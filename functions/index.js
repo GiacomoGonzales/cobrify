@@ -11,6 +11,7 @@ import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, 
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseService.js'
+import { sendPushNotification } from './notifications/sendPushNotification.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -6649,6 +6650,7 @@ export { onNewSale } from './notifications/onNewSale.js'
 export { onProductStockChange } from './notifications/onStockLow.js'
 export { onYapePayment } from './notifications/onYapePayment.js'
 export { saveYapePaymentNative } from './notifications/saveYapePaymentNative.js'
+export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 
 // Import and re-export migration function
 export { migratePurchasesHTTP } from './migratePurchases.js'
@@ -8059,16 +8061,20 @@ export const checkSubscriptionExpirations = onSchedule(
 
           // Crear notificación de suspensión
           try {
+            const suspTitle = 'Cuenta Suspendida'
+            const suspMessage = `Tu suscripción ha vencido y tu cuenta ha sido suspendida. Renueva tu plan para seguir usando Cobrify.`
             await db.collection('notifications').add({
               userId,
               type: 'subscription_expired',
-              title: 'Cuenta Suspendida',
-              message: `Tu suscripción ha vencido y tu cuenta ha sido suspendida. Renueva tu plan para seguir usando Cobrify.`,
+              title: suspTitle,
+              message: suspMessage,
               metadata: { periodEnd: periodEnd.toISOString(), autoSuspended: true },
               read: false,
               createdAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
             })
+            // Enviar push notification
+            await sendPushNotification(userId, suspTitle, suspMessage, { type: 'subscription_expired' })
             notificationsCreated++
           } catch (notifErr) {
             console.error(`⚠️ Error notificación suspensión ${userId}:`, notifErr.message)
@@ -8109,6 +8115,8 @@ export const checkSubscriptionExpirations = onSchedule(
               createdAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
             })
+            // Enviar push notification
+            await sendPushNotification(userId, notifTitle, notifMessage, { type: notifType })
             notificationsCreated++
           } catch (notifError) {
             console.error(`⚠️ Error creando notificación para ${userId}:`, notifError.message)

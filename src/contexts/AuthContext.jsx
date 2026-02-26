@@ -31,6 +31,7 @@ export const AuthProvider = ({ children }) => {
   const [allowedPaymentMethods, setAllowedPaymentMethods] = useState([]) // Métodos de pago POS (vacío = todos)
   const [assignedSellerId, setAssignedSellerId] = useState(null) // Vendedor asignado al sub-usuario
   const [assignedSellerName, setAssignedSellerName] = useState(null)
+  const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
@@ -152,6 +153,7 @@ export const AuthProvider = ({ children }) => {
                 setAllowedPaymentMethods(userData.allowedPaymentMethods || [])
                 setAssignedSellerId(userData.assignedSellerId || null)
                 setAssignedSellerName(userData.assignedSellerName || null)
+                setIndependentCashRegister(userData.independentCashRegister || false)
                 console.log('✅ Permisos cargados:', userData.allowedPages)
                 console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
                 console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
@@ -171,6 +173,7 @@ export const AuthProvider = ({ children }) => {
                 setAllowedPaymentMethods([])
                 setAssignedSellerId(null)
                 setAssignedSellerName(null)
+                setIndependentCashRegister(false)
               }
             } catch (error) {
               console.error('Error al cargar permisos:', error)
@@ -180,6 +183,7 @@ export const AuthProvider = ({ children }) => {
               setAllowedPaymentMethods([])
               setAssignedSellerId(null)
               setAssignedSellerName(null)
+              setIndependentCashRegister(false)
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
@@ -189,6 +193,7 @@ export const AuthProvider = ({ children }) => {
             setAllowedPaymentMethods([])
             setAssignedSellerId(null)
             setAssignedSellerName(null)
+            setIndependentCashRegister(false)
             console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
@@ -349,6 +354,7 @@ export const AuthProvider = ({ children }) => {
           setAllowedPaymentMethods([])
           setAssignedSellerId(null)
           setAssignedSellerName(null)
+          setIndependentCashRegister(false)
           setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
           setUserFeatures({ productImages: false })
@@ -531,6 +537,7 @@ export const AuthProvider = ({ children }) => {
       setAllowedPaymentMethods([])
       setAssignedSellerId(null)
       setAssignedSellerName(null)
+      setIndependentCashRegister(false)
       setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
       setUserFeatures({ productImages: false })
@@ -714,6 +721,7 @@ export const AuthProvider = ({ children }) => {
     allowedPaymentMethods, // Métodos de pago permitidos en POS
     assignedSellerId, // Vendedor asignado al sub-usuario en POS
     assignedSellerName,
+    independentCashRegister, // Si el sub-usuario tiene caja independiente
     hasPageAccess,
     hasWarehouseAccess, // Función para verificar acceso a un almacén
     filterWarehousesByAccess, // Función para filtrar almacenes según permisos

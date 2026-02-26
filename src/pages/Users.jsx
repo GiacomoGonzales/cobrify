@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -48,6 +48,7 @@ export default function Users() {
   const [allowedPaymentMethods, setAllowedPaymentMethods] = useState([])
   const [posSellers, setPosSellers] = useState([])
   const [assignedSellerId, setAssignedSellerId] = useState('')
+  const [independentCashRegister, setIndependentCashRegister] = useState(false)
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
@@ -205,6 +206,7 @@ export default function Users() {
     setAllowedDocumentTypes([])
     setAllowedPaymentMethods([])
     setAssignedSellerId('')
+    setIndependentCashRegister(false)
     reset({
       email: '',
       password: '',
@@ -223,6 +225,7 @@ export default function Users() {
     setAllowedDocumentTypes(userToEdit.allowedDocumentTypes || [])
     setAllowedPaymentMethods(userToEdit.allowedPaymentMethods || [])
     setAssignedSellerId(userToEdit.assignedSellerId || '')
+    setIndependentCashRegister(userToEdit.independentCashRegister || false)
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -307,6 +310,7 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerObj?.name || null,
+          independentCashRegister,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -340,6 +344,7 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerForCreate?.name || null,
+          independentCashRegister,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -853,6 +858,32 @@ export default function Users() {
                       </label>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Configuración de Caja (solo si tiene acceso a caja o POS) */}
+              {(selectedPages.includes('cash-register') || selectedPages.includes('pos')) && (
+                <div className="bg-green-50 rounded-xl p-4 space-y-3">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                    Configuración de Caja
+                  </h3>
+                  <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-green-100">
+                    <input
+                      type="checkbox"
+                      checked={independentCashRegister}
+                      onChange={() => setIndependentCashRegister(!independentCashRegister)}
+                      className="w-4 h-4 text-green-600 border-green-300 rounded focus:ring-green-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">Caja independiente</span>
+                      <p className="text-xs text-green-700 mt-0.5">
+                        {independentCashRegister
+                          ? 'Este usuario abre y cierra su propia caja'
+                          : 'Las ventas de este usuario se suman a la caja principal'}
+                      </p>
+                    </div>
+                  </label>
                 </div>
               )}
 

@@ -29,7 +29,7 @@ import CashClosureTicket from '@/components/CashClosureTicket'
 import { Capacitor } from '@capacitor/core'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -260,9 +260,41 @@ export default function CashRegister() {
         return
       }
 
-      // Determinar el usuario objetivo: si hay selectedCashUser, usar ese; si no, usar user.uid
-      const targetUserUid = selectedCashUser && selectedCashUser !== 'all' ? selectedCashUser : user.uid
+      // Sub-usuario sin caja independiente: comparte la caja del owner
+      const isSubUser = userPermissions && userPermissions.ownerId
+      const isSharedCashUser = isSubUser && !independentCashRegister
+
+      // Determinar el usuario objetivo para la sesión de caja
+      let targetUserUid
+      if (isSharedCashUser) {
+        // Sub-usuario compartido: buscar sesión sin filtro de usuario (caja general)
+        targetUserUid = null
+      } else if (selectedCashUser && selectedCashUser !== 'all') {
+        targetUserUid = selectedCashUser
+      } else {
+        targetUserUid = user.uid
+      }
       const isViewingAll = selectedCashUser === 'all'
+
+      // Construir set de UIDs cuyas ventas se suman a esta caja
+      // Owner "Mi Caja": incluir su UID + UIDs de sub-usuarios sin caja independiente
+      // Sub-usuario compartido: no filtrar (ver todas las ventas de la sesión)
+      let allowedCreatedByUids = null // null = no filtrar por createdBy
+      if (!isSharedCashUser && !isViewingAll) {
+        if (isOwner && !selectedCashUser) {
+          // Owner viendo "Mi Caja": incluir ventas propias + sub-usuarios compartidos
+          const sharedSubUserUids = subUsers
+            .filter(u => !u.independentCashRegister)
+            .map(u => u.uid || u.id)
+          allowedCreatedByUids = new Set([user.uid, ...sharedSubUserUids])
+        } else if (selectedCashUser && selectedCashUser !== 'all') {
+          // Owner viendo caja de un sub-usuario específico (con caja independiente)
+          allowedCreatedByUids = new Set([selectedCashUser])
+        } else if (!isOwner && !isSharedCashUser) {
+          // Sub-usuario con caja independiente: solo sus propias ventas
+          allowedCreatedByUids = new Set([user.uid])
+        }
+      }
 
       // Obtener sesión actual para la sucursal seleccionada y el usuario objetivo
       const branchId = selectedBranch?.id || null
@@ -300,9 +332,11 @@ export default function CashRegister() {
           const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
             const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
             if (invoiceDate < sessionOpenedAt || invoiceDate > now) return false
-            // Filtrar por usuario: solo mostrar facturas del usuario objetivo
-            // Compatibilidad: facturas antiguas sin createdBy se muestran a todos
-            if (invoice.createdBy && invoice.createdBy !== targetUserUid) return false
+            // Si allowedCreatedByUids es null, no filtrar (caja compartida - todas las ventas suman)
+            if (allowedCreatedByUids) {
+              // Compatibilidad: facturas antiguas sin createdBy se muestran a todos
+              if (invoice.createdBy && !allowedCreatedByUids.has(invoice.createdBy)) return false
+            }
             return true
           })
           setTodayInvoices(sessionInvoicesList)
@@ -382,10 +416,14 @@ export default function CashRegister() {
       const branchId = selectedBranch?.id || null
       // Determinar filtro de usuario para historial
       const isSubUser = userPermissions && userPermissions.ownerId
+      const isSharedCashUser = isSubUser && !independentCashRegister
       let historyUserUid = null
-      if (isSubUser) {
-        // Sub-usuario: siempre ve solo sus propias sesiones
+      if (isSubUser && !isSharedCashUser) {
+        // Sub-usuario con caja independiente: ve solo sus propias sesiones
         historyUserUid = user.uid
+      } else if (isSharedCashUser) {
+        // Sub-usuario con caja compartida: ve las sesiones generales (sin filtro de usuario)
+        historyUserUid = null
       } else if (selectedCashUser && selectedCashUser !== 'all') {
         // Owner viendo caja de un sub-usuario específico
         historyUserUid = selectedCashUser
@@ -561,7 +599,12 @@ export default function CashRegister() {
       }
 
       const branchId = selectedBranch?.id || null
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, user.uid, user.displayName || user.email || 'Usuario')
+      // Sub-usuario sin caja independiente: abrir caja general (sin userUid)
+      const isSubUser = userPermissions && userPermissions.ownerId
+      const isSharedCashUser = isSubUser && !independentCashRegister
+      const openUserUid = isSharedCashUser ? null : user.uid
+      const openUserName = isSharedCashUser ? null : (user.displayName || user.email || 'Usuario')
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName)
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
