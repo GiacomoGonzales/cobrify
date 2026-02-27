@@ -128,7 +128,7 @@ export default function CashRegister() {
     if (user?.uid) {
       loadData()
     }
-  }, [user, selectedBranch, selectedCashUser])
+  }, [user, selectedBranch, selectedCashUser, subUsers])
 
   // Función para cargar sesiones abiertas (para el selector de usuario)
   const refreshOpenSessions = async () => {
