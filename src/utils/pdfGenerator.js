@@ -566,30 +566,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const infoColumnWidth = CONTENT_WIDTH - actualLogoWidth - docColumnWidth - 20
   const infoCenterX = MARGIN_LEFT + actualLogoWidth + 10 + (infoColumnWidth / 2)
 
-  // ===== ESLOGAN debajo del logo =====
-  if (companySettings?.companySlogan) {
-    const slogan = companySettings.companySlogan.toUpperCase()
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...BLACK)
-
-    // El eslogan se centra con los datos de la empresa (columna 2)
-    const sloganMaxWidth = infoColumnWidth - 10
-    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
-
-    // Limitar a máximo 2 líneas
-    const linesToShow = sloganLines.slice(0, 2)
-
-    // Posición: centrado con la columna de datos de empresa
-    const sloganCenterX = infoCenterX
-    const sloganY = currentY + headerHeight - 18
-    linesToShow.forEach((line, index) => {
-      doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
-    })
-
-    doc.setTextColor(...BLACK) // Restaurar color
-  }
-
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
   // Recopilar todos los datos disponibles
   const companyName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
@@ -597,12 +573,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const showBusinessName = businessName && businessName !== companyName
 
   // Preparar lista de sucursales/direcciones para mostrar
-  // Si hay branches, mostrar todas. Si no, usar la dirección de la empresa
+  // Cada entrada tiene address y phone por separado (se muestran en líneas independientes)
   let branchLocations = []
   const activeBranches = branches.filter(b => b.isActive !== false)
 
   if (activeBranches.length > 0) {
-    // Agregar "Sucursal Principal" (datos de la empresa) si tiene dirección
+    // Agregar dirección principal (datos de la empresa)
     if (companySettings?.address) {
       let mainAddress = companySettings.address
       if (companySettings?.district || companySettings?.province || companySettings?.department) {
@@ -610,8 +586,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         if (locationParts.length > 0) mainAddress += ' - ' + locationParts.join(', ')
       }
       branchLocations.push({
-        name: 'Principal',
-        address: mainAddress,
+        address: mainAddress.toUpperCase(),
         phone: companySettings?.phone || ''
       })
     }
@@ -619,8 +594,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     activeBranches.forEach(branch => {
       if (branch.address || branch.phone) {
         branchLocations.push({
-          name: branch.name || 'Sucursal',
-          address: branch.address || '',
+          address: (branch.address || '').toUpperCase(),
           phone: branch.phone || ''
         })
       }
@@ -641,7 +615,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
     const phone = invoice.branchPhone || invoice.warehousePhone || companySettings?.phone || ''
     if (fullAddress || phone) {
-      branchLocations.push({ name: '', address: fullAddress, phone })
+      branchLocations.push({ address: fullAddress.toUpperCase(), phone })
     }
   }
 
@@ -653,11 +627,21 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFont('helvetica', 'bold')
   const nameLines = doc.splitTextToSize(companyName, infoColumnWidth - 10)
 
-  // Contar líneas totales para centrar
+  // Contar líneas totales para centrar (pre-calcular splits de direcciones)
+  const maxWidth = infoColumnWidth - 10
   let totalLines = nameLines.length
   if (showBusinessName) totalLines += 1
-  // Líneas para sucursales (cada sucursal = 1 línea)
-  totalLines += branchLocations.length
+  // Líneas para sucursales: primero todas las direcciones, luego todos los teléfonos
+  branchLocations.forEach(loc => {
+    if (loc.address) {
+      const addrLine = 'DIRECCIÓN: ' + loc.address
+      const addrLines = doc.splitTextToSize(addrLine, maxWidth)
+      totalLines += Math.min(addrLines.length, 3)
+    }
+  })
+  branchLocations.forEach(loc => {
+    if (loc.phone) totalLines += 1
+  })
   if (email) totalLines += 1
   if (website) totalLines += 1
 
@@ -687,30 +671,31 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     infoY += businessLinesToShow.length * 9 + 1
   }
 
-  // Mostrar sucursales/direcciones
+  // Mostrar primero TODAS las direcciones, luego TODOS los teléfonos (todo mayúscula)
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
   branchLocations.forEach(loc => {
-    let line = ''
-    if (loc.name) line += loc.name + ': '
-    if (loc.address) line += loc.address
-    if (loc.phone) line += (loc.address ? ' - ' : '') + 'Tel: ' + loc.phone
-    if (line) {
-      // Permitir múltiples líneas para direcciones largas
-      const maxWidth = infoColumnWidth - 10
-      const addressLines = doc.splitTextToSize(line, maxWidth)
-      const linesToShow = addressLines.slice(0, 3) // Máximo 3 líneas
-      linesToShow.forEach((addrLine) => {
-        doc.text(addrLine, infoCenterX, infoY, { align: 'center' })
+    if (loc.address) {
+      const addrLine = 'DIRECCIÓN: ' + loc.address
+      const addressLines = doc.splitTextToSize(addrLine, maxWidth)
+      const linesToShow = addressLines.slice(0, 3)
+      linesToShow.forEach((line) => {
+        doc.text(line, infoCenterX, infoY, { align: 'center' })
         infoY += 9
       })
+    }
+  })
+  branchLocations.forEach(loc => {
+    if (loc.phone) {
+      doc.text('TELF: ' + loc.phone.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+      infoY += 9
     }
   })
 
   // Email
   if (email) {
-    doc.text(`Email: ${email}`, infoCenterX, infoY, { align: 'center' })
+    doc.text(`EMAIL: ${email.toUpperCase()}`, infoCenterX, infoY, { align: 'center' })
     infoY += 9
   }
 
@@ -719,8 +704,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(website, infoCenterX, infoY, { align: 'center' })
+    doc.text(website.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+    infoY += 9
   }
+
 
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO (derecha) =====
   const docBoxY = currentY
@@ -788,7 +775,34 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + (spacious ? 25 : 15)
+  currentY += headerHeight + 5
+
+  // ========== ESLOGAN (centrado debajo del encabezado) ==========
+  if (companySettings?.companySlogan) {
+    const slogan = companySettings.companySlogan.toUpperCase()
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    const sloganMaxWidth = CONTENT_WIDTH - 20
+    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
+    const sloganLinesToShow = sloganLines.slice(0, 2)
+    const sloganCenterX = MARGIN_LEFT + CONTENT_WIDTH / 2
+    // Si alguna línea del slogan es tan ancha que chocaría con el recuadro del comprobante,
+    // empujar el slogan debajo del recuadro completo
+    const spaceLeftOfBox = docBoxX - MARGIN_LEFT - 10
+    const sloganCollidesWithBox = sloganLinesToShow.some(line => doc.getTextWidth(line) > spaceLeftOfBox)
+    if (sloganCollidesWithBox) {
+      const boxBottomY = MARGIN_TOP + headerHeight + 13
+      if (currentY < boxBottomY) currentY = boxBottomY
+    }
+    sloganLinesToShow.forEach((line) => {
+      doc.text(line, sloganCenterX, currentY, { align: 'center' })
+      currentY += 14
+    })
+    currentY += 5
+  } else {
+    currentY += (spacious ? 20 : 10)
+  }
 
   // ========== 2. DATOS DEL CLIENTE (DOS COLUMNAS) ==========
 
