@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
@@ -593,8 +594,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Agregar sucursales adicionales
     activeBranches.forEach(branch => {
       if (branch.address || branch.phone) {
+        let branchAddress = branch.address || ''
+        if (branch.department || branch.province || branch.district) {
+          const deptName = DEPARTAMENTOS.find(d => d.code === branch.department)?.name || branch.department || ''
+          const provName = (PROVINCIAS[branch.department] || []).find(p => p.code === branch.province)?.name || branch.province || ''
+          const distName = (DISTRITOS[`${branch.department}${branch.province}`] || []).find(d => d.code === branch.district)?.name || branch.district || ''
+          const locationParts = [distName, provName, deptName].filter(Boolean)
+          if (locationParts.length > 0) branchAddress += ' - ' + locationParts.join(', ')
+        }
         branchLocations.push({
-          address: (branch.address || '').toUpperCase(),
+          address: branchAddress.toUpperCase(),
           phone: branch.phone || ''
         })
       }
