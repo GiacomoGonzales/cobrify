@@ -3419,7 +3419,7 @@ export default function POS() {
       toast.info('Generando comprobante...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding)
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding, branches)
 
       // Preparar nombre del archivo
       const docTypeFile = lastInvoiceData.documentType === 'factura' ? 'Factura' :
@@ -3528,7 +3528,7 @@ Gracias por tu preferencia.`
       toast.info('Generando PDF...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding)
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding, branches)
 
       // Convertir Blob a base64
       const reader = new FileReader()
@@ -5686,7 +5686,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       onClick={async () => {
                         setIsLoadingPreview(true)
                         try {
-                          await previewInvoicePDF(lastInvoiceData, companySettings, branding)
+                          await previewInvoicePDF(lastInvoiceData, companySettings, branding, branches)
                           if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
                         } catch (error) {
                           console.error('Error al generar vista previa:', error)

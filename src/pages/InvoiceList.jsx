@@ -375,7 +375,7 @@ export default function InvoiceList() {
       toast.info('Generando comprobante...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(invoice, companySettings, branding)
+      const pdfBlob = await getInvoicePDFBlob(invoice, companySettings, branding, branches)
 
       // Preparar nombre del archivo
       const docTypeFile = invoice.documentType === 'factura' ? 'Factura' :
@@ -2341,7 +2341,7 @@ Gracias por tu preferencia.`
                     onClick={async () => {
                       setOpenMenuId(null)
                       try {
-                        await previewInvoicePDF(invoice, companySettings, branding)
+                        await previewInvoicePDF(invoice, companySettings, branding, branches)
                       } catch (error) {
                         console.error('Error al generar vista previa:', error)
                         toast.error(`Error al generar vista previa: ${error.message}`)
@@ -2946,7 +2946,7 @@ Gracias por tu preferencia.`
                 </Button>
                 <Button size="sm" variant="outline" onClick={async () => {
                   if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  try { await previewInvoicePDF(viewingInvoice, companySettings, branding) } catch (e) { toast.error('Error al generar vista previa') }
+                  try { await previewInvoicePDF(viewingInvoice, companySettings, branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
                 }}>
                   <Eye className="w-4 h-4 mr-1" />
                   Vista Previa
