@@ -617,7 +617,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     let itemsText = '';
 
     // NO mostrar header de columnas para ningún formato (ni 58mm ni 80mm)
-    for (const item of invoice.items) {
+    for (const item of invoice.items || []) {
       // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
       const itemName = convertSpanishText(item.name || item.description || '');
       // Observaciones adicionales (IMEI, placa, serie, etc.)
@@ -2137,7 +2137,7 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       .bold(false);
 
     // Items
-    for (const item of invoice.items) {
+    for (const item of invoice.items || []) {
       // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
       const itemName = item.name || item.description || '';
       // Observaciones adicionales (IMEI, placa, serie, etc.)
