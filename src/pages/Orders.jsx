@@ -18,6 +18,7 @@ import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { Capacitor } from '@capacitor/core'
 import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations } from '@/services/thermalPrinterService'
+import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -90,7 +91,12 @@ export default function Orders() {
           const config = businessData.restaurantConfig || {}
           setItemStatusTracking(config.itemStatusTracking || false)
           setRequirePaymentBeforeKitchen(config.requirePaymentBeforeKitchen || false)
-          setDeliveryPersons((config.deliveryPersons || []).filter(p => p.active !== false))
+          // Cargar motoristas desde la colección de motoristas
+          getActiveMotoristas(getBusinessId()).then(result => {
+            if (result.success) {
+              setDeliveryPersons(result.data)
+            }
+          })
           setBrands((config.brands || []).filter(b => b.active !== false))
           setKitchenStations(config.kitchenStations || [])
           setEnableKitchenStations(config.enableKitchenStations || false)
@@ -537,15 +543,37 @@ export default function Orders() {
     }
 
     const deliveryPerson = deliveryPersons.find(p => p.id === deliveryPersonId)
+    const order = orders.find(o => o.id === orderId)
 
     try {
-      const result = await updateOrder(getBusinessId(), orderId, {
+      const businessId = getBusinessId()
+      const result = await updateOrder(businessId, orderId, {
         deliveryPersonId: deliveryPersonId || null,
         deliveryPersonName: deliveryPerson?.name || null,
         deliveryPersonPhone: deliveryPerson?.phone || null,
       })
       if (result.success) {
         toast.success(deliveryPerson ? `Repartidor ${deliveryPerson.name} asignado` : 'Repartidor removido')
+
+        // Crear delivery record y actualizar estado operacional si se asignó un motorista
+        if (deliveryPerson && order) {
+          createDeliveryRecord(businessId, {
+            motoristaId: deliveryPerson.id,
+            motoristaName: deliveryPerson.name,
+            orderId: orderId,
+            orderNumber: order.orderNumber || '',
+            customerName: order.customerName || '',
+            customerAddress: order.customerAddress || '',
+            amount: order.total || 0,
+            deliveryFee: order.deliveryFee || 0,
+            paymentMethod: order.paymentMethod || 'cash',
+            cashCollected: order.paymentMethod === 'cash' || order.paymentMethod === 'efectivo' ? (order.total || 0) : 0,
+            status: 'assigned',
+          }).catch(err => console.error('Error creando delivery record:', err))
+
+          updateOperationalStatus(businessId, deliveryPerson.id, 'on_delivery')
+            .catch(err => console.error('Error actualizando estado operacional:', err))
+        }
       } else {
         toast.error('Error al asignar repartidor: ' + result.error)
       }
@@ -939,7 +967,7 @@ export default function Orders() {
                         <option value="">Sin asignar</option>
                         {deliveryPersons.map((person) => (
                           <option key={person.id} value={person.id}>
-                            {person.name}
+                            {person.name}{person.operationalStatus ? ` (${person.operationalStatus === 'available' ? '✓' : person.operationalStatus === 'on_delivery' ? '🚗' : person.operationalStatus === 'break' ? '☕' : '⭘'})` : ''}
                           </option>
                         ))}
                       </select>

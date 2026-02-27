@@ -1909,13 +1909,11 @@ export default function Settings() {
     { id: 'informacion', label: 'Mi Empresa', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
+    { id: 'documentos', label: 'Documentos', icon: FileText },
     { id: 'catalogo', label: 'Catálogo', icon: Globe },
-    { id: 'reclamos', label: 'Reclamos', icon: BookOpen },
-    { id: 'series', label: 'Series', icon: FileText },
-    { id: 'avanzado', label: 'Avanzado', icon: Cog },
+    { id: 'series', label: 'Series', icon: Hash },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
-    { id: 'yape', label: 'Yape', icon: Bell },
   ]
 
   return (
@@ -2566,108 +2564,6 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Color de Acento del PDF */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Color de Acento del PDF
-                </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { color: '#464646', name: 'Gris Oscuro' },
-                    { color: '#1E40AF', name: 'Azul' },
-                    { color: '#065F46', name: 'Verde' },
-                    { color: '#7C2D12', name: 'Marrón' },
-                    { color: '#581C87', name: 'Púrpura' },
-                    { color: '#0F172A', name: 'Negro' },
-                    { color: '#B91C1C', name: 'Rojo' },
-                    { color: '#0E7490', name: 'Cyan' },
-                  ].map((option) => (
-                    <button
-                      key={option.color}
-                      type="button"
-                      onClick={() => setPdfAccentColor(option.color)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
-                        pdfAccentColor === option.color
-                          ? 'border-primary-500 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      title={option.name}
-                    >
-                      <div
-                        className="w-10 h-10 rounded-md shadow-sm"
-                        style={{ backgroundColor: option.color }}
-                      />
-                      <span className="text-xs text-gray-600">{option.name}</span>
-                    </button>
-                  ))}
-                  {/* Selector de color personalizado */}
-                  <div className="flex flex-col items-center gap-1 p-2">
-                    <input
-                      type="color"
-                      value={pdfAccentColor}
-                      onChange={(e) => setPdfAccentColor(e.target.value)}
-                      onInput={(e) => setPdfAccentColor(e.target.value)}
-                      onBlur={(e) => setPdfAccentColor(e.target.value)}
-                      className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
-                      title="Elegir color personalizado"
-                    />
-                    <span className="text-xs text-gray-600">Otro</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Códigos de producto en cotizaciones */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={showProductCodeInQuotation}
-                  onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Mostrar códigos de producto en cotizaciones
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {showProductCodeInQuotation
-                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
-                      : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Espaciado amplio en PDF */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={pdfSpacious}
-                  onChange={(e) => setPdfSpacious(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Espaciado amplio en PDF
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {pdfSpacious
-                      ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
-                      : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
               {/* Imágenes de productos */}
               <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                 <input
@@ -2704,26 +2600,6 @@ export default function Settings() {
                     {enableProductLocation
                       ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
                       : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Guías de Remisión */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={dispatchGuidesEnabled}
-                  onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Habilitar Guías de Remisión Electrónicas
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {dispatchGuidesEnabled
-                      ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
-                      : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
                   </p>
                 </div>
               </label>
@@ -2773,89 +2649,6 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Plantillas de Términos y Condiciones */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-base font-semibold text-gray-900">Plantillas de Términos</h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingTemplate(null)
-                      setTemplateName('')
-                      setTemplateContent('')
-                      setShowTermsTemplateModal(true)
-                    }}
-                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                  >
-                    + Nueva Plantilla
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600 mb-4">
-                  Crea plantillas de términos y condiciones para usarlas rápidamente en tus cotizaciones.
-                  Ideal para diferentes tipos de servicios (transporte, montacargas, grúas, etc.).
-                </p>
-
-                {termsTemplates.length === 0 ? (
-                  <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                    <p className="text-gray-500 text-sm">No hay plantillas creadas</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingTemplate(null)
-                        setTemplateName('')
-                        setTemplateContent('')
-                        setShowTermsTemplateModal(true)
-                      }}
-                      className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
-                    >
-                      Crear primera plantilla
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {termsTemplates.map((template) => (
-                      <div
-                        key={template.id}
-                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{template.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{template.content.substring(0, 80)}...</p>
-                        </div>
-                        <div className="flex items-center gap-2 ml-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingTemplate(template)
-                              setTemplateName(template.name)
-                              setTemplateContent(template.content)
-                              setShowTermsTemplateModal(true)
-                            }}
-                            className="text-gray-600 hover:text-primary-600 text-sm"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm('¿Eliminar esta plantilla?')) {
-                                setTermsTemplates(termsTemplates.filter(t => t.id !== template.id))
-                              }
-                            }}
-                            className="text-red-600 hover:text-red-700 text-sm"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
               {/* Personalización del Menú Lateral */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
@@ -2881,6 +2674,7 @@ export default function Settings() {
                         { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
                         { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
                         { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
+                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
@@ -2931,6 +2725,7 @@ export default function Settings() {
                         { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
                         { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
+                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
@@ -3031,6 +2826,7 @@ export default function Settings() {
                         { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
                         { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
                         { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
+                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
@@ -3092,12 +2888,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
-                      dispatchGuidesEnabled: dispatchGuidesEnabled,
                       hiddenMenuItems: hiddenMenuItems,
-                      termsTemplates: termsTemplates,
-                      pdfAccentColor: pdfAccentColor,
-                      showProductCodeInQuotation: showProductCodeInQuotation,
-                      pdfSpacious: pdfSpacious,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     if (refreshBusinessSettings) await refreshBusinessSettings()
@@ -3481,105 +3272,6 @@ export default function Settings() {
                               </div>
                             </div>
                           )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Gestión de Repartidores */}
-                    <div className={`p-4 border rounded-lg transition-colors ${
-                      (restaurantConfig.deliveryPersons || []).length > 0
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
-                    }`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">
-                            Repartidores / Motoristas
-                          </span>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            Gestiona tu equipo de delivery para asignar pedidos
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newPerson = {
-                              id: `delivery_${Date.now()}`,
-                              name: '',
-                              phone: '',
-                              active: true
-                            }
-                            setRestaurantConfig({
-                              ...restaurantConfig,
-                              deliveryPersons: [...(restaurantConfig.deliveryPersons || []), newPerson]
-                            })
-                          }}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Agregar
-                        </button>
-                      </div>
-
-                      {/* Lista de repartidores */}
-                      {(restaurantConfig.deliveryPersons || []).length === 0 ? (
-                        <div className="text-center py-4 text-gray-500 text-sm">
-                          <Bike className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                          <p>No hay repartidores configurados</p>
-                          <p className="text-xs">Agrega repartidores para asignarlos a pedidos de delivery</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {(restaurantConfig.deliveryPersons || []).map((person, index) => (
-                            <div key={person.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
-                              <input
-                                type="text"
-                                value={person.name}
-                                onChange={(e) => {
-                                  const updated = [...restaurantConfig.deliveryPersons]
-                                  updated[index] = { ...person, name: e.target.value }
-                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
-                                }}
-                                placeholder="Nombre del repartidor"
-                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                              <input
-                                type="tel"
-                                value={person.phone || ''}
-                                onChange={(e) => {
-                                  const updated = [...restaurantConfig.deliveryPersons]
-                                  updated[index] = { ...person, phone: e.target.value }
-                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
-                                }}
-                                placeholder="Teléfono"
-                                className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                              <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={person.active !== false}
-                                  onChange={(e) => {
-                                    const updated = [...restaurantConfig.deliveryPersons]
-                                    updated[index] = { ...person, active: e.target.checked }
-                                    setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
-                                  }}
-                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                />
-                                <span className="text-xs text-gray-600">Activo</span>
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = restaurantConfig.deliveryPersons.filter((_, i) => i !== index)
-                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
-                                }}
-                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Eliminar repartidor"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
                         </div>
                       )}
                     </div>
@@ -4172,8 +3864,480 @@ export default function Settings() {
         </Card>
       )}
 
+      {/* Tab Content - Documentos */}
+      {activeTab === 'documentos' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <FileText className="w-5 h-5 text-primary-600" />
+              <CardTitle>Documentos y Comprobantes</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Formato PDF */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Formato PDF</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Personaliza la apariencia de tus comprobantes en PDF
+                </p>
+
+                {/* Color de Acento del PDF */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Color de Acento del PDF
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      { color: '#464646', name: 'Gris Oscuro' },
+                      { color: '#1E40AF', name: 'Azul' },
+                      { color: '#065F46', name: 'Verde' },
+                      { color: '#7C2D12', name: 'Marrón' },
+                      { color: '#581C87', name: 'Púrpura' },
+                      { color: '#0F172A', name: 'Negro' },
+                      { color: '#B91C1C', name: 'Rojo' },
+                      { color: '#0E7490', name: 'Cyan' },
+                    ].map((option) => (
+                      <button
+                        key={option.color}
+                        type="button"
+                        onClick={() => setPdfAccentColor(option.color)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                          pdfAccentColor === option.color
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        title={option.name}
+                      >
+                        <div
+                          className="w-10 h-10 rounded-md shadow-sm"
+                          style={{ backgroundColor: option.color }}
+                        />
+                        <span className="text-xs text-gray-600">{option.name}</span>
+                      </button>
+                    ))}
+                    <div className="flex flex-col items-center gap-1 p-2">
+                      <input
+                        type="color"
+                        value={pdfAccentColor}
+                        onChange={(e) => setPdfAccentColor(e.target.value)}
+                        onInput={(e) => setPdfAccentColor(e.target.value)}
+                        onBlur={(e) => setPdfAccentColor(e.target.value)}
+                        className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
+                        title="Elegir color personalizado"
+                      />
+                      <span className="text-xs text-gray-600">Otro</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Códigos de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductCodeInQuotation}
+                    onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar códigos de producto en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductCodeInQuotation
+                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Espaciado amplio en PDF */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={pdfSpacious}
+                    onChange={(e) => setPdfSpacious(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Espaciado amplio en PDF
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {pdfSpacious
+                        ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
+                        : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Guías de Remisión */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Guías de Remisión</h3>
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={dispatchGuidesEnabled}
+                    onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Habilitar Guías de Remisión Electrónicas
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {dispatchGuidesEnabled
+                        ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
+                        : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Plantillas de Términos y Condiciones */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-base font-semibold text-gray-900">Plantillas de Términos</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTemplate(null)
+                      setTemplateName('')
+                      setTemplateContent('')
+                      setShowTermsTemplateModal(true)
+                    }}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Nueva Plantilla
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Crea plantillas de términos y condiciones para usarlas rápidamente en tus cotizaciones.
+                  Ideal para diferentes tipos de servicios (transporte, montacargas, grúas, etc.).
+                </p>
+
+                {termsTemplates.length === 0 ? (
+                  <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <p className="text-gray-500 text-sm">No hay plantillas creadas</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTemplate(null)
+                        setTemplateName('')
+                        setTemplateContent('')
+                        setShowTermsTemplateModal(true)
+                      }}
+                      className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      Crear primera plantilla
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {termsTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900">{template.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{template.content.substring(0, 80)}...</p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTemplate(template)
+                              setTemplateName(template.name)
+                              setTemplateContent(template.content)
+                              setShowTermsTemplateModal(true)
+                            }}
+                            className="text-gray-600 hover:text-primary-600 text-sm"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('¿Eliminar esta plantilla?')) {
+                                setTermsTemplates(termsTemplates.filter(t => t.id !== template.id))
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-700 text-sm"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Envío a SUNAT */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Envío a SUNAT</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del envío de comprobantes a SUNAT
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoSendToSunat}
+                      onChange={e => setAutoSendToSunat(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">Envío automático a SUNAT desde el POS</div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta.
+                        Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes.
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs text-blue-700">
+                          {autoSendToSunat
+                            ? 'Los comprobantes se enviarán automáticamente'
+                            : 'Los comprobantes requerirán envío manual'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Gestión de Comprobantes */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Gestión de Comprobantes</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura las opciones de seguridad para la gestión de comprobantes
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowDeleteInvoices}
+                      onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir eliminar comprobantes
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowDeleteInvoices
+                          ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
+                          : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs text-amber-700 font-medium">
+                          {allowDeleteInvoices
+                            ? 'Mayor flexibilidad, menor control'
+                            : 'Mayor control y trazabilidad'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowCustomEmissionDate}
+                      onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir seleccionar fecha de emisión en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowCustomEmissionDate
+                          ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
+                          : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs text-blue-700 font-medium">
+                          {allowCustomEmissionDate
+                            ? 'Útil para regularizar ventas de días anteriores'
+                            : 'Emisión con fecha actual solamente'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Privacidad y Permisos */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Privacidad y Permisos</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura qué información pueden ver los usuarios secundarios
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hideDashboardDataFromSecondary}
+                      onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 group-hover:text-primary-900">
+                        Ocultar datos del dashboard a usuarios secundarios
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
+                        {hideDashboardDataFromSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios verán el dashboard con todos los valores en cero. Solo el propietario y administradores podrán ver las estadísticas reales de ventas, ingresos y otros datos sensibles.'
+                          : '✗ Deshabilitado: Todos los usuarios pueden ver las estadísticas completas del dashboard incluyendo ventas totales, ingresos, productos más vendidos y gráficas.'}
+                      </p>
+                      <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
+                        <div className="flex items-start gap-2">
+                          <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-purple-800 space-y-1">
+                            <p className="font-medium">Control de información sensible</p>
+                            <p>
+                              Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
+                              Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Herramientas de Administración - Solo visible si está habilitado en Firebase */}
+              {adminToolsEnabled && (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                      <Wrench className="w-5 h-5 text-orange-500" />
+                      Herramientas de Administración
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Herramientas especiales para resolver problemas con documentos
+                    </p>
+
+                    <div className="space-y-3">
+                      <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                              <RefreshCw className="w-4 h-4 text-orange-600" />
+                              Renumerar documentos rechazados
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
+                              esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
+                            </p>
+                            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
+                              <AlertTriangle className="w-4 h-4 text-orange-600" />
+                              <span className="text-xs text-orange-700">
+                                Use con precaución - solo para documentos rechazados
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => setShowRenumberModal(true)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
+                          >
+                            <Wrench className="w-4 h-4 mr-2" />
+                            Abrir herramienta
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+
+          {/* Save Button for Documentos */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      pdfAccentColor: pdfAccentColor,
+                      showProductCodeInQuotation: showProductCodeInQuotation,
+                      pdfSpacious: pdfSpacious,
+                      dispatchGuidesEnabled: dispatchGuidesEnabled,
+                      termsTemplates: termsTemplates,
+                      autoSendToSunat: autoSendToSunat,
+                      allowDeleteInvoices: allowDeleteInvoices,
+                      allowCustomEmissionDate: allowCustomEmissionDate,
+                      hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
+                    toast.success('Configuración de documentos guardada exitosamente.')
+                  } catch (error) {
+                    console.error('Error al guardar configuración de documentos:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Documentos
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Tab Content - Catálogo Público */}
       {activeTab === 'catalogo' && (
+        <div className="space-y-6">
         <Card>
           <CardHeader>
             <div className="flex items-center space-x-2">
@@ -4694,10 +4858,8 @@ export default function Settings() {
             </div>
           </div>
         </Card>
-      )}
 
-      {/* Tab Content - Libro de Reclamaciones */}
-      {activeTab === 'reclamos' && (
+        {/* Libro de Reclamaciones */}
         <Card>
           <CardHeader>
             <div className="flex items-center space-x-2">
@@ -4936,261 +5098,7 @@ export default function Settings() {
             </div>
           </div>
         </Card>
-      )}
-
-      {/* Tab Content - Avanzado (SUNAT, Comprobantes, GRE, Privacidad) */}
-      {activeTab === 'avanzado' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <Cog className="w-5 h-5 text-primary-600" />
-              <CardTitle>Configuración Avanzada</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Configuración de Envío a SUNAT */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Envío a SUNAT</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Configura el comportamiento del envío de comprobantes a SUNAT
-                </p>
-
-                {/* Auto Send to SUNAT */}
-                <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoSendToSunat}
-                      onChange={e => setAutoSendToSunat(e.target.checked)}
-                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">Envío automático a SUNAT desde el POS</div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta.
-                        Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes.
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
-                        <Info className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-blue-700">
-                          {autoSendToSunat
-                            ? 'Los comprobantes se enviarán automáticamente'
-                            : 'Los comprobantes requerirán envío manual'}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Configuración de Comprobantes */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Gestión de Comprobantes</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Configura las opciones de seguridad para la gestión de comprobantes
-                </p>
-
-                <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowDeleteInvoices}
-                      onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir eliminar comprobantes
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowDeleteInvoices
-                          ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
-                          : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
-                        <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs text-amber-700 font-medium">
-                          {allowDeleteInvoices
-                            ? 'Mayor flexibilidad, menor control'
-                            : 'Mayor control y trazabilidad'}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowCustomEmissionDate}
-                      onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir seleccionar fecha de emisión en el POS
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowCustomEmissionDate
-                          ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
-                          : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                        <Info className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-blue-700 font-medium">
-                          {allowCustomEmissionDate
-                            ? 'Útil para regularizar ventas de días anteriores'
-                            : 'Emisión con fecha actual solamente'}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Configuración de Privacidad */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Privacidad y Permisos</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Configura qué información pueden ver los usuarios secundarios
-                </p>
-
-                <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={hideDashboardDataFromSecondary}
-                      onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
-                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar datos del dashboard a usuarios secundarios
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
-                        {hideDashboardDataFromSecondary
-                          ? '✓ Habilitado: Los usuarios secundarios verán el dashboard con todos los valores en cero. Solo el propietario y administradores podrán ver las estadísticas reales de ventas, ingresos y otros datos sensibles.'
-                          : '✗ Deshabilitado: Todos los usuarios pueden ver las estadísticas completas del dashboard incluyendo ventas totales, ingresos, productos más vendidos y gráficas.'}
-                      </p>
-                      <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
-                        <div className="flex items-start gap-2">
-                          <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                          <div className="text-xs text-purple-800 space-y-1">
-                            <p className="font-medium">Control de información sensible</p>
-                            <p>
-                              Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
-                              Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-
-          {/* Save Button for Avanzado */}
-          <div className="px-6 pb-6">
-            <div className="flex justify-end">
-              <Button
-                onClick={async () => {
-                  if (isDemoMode) {
-                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
-                    return
-                  }
-
-                  setIsSaving(true)
-                  try {
-                    const businessRef = doc(db, 'businesses', getBusinessId())
-                    await setDoc(businessRef, {
-                      autoSendToSunat: autoSendToSunat,
-                      allowDeleteInvoices: allowDeleteInvoices,
-                      allowCustomEmissionDate: allowCustomEmissionDate,
-                      hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
-                      updatedAt: serverTimestamp(),
-                    }, { merge: true })
-                    if (refreshBusinessSettings) await refreshBusinessSettings()
-                    toast.success('Configuración avanzada guardada exitosamente.')
-                  } catch (error) {
-                    console.error('Error al guardar configuración:', error)
-                    toast.error('Error al guardar la configuración')
-                  } finally {
-                    setIsSaving(false)
-                  }
-                }}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Guardar Configuración
-                  </>
-                )}
-              </Button>
-            </div>
-
-              {/* Herramientas de Administración - Solo visible si está habilitado en Firebase */}
-              {adminToolsEnabled && (
-                <>
-                  {/* Divider */}
-                  <div className="border-t border-gray-200 my-6"></div>
-
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
-                      <Wrench className="w-5 h-5 text-orange-500" />
-                      Herramientas de Administración
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Herramientas especiales para resolver problemas con documentos
-                    </p>
-
-                    <div className="space-y-3">
-                      <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 flex items-center gap-2">
-                              <RefreshCw className="w-4 h-4 text-orange-600" />
-                              Renumerar documentos rechazados
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
-                              esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
-                            </p>
-                            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
-                              <AlertTriangle className="w-4 h-4 text-orange-600" />
-                              <span className="text-xs text-orange-700">
-                                Use con precaución - solo para documentos rechazados
-                              </span>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => setShowRenumberModal(true)}
-                            className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
-                          >
-                            <Wrench className="w-4 h-4 mr-2" />
-                            Abrir herramienta
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-          </div>
-        </Card>
+        </div>
       )}
 
       {/* Tab Content - Series por Sucursal */}
@@ -6380,6 +6288,220 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          {/* Detector de Pagos Yape */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Bell className="w-5 h-5 text-purple-600" />
+                  <CardTitle>Detector de Pagos Yape</CardTitle>
+                </div>
+                {/* Toggle de activación */}
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={yapeConfig.enabled}
+                    onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  <span className="ml-2 text-sm font-medium text-gray-700">
+                    {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
+                  </span>
+                </label>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Descripción */}
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-sm text-purple-800">
+                    Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
+                    push a los usuarios que selecciones.
+                  </p>
+                </div>
+
+                {yapeConfig.enabled && (
+                  <>
+                    {/* Auto-iniciar */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
+                        <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={yapeConfig.autoStartListening}
+                          onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Notificar a todos */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
+                        <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={yapeConfig.notifyAllUsers}
+                          onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Selección de usuarios específicos */}
+                    {!yapeConfig.notifyAllUsers && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
+                        {isLoadingYape ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                          </div>
+                        ) : businessUsers.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-4">
+                            No hay usuarios registrados en este negocio
+                          </p>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {businessUsers.map(user => (
+                              <label
+                                key={user.id}
+                                className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={yapeConfig.notifyUsers.includes(user.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setYapeConfig(prev => ({
+                                        ...prev,
+                                        notifyUsers: [...prev.notifyUsers, user.id]
+                                      }))
+                                    } else {
+                                      setYapeConfig(prev => ({
+                                        ...prev,
+                                        notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
+                                      }))
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                                />
+                                <div className="ml-3">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {user.displayName || user.name || user.email}
+                                    {user.isOwner && (
+                                      <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                        Dueño
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{user.email}</p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Botón guardar */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <Button
+                        onClick={handleSaveYapeConfig}
+                        disabled={isSavingYape}
+                        className="w-full sm:w-auto"
+                      >
+                        {isSavingYape ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Guardar Configuración Yape
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Instrucciones Yape */}
+          {yapeConfig.enabled && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Instrucciones de uso - Yape</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">1</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
+                      <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">2</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
+                      <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">3</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">¡Listo!</p>
+                      <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botón de prueba */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <Link
+                    to="/test-notifications"
+                    className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
+                  >
+                    <Bell className="w-4 h-4 mr-1" />
+                    Abrir página de pruebas
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Nota de privacidad Yape */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  Solo se detectan notificaciones de Yape. Las notificaciones se procesan
+                  localmente y solo se guarda el monto y nombre del pagador.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -6553,226 +6675,6 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* Yape Tab */}
-      {activeTab === 'yape' && (
-        <div className="space-y-6">
-          {/* Configuración principal */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Bell className="w-5 h-5 text-purple-600" />
-                  <CardTitle>Detector de Pagos Yape</CardTitle>
-                </div>
-                {/* Toggle de activación */}
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={yapeConfig.enabled}
-                    onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                  <span className="ml-2 text-sm font-medium text-gray-700">
-                    {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
-                  </span>
-                </label>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Descripción */}
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <p className="text-sm text-purple-800">
-                    Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
-                    push a los usuarios que selecciones.
-                  </p>
-                </div>
-
-                {yapeConfig.enabled && (
-                  <>
-                    {/* Auto-iniciar */}
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
-                        <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={yapeConfig.autoStartListening}
-                          onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Notificar a todos */}
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
-                        <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={yapeConfig.notifyAllUsers}
-                          onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Selección de usuarios específicos */}
-                    {!yapeConfig.notifyAllUsers && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
-                        {isLoadingYape ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
-                          </div>
-                        ) : businessUsers.length === 0 ? (
-                          <p className="text-sm text-gray-500 text-center py-4">
-                            No hay usuarios registrados en este negocio
-                          </p>
-                        ) : (
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {businessUsers.map(user => (
-                              <label
-                                key={user.id}
-                                className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={yapeConfig.notifyUsers.includes(user.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setYapeConfig(prev => ({
-                                        ...prev,
-                                        notifyUsers: [...prev.notifyUsers, user.id]
-                                      }))
-                                    } else {
-                                      setYapeConfig(prev => ({
-                                        ...prev,
-                                        notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
-                                      }))
-                                    }
-                                  }}
-                                  className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
-                                />
-                                <div className="ml-3">
-                                  <p className="text-sm font-medium text-gray-900">
-                                    {user.displayName || user.name || user.email}
-                                    {user.isOwner && (
-                                      <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
-                                        Dueño
-                                      </span>
-                                    )}
-                                  </p>
-                                  <p className="text-xs text-gray-500">{user.email}</p>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Botón guardar */}
-                    <div className="border-t border-gray-200 pt-4">
-                      <Button
-                        onClick={handleSaveYapeConfig}
-                        disabled={isSavingYape}
-                        className="w-full sm:w-auto"
-                      >
-                        {isSavingYape ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-2" />
-                            Guardar Configuración
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Instrucciones */}
-          {yapeConfig.enabled && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Instrucciones de uso</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">1</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
-                      <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">2</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
-                      <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">3</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">¡Listo!</p>
-                      <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botón de prueba */}
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <Link
-                    to="/test-notifications"
-                    className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
-                  >
-                    <Bell className="w-4 h-4 mr-1" />
-                    Abrir página de pruebas
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Nota de privacidad */}
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start">
-              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
-                <p className="text-sm text-blue-800 mt-1">
-                  Solo se detectan notificaciones de Yape. Las notificaciones se procesan
-                  localmente y solo se guarda el monto y nombre del pagador.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
