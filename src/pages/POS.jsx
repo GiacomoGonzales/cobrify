@@ -702,6 +702,16 @@ export default function POS() {
         }
       }
 
+      // Cargar observaciones de la cotización
+      if (quotationInfo.notes) {
+        setGeneralNotes(quotationInfo.notes)
+      }
+
+      // Si el cliente tiene RUC (11 dígitos), seleccionar factura automáticamente
+      if (quotationInfo.customer?.documentNumber?.length === 11) {
+        setDocumentType('factura')
+      }
+
       toast.success(`Cotización ${quotationInfo.quotationNumber} cargada - ${quotationInfo.items?.length || 0} items. Revisa y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga
