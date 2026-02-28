@@ -596,107 +596,48 @@ export default function AdminUsers() {
     }
   }, [users])
 
-  // Métricas de renovación mensual
+  // Métricas de retención histórica
   const renewalStats = useMemo(() => {
     if (!users.length) return null
 
     const now = new Date()
-    const months = []
-    const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
-      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)
+    // Clasificar usuarios que alguna vez pagaron
+    let totalWithPayments = 0  // todos los que alguna vez pagaron
+    let active = 0             // suscripción vigente (currentPeriodEnd > ahora)
+    let churned = 0            // suscripción vencida (currentPeriodEnd <= ahora)
+    let inFirstPeriod = 0      // aún en su primer periodo (solo 1 pago y vigente)
+    let totalRevenue = 0       // ingresos históricos totales
 
-      let due = 0        // candidatos a renovar (vencimiento en este mes)
-      let renewed = 0    // renovados
-      let revenue = 0    // ingresos totales del mes
-      let newClients = 0 // clientes nuevos (primer pago)
+    for (const u of users) {
+      const payments = (u.paymentHistory || [])
+      if (payments.length === 0) continue
 
-      for (const u of users) {
-        if (u.status === 'suspended') continue
+      totalWithPayments++
 
-        // Contar pagos de este usuario en este mes
-        const paymentsThisMonth = (u.paymentHistory || []).filter(p => {
-          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
-          return pDate && pDate >= monthStart && pDate <= monthEnd
-        })
-
-        // Ingresos: sumar amount de pagos del mes
-        for (const p of paymentsThisMonth) {
-          revenue += (p.amount || 0)
-        }
-
-        // Determinar si es nuevo cliente (primer pago es en este mes)
-        const allPayments = (u.paymentHistory || []).map(p => {
-          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
-          return pDate
-        }).filter(Boolean).sort((a, b) => a - b)
-
-        if (allPayments.length > 0 && allPayments[0] >= monthStart && allPayments[0] <= monthEnd) {
-          newClients++
-          continue // Nuevo cliente, no es candidato a renovar
-        }
-
-        // Candidato a renovar: tenía algún periodo que vencía en este mes
-        // Miramos si algún pago previo generó un currentPeriodEnd en este mes
-        const payments = (u.paymentHistory || []).map(p => {
-          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
-          return { ...p, parsedDate: pDate }
-        }).filter(p => p.parsedDate).sort((a, b) => a.parsedDate - b.parsedDate)
-
-        let wasDueThisMonth = false
-        for (let pi = 0; pi < payments.length; pi++) {
-          const p = payments[pi]
-          const pMonths = p.months || 1
-          const endDate = new Date(p.parsedDate)
-          endDate.setMonth(endDate.getMonth() + pMonths)
-          if (endDate >= monthStart && endDate <= monthEnd) {
-            wasDueThisMonth = true
-            break
-          }
-        }
-
-        // Also check currentPeriodEnd directly for users with a single payment or no computed end
-        if (!wasDueThisMonth) {
-          const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
-            (u.periodEnd instanceof Date ? u.periodEnd : null)
-          if (pEnd && pEnd >= monthStart && pEnd <= monthEnd) {
-            wasDueThisMonth = true
-          }
-        }
-
-        if (wasDueThisMonth) {
-          due++
-          // Check if they renewed (payment in this month or next month)
-          const nextMonthEnd = new Date(d.getFullYear(), d.getMonth() + 2, 0, 23, 59, 59)
-          const didRenew = (u.paymentHistory || []).some(p => {
-            const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
-            return pDate && pDate >= monthStart && pDate <= nextMonthEnd
-          })
-          if (didRenew) renewed++
-        }
+      // Sumar ingresos históricos
+      for (const p of payments) {
+        totalRevenue += (p.amount || 0)
       }
 
-      const expired = due - renewed
-      const rate = due > 0 ? Math.round((renewed / due) * 100) : null
+      // Determinar si su periodo actual está vigente
+      const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
+        (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
 
-      months.push({
-        label: `${monthLabels[d.getMonth()]} ${d.getFullYear()}`,
-        renewed,
-        due,
-        expired,
-        rate,
-        revenue,
-        newClients
-      })
+      if (pEnd && pEnd > now) {
+        active++
+        if (payments.length === 1) inFirstPeriod++
+      } else {
+        churned++
+      }
     }
 
-    const currentMonth = months[months.length - 1]
-    const previousMonth = months[months.length - 2]
+    // Candidatos = todos los que pagaron menos los que están en su primer periodo
+    const candidates = totalWithPayments - inFirstPeriod
+    const renewed = active - inFirstPeriod
+    const rate = candidates > 0 ? Math.round((renewed / candidates) * 100) : null
 
-    return { currentMonth, previousMonth, months }
+    return { totalWithPayments, active, churned, inFirstPeriod, candidates, renewed, rate, totalRevenue }
   }, [users])
 
   function handleSort(field) {
@@ -1776,7 +1717,7 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* Tasa de Renovación */}
+      {/* Tasa de Retención */}
       {renewalStats && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <button
@@ -1788,40 +1729,33 @@ export default function AdminUsers() {
                 <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
               </div>
               <div className="text-left min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500">Tasa de Renovación</p>
+                <p className="text-xs sm:text-sm text-gray-500">Tasa de Retención</p>
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className={`text-xl sm:text-2xl font-bold ${
-                    renewalStats.currentMonth.rate === null ? 'text-gray-400' :
-                    renewalStats.currentMonth.rate > 70 ? 'text-green-600' :
-                    renewalStats.currentMonth.rate >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    renewalStats.rate === null ? 'text-gray-400' :
+                    renewalStats.rate > 70 ? 'text-green-600' :
+                    renewalStats.rate >= 40 ? 'text-yellow-600' : 'text-red-600'
                   }`}>
-                    {renewalStats.currentMonth.rate !== null ? `${renewalStats.currentMonth.rate}%` : '—'}
+                    {renewalStats.rate !== null ? `${renewalStats.rate}%` : '—'}
                   </span>
-                  {renewalStats.currentMonth.rate !== null && renewalStats.previousMonth.rate !== null && (
-                    <span className={`flex items-center gap-0.5 text-xs sm:text-sm font-medium ${
-                      renewalStats.currentMonth.rate >= renewalStats.previousMonth.rate ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {renewalStats.currentMonth.rate >= renewalStats.previousMonth.rate ?
-                        <TrendingUp className="w-3.5 h-3.5" /> :
-                        <TrendingDown className="w-3.5 h-3.5" />
-                      }
-                      {Math.abs(renewalStats.currentMonth.rate - renewalStats.previousMonth.rate)}%
-                    </span>
-                  )}
                 </div>
               </div>
               <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
                 <div className="text-center">
-                  <p className="text-gray-500 text-xs">Renovados</p>
-                  <p className="font-semibold text-gray-900">{renewalStats.currentMonth.renewed}/{renewalStats.currentMonth.due}</p>
+                  <p className="text-gray-500 text-xs">Activos</p>
+                  <p className="font-semibold text-green-600">{renewalStats.active}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-gray-500 text-xs">Nuevos</p>
-                  <p className="font-semibold text-blue-600">{renewalStats.currentMonth.newClients}</p>
+                  <p className="text-gray-500 text-xs">No renovaron</p>
+                  <p className="font-semibold text-red-600">{renewalStats.churned}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-gray-500 text-xs">Ingresos</p>
-                  <p className="font-semibold text-green-600">S/ {renewalStats.currentMonth.revenue.toFixed(0)}</p>
+                  <p className="text-gray-500 text-xs">En 1er periodo</p>
+                  <p className="font-semibold text-blue-600">{renewalStats.inFirstPeriod}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Ingresos totales</p>
+                  <p className="font-semibold text-green-600">S/ {renewalStats.totalRevenue.toFixed(0)}</p>
                 </div>
               </div>
             </div>
@@ -1831,57 +1765,43 @@ export default function AdminUsers() {
           {/* Resumen móvil */}
           <div className="sm:hidden px-3 pb-2 flex gap-3 text-xs text-center">
             <div className="flex-1">
-              <p className="text-gray-500">Renovados</p>
-              <p className="font-semibold">{renewalStats.currentMonth.renewed}/{renewalStats.currentMonth.due}</p>
+              <p className="text-gray-500">Activos</p>
+              <p className="font-semibold text-green-600">{renewalStats.active}</p>
             </div>
             <div className="flex-1">
-              <p className="text-gray-500">Nuevos</p>
-              <p className="font-semibold text-blue-600">{renewalStats.currentMonth.newClients}</p>
+              <p className="text-gray-500">No renovaron</p>
+              <p className="font-semibold text-red-600">{renewalStats.churned}</p>
             </div>
             <div className="flex-1">
-              <p className="text-gray-500">Ingresos</p>
-              <p className="font-semibold text-green-600">S/ {renewalStats.currentMonth.revenue.toFixed(0)}</p>
+              <p className="text-gray-500">1er periodo</p>
+              <p className="font-semibold text-blue-600">{renewalStats.inFirstPeriod}</p>
             </div>
           </div>
 
-          {/* Tabla detallada */}
+          {/* Detalle expandible */}
           {showRenewalDetails && (
-            <div className="border-t border-gray-200 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <th className="px-3 sm:px-4 py-2 text-left font-medium">Mes</th>
-                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Renovados</th>
-                    <th className="px-3 sm:px-4 py-2 text-center font-medium hidden sm:table-cell">Vencidos</th>
-                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Tasa</th>
-                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Nuevos</th>
-                    <th className="px-3 sm:px-4 py-2 text-right font-medium">Ingresos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renewalStats.months.map((m, idx) => (
-                    <tr key={idx} className={`border-t border-gray-100 ${idx === renewalStats.months.length - 1 ? 'bg-indigo-50/50' : ''}`}>
-                      <td className="px-3 sm:px-4 py-2 font-medium text-gray-900">{m.label}</td>
-                      <td className="px-3 sm:px-4 py-2 text-center text-gray-700">{m.renewed}/{m.due}</td>
-                      <td className="px-3 sm:px-4 py-2 text-center text-gray-500 hidden sm:table-cell">{m.expired}</td>
-                      <td className="px-3 sm:px-4 py-2 text-center">
-                        {m.rate !== null ? (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            m.rate > 70 ? 'bg-green-100 text-green-700' :
-                            m.rate >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {m.rate}%
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 sm:px-4 py-2 text-center text-blue-600">{m.newClients}</td>
-                      <td className="px-3 sm:px-4 py-2 text-right text-gray-700">S/ {m.revenue.toFixed(0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="border-t border-gray-200 p-3 sm:p-4 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <p className="text-gray-500 text-xs mb-1">Total con pagos</p>
+                  <p className="text-lg font-bold text-gray-900">{renewalStats.totalWithPayments}</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="text-gray-500 text-xs mb-1">Renovaron</p>
+                  <p className="text-lg font-bold text-green-600">{renewalStats.renewed}/{renewalStats.candidates}</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <p className="text-gray-500 text-xs mb-1">No renovaron</p>
+                  <p className="text-lg font-bold text-red-600">{renewalStats.churned}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-gray-500 text-xs mb-1">En 1er periodo</p>
+                  <p className="text-lg font-bold text-blue-600">{renewalStats.inFirstPeriod}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                La tasa se calcula sobre {renewalStats.candidates} candidatos (excluye {renewalStats.inFirstPeriod} en su primer periodo). Activos con suscripción vigente = renovaron. Vencidos sin nuevo pago = no renovaron.
+              </p>
             </div>
           )}
         </div>
