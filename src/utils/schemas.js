@@ -232,31 +232,13 @@ export const productSchema = z.object({
   variantAttributes: z.array(z.string()).optional(), // ["size", "color", "material"]
   variants: z.array(productVariantSchema).optional(), // Array de variantes
 }).superRefine((data, ctx) => {
-  // Si hasVariants es true, validar que tenga variantes y atributos
-  if (data.hasVariants) {
-    if (!data.variants || data.variants.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Debes agregar al menos una variante',
-        path: ['variants'],
-      })
-    }
-    if (!data.variantAttributes || data.variantAttributes.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Debes definir al menos un atributo de variante',
-        path: ['variantAttributes'],
-      })
-    }
-  } else {
-    // Si no tiene variantes, price es requerido
-    if (!data.price) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Precio es requerido',
-        path: ['price'],
-      })
-    }
+  // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state local)
+  if (!data.hasVariants && !data.price) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Precio es requerido',
+      path: ['price'],
+    })
   }
 })
 

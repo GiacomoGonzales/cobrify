@@ -241,7 +241,9 @@ export default function Products() {
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
-  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', stock: '' })
+  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+  const [editingVariantIndex, setEditingVariantIndex] = useState(null)
+  const [editingVariant, setEditingVariant] = useState(null)
 
   // Category management state
   const [categories, setCategories] = useState([])
@@ -338,6 +340,7 @@ export default function Products() {
       category: '',
       stock: '',
       noStock: false,
+      hasVariants: false,
       trackExpiration: false,
       expirationDate: '',
     },
@@ -469,7 +472,7 @@ export default function Products() {
     setVariantAttributes([])
     setVariants([])
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
     // Resetear stocks iniciales por almacén
     setWarehouseInitialStocks({})
     reset({
@@ -484,6 +487,7 @@ export default function Products() {
       category: '',
       stock: '',
       noStock: false,
+      hasVariants: false,
       trackExpiration: false,
       expirationDate: '',
     })
@@ -535,7 +539,7 @@ export default function Products() {
     setVariantAttributes(product.variantAttributes || [])
     setVariants(product.variants || [])
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
     // Load modifiers if product has them (restaurant mode)
     setModifiers(product.modifiers || [])
@@ -590,7 +594,7 @@ export default function Products() {
       sku: product.sku || '',
       name: product.name,
       description: product.description || '',
-      price: productHasVariants ? (product.variants?.[0]?.price?.toString() || '') : (product.price?.toString() || ''),
+      price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
@@ -601,6 +605,7 @@ export default function Products() {
       // Si no tiene initialStock definido, usar 0 (productos creados antes de esta feature o desde compras)
       initialStock: hasNoStock ? '' : (product.initialStock !== undefined && product.initialStock !== null ? product.initialStock.toString() : '0'),
       noStock: hasNoStock,
+      hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
     })
@@ -630,7 +635,7 @@ export default function Products() {
     // Clonar variantes pero limpiar IDs
     setVariants((product.variants || []).map(v => ({ ...v, id: undefined })))
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
     // Clonar modificadores
     setModifiers((product.modifiers || []).map(m => ({ ...m, id: undefined })))
@@ -683,7 +688,7 @@ export default function Products() {
       sku: '', // Limpiar SKU para evitar duplicados
       name: `${product.name} (copia)`, // Agregar indicador de copia
       description: product.description || '',
-      price: productHasVariants ? (product.variants?.[0]?.price?.toString() || '') : (product.price?.toString() || ''),
+      price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
@@ -693,6 +698,7 @@ export default function Products() {
       category: product.category || '', // Mantener la categoría
       initialStock: '', // Stock inicial vacío para el nuevo producto
       noStock: hasNoStock,
+      hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
     })
@@ -830,6 +836,9 @@ export default function Products() {
           sku: v.sku,
           attributes: v.attributes,
           price: typeof v.price === 'string' ? parseFloat(v.price) : v.price,
+          price2: v.price2 || null,
+          price3: v.price3 || null,
+          price4: v.price4 || null,
           stock: v.stock === '' || v.stock === null ? null : (typeof v.stock === 'string' ? parseInt(v.stock) : v.stock),
         }))
         // Calculate base price as average of variant prices
@@ -838,6 +847,10 @@ export default function Products() {
         // Don't include single price/stock for variant products
         productData.price = null
         productData.stock = null
+        // Precios adicionales se manejan a nivel variante, no producto
+        productData.price2 = null
+        productData.price3 = null
+        productData.price4 = null
         // Productos con variantes siempre manejan stock
         productData.trackStock = true
       } else {
@@ -1964,6 +1977,9 @@ export default function Products() {
       sku: newVariant.sku.trim(),
       attributes: { ...newVariant.attributes },
       price: parseFloat(newVariant.price),
+      price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
+      price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
+      price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
       stock: newVariant.stock === '' ? null : parseInt(newVariant.stock),
     }])
 
@@ -1972,12 +1988,69 @@ export default function Products() {
       sku: '',
       attributes: {},
       price: '',
+      price2: '',
+      price3: '',
+      price4: '',
       stock: '',
     })
   }
 
   const handleRemoveVariant = (index) => {
+    if (editingVariantIndex === index) {
+      setEditingVariantIndex(null)
+      setEditingVariant(null)
+    } else if (editingVariantIndex !== null && editingVariantIndex > index) {
+      setEditingVariantIndex(editingVariantIndex - 1)
+    }
     setVariants(variants.filter((_, i) => i !== index))
+  }
+
+  const handleEditVariant = (index) => {
+    const v = variants[index]
+    setEditingVariantIndex(index)
+    setEditingVariant({
+      sku: v.sku,
+      attributes: { ...v.attributes },
+      price: v.price?.toString() || '',
+      price2: v.price2?.toString() || '',
+      price3: v.price3?.toString() || '',
+      price4: v.price4?.toString() || '',
+      stock: v.stock?.toString() || '',
+    })
+  }
+
+  const handleSaveEditVariant = () => {
+    if (!editingVariant.sku.trim()) {
+      toast.error('El SKU es requerido')
+      return
+    }
+    if (!editingVariant.price || parseFloat(editingVariant.price) <= 0) {
+      toast.error('El precio debe ser mayor a 0')
+      return
+    }
+    // Check SKU uniqueness (excluding current)
+    if (variants.some((v, i) => i !== editingVariantIndex && v.sku === editingVariant.sku.trim())) {
+      toast.error('Ya existe otra variante con este SKU')
+      return
+    }
+    const updated = [...variants]
+    updated[editingVariantIndex] = {
+      sku: editingVariant.sku.trim(),
+      attributes: { ...editingVariant.attributes },
+      price: parseFloat(editingVariant.price),
+      price2: editingVariant.price2 ? parseFloat(editingVariant.price2) : null,
+      price3: editingVariant.price3 ? parseFloat(editingVariant.price3) : null,
+      price4: editingVariant.price4 ? parseFloat(editingVariant.price4) : null,
+      stock: editingVariant.stock === '' ? null : parseInt(editingVariant.stock),
+    }
+    setVariants(updated)
+    setEditingVariantIndex(null)
+    setEditingVariant(null)
+  }
+
+  const handleCancelEditVariant = () => {
+    setEditingVariantIndex(null)
+    setEditingVariant(null)
   }
 
   const handleNewVariantChange = (field, value) => {
@@ -3376,7 +3449,11 @@ export default function Products() {
         title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
         size="5xl"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <form onSubmit={handleSubmit(onSubmit, (formErrors) => {
+          console.error('Errores de validación:', formErrors)
+          const firstError = Object.values(formErrors)[0]
+          if (firstError?.message) toast.error(firstError.message)
+        })} className="space-y-5">
           {/* ═══════════════ LAYOUT 2 COLUMNAS (desktop) ═══════════════ */}
           <div className="lg:grid lg:grid-cols-2 lg:gap-8">
           {/* ═══════════════════════════════════════════════════════════════════
@@ -3600,16 +3677,9 @@ export default function Products() {
                 />
               )}
 
-              {/* Precios adicionales - solo si está habilitado en Settings */}
-              {businessSettings?.multiplePricesEnabled && (
+              {/* Precios adicionales - solo si está habilitado en Settings y NO tiene variantes */}
+              {businessSettings?.multiplePricesEnabled && !hasVariants && (
                 <>
-                  {hasVariants && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg">
-                        Estos precios se aplican proporcionalmente a cada variante según su precio individual.
-                      </p>
-                    </div>
-                  )}
                   <Input
                     label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
                     type="number"
@@ -3635,6 +3705,13 @@ export default function Products() {
                     {...register('price4')}
                   />
                 </>
+              )}
+              {businessSettings?.multiplePricesEnabled && hasVariants && (
+                <div className="col-span-2">
+                  <p className="text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg">
+                    Los precios adicionales se configuran directamente en cada variante.
+                  </p>
+                </div>
               )}
 
               <Select
@@ -3817,11 +3894,16 @@ export default function Products() {
                   checked={hasVariants}
                   onChange={e => {
                     setHasVariants(e.target.checked)
-                    if (!e.target.checked) {
+                    setValue('hasVariants', e.target.checked)
+                    if (e.target.checked) {
+                      // Poner precio dummy para que Zod no bloquee el submit
+                      setValue('price', '1')
+                    } else {
+                      setValue('price', '')
                       setVariantAttributes([])
                       setVariants([])
                       setNewAttributeName('')
-                      setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+                      setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
                     }
                   }}
                   className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -4354,7 +4436,7 @@ export default function Products() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Precio
+                            {businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : 'Precio'}
                           </label>
                           <input
                             type="number"
@@ -4365,6 +4447,49 @@ export default function Products() {
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                         </div>
+                        {businessSettings?.multiplePricesEnabled && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={newVariant.price2}
+                                onChange={e => handleNewVariantChange('price2', e.target.value)}
+                                placeholder="0.00 (opcional)"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={newVariant.price3}
+                                onChange={e => handleNewVariantChange('price3', e.target.value)}
+                                placeholder="0.00 (opcional)"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={newVariant.price4}
+                                onChange={e => handleNewVariantChange('price4', e.target.value)}
+                                placeholder="0.00 (opcional)"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
+                          </>
+                        )}
                         {variantAttributes.map(attr => (
                           <div key={attr}>
                             <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
@@ -4414,30 +4539,95 @@ export default function Products() {
                               {variantAttributes.map(attr => (
                                 <th key={attr} className="px-2 py-2 text-left capitalize">{attr}</th>
                               ))}
-                              <th className="px-2 py-2 text-left">Precio</th>
+                              <th className="px-2 py-2 text-left">{businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'P1') : 'Precio'}</th>
+                              {businessSettings?.multiplePricesEnabled && (
+                                <>
+                                  <th className="px-2 py-2 text-left">{businessSettings?.priceLabels?.price2 || 'P2'}</th>
+                                  <th className="px-2 py-2 text-left">{businessSettings?.priceLabels?.price3 || 'P3'}</th>
+                                  <th className="px-2 py-2 text-left">{businessSettings?.priceLabels?.price4 || 'P4'}</th>
+                                </>
+                              )}
                               <th className="px-2 py-2 text-left">Stock</th>
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {variants.map((variant, index) => (
-                              <tr key={index} className="border-b border-gray-200">
-                                <td className="px-2 py-2 font-mono text-xs">{variant.sku}</td>
-                                {variantAttributes.map(attr => (
-                                  <td key={attr} className="px-2 py-2">{variant.attributes[attr] || '-'}</td>
-                                ))}
-                                <td className="px-2 py-2 font-semibold">{formatCurrency(variant.price)}</td>
-                                <td className="px-2 py-2">{variant.stock ?? 'N/A'}</td>
-                                <td className="px-2 py-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveVariant(index)}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
+                              editingVariantIndex === index ? (
+                                <tr key={index} className="border-b border-gray-200 bg-blue-50">
+                                  <td className="px-2 py-1">
+                                    <input type="text" value={editingVariant.sku} onChange={e => setEditingVariant({ ...editingVariant, sku: e.target.value })} className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded" />
+                                  </td>
+                                  {variantAttributes.map(attr => (
+                                    <td key={attr} className="px-2 py-1">
+                                      <input type="text" value={editingVariant.attributes[attr] || ''} onChange={e => setEditingVariant({ ...editingVariant, attributes: { ...editingVariant.attributes, [attr]: e.target.value } })} className="w-full px-2 py-1 text-xs border border-gray-300 rounded" />
+                                    </td>
+                                  ))}
+                                  <td className="px-2 py-1">
+                                    <input type="number" step="0.01" value={editingVariant.price} onChange={e => setEditingVariant({ ...editingVariant, price: e.target.value })} className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                  </td>
+                                  {businessSettings?.multiplePricesEnabled && (
+                                    <>
+                                      <td className="px-2 py-1">
+                                        <input type="number" step="0.01" value={editingVariant.price2} onChange={e => setEditingVariant({ ...editingVariant, price2: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        <input type="number" step="0.01" value={editingVariant.price3} onChange={e => setEditingVariant({ ...editingVariant, price3: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        <input type="number" step="0.01" value={editingVariant.price4} onChange={e => setEditingVariant({ ...editingVariant, price4: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                      </td>
+                                    </>
+                                  )}
+                                  <td className="px-2 py-1">
+                                    <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                  </td>
+                                  <td className="px-2 py-1">
+                                    <div className="flex gap-1">
+                                      <button type="button" onClick={handleSaveEditVariant} className="text-green-600 hover:text-green-800">
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                      <button type="button" onClick={handleCancelEditVariant} className="text-gray-500 hover:text-gray-700">
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : (
+                                <tr key={index} className="border-b border-gray-200">
+                                  <td className="px-2 py-2 font-mono text-xs">{variant.sku}</td>
+                                  {variantAttributes.map(attr => (
+                                    <td key={attr} className="px-2 py-2">{variant.attributes[attr] || '-'}</td>
+                                  ))}
+                                  <td className="px-2 py-2 font-semibold">{formatCurrency(variant.price)}</td>
+                                  {businessSettings?.multiplePricesEnabled && (
+                                    <>
+                                      <td className="px-2 py-2 text-gray-600">{variant.price2 ? formatCurrency(variant.price2) : '-'}</td>
+                                      <td className="px-2 py-2 text-gray-600">{variant.price3 ? formatCurrency(variant.price3) : '-'}</td>
+                                      <td className="px-2 py-2 text-gray-600">{variant.price4 ? formatCurrency(variant.price4) : '-'}</td>
+                                    </>
+                                  )}
+                                  <td className="px-2 py-2">{variant.stock ?? 'N/A'}</td>
+                                  <td className="px-2 py-2">
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditVariant(index)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveVariant(index)}
+                                        className="text-red-600 hover:text-red-800"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
                             ))}
                           </tbody>
                         </table>

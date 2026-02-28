@@ -60,20 +60,44 @@ const isProductOutOfStock = (product, ignoreStock = false) => {
 // Helper: obtener precios disponibles de un producto (mayorista, VIP, etc.)
 const getProductPrices = (product, business) => {
   if (!business?.multiplePricesEnabled) return []
+  const defaultLabels = { price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' }
+  const prices = []
+
+  if (product.hasVariants && product.variants?.length > 0) {
+    // Para productos con variantes, verificar qué niveles de precio tienen las variantes
+    const baseValue = product.basePrice || Math.min(...product.variants.map(v => v.price))
+    prices.push({
+      key: 'price1',
+      value: baseValue,
+      label: business.priceLabels?.price1 || defaultLabels.price1
+    })
+    const hasP2 = product.variants.some(v => v.price2 && v.price2 > 0)
+    const hasP3 = product.variants.some(v => v.price3 && v.price3 > 0)
+    const hasP4 = product.variants.some(v => v.price4 && v.price4 > 0)
+    if (hasP2) {
+      const avgP2 = product.variants.reduce((sum, v) => sum + (v.price2 || 0), 0) / product.variants.filter(v => v.price2 > 0).length
+      prices.push({ key: 'price2', value: parseFloat(avgP2.toFixed(2)), label: business.priceLabels?.price2 || defaultLabels.price2 })
+    }
+    if (hasP3) {
+      const avgP3 = product.variants.reduce((sum, v) => sum + (v.price3 || 0), 0) / product.variants.filter(v => v.price3 > 0).length
+      prices.push({ key: 'price3', value: parseFloat(avgP3.toFixed(2)), label: business.priceLabels?.price3 || defaultLabels.price3 })
+    }
+    if (hasP4) {
+      const avgP4 = product.variants.reduce((sum, v) => sum + (v.price4 || 0), 0) / product.variants.filter(v => v.price4 > 0).length
+      prices.push({ key: 'price4', value: parseFloat(avgP4.toFixed(2)), label: business.priceLabels?.price4 || defaultLabels.price4 })
+    }
+    return prices
+  }
+
+  // Producto sin variantes
   const keys = [
     { priceField: 'price', labelKey: 'price1' },
     { priceField: 'price2', labelKey: 'price2' },
     { priceField: 'price3', labelKey: 'price3' },
     { priceField: 'price4', labelKey: 'price4' },
   ]
-  const defaultLabels = { price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' }
-  const prices = []
   keys.forEach(({ priceField, labelKey }) => {
-    let value = product[priceField]
-    // Para productos con variantes, usar basePrice como referencia del precio base
-    if (priceField === 'price' && !value && product.hasVariants) {
-      value = product.basePrice
-    }
+    const value = product[priceField]
     if (value && value > 0) {
       prices.push({
         key: labelKey,
@@ -87,36 +111,55 @@ const getProductPrices = (product, business) => {
 
 // Helper: obtener rango de precios min~max (productos con múltiples precios, con o sin variantes)
 const getProductPriceRange = (product, business) => {
+  if (!business?.multiplePricesEnabled) return null
+
+  if (product.hasVariants && product.variants?.length > 0) {
+    // Rango directo: min y max de todos los precios de todas las variantes
+    const allPrices = []
+    product.variants.forEach(v => {
+      allPrices.push(v.price)
+      if (v.price2 && v.price2 > 0) allPrices.push(v.price2)
+      if (v.price3 && v.price3 > 0) allPrices.push(v.price3)
+      if (v.price4 && v.price4 > 0) allPrices.push(v.price4)
+    })
+    if (allPrices.length <= 1) return null
+    const min = Math.min(...allPrices)
+    const max = Math.max(...allPrices)
+    if (min === max) return null
+    return { min, max }
+  }
+
+  // Producto sin variantes
   const prices = getProductPrices(product, business)
   if (prices.length <= 1) return null
   const values = prices.map(p => p.value)
-
-  if (product.hasVariants && product.variants?.length > 0) {
-    // Rango combinado: precio mínimo de variante × ratio mínimo ~ precio máximo de variante
-    const baseRef = product.basePrice || Math.max(...values)
-    const minRatio = Math.min(...values) / baseRef
-    const variantPrices = product.variants.map(v => v.price)
-    const minVariantPrice = Math.min(...variantPrices)
-    const maxVariantPrice = Math.max(...variantPrices)
-    return {
-      min: Math.round(minVariantPrice * minRatio * 100) / 100,
-      max: maxVariantPrice
-    }
-  }
-
   return { min: Math.min(...values), max: Math.max(...values) }
 }
 
-// Helper: calcular precio de variante ajustado a un nivel de precio
+// Helper: obtener precio de variante para un nivel de precio (lectura directa)
 const getVariantPriceForLevel = (variant, product, priceLevel) => {
   if (!priceLevel || priceLevel === 'price1') return variant.price
-  const baseRef = product.basePrice
-  const levelPrice = priceLevel === 'price2' ? product.price2
-    : priceLevel === 'price3' ? product.price3
-    : priceLevel === 'price4' ? product.price4
-    : null
-  if (!levelPrice || !baseRef || baseRef === 0) return variant.price
-  return Math.round(variant.price * (levelPrice / baseRef) * 100) / 100
+  const key = priceLevel === 'price2' ? 'price2'
+    : priceLevel === 'price3' ? 'price3'
+    : priceLevel === 'price4' ? 'price4' : null
+  return (key && variant[key]) ? variant[key] : variant.price
+}
+
+// Helper: obtener precios disponibles de una variante específica
+const getVariantPrices = (variant, business) => {
+  if (!business?.multiplePricesEnabled) return []
+  const defaultLabels = { price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' }
+  const prices = [{ key: 'price1', value: variant.price, label: business.priceLabels?.price1 || defaultLabels.price1 }]
+  if (variant.price2 && variant.price2 > 0) {
+    prices.push({ key: 'price2', value: variant.price2, label: business.priceLabels?.price2 || defaultLabels.price2 })
+  }
+  if (variant.price3 && variant.price3 > 0) {
+    prices.push({ key: 'price3', value: variant.price3, label: business.priceLabels?.price3 || defaultLabels.price3 })
+  }
+  if (variant.price4 && variant.price4 > 0) {
+    prices.push({ key: 'price4', value: variant.price4, label: business.priceLabels?.price4 || defaultLabels.price4 })
+  }
+  return prices
 }
 
 // Modal de producto con soporte para modificadores
@@ -197,8 +240,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   const hasVariants = product.hasVariants && product.variants?.length > 0
 
-  // Precios disponibles (mayorista, VIP, etc.)
-  const availablePrices = getProductPrices(product, business)
+  // Precios disponibles (mayorista, VIP, etc.) — para variantes, mostrar precios de la variante seleccionada
+  const availablePrices = (hasVariants && selectedVariant)
+    ? getVariantPrices(selectedVariant, business)
+    : getProductPrices(product, business)
   const hasMultiplePrices = availablePrices.length > 1
 
   // Calcular precio total con modificadores, variante y nivel de precio
@@ -367,8 +412,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             )}
           </div>
 
-          {/* Tabla de precios por mayor */}
-          {hasMultiplePrices && showPrices && (
+          {/* Tabla de precios por mayor — productos SIN variantes */}
+          {!hasVariants && hasMultiplePrices && showPrices && (
             <div className="mb-6">
               <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
                 {availablePrices.map((priceItem) => {
@@ -404,7 +449,6 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   )
                 })}
               </div>
-              {/* Nota de cantidad mínima para precio mayorista */}
               {selectedPriceLevel && selectedPriceLevel !== 'price1' && business?.catalogWholesaleMinQty > 1 && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
@@ -439,6 +483,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         if (!outOfStock) {
                           setSelectedVariant(variant)
                           setVariantError(false)
+                          setSelectedPriceLevel('price1')
                         }
                       }}
                       disabled={outOfStock}
@@ -457,10 +502,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       <div className="flex items-center gap-2">
                         {showPrices && (
                           <span className="text-sm font-medium text-gray-600">
-                            S/ {(hasMultiplePrices && selectedPriceLevel
-                              ? getVariantPriceForLevel(variant, product, selectedPriceLevel)
-                              : variant.price
-                            ).toFixed(2)}
+                            S/ {variant.price.toFixed(2)}
                           </span>
                         )}
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -477,6 +519,54 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   )
                 })}
               </div>
+            </div>
+
+          )}
+
+          {/* Tabla de precios por mayor — variantes (aparece después de seleccionar variante) */}
+          {hasVariants && selectedVariant && availablePrices.length > 1 && showPrices && (
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Precios disponibles</h3>
+              <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
+                {availablePrices.map((priceItem) => {
+                  const isSelected = selectedPriceLevel === priceItem.key
+                  return (
+                    <button
+                      key={priceItem.key}
+                      onClick={() => setSelectedPriceLevel(priceItem.key)}
+                      className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
+                        isSelected
+                          ? 'bg-emerald-50'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className={`font-medium ${isSelected ? 'text-emerald-700' : 'text-gray-700'}`}>
+                          {priceItem.label}
+                        </span>
+                      </div>
+                      <span className={`font-bold ${isSelected ? 'text-emerald-700' : 'text-gray-900'}`}>
+                        S/ {priceItem.value.toFixed(2)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedPriceLevel && selectedPriceLevel !== 'price1' && business?.catalogWholesaleMinQty > 1 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  Precio aplica desde {business.catalogWholesaleMinQty} unidades
+                </p>
+              )}
             </div>
           )}
 
