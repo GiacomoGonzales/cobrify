@@ -3587,19 +3587,29 @@ export default function Products() {
                 <p className="text-xs text-gray-500 mt-1">Opcional</p>
               </div>
 
-              <Input
-                label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
-                type="number"
-                step="0.01"
-                required
-                placeholder="0.00"
-                error={errors.price?.message}
-                {...register('price')}
-              />
+              {/* Precio principal - ocultar cuando tiene variantes (cada variante tiene su precio) */}
+              {!hasVariants && (
+                <Input
+                  label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder="0.00"
+                  error={errors.price?.message}
+                  {...register('price')}
+                />
+              )}
 
               {/* Precios adicionales - solo si está habilitado en Settings */}
               {businessSettings?.multiplePricesEnabled && (
                 <>
+                  {hasVariants && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg">
+                        Estos precios se aplican proporcionalmente a cada variante según su precio individual.
+                      </p>
+                    </div>
+                  )}
                   <Input
                     label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
                     type="number"
