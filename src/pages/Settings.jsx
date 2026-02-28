@@ -5154,64 +5154,237 @@ export default function Settings() {
           {!loadingBranches && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="space-y-3">
+                  {/* Fila 1: Título */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
+                    <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
                       <Store className="w-5 h-5 text-blue-600" />
                     </div>
-                    <div>
-                      <CardTitle className="text-lg">Sucursal Principal</CardTitle>
-                      <p className="text-sm text-gray-500 mt-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CardTitle className="text-lg">Sucursal Principal</CardTitle>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">
+                          Principal
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
                         Series globales del negocio
                       </p>
                     </div>
-                    <span className="px-2 py-1 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">
-                      Principal
-                    </span>
                   </div>
-                  {!editingSeries ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingSeries(true)}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Editar Series
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
+                  {/* Fila 2: Botones */}
+                  <div className="flex justify-end">
+                    {!editingSeries ? (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setEditingSeries(false)}
-                        disabled={isSaving}
+                        onClick={() => setEditingSeries(true)}
+                        className="w-full sm:w-auto"
                       >
-                        Cancelar
+                        <Edit className="w-4 h-4 mr-1" />
+                        Editar Series
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSaveSeries}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-1" />
-                            Guardar
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingSeries(false)}
+                          disabled={isSaving}
+                          className="flex-1 sm:flex-none"
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveSeries}
+                          disabled={isSaving}
+                          className="flex-1 sm:flex-none"
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-1" />
+                              Guardar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Tabla de series globales */}
-                <div className="overflow-x-auto">
+                {/* Vista móvil - Tarjetas */}
+                <div className="md:hidden space-y-4">
+                  {/* Documentos principales */}
+                  {[
+                    { key: 'factura', label: 'Factura Electrónica' },
+                    { key: 'boleta', label: 'Boleta de Venta' },
+                    { key: 'nota_venta', label: 'Nota de Venta' },
+                    { key: 'cotizacion', label: 'Cotización' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notas de Crédito */}
+                  <div className="py-1 px-3 text-xs font-semibold text-blue-700 bg-blue-50 rounded">Notas de Crédito</div>
+                  {[
+                    { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                    { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notas de Débito */}
+                  <div className="py-1 px-3 text-xs font-semibold text-orange-700 bg-orange-50 rounded">Notas de Débito</div>
+                  {[
+                    { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                    { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Guías de Remisión */}
+                  <div className="py-1 px-3 text-xs font-semibold text-purple-700 bg-purple-50 rounded">Guías de Remisión</div>
+                  {[
+                    { key: 'guia_remision', label: 'Guía Remitente', defaultSerie: 'T001' },
+                    { key: 'guia_transportista', label: 'Guía Transportista', defaultSerie: 'V001' },
+                  ].map(({ key, label, defaultSerie }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key]?.serie || defaultSerie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSerie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Vista desktop - Tabla */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-gray-50">
@@ -5406,66 +5579,234 @@ export default function Settings() {
                 return (
                   <Card key={branch.id}>
                     <CardHeader>
-                      <div className="flex items-center justify-between">
+                      <div className="space-y-3">
+                        {/* Fila 1: Título */}
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-cyan-100 rounded-lg">
+                          <div className="p-2 bg-cyan-100 rounded-lg flex-shrink-0">
                             <Store className="w-5 h-5 text-cyan-600" />
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <CardTitle className="text-lg">{branch.name}</CardTitle>
                             {branch.address && (
-                              <p className="text-sm text-gray-500 flex items-center mt-1">
-                                <MapPin className="w-3 h-3 mr-1" />
-                                {branch.address}
+                              <p className="text-sm text-gray-500 flex items-center mt-0.5 truncate">
+                                <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                                <span className="truncate">{branch.address}</span>
                               </p>
                             )}
                           </div>
                         </div>
-                        {!isEditing ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => initializeBranchSeries(branch.id, index)}
-                          >
-                            <Edit className="w-4 h-4 mr-1" />
-                            Editar Series
-                          </Button>
-                        ) : (
-                          <div className="flex gap-2">
+                        {/* Fila 2: Botones */}
+                        <div className="flex justify-end">
+                          {!isEditing ? (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setEditingBranchId(null)
-                                loadBranchesAndSeries()
-                              }}
-                              disabled={isSaving}
+                              onClick={() => initializeBranchSeries(branch.id, index)}
+                              className="w-full sm:w-auto"
                             >
-                              Cancelar
+                              <Edit className="w-4 h-4 mr-1" />
+                              Editar Series
                             </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => handleSaveBranchSeries(branch.id)}
-                              disabled={isSaving}
-                            >
-                              {isSaving ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                  Guardando...
-                                </>
-                              ) : (
-                                <>
-                                  <Save className="w-4 h-4 mr-1" />
-                                  Guardar
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex gap-2 w-full sm:w-auto">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingBranchId(null)
+                                  loadBranchesAndSeries()
+                                }}
+                                disabled={isSaving}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveBranchSeries(branch.id)}
+                                disabled={isSaving}
+                                className="flex-1 sm:flex-none"
+                              >
+                                {isSaving ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                    Guardando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-4 h-4 mr-1" />
+                                    Guardar
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
+                      {/* Vista móvil - Tarjetas */}
+                      <div className="md:hidden space-y-4">
+                        {[
+                          { key: 'factura', label: 'Factura Electrónica' },
+                          { key: 'boleta', label: 'Boleta de Venta' },
+                          { key: 'nota_venta', label: 'Nota de Venta' },
+                          { key: 'cotizacion', label: 'Cotización' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-blue-700 bg-blue-50 rounded">Notas de Crédito</div>
+                        {[
+                          { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                          { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-orange-700 bg-orange-50 rounded">Notas de Débito</div>
+                        {[
+                          { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                          { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-purple-700 bg-purple-50 rounded">Guías de Remisión</div>
+                        {[
+                          { key: 'guia_remision', label: 'Guía Remitente', defaultSerie: 'T001' },
+                          { key: 'guia_transportista', label: 'Guía Transportista', defaultSerie: 'V001' },
+                        ].map(({ key, label, defaultSerie }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key]?.serie || defaultSerie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSerie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Vista desktop - Tabla */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-gray-50">

@@ -375,6 +375,7 @@ export default function POS() {
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
   const [showVariantModal, setShowVariantModal] = useState(false)
+  const [variantForPriceSelection, setVariantForPriceSelection] = useState(null) // Variante pendiente de selección de precio
 
   // Modifier selection modal (restaurant modifiers)
   const [showModifierModal, setShowModifierModal] = useState(false)
@@ -1603,6 +1604,29 @@ export default function POS() {
 
   // Manejar selección de precio desde el modal
   const handlePriceSelection = (priceLevel) => {
+    // Manejar variante con múltiples precios
+    if (variantForPriceSelection) {
+      const { product, variant } = variantForPriceSelection
+      let selectedPrice = variant.price // default price1
+
+      if (priceLevel === 'price2' && variant.price2) {
+        selectedPrice = variant.price2
+      } else if (priceLevel === 'price3' && variant.price3) {
+        selectedPrice = variant.price3
+      } else if (priceLevel === 'price4' && variant.price4) {
+        selectedPrice = variant.price4
+      }
+
+      // Agregar variante al carrito con el precio seleccionado
+      addVariantToCart(product, variant, selectedPrice)
+
+      // Cerrar modal y limpiar estado
+      setShowPriceModal(false)
+      setVariantForPriceSelection(null)
+      return
+    }
+
+    // Manejar producto normal con múltiples precios
     if (!productForPriceSelection) return
 
     const product = productForPriceSelection
@@ -1690,7 +1714,7 @@ export default function POS() {
     setProductForPresentationSelection(null)
   }
 
-  const addVariantToCart = (product, variant) => {
+  const addVariantToCart = (product, variant, selectedPrice = null) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -1702,6 +1726,26 @@ export default function POS() {
       toast.error('Variante sin stock disponible')
       return
     }
+
+    // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (variant.price2 || variant.price3 || variant.price4)
+    if (hasMultiplePrices && selectedPrice === null) {
+      // Si el cliente tiene un nivel de precio asignado, usarlo automáticamente
+      if (selectedCustomer?.priceLevel) {
+        const priceKey = selectedCustomer.priceLevel
+        const autoPrice = variant[priceKey] || variant.price
+        return addVariantToCart(product, variant, autoPrice)
+      }
+      // Mostrar modal de selección de precio
+      setVariantForPriceSelection({ product, variant })
+      setShowPriceModal(true)
+      setShowVariantModal(false)
+      setSelectedProductForVariant(null)
+      return
+    }
+
+    // Determinar el precio final
+    const finalPrice = selectedPrice !== null ? selectedPrice : variant.price
 
     // Create unique ID for variant (product ID + variant SKU)
     const variantCartId = `${product.id}-${variant.sku}`
@@ -1730,7 +1774,7 @@ export default function POS() {
         name: product.name,
         variantSku: variant.sku,
         variantAttributes: variant.attributes,
-        price: variant.price,
+        price: finalPrice,
         stock: variant.stock,
         quantity: 1,
         isVariant: true,
@@ -6051,97 +6095,117 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         onClose={() => {
           setShowPriceModal(false)
           setProductForPriceSelection(null)
+          setVariantForPriceSelection(null)
         }}
-        title={`Seleccionar precio - ${productForPriceSelection?.name || ''}`}
+        title={`Seleccionar precio - ${variantForPriceSelection ? variantForPriceSelection.product.name : productForPriceSelection?.name || ''}`}
         size="sm"
       >
-        {productForPriceSelection && (
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <p className="text-sm text-gray-600">
-              Este producto tiene múltiples precios. Selecciona el precio a aplicar:
-            </p>
+        {(productForPriceSelection || variantForPriceSelection) && (() => {
+          // Determinar si estamos mostrando precios de variante o producto
+          const priceSource = variantForPriceSelection ? variantForPriceSelection.variant : productForPriceSelection
+          const variantInfo = variantForPriceSelection?.variant
 
-            <div className="space-y-3">
-              {/* Precio 1 */}
-              <button
-                onClick={() => handlePriceSelection('price1')}
-                className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {businessSettings?.priceLabels?.price1 || 'Precio 1'}
-                    </p>
-                    <p className="text-xs text-gray-500">Precio principal</p>
+          return (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {variantInfo && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Variante: <span className="font-mono">{variantInfo.sku}</span></p>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(variantInfo.attributes || {}).map(([key, value]) => (
+                      <Badge key={key} variant="secondary" className="text-xs">
+                        {key}: {value}
+                      </Badge>
+                    ))}
                   </div>
-                  <p className="text-xl font-bold text-primary-600">
-                    {formatCurrency(productForPriceSelection.price)}
-                  </p>
                 </div>
-              </button>
+              )}
 
-              {/* Precio 2 */}
-              {productForPriceSelection.price2 && (
+              <p className="text-sm text-gray-600">
+                {variantForPriceSelection ? 'Esta variante' : 'Este producto'} tiene múltiples precios. Selecciona el precio a aplicar:
+              </p>
+
+              <div className="space-y-3">
+                {/* Precio 1 */}
                 <button
-                  onClick={() => handlePriceSelection('price2')}
+                  onClick={() => handlePriceSelection('price1')}
                   className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">
-                        {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                        {businessSettings?.priceLabels?.price1 || 'Precio 1'}
                       </p>
-                      <p className="text-xs text-gray-500">Precio alternativo</p>
+                      <p className="text-xs text-gray-500">Precio principal</p>
                     </div>
-                    <p className="text-xl font-bold text-green-600">
-                      {formatCurrency(productForPriceSelection.price2)}
+                    <p className="text-xl font-bold text-primary-600">
+                      {formatCurrency(priceSource.price)}
                     </p>
                   </div>
                 </button>
-              )}
 
-              {/* Precio 3 */}
-              {productForPriceSelection.price3 && (
-                <button
-                  onClick={() => handlePriceSelection('price3')}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                {/* Precio 2 */}
+                {priceSource.price2 && (
+                  <button
+                    onClick={() => handlePriceSelection('price2')}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                        </p>
+                        <p className="text-xs text-gray-500">Precio alternativo</p>
+                      </div>
+                      <p className="text-xl font-bold text-green-600">
+                        {formatCurrency(priceSource.price2)}
                       </p>
-                      <p className="text-xs text-gray-500">Precio especial</p>
                     </div>
-                    <p className="text-xl font-bold text-amber-600">
-                      {formatCurrency(productForPriceSelection.price3)}
-                    </p>
-                  </div>
-                </button>
-              )}
+                  </button>
+                )}
 
-              {/* Precio 4 */}
-              {productForPriceSelection.price4 && (
-                <button
-                  onClick={() => handlePriceSelection('price4')}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                {/* Precio 3 */}
+                {priceSource.price3 && (
+                  <button
+                    onClick={() => handlePriceSelection('price3')}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                        </p>
+                        <p className="text-xs text-gray-500">Precio especial</p>
+                      </div>
+                      <p className="text-xl font-bold text-amber-600">
+                        {formatCurrency(priceSource.price3)}
                       </p>
-                      <p className="text-xs text-gray-500">Precio personalizado</p>
                     </div>
-                    <p className="text-xl font-bold text-purple-600">
-                      {formatCurrency(productForPriceSelection.price4)}
-                    </p>
-                  </div>
-                </button>
-              )}
+                  </button>
+                )}
+
+                {/* Precio 4 */}
+                {priceSource.price4 && (
+                  <button
+                    onClick={() => handlePriceSelection('price4')}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                        </p>
+                        <p className="text-xs text-gray-500">Precio personalizado</p>
+                      </div>
+                      <p className="text-xl font-bold text-purple-600">
+                        {formatCurrency(priceSource.price4)}
+                      </p>
+                    </div>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Modal de Selección de Lote (Modo Farmacia) */}

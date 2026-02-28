@@ -818,7 +818,7 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
         </CardContent>
       </Card>
 
-      {/* Tabla */}
+      {/* Lista de Envíos */}
       <Card>
         <CardHeader>
           <CardTitle>Envíos ({deliveries.length})</CardTitle>
@@ -828,32 +828,106 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
             </div>
+          ) : deliveries.length === 0 ? (
+            <div className="text-center py-12">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600">No se encontraron envíos</p>
+              <p className="text-sm text-gray-500 mt-1">Crea un nuevo envío con el botón superior</p>
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha/Hora</TableHead>
-                    <TableHead>Factura #</TableHead>
-                    <TableHead>Motorista</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
-                    <TableHead>Método Pago</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deliveries.length === 0 ? (
+            <>
+              {/* Vista de tarjetas para móvil */}
+              <div className="lg:hidden divide-y divide-gray-100">
+                {deliveries.map((d) => {
+                  const nextStatuses = DELIVERY_STATUS_FLOW[d.status] || []
+                  return (
+                    <div key={d.id} className="py-3">
+                      {/* Fila 1: Factura + Monto + Imprimir */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-medium text-primary-600">{d.orderNumber || '-'}</span>
+                          <Badge variant="default" className="text-xs">
+                            {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">S/ {(d.amount || 0).toFixed(2)}</span>
+                          <button
+                            onClick={() => onPrint(d)}
+                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Imprimir guía"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Fila 2: Cliente + Motorista */}
+                      <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-600">
+                        <span className="truncate flex-1">{d.customerName || 'Sin cliente'}</span>
+                        <span className="flex items-center gap-1 text-blue-600 flex-shrink-0">
+                          <Bike className="w-3.5 h-3.5" />
+                          {d.motoristaName || '-'}
+                        </span>
+                      </div>
+
+                      {/* Fila 3: Fecha + Estado */}
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs text-gray-500">
+                          {d.createdAt?.toDate
+                            ? d.createdAt.toDate().toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+                            : '-'}
+                        </span>
+                        {nextStatuses.length > 0 ? (
+                          <select
+                            value={d.status}
+                            onChange={(e) => onStatusChange(d, e.target.value)}
+                            className={`text-xs px-2 py-1 border rounded font-medium cursor-pointer ${
+                              d.status === 'assigned' ? 'border-yellow-300 bg-yellow-50 text-yellow-700'
+                              : d.status === 'in_transit' ? 'border-blue-300 bg-blue-50 text-blue-700'
+                              : 'border-gray-300 bg-white text-gray-700'
+                            }`}
+                          >
+                            <option value={d.status}>{DELIVERY_STATUS_LABELS[d.status]}</option>
+                            {nextStatuses.map(s => (
+                              <option key={s} value={s}>{DELIVERY_STATUS_LABELS[s]}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Badge
+                            variant={
+                              d.status === 'delivered' ? 'success'
+                              : d.status === 'cancelled' ? 'destructive'
+                              : 'default'
+                            }
+                            className="text-xs"
+                          >
+                            {DELIVERY_STATUS_LABELS[d.status] || d.status}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Tabla para desktop */}
+              <div className="hidden lg:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12">
-                        <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                        <p className="text-gray-600">No se encontraron envíos</p>
-                        <p className="text-sm text-gray-500 mt-1">Crea un nuevo envío con el botón superior</p>
-                      </TableCell>
+                      <TableHead>Fecha/Hora</TableHead>
+                      <TableHead>Factura #</TableHead>
+                      <TableHead>Motorista</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead>Método Pago</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  ) : (
-                    deliveries.map((d) => {
+                  </TableHeader>
+                  <TableBody>
+                    {deliveries.map((d) => {
                       const nextStatuses = DELIVERY_STATUS_FLOW[d.status] || []
                       return (
                         <TableRow key={d.id}>
@@ -913,11 +987,11 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                           </TableCell>
                         </TableRow>
                       )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
