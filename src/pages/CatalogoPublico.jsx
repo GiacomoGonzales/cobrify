@@ -421,7 +421,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   return (
                     <button
                       key={priceItem.key}
-                      onClick={() => setSelectedPriceLevel(priceItem.key)}
+                      onClick={() => {
+                        setSelectedPriceLevel(priceItem.key)
+                        if (priceItem.key !== 'price1' && business?.catalogWholesaleMinQty > 1 && quantity < business.catalogWholesaleMinQty) {
+                          setQuantity(business.catalogWholesaleMinQty)
+                        }
+                      }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
                         isSelected
                           ? 'bg-emerald-50'
@@ -533,7 +538,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   return (
                     <button
                       key={priceItem.key}
-                      onClick={() => setSelectedPriceLevel(priceItem.key)}
+                      onClick={() => {
+                        setSelectedPriceLevel(priceItem.key)
+                        if (priceItem.key !== 'price1' && business?.catalogWholesaleMinQty > 1 && quantity < business.catalogWholesaleMinQty) {
+                          setQuantity(business.catalogWholesaleMinQty)
+                        }
+                      }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
                         isSelected
                           ? 'bg-emerald-50'
@@ -633,7 +643,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             <span className="text-gray-600">Cantidad:</span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                onClick={() => {
+                  const minQty = (selectedPriceLevel && selectedPriceLevel !== 'price1' && business?.catalogWholesaleMinQty > 1)
+                    ? business.catalogWholesaleMinQty
+                    : 1
+                  setQuantity(Math.max(minQty, quantity - 1))
+                }}
                 className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
               >
                 <Minus className="w-4 h-4" />
