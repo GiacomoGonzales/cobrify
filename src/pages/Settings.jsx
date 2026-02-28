@@ -207,6 +207,7 @@ export default function Settings() {
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
+  const [catalogWholesaleMinQty, setCatalogWholesaleMinQty] = useState(1)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -766,6 +767,7 @@ export default function Settings() {
         setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
+        setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
 
         // Cargar configuración de Libro de Reclamaciones
         setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
@@ -4767,6 +4769,24 @@ export default function Settings() {
                     </label>
                   </div>
 
+                  {/* Cantidad mínima para precio mayorista */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cantidad mínima para precio mayorista en catálogo
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={catalogWholesaleMinQty}
+                      onChange={(e) => setCatalogWholesaleMinQty(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      A partir de cuántas unidades se aplica el precio mayorista al comprar por catálogo. Valor 1 = sin restricción. Solo afecta al catálogo, no al POS.
+                    </p>
+                  </div>
+
                   {/* WhatsApp del catálogo */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4831,6 +4851,7 @@ export default function Settings() {
                       catalogIgnoreStock,
                       catalogWhatsapp: catalogWhatsapp.trim(),
                       catalogObservations: catalogObservations.trim(),
+                      catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')

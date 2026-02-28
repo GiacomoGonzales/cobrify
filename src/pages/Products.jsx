@@ -843,10 +843,6 @@ export default function Products() {
       } else {
         // Regular product without variants
         productData.price = parseFloat(data.price)
-        // Precios adicionales (solo si están habilitados y tienen valor)
-        productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
-        productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
-        productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
 
         // Manejar stock e initialStock
         if (noStock) {
@@ -905,6 +901,11 @@ export default function Products() {
         productData.variantAttributes = []
         productData.variants = []
       }
+
+      // Precios adicionales (mayorista, VIP, etc.) — aplican tanto con como sin variantes
+      productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
+      productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
+      productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
 
       // Handle product image upload (only if feature is enabled)
       if (canUseProductImages && productImage) {

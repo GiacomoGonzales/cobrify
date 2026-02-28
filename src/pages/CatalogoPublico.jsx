@@ -69,7 +69,11 @@ const getProductPrices = (product, business) => {
   const defaultLabels = { price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' }
   const prices = []
   keys.forEach(({ priceField, labelKey }) => {
-    const value = product[priceField]
+    let value = product[priceField]
+    // Para productos con variantes, usar basePrice como referencia del precio base
+    if (priceField === 'price' && !value && product.hasVariants) {
+      value = product.basePrice
+    }
     if (value && value > 0) {
       prices.push({
         key: labelKey,
@@ -81,13 +85,38 @@ const getProductPrices = (product, business) => {
   return prices
 }
 
-// Helper: obtener rango de precios min~max (solo para productos sin variantes con múltiples precios)
+// Helper: obtener rango de precios min~max (productos con múltiples precios, con o sin variantes)
 const getProductPriceRange = (product, business) => {
-  if (product.hasVariants && product.variants?.length > 0) return null
   const prices = getProductPrices(product, business)
   if (prices.length <= 1) return null
   const values = prices.map(p => p.value)
+
+  if (product.hasVariants && product.variants?.length > 0) {
+    // Rango combinado: precio mínimo de variante × ratio mínimo ~ precio máximo de variante
+    const baseRef = product.basePrice || Math.max(...values)
+    const minRatio = Math.min(...values) / baseRef
+    const variantPrices = product.variants.map(v => v.price)
+    const minVariantPrice = Math.min(...variantPrices)
+    const maxVariantPrice = Math.max(...variantPrices)
+    return {
+      min: Math.round(minVariantPrice * minRatio * 100) / 100,
+      max: maxVariantPrice
+    }
+  }
+
   return { min: Math.min(...values), max: Math.max(...values) }
+}
+
+// Helper: calcular precio de variante ajustado a un nivel de precio
+const getVariantPriceForLevel = (variant, product, priceLevel) => {
+  if (!priceLevel || priceLevel === 'price1') return variant.price
+  const baseRef = product.basePrice
+  const levelPrice = priceLevel === 'price2' ? product.price2
+    : priceLevel === 'price3' ? product.price3
+    : priceLevel === 'price4' ? product.price4
+    : null
+  if (!levelPrice || !baseRef || baseRef === 0) return variant.price
+  return Math.round(variant.price * (levelPrice / baseRef) * 100) / 100
 }
 
 // Modal de producto con soporte para modificadores
@@ -170,13 +199,17 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   // Precios disponibles (mayorista, VIP, etc.)
   const availablePrices = getProductPrices(product, business)
-  const hasMultiplePrices = availablePrices.length > 1 && !hasVariants
+  const hasMultiplePrices = availablePrices.length > 1
 
-  // Calcular precio total con modificadores y variante
+  // Calcular precio total con modificadores, variante y nivel de precio
   const calculateTotalPrice = () => {
     let total
     if (hasVariants) {
-      total = selectedVariant?.price || product.basePrice || 0
+      if (hasMultiplePrices && selectedPriceLevel && selectedVariant) {
+        total = getVariantPriceForLevel(selectedVariant, product, selectedPriceLevel)
+      } else {
+        total = selectedVariant?.price || product.basePrice || 0
+      }
     } else if (hasMultiplePrices && selectedPriceLevel) {
       const selected = availablePrices.find(p => p.key === selectedPriceLevel)
       total = selected?.value || product.price || 0
@@ -371,6 +404,13 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   )
                 })}
               </div>
+              {/* Nota de cantidad mínima para precio mayorista */}
+              {selectedPriceLevel && selectedPriceLevel !== 'price1' && business?.catalogWholesaleMinQty > 1 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  Precio aplica desde {business.catalogWholesaleMinQty} unidades
+                </p>
+              )}
             </div>
           )}
 
@@ -416,7 +456,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       </span>
                       <div className="flex items-center gap-2">
                         {showPrices && (
-                          <span className="text-sm font-medium text-gray-600">S/ {variant.price.toFixed(2)}</span>
+                          <span className="text-sm font-medium text-gray-600">
+                            S/ {(hasMultiplePrices && selectedPriceLevel
+                              ? getVariantPriceForLevel(variant, product, selectedPriceLevel)
+                              : variant.price
+                            ).toFixed(2)}
+                          </span>
                         )}
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                           isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
@@ -1699,13 +1744,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     {product.description && (
                       <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
                     )}
+                    {priceRange && business?.catalogWholesaleMinQty > 1 && (
+                      <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full mb-1 inline-block">
+                        Desde {business.catalogWholesaleMinQty} un.
+                      </span>
+                    )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
                         <span className={`text-lg font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {product.hasVariants && product.variants?.length > 0
-                            ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                            : priceRange
-                              ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                          {priceRange
+                            ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                            : product.hasVariants && product.variants?.length > 0
+                              ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                               : `S/ ${product.price?.toFixed(2)}`
                           }
                         </span>
@@ -1780,13 +1830,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                         <p className="text-sm text-gray-500 line-clamp-2">{product.description}</p>
                       )}
                     </div>
+                    {priceRange && business?.catalogWholesaleMinQty > 1 && (
+                      <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full inline-block mt-1">
+                        Desde {business.catalogWholesaleMinQty} un.
+                      </span>
+                    )}
                     <div className="flex items-center justify-between mt-2">
                       {showPrices ? (
                         <span className={`text-xl font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {product.hasVariants && product.variants?.length > 0
-                            ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                            : priceRange
-                              ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                          {priceRange
+                            ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                            : product.hasVariants && product.variants?.length > 0
+                              ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                               : `S/ ${product.price?.toFixed(2)}`
                           }
                         </span>
