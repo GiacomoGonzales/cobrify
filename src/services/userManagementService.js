@@ -60,6 +60,8 @@ export const RETAIL_PAGES = [
   { id: 'ingredients', name: 'Insumos', path: '/ingredientes', category: 'produccion' },
   { id: 'recipes', name: 'Composición', path: '/recetas', category: 'produccion' },
   { id: 'production', name: 'Producción', path: '/produccion', category: 'produccion' },
+  // Envíos
+  { id: 'envios', name: 'Envíos', path: '/envios', category: 'otros' },
   // Otros
   { id: 'loans', name: 'Préstamos', path: '/prestamos', category: 'otros' },
   { id: 'certificates', name: 'Certificados', path: '/certificados', category: 'otros' },
@@ -72,8 +74,10 @@ export const RESTAURANT_PAGES = [
   { id: 'orders', name: 'Órdenes', path: '/ordenes', category: 'operaciones' },
   { id: 'kitchen', name: 'Cocina', path: '/cocina', category: 'operaciones' },
   { id: 'waiters', name: 'Mozos', path: '/mozos', category: 'operaciones' },
+  { id: 'envios', name: 'Envíos', path: '/envios', category: 'operaciones' },
   // Inventario y Producción
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'ingredients', name: 'Ingredientes', path: '/ingredientes', category: 'produccion' },
   { id: 'recipes', name: 'Recetas', path: '/recetas', category: 'produccion' },
   { id: 'production', name: 'Producción', path: '/produccion', category: 'produccion' },

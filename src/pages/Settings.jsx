@@ -2724,6 +2724,7 @@ export default function Settings() {
                         { id: 'recipes', label: 'Recetas', description: 'Recetas y composición de platos' },
                         { id: 'production', label: 'Producción', description: 'Producción y transformación de platos' },
                         { id: 'inventory', label: 'Inventario', description: 'Control de stock de productos e ingredientes' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras a proveedores' },
                         { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
                         { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },

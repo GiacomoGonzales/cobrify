@@ -38,6 +38,7 @@ import AdminAnalytics from './pages/admin/AdminAnalytics'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminResellers from './pages/admin/AdminResellers'
 import AdminExpirations from './pages/admin/AdminExpirations'
+import AdminNotifications from './pages/admin/AdminNotifications'
 // Reseller pages
 import ResellerLayout from './layouts/ResellerLayout'
 import ResellerDashboard from './pages/reseller/ResellerDashboard'
@@ -96,6 +97,8 @@ import ComplaintsList from './pages/ComplaintsList'
 import StudentPaymentControl from './pages/StudentPaymentControl'
 // Production
 import Production from './pages/Production'
+// Envíos
+import Envios from './pages/Envios'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -201,6 +204,7 @@ function App() {
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
+              <Route path="envios" element={<Envios />} />
             </Route>
 
             {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}
@@ -218,6 +222,7 @@ function App() {
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
               <Route path="proveedores" element={<Suppliers />} />
@@ -233,6 +238,7 @@ function App() {
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
+              <Route path="envios" element={<Envios />} />
             </Route>
 
             {/* Rutas de demo farmacia (sin autenticación, con datos de ejemplo de farmacia) */}
@@ -320,6 +326,7 @@ function App() {
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
+              <Route path="envios" element={<Envios />} />
 
               {/* Rutas de modo farmacia */}
               <Route path="laboratorios" element={<Laboratories />} />
@@ -344,6 +351,7 @@ function App() {
               <Route path="expirations" element={<AdminExpirations />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="notifications" element={<AdminNotifications />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
 

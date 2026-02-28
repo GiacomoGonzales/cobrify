@@ -4060,7 +4060,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   return w.branchId === selectedBranch.id
                 })
 
-                return filteredWarehouses.length > 0 && businessMode !== 'restaurant' && (
+                return filteredWarehouses.length > 0 && (
                   <div>
                     <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
                       <Warehouse className="w-3.5 h-3.5" />

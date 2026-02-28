@@ -24,6 +24,7 @@ import {
   Receipt,
   TrendingUp,
   GraduationCap,
+  Bike,
   // Iconos para modo restaurante
   UtensilsCrossed,
   Grid3x3,
@@ -240,6 +241,13 @@ function Sidebar() {
       menuId: 'production',
     },
     {
+      path: '/envios',
+      icon: Truck,
+      label: 'Envíos',
+      pageId: 'envios',
+      menuId: 'envios',
+    },
+    {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
@@ -328,6 +336,13 @@ function Sidebar() {
       pageId: 'waiters',
       menuId: 'waiters',
     },
+    {
+      path: '/envios',
+      icon: Truck,
+      label: 'Envíos',
+      pageId: 'envios',
+      menuId: 'envios',
+    },
     // --- Ventas y clientes ---
     {
       path: '/facturas',
@@ -383,6 +398,13 @@ function Sidebar() {
       label: 'Inventario',
       pageId: 'inventory',
       menuId: 'inventory',
+    },
+    {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'warehouses',
+      menuId: 'warehouses',
     },
     {
       path: '/compras',
