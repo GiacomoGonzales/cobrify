@@ -2681,6 +2681,8 @@ export default function Settings() {
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
+                        { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
                         <label
