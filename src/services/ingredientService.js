@@ -403,12 +403,39 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         const productData = productDoc.data()
         const currentStock = productData.stock ?? productData.currentStock ?? 0
         const quantityToDeduct = ingredient.quantity
-        const newStock = Math.max(0, currentStock - quantityToDeduct)
+        const effectiveWarehouseId = warehouseId || ingredient.warehouseId
+        const warehouseStocks = productData.warehouseStocks || []
 
-        batch.update(productRef, {
+        let newStock
+        let updatedWarehouseStocks = [...warehouseStocks]
+
+        if (effectiveWarehouseId && warehouseStocks.length > 0) {
+          // Descontar del almacén específico
+          const warehouseIndex = updatedWarehouseStocks.findIndex(
+            ws => ws.warehouseId === effectiveWarehouseId
+          )
+          if (warehouseIndex >= 0) {
+            const currentWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+            updatedWarehouseStocks[warehouseIndex] = {
+              ...updatedWarehouseStocks[warehouseIndex],
+              stock: Math.max(0, currentWarehouseStock - quantityToDeduct)
+            }
+          }
+          // Recalcular stock total desde almacenes
+          newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        } else {
+          newStock = Math.max(0, currentStock - quantityToDeduct)
+        }
+
+        const updateData = {
           stock: newStock,
           updatedAt: Timestamp.now()
-        })
+        }
+        if (effectiveWarehouseId && warehouseStocks.length > 0) {
+          updateData.warehouseStocks = updatedWarehouseStocks
+        }
+
+        batch.update(productRef, updateData)
 
         // Crear movimiento de stock para el producto
         const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
@@ -419,9 +446,9 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           productName: ingredient.ingredientName,
           ingredientType: 'product',
           type: movementType,
-          quantity: quantityToDeduct,
+          quantity: -quantityToDeduct,
           unit: productData.unit || 'unidades',
-          warehouseId: null,
+          warehouseId: effectiveWarehouseId || null,
           reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
           relatedSaleId: relatedSaleId,
           beforeStock: currentStock,
@@ -498,7 +525,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         ingredientId: ingredient.ingredientId,
         ingredientName: ingredient.ingredientName,
         type: movementType,
-        quantity: quantityToDeduct,
+        quantity: -quantityToDeduct,
         unit: currentData.purchaseUnit,
         warehouseId: effectiveWarehouseId || null,
         reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
