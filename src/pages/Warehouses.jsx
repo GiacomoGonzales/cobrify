@@ -326,6 +326,11 @@ export default function Warehouses() {
           changeType = 'assign_warehouse'
           oldValue = currentStock
           newValue = currentStock
+        } else if (warehouseStocks.length === 0 && currentStock === 0) {
+          // CASO 4: Sin almacén asignado y stock en 0 — inicializar en almacén
+          changeType = 'initialize_warehouse'
+          oldValue = 0
+          newValue = 0
         } else {
           continue
         }

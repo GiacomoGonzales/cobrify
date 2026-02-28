@@ -113,7 +113,10 @@ export default function StockMovements() {
         // Enriquecer movimientos con nombres de productos, almacenes y sucursales
         const enrichedMovements = movementsResult.data.map(mov => {
           const product = productsResult.data?.find(p => p.id === mov.productId)
-          const warehouse = warehousesResult.data?.find(w => w.id === mov.warehouseId)
+          const defaultWarehouse = warehousesResult.data?.find(w => w.isDefault) || warehousesResult.data?.[0]
+          const warehouse = mov.warehouseId
+            ? warehousesResult.data?.find(w => w.id === mov.warehouseId) || defaultWarehouse
+            : defaultWarehouse
           const fromWarehouse = warehousesResult.data?.find(w => w.id === mov.fromWarehouse)
           const toWarehouse = warehousesResult.data?.find(w => w.id === mov.toWarehouse)
 

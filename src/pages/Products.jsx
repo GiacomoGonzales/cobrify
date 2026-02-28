@@ -4867,7 +4867,7 @@ export default function Products() {
                           return (
                             <div key={ws.warehouseId} className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded">
                               <span className="text-sm text-gray-700">
-                                {warehouse?.name || 'Almacén desconocido'}
+                                {warehouse?.name || 'Almacén Principal'}
                                 {warehouse?.isDefault && <Badge variant="default" className="ml-2 text-xs">Principal</Badge>}
                               </span>
                               <span className={`font-semibold text-sm ${

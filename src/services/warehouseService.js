@@ -755,6 +755,18 @@ export const syncAllProductsStock = async (businessId, targetWarehouseId) => {
           updatedAt: serverTimestamp()
         })
       }
+      // CASO 4: Sin warehouseStocks y stock en 0 — inicializar en almacén
+      else if (warehouseStocks.length === 0 && currentStock === 0) {
+        const newWarehouseStocks = [{
+          warehouseId: targetWarehouseId,
+          stock: 0,
+          minStock: 0
+        }]
+        batch.update(productRef, {
+          warehouseStocks: newWarehouseStocks,
+          updatedAt: serverTimestamp()
+        })
+      }
       else {
         // No necesita cambios
         continue

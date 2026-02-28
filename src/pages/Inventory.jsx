@@ -803,13 +803,16 @@ export default function Inventory() {
       if (result.success) {
         // Enriquecer movimientos con nombres de almacenes
         const enrichedMovements = result.data.map(mov => {
-          const warehouse = warehouses.find(w => w.id === mov.warehouseId)
+          const defaultWarehouse = warehouses.find(w => w.isDefault) || warehouses[0]
+          const warehouse = mov.warehouseId
+            ? warehouses.find(w => w.id === mov.warehouseId) || defaultWarehouse
+            : defaultWarehouse
           const fromWarehouse = warehouses.find(w => w.id === mov.fromWarehouse)
           const toWarehouse = warehouses.find(w => w.id === mov.toWarehouse)
 
           return {
             ...mov,
-            warehouseName: warehouse?.name || 'Almacén desconocido',
+            warehouseName: warehouse?.name || 'Almacén Principal',
             fromWarehouseName: fromWarehouse?.name,
             toWarehouseName: toWarehouse?.name,
           }
