@@ -126,6 +126,7 @@ export default function Inventory() {
   const [filterCategories, setFilterCategories] = useState([]) // Array vacío = todas las categorías
   const [filterStatuses, setFilterStatuses] = useState([]) // Array vacío = todos los estados
   const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
+  const [filterStockTracking, setFilterStockTracking] = useState('tracked') // 'all', 'tracked', 'untracked'
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
@@ -1132,7 +1133,17 @@ export default function Inventory() {
         matchesStatus = filterStatuses.some(status => itemStatuses.includes(status))
       }
 
-      return matchesSearch && matchesCategory && matchesStatus
+      // Filtro por control de stock
+      let matchesStockTracking = true
+      if (filterStockTracking === 'tracked') {
+        // Solo items que manejan stock (trackStock !== false y stock no es null)
+        matchesStockTracking = item.trackStock !== false && item.stock !== null && item.stock !== undefined
+      } else if (filterStockTracking === 'untracked') {
+        // Solo items que NO manejan stock
+        matchesStockTracking = item.trackStock === false || item.stock === null || item.stock === undefined
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesStockTracking
     })
 
     // Ordenar productos
@@ -1177,7 +1188,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, searchTerm, filterCategories, filterStatuses, productCategories, sortField, sortDirection, getStockForBranch])
+  }, [allItems, searchTerm, filterCategories, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -1201,7 +1212,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategories, filterStatuses, filterBranch, filterWarehouses])
+  }, [searchTerm, filterCategories, filterStatuses, filterBranch, filterWarehouses, filterStockTracking])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -1800,6 +1811,20 @@ export default function Inventory() {
                   )}
                 </div>
               )}
+
+              {/* Stock Tracking Filter */}
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
+                <Package className="w-4 h-4 text-gray-500" />
+                <select
+                  value={filterStockTracking}
+                  onChange={e => setFilterStockTracking(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todos</option>
+                  <option value="tracked">Con control de stock</option>
+                  <option value="untracked">Sin control de stock</option>
+                </select>
+              </div>
             </div>
           </div>
         </CardContent>
