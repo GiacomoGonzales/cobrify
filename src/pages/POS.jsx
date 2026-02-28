@@ -5664,7 +5664,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <p className="text-sm font-medium text-gray-700 mb-3">Descargar comprobante:</p>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Button
-                      onClick={handlePrintTicket}
+                      onClick={() => handlePrintTicket()}
                       variant="outline"
                       size="sm"
                       className="flex-1"
@@ -6334,7 +6334,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             ref={ticketRef}
             invoice={{
               ...lastInvoiceData,
-              items: lastInvoiceData.items.map(item => ({
+              items: (lastInvoiceData.items || []).map(item => ({
                 code: item.code,
                 name: item.name,
                 description: item.name,
@@ -6343,7 +6343,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 observations: item.observations,
               })),
               series: lastInvoiceData.series,
-              number: lastInvoiceData.correlativeNumber,
+              number: lastInvoiceData.number,
               customerDocumentNumber: lastInvoiceData.customer?.documentNumber,
               customerName: lastInvoiceData.customer?.name,
               customerBusinessName: lastInvoiceData.customer?.businessName,
