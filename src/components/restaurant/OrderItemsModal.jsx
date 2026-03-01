@@ -467,6 +467,11 @@ export default function OrderItemsModal({
                           <span className="font-semibold text-primary-600">
                             S/ {(product.price || 0).toFixed(2)}
                           </span>
+                          {isNewOrder && (product.price2 || product.price3 || product.price4) && (
+                            <span className="text-xs text-green-600 ml-1">
+                              - S/ {(product.price2 || product.price3 || product.price4 || 0).toFixed(2)}
+                            </span>
+                          )}
                         </div>
                         {product.stock !== undefined && (
                           <div className="text-xs text-gray-500">Stock: {product.stock}</div>
