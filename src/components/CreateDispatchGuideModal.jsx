@@ -91,11 +91,14 @@ const getTomorrowDateString = () => {
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, user } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, user } = useAppContext()
 
   // Sucursales disponibles
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState('')
+
+  // Verificar si el usuario tiene acceso a la sucursal principal
+  const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
 
   // Datos básicos de la guía
   const [transferReason, setTransferReason] = useState('01')
@@ -232,10 +235,13 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       setSelectedBranchId(referenceInvoice.branchId)
     } else if (selectedBranch?.id) {
       setSelectedBranchId(selectedBranch.id)
+    } else if (!hasMainAccess && branches.length > 0) {
+      // Si no tiene acceso a main, auto-seleccionar la primera sucursal permitida
+      setSelectedBranchId(branches[0].id)
     } else {
       setSelectedBranchId('')
     }
-  }, [referenceInvoice?.branchId, selectedBranch?.id, isOpen])
+  }, [referenceInvoice?.branchId, selectedBranch?.id, isOpen, hasMainAccess, branches])
 
   // Pre-llenar datos si hay factura de referencia
   useEffect(() => {
@@ -817,7 +823,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                     onChange={(e) => setSelectedBranchId(e.target.value)}
                     className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
-                    <option value="">Sucursal Principal</option>
+                    {hasMainAccess && <option value="">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name}

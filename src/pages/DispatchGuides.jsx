@@ -84,7 +84,10 @@ const DEMO_GUIDES = [
 ]
 
 export default function DispatchGuides() {
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, user } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user } = useAppContext()
+
+  // Verificar si el usuario tiene acceso a la sucursal principal
+  const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
   const toast = useToast()
 
   const [guides, setGuides] = useState([])
@@ -130,6 +133,10 @@ export default function DispatchGuides() {
       if (result.success) {
         const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
         setBranches(branchList)
+        // Si no tiene acceso a main, auto-seleccionar primera sucursal permitida
+        if (!hasMainAccess && branchList.length > 0) {
+          setFilterBranch(branchList[0].id)
+        }
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)
@@ -576,8 +583,8 @@ export default function DispatchGuides() {
                     onChange={e => setFilterBranch(e.target.value)}
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
-                    <option value="all">Todas las sucursales</option>
-                    <option value="main">Sucursal Principal</option>
+                    {hasMainAccess && <option value="all">Todas las sucursales</option>}
+                    {hasMainAccess && <option value="main">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}
