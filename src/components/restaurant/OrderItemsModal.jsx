@@ -181,8 +181,15 @@ export default function OrderItemsModal({
       return
     }
 
+    // Si NO es desde mesas y el producto tiene múltiples precios, mostrar selector
+    if (isNewOrder && !selectedPrice && (product.price2 || product.price3 || product.price4)) {
+      setProductForPriceSelection(product)
+      setShowPriceModal(true)
+      return
+    }
+
     // En mesas siempre usar precio principal (precio 1), no mostrar selector de precios
-    const price = product.price ?? 0
+    const price = selectedPrice ?? product.price ?? 0
 
     // Si no tiene modificadores, agregar directamente al carrito
     const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers && item.price === price)
