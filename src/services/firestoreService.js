@@ -1849,26 +1849,27 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
  */
 export const createDispatchGuide = async (businessId, guideData) => {
   try {
-    // Obtener la serie actual y el siguiente número correlativo
-    const businessRef = doc(db, 'businesses', businessId)
-    const businessDoc = await getDoc(businessRef)
+    // Obtener siguiente número usando branchSeries si hay sucursal
+    const numberResult = await getNextDocumentNumber(
+      businessId,
+      'guia_remision',
+      null,
+      guideData.branchId || null
+    )
 
-    if (!businessDoc.exists()) {
-      throw new Error('Negocio no encontrado')
+    if (!numberResult.success) {
+      throw new Error(numberResult.error || 'Error al obtener número de serie')
     }
 
-    const businessData = businessDoc.data()
-    const series = businessData.series?.guia_remision || { serie: 'T001', lastNumber: 0 }
-
-    // Incrementar el número correlativo
-    const newCorrelative = (series.lastNumber || 0) + 1
-    const guideNumber = `${series.serie}-${String(newCorrelative).padStart(8, '0')}`
+    const guideNumber = numberResult.number
+    const seriesPrefix = numberResult.series
+    const newCorrelative = numberResult.correlativeNumber
 
     // Crear la guía en la subcolección
     const guideToSave = {
       ...guideData,
       number: guideNumber,
-      series: series.serie,
+      series: seriesPrefix,
       correlative: newCorrelative,
       status: 'pending', // pending, sent, accepted, rejected
       sunatStatus: 'pending', // pending, sent, accepted, rejected
@@ -1881,12 +1882,6 @@ export const createDispatchGuide = async (businessId, guideData) => {
       collection(db, 'businesses', businessId, 'dispatchGuides'),
       guideToSave
     )
-
-    // Actualizar el contador de series
-    await updateDoc(businessRef, {
-      'series.guia_remision.lastNumber': newCorrelative,
-      updatedAt: serverTimestamp(),
-    })
 
     return {
       success: true,
@@ -2068,27 +2063,27 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
  */
 export const createCarrierDispatchGuide = async (businessId, guideData) => {
   try {
-    // Obtener la serie actual y el siguiente número correlativo
-    const businessRef = doc(db, 'businesses', businessId)
-    const businessDoc = await getDoc(businessRef)
+    // Obtener siguiente número usando branchSeries si hay sucursal
+    const numberResult = await getNextDocumentNumber(
+      businessId,
+      'guia_transportista',
+      null,
+      guideData.branchId || null
+    )
 
-    if (!businessDoc.exists()) {
-      throw new Error('Negocio no encontrado')
+    if (!numberResult.success) {
+      throw new Error(numberResult.error || 'Error al obtener número de serie')
     }
 
-    const businessData = businessDoc.data()
-    // Serie V001 para GRE Transportista (diferente de T001 para Remitente)
-    const series = businessData.series?.guia_transportista || { serie: 'V001', lastNumber: 0 }
-
-    // Incrementar el número correlativo
-    const newCorrelative = (series.lastNumber || 0) + 1
-    const guideNumber = `${series.serie}-${String(newCorrelative).padStart(8, '0')}`
+    const guideNumber = numberResult.number
+    const seriesPrefix = numberResult.series
+    const newCorrelative = numberResult.correlativeNumber
 
     // Crear la guía en la subcolección
     const guideToSave = {
       ...guideData,
       number: guideNumber,
-      series: series.serie,
+      series: seriesPrefix,
       correlative: newCorrelative,
       documentType: '31', // 31 = GRE Transportista
       status: 'pending',
@@ -2102,13 +2097,6 @@ export const createCarrierDispatchGuide = async (businessId, guideData) => {
       collection(db, 'businesses', businessId, 'carrierDispatchGuides'),
       guideToSave
     )
-
-    // Actualizar el contador de series
-    await updateDoc(businessRef, {
-      'series.guia_transportista.lastNumber': newCorrelative,
-      'series.guia_transportista.serie': series.serie,
-      updatedAt: serverTimestamp(),
-    })
 
     return {
       success: true,
