@@ -15,9 +15,7 @@ import {
   CreditCard,
   UserPlus,
   Activity,
-  FileText,
-  Receipt,
-  Zap
+  FileText
 } from 'lucide-react'
 import {
   LineChart,
@@ -36,7 +34,7 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { getAdminStats, getSystemAlerts, getGlobalBillingStats, recalculateGlobalBillingStats } from '@/services/adminStatsService'
+import { getAdminStats, getSystemAlerts } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4']
@@ -44,9 +42,6 @@ const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null)
   const [alerts, setAlerts] = useState([])
-  const [billingStats, setBillingStats] = useState(null)
-  const [billingLoading, setBillingLoading] = useState(true)
-  const [billingRecalculating, setBillingRecalculating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -65,17 +60,6 @@ export default function AdminDashboard() {
       setAlerts(alertsData)
       setLoading(false)
       setRefreshing(false)
-
-      // Cargar estadísticas de facturación en segundo plano (puede demorar)
-      setBillingLoading(true)
-      try {
-        const billingData = await getGlobalBillingStats()
-        setBillingStats(billingData)
-      } catch (e) {
-        console.error('Error al cargar billing stats:', e)
-      } finally {
-        setBillingLoading(false)
-      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
       setLoading(false)
@@ -86,28 +70,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadData()
   }, [])
-
-  const handleRecalculateBilling = async () => {
-    setBillingRecalculating(true)
-    try {
-      const result = await recalculateGlobalBillingStats()
-      if (result.success && result.stats) {
-        setBillingStats({
-          ...result.stats,
-          calculatedAt: new Date(),
-          fromCache: true
-        })
-      } else {
-        // Recargar desde caché después del recálculo
-        const billingData = await getGlobalBillingStats()
-        setBillingStats(billingData)
-      }
-    } catch (e) {
-      console.error('Error al recalcular:', e)
-    } finally {
-      setBillingRecalculating(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -138,135 +100,6 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {/* Hero Stats - Estadísticas Globales de Facturación */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-xl">
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 -mb-16 -ml-16 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
-
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-                <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg sm:text-xl font-bold text-white">Facturación Global</h3>
-                <p className="text-sm text-white/70">
-                  {billingStats?.calculatedAt
-                    ? `Actualizado: ${format(billingStats.calculatedAt, "dd/MM/yyyy HH:mm", { locale: es })}`
-                    : 'Estadísticas de todo el sistema'}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={handleRecalculateBilling}
-              disabled={billingRecalculating || billingLoading}
-              className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50"
-              title="Recalcular estadísticas"
-            >
-              <RefreshCw className={`w-5 h-5 text-white ${billingRecalculating ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          {billingLoading || billingRecalculating ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white mx-auto mb-3"></div>
-                <p className="text-white/70 text-sm">
-                  {billingRecalculating ? 'Recalculando estadísticas...' : 'Cargando estadísticas...'}
-                </p>
-              </div>
-            </div>
-          ) : billingStats?.needsCalculation ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <p className="text-white/70 text-sm mb-4">No hay estadísticas en caché</p>
-              <button
-                onClick={handleRecalculateBilling}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-colors"
-              >
-                Calcular ahora
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-                {/* Total Comprobantes */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 sm:p-6 border border-white/20">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/20 rounded-lg">
-                      <Receipt className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-white/70 font-medium">Comprobantes Emitidos</p>
-                      <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
-                        {billingStats?.totalDocuments?.toLocaleString() || '0'}
-                      </p>
-                    </div>
-                  </div>
-                  {billingStats?.documentTypes && billingStats.documentTypes.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-white/20">
-                      <div className="flex flex-wrap gap-2">
-                        {billingStats.documentTypes.map((docType, idx) => (
-                          <span key={idx} className="px-2 py-1 bg-white/20 rounded text-xs text-white">
-                            {docType.name}: {docType.count.toLocaleString()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Total Facturado */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 sm:p-6 border border-white/20">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/20 rounded-lg">
-                      <DollarSign className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-white/70 font-medium">Total Facturado</p>
-                      <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
-                        S/ {billingStats?.totalAmount?.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-white/20">
-                    <p className="text-sm text-white/70">
-                      Promedio por comprobante: <span className="text-white font-semibold">
-                        S/ {billingStats?.totalDocuments > 0
-                          ? (billingStats.totalAmount / billingStats.totalDocuments).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : '0.00'}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Top negocios que más facturan */}
-              {billingStats?.topBusinesses && billingStats.topBusinesses.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-white/20">
-                  <p className="text-sm font-medium text-white/80 mb-3">Top Negocios por Facturación</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {billingStats.topBusinesses.slice(0, 3).map((business, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
-                        <span className="w-6 h-6 flex items-center justify-center bg-white/20 rounded-full text-xs text-white font-bold">
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-white font-medium truncate">{business.businessName}</p>
-                          <p className="text-xs text-white/60">
-                            {business.documentCount} docs - S/ {business.totalAmount.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
