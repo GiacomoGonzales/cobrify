@@ -390,17 +390,58 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h2>
             {product.description && (
-              <p className="text-gray-600">{product.description}</p>
+              <p className="text-gray-600 whitespace-pre-line">{product.description}</p>
             )}
           </div>
 
           <div className="flex items-center justify-between mb-6">
             {showPrices ? (
-              <div className="text-3xl font-bold text-gray-900">
-                {hasVariants && !selectedVariant
-                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                  : `S/ ${unitPrice.toFixed(2)}`
-                }
+              <div>
+                {(() => {
+                  const showAllPrices = business?.catalogShowAllPrices !== false
+                  const minWholesale = business?.catalogWholesaleMinQty || 0
+                  if (showAllPrices && hasMultiplePrices && !hasVariants) {
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        {availablePrices.map(p => (
+                          <div key={p.key} className="flex items-baseline gap-2">
+                            <span className={`font-bold ${p.key === selectedPriceLevel ? 'text-3xl text-gray-900' : 'text-xl text-gray-500'}`}>
+                              S/ {p.value.toFixed(2)}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {p.label}
+                              {p.key !== 'price1' && minWholesale > 1 && (
+                                <span className="text-xs text-gray-400 ml-1">(min. {minWholesale} un.)</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+                  if (showAllPrices && hasMultiplePrices && hasVariants && !selectedVariant) {
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        {availablePrices.map(p => (
+                          <div key={p.key} className="flex items-baseline gap-2">
+                            <span className="text-xl font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
+                            <span className="text-sm text-gray-500">
+                              {p.label}
+                              {p.key !== 'price1' && minWholesale > 1 && (
+                                <span className="text-xs text-gray-400 ml-1">(min. {minWholesale} un.)</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="text-3xl font-bold text-gray-900">
+                      S/ {unitPrice.toFixed(2)}
+                    </div>
+                  )
+                })()}
               </div>
             ) : (
               <div className="text-lg text-gray-500">Consultar precio</div>
@@ -1897,7 +1938,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         ) : viewMode === 'grid' ? (
           // Vista Grid
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6">
             {filteredProducts.map(product => {
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
@@ -1905,18 +1946,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
-                  <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                  <div className="relative bg-gray-100 overflow-hidden">
                     {product.imageUrl ? (
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                        className={`w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
-                      <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
+                      <div className={`w-full aspect-square flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
                         <Package className="w-12 h-12 text-gray-300" />
                       </div>
                     )}
@@ -1936,7 +1977,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{product.name}</h3>
                     {product.description && (
-                      <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
+                      <p className="text-sm text-gray-500 mb-2 line-clamp-2 whitespace-pre-line">{product.description}</p>
                     )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
@@ -2034,7 +2075,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
                       {product.description && (
-                        <p className="text-sm text-gray-500 line-clamp-2">{product.description}</p>
+                        <p className="text-sm text-gray-500 line-clamp-2 whitespace-pre-line">{product.description}</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
