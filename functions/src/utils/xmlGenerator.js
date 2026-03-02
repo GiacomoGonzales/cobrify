@@ -2140,9 +2140,12 @@ export function generateDispatchGuideXML(guideData, businessData) {
     )
     additionalDoc.ele('cbc:DocumentTypeCode', {
       'listAgencyName': 'PE:SUNAT',
-      'listName': 'Tipo de Documento',
-      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
+      'listName': 'Documento relacionado al transporte',
+      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61'
     }).txt(guideData.referencedInvoice.documentType || '01')
+    additionalDoc.ele('cbc:DocumentType').txt(
+      guideData.referencedInvoice.documentDescription || 'Factura'
+    )
 
     // RUC del emisor del documento relacionado (obligatorio según SUNAT - error 3380)
     const issuerParty = additionalDoc.ele('cac:IssuerParty')
@@ -2878,40 +2881,17 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   }
 
   // === LÍNEAS DE DESPACHO (DespatchLine) ===
-  // Para GRE Transportista (tipo 31), el transportista no detalla bienes individuales.
-  // Se usa unitCode="ZZ" (unidad genérica) en vez de NIU/unidades específicas (OBS 4434).
-  // SUNAT valida que DeliveredQuantity sea > 0 (ERROR 2780 si es 0).
-  if (guideData.items && guideData.items.length > 0) {
-    guideData.items.forEach((item, index) => {
-      const despatchLine = root.ele('cac:DespatchLine')
-      despatchLine.ele('cbc:ID').txt(String(index + 1))
-      if (item.packageType || item.note) {
-        despatchLine.ele('cbc:Note').txt(item.packageType || item.note || '')
-      }
-      despatchLine.ele('cbc:DeliveredQuantity', {
-        'unitCode': 'ZZ'
-      }).txt(String(item.quantity || 1))
-      const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-      orderLineRef.ele('cbc:LineID').txt(String(index + 1))
-      const itemEle = despatchLine.ele('cac:Item')
-      itemEle.ele('cbc:Description').txt(item.description || 'CARGA')
-      if (item.code) {
-        const sellersItemId = itemEle.ele('cac:SellersItemIdentification')
-        sellersItemId.ele('cbc:ID').txt(item.code)
-      }
-    })
-  } else {
-    // Fallback: DespatchLine mínimo cuando no hay items
-    const despatchLine = root.ele('cac:DespatchLine')
-    despatchLine.ele('cbc:ID').txt('1')
-    despatchLine.ele('cbc:DeliveredQuantity', {
-      'unitCode': 'ZZ'
-    }).txt('1')
-    const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-    orderLineRef.ele('cbc:LineID').txt('1')
-    const itemEle = despatchLine.ele('cac:Item')
-    itemEle.ele('cbc:Description').txt('CARGA')
-  }
+  // Para GRE Transportista (tipo 31), NO corresponde detallar bienes individuales (OBS 4434).
+  // Se envía una sola línea genérica con cantidad 1 y unitCode="ZZ".
+  const despatchLine = root.ele('cac:DespatchLine')
+  despatchLine.ele('cbc:ID').txt('1')
+  despatchLine.ele('cbc:DeliveredQuantity', {
+    'unitCode': 'ZZ'
+  }).txt('1')
+  const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+  orderLineRef.ele('cbc:LineID').txt('1')
+  const itemEle = despatchLine.ele('cac:Item')
+  itemEle.ele('cbc:Description').txt('CARGA')
 
   // Retornar XML como string
   return root.end({ prettyPrint: true })

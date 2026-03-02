@@ -259,6 +259,7 @@ export default function Products() {
   // Import modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
+
   // Bulk actions state
   const [selectedProducts, setSelectedProducts] = useState(new Set())
   const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false)

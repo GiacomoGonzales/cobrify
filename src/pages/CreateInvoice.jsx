@@ -292,6 +292,9 @@ export default function CreateInvoice() {
         paymentMethod: 'Manual',
         status: 'pending',
         notes: '',
+        createdBy: user.uid,
+        createdByName: user.displayName || user.email || 'Usuario',
+        createdByEmail: user.email || '',
       }
 
       const result = await createInvoice(user.uid, invoiceData)

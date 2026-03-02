@@ -8221,4 +8221,275 @@ export const migrateProductsIgvRate = onRequest(
   }
 )
 
+// ============================================
+// BULK PUSH NOTIFICATIONS (Admin)
+// ============================================
+export const sendBulkPushNotifications = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async (request) => {
+    // Verificar autenticación
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado para ejecutar esta función')
+    }
+
+    // Verificar que es admin
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists()) {
+      throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
+    }
+
+    const { campaignId } = request.data
+    if (!campaignId) {
+      throw new HttpsError('invalid-argument', 'Se requiere campaignId')
+    }
+
+    try {
+      console.log(`📢 [BulkPush] Iniciando campaña ${campaignId}`)
+
+      // 1. Leer campaña y verificar status
+      const campaignRef = db.collection('pushCampaigns').doc(campaignId)
+      const campaignDoc = await campaignRef.get()
+
+      if (!campaignDoc.exists()) {
+        throw new HttpsError('not-found', 'Campaña no encontrada')
+      }
+
+      const campaign = campaignDoc.data()
+      if (campaign.status !== 'draft') {
+        throw new HttpsError('failed-precondition', `La campaña tiene estado "${campaign.status}", se esperaba "draft"`)
+      }
+
+      // 2. Marcar como enviando
+      await campaignRef.update({
+        status: 'sending',
+        sentAt: FieldValue.serverTimestamp()
+      })
+
+      // 3. Resolver usuarios destino
+      let targetUserIds = []
+
+      if (campaign.targetMode === 'manual') {
+        targetUserIds = campaign.manualUserIds || []
+      } else {
+        // Obtener todos los usuarios o filtrados
+        const usersSnapshot = await db.collection('users').get()
+
+        for (const userDoc of usersSnapshot.docs) {
+          const userData = userDoc.data()
+
+          if (campaign.targetMode === 'filter') {
+            const filters = campaign.filters || {}
+
+            // Filtrar por plan
+            if (filters.plans && filters.plans.length > 0) {
+              const userPlan = userData.subscription?.plan || userData.plan || 'free'
+              if (!filters.plans.includes(userPlan)) continue
+            }
+
+            // Filtrar por status de suscripción
+            if (filters.statuses && filters.statuses.length > 0) {
+              const userStatus = userData.subscription?.status || userData.subscriptionStatus || 'active'
+              if (!filters.statuses.includes(userStatus)) continue
+            }
+
+            // Filtrar por modo de negocio
+            if (filters.businessModes && filters.businessModes.length > 0) {
+              const userMode = userData.businessMode || 'retail'
+              if (!filters.businessModes.includes(userMode)) continue
+            }
+          }
+
+          // Verificar que tiene tokens FCM
+          const tokensSnap = await db.collection('users').doc(userDoc.id).collection('fcmTokens').limit(1).get()
+          if (!tokensSnap.empty) {
+            targetUserIds.push(userDoc.id)
+          }
+        }
+      }
+
+      console.log(`📢 [BulkPush] Usuarios destino: ${targetUserIds.length}`)
+
+      if (targetUserIds.length === 0) {
+        await campaignRef.update({
+          status: 'sent',
+          totalRecipients: 0,
+          totalTokens: 0,
+          successCount: 0,
+          failureCount: 0,
+          completedAt: FieldValue.serverTimestamp()
+        })
+        return { success: true, totalRecipients: 0, successCount: 0 }
+      }
+
+      // 4. Recopilar todos los tokens
+      const allTokens = []
+      const tokenUserMap = {} // token -> userId
+
+      for (const userId of targetUserIds) {
+        const tokensSnap = await db.collection('users').doc(userId).collection('fcmTokens').get()
+        for (const tokenDoc of tokensSnap.docs) {
+          const token = tokenDoc.data().token
+          if (token) {
+            allTokens.push(token)
+            tokenUserMap[token] = userId
+          }
+        }
+      }
+
+      console.log(`📢 [BulkPush] Total tokens: ${allTokens.length}`)
+
+      let totalSuccess = 0
+      let totalFailure = 0
+      const invalidTokens = []
+
+      // 5. Enviar en lotes de 500
+      const BATCH_SIZE = 500
+      for (let i = 0; i < allTokens.length; i += BATCH_SIZE) {
+        const batchTokens = allTokens.slice(i, i + BATCH_SIZE)
+
+        const message = {
+          notification: {
+            title: campaign.title,
+            body: campaign.message
+          },
+          data: {
+            type: 'admin_broadcast',
+            campaignId: campaignId,
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              sound: 'default',
+              channelId: 'default'
+            }
+          },
+          apns: {
+            headers: { 'apns-priority': '10' },
+            payload: {
+              aps: {
+                alert: { title: campaign.title, body: campaign.message },
+                badge: 1,
+                sound: 'default'
+              }
+            }
+          },
+          tokens: batchTokens
+        }
+
+        try {
+          const response = await admin.messaging().sendEachForMulticast(message)
+          totalSuccess += response.successCount
+          totalFailure += response.failureCount
+
+          // Identificar tokens inválidos
+          if (response.failureCount > 0) {
+            response.responses.forEach((resp, idx) => {
+              if (!resp.success) {
+                if (resp.error?.code === 'messaging/invalid-registration-token' ||
+                    resp.error?.code === 'messaging/registration-token-not-registered') {
+                  invalidTokens.push(batchTokens[idx])
+                }
+              }
+            })
+          }
+        } catch (batchError) {
+          console.error(`📢 [BulkPush] Error en lote ${i / BATCH_SIZE + 1}:`, batchError.message)
+          totalFailure += batchTokens.length
+        }
+      }
+
+      // 6. Crear notificaciones in-app para cada usuario
+      const uniqueUserIds = [...new Set(targetUserIds)]
+      let notifBatch = db.batch()
+      let batchCount = 0
+
+      for (const userId of uniqueUserIds) {
+        const notifRef = db.collection('notifications').doc()
+        notifBatch.set(notifRef, {
+          userId,
+          type: 'admin_broadcast',
+          title: campaign.title,
+          message: campaign.message,
+          read: false,
+          campaignId,
+          createdAt: FieldValue.serverTimestamp()
+        })
+        batchCount++
+
+        // Firestore batch limit is 500
+        if (batchCount >= 490) {
+          await notifBatch.commit()
+          notifBatch = db.batch()
+          batchCount = 0
+        }
+      }
+
+      if (batchCount > 0) {
+        await notifBatch.commit()
+      }
+
+      // 7. Limpiar tokens inválidos
+      if (invalidTokens.length > 0) {
+        console.log(`📢 [BulkPush] Limpiando ${invalidTokens.length} tokens inválidos`)
+        for (const token of invalidTokens) {
+          const userId = tokenUserMap[token]
+          if (userId) {
+            try {
+              const tokenQuery = await db.collection('users').doc(userId).collection('fcmTokens')
+                .where('token', '==', token).get()
+              for (const tokenDoc of tokenQuery.docs) {
+                await tokenDoc.ref.delete()
+              }
+            } catch (e) {
+              console.error(`📢 [BulkPush] Error limpiando token:`, e.message)
+            }
+          }
+        }
+      }
+
+      // 8. Actualizar campaña con stats
+      const finalStatus = totalSuccess > 0
+        ? (totalFailure > 0 ? 'partial' : 'sent')
+        : 'failed'
+
+      await campaignRef.update({
+        status: finalStatus,
+        totalRecipients: uniqueUserIds.length,
+        totalTokens: allTokens.length,
+        successCount: totalSuccess,
+        failureCount: totalFailure,
+        completedAt: FieldValue.serverTimestamp()
+      })
+
+      console.log(`📢 [BulkPush] Campaña ${campaignId} completada: ${finalStatus} (${totalSuccess}/${allTokens.length})`)
+
+      return {
+        success: true,
+        status: finalStatus,
+        totalRecipients: uniqueUserIds.length,
+        totalTokens: allTokens.length,
+        successCount: totalSuccess,
+        failureCount: totalFailure
+      }
+    } catch (error) {
+      console.error('📢 [BulkPush] Error:', error)
+
+      // Intentar marcar campaña como failed
+      try {
+        await db.collection('pushCampaigns').doc(campaignId).update({
+          status: 'failed',
+          completedAt: FieldValue.serverTimestamp()
+        })
+      } catch (_) {}
+
+      throw new HttpsError('internal', error.message)
+    }
+  }
+)
+
 

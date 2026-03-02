@@ -15,7 +15,8 @@ import {
   X,
   Search,
   Building2,
-  CalendarClock
+  CalendarClock,
+  Bell
 } from 'lucide-react'
 
 const navItems = [
@@ -60,6 +61,13 @@ const navItems = [
     label: 'Analytics',
     description: 'Reportes y gráficos',
     color: 'from-pink-500 to-rose-600'
+  },
+  {
+    path: '/app/admin/notifications',
+    icon: Bell,
+    label: 'Notificaciones',
+    description: 'Campañas push',
+    color: 'from-orange-500 to-amber-600'
   },
   {
     path: '/app/admin/settings',

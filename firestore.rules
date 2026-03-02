@@ -481,6 +481,18 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Motoristas (Repartidores)
+      match /motoristas/{motoristaId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Deliveries (Envíos/Entregas)
+      match /deliveries/{deliveryId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos

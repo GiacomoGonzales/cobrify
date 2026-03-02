@@ -30,6 +30,7 @@ export const NOTIFICATION_TYPES = {
   LOW_STOCK: 'low_stock', // Producto con stock bajo
   OUT_OF_STOCK: 'out_of_stock', // Producto sin stock
   YAPE_PAYMENT: 'yape_payment', // Pago Yape detectado
+  ADMIN_BROADCAST: 'admin_broadcast', // Campaña push del admin
 };
 
 // ===========================================
