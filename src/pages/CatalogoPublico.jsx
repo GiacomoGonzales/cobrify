@@ -644,10 +644,13 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const minQty = (selectedPriceLevel && selectedPriceLevel !== 'price1' && business?.catalogWholesaleMinQty > 1)
-                    ? business.catalogWholesaleMinQty
-                    : 1
-                  setQuantity(Math.max(minQty, quantity - 1))
+                  const newQty = quantity - 1
+                  const minWholesale = business?.catalogWholesaleMinQty || 0
+                  // Si baja de la cantidad mayorista, volver a precio público
+                  if (hasMultiplePrices && minWholesale > 1 && newQty < minWholesale && selectedPriceLevel !== 'price1') {
+                    setSelectedPriceLevel('price1')
+                  }
+                  setQuantity(Math.max(1, newQty))
                 }}
                 className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
               >
@@ -655,7 +658,18 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
               </button>
               <span className="w-12 text-center text-xl font-semibold">{quantity}</span>
               <button
-                onClick={() => setQuantity(quantity + 1)}
+                onClick={() => {
+                  const newQty = quantity + 1
+                  const minWholesale = business?.catalogWholesaleMinQty || 0
+                  // Si llega a la cantidad mayorista y hay price2, cambiar automáticamente
+                  if (hasMultiplePrices && minWholesale > 1 && newQty >= minWholesale && selectedPriceLevel === 'price1') {
+                    const hasPrice2 = availablePrices.find(p => p.key === 'price2')
+                    if (hasPrice2) {
+                      setSelectedPriceLevel('price2')
+                    }
+                  }
+                  setQuantity(newQty)
+                }}
                 className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -1496,20 +1510,47 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
     // No permitir agregar productos agotados
     if (isProductOutOfStock(product, ignoreStock)) return
+
+    // Determinar precio según cantidad y mínimo mayorista
+    const minWholesale = business?.catalogWholesaleMinQty || 0
+    const hasWholesale = business?.multiplePricesEnabled && minWholesale > 1 && product.price2 && product.price2 > 0
+    let finalUnitPrice = unitPrice || product.price
+    let finalPriceLabel = priceLevelLabel
+
+    if (hasWholesale && quantity >= minWholesale) {
+      finalUnitPrice = product.price2
+      finalPriceLabel = business.priceLabels?.price2 || 'Mayorista'
+    } else if (hasWholesale && quantity < minWholesale) {
+      finalUnitPrice = product.price
+      finalPriceLabel = null
+    }
+
     setCart(prev => {
-      // Generar un ID único para el item del carrito basado en producto + variante + modificadores + nivel de precio
+      // Generar un ID único para el item del carrito basado en producto + variante + modificadores (sin precio)
       const variantKey = product.isVariant ? product.variantSku : ''
       const modifiersKey = selectedModifiers.length > 0
         ? JSON.stringify(selectedModifiers.map(m => ({ id: m.modifierId, opts: m.options.map(o => o.optionId).sort() })))
         : ''
-      const priceLevelKey = priceLevelLabel || ''
-      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}-${priceLevelKey}`
+      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}`
 
       const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
+        const newQty = existing.quantity + quantity
+        // Recalcular precio al acumular cantidad
+        let updatedPrice = existing.unitPrice
+        let updatedLabel = existing.priceLevelLabel
+        if (hasWholesale) {
+          if (newQty >= minWholesale) {
+            updatedPrice = product.price2
+            updatedLabel = business.priceLabels?.price2 || 'Mayorista'
+          } else {
+            updatedPrice = product.price
+            updatedLabel = null
+          }
+        }
         return prev.map(item =>
           item.cartItemId === cartItemId
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: newQty, unitPrice: updatedPrice, priceLevelLabel: updatedLabel }
             : item
         )
       }
@@ -1518,8 +1559,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         cartItemId,
         quantity,
         selectedModifiers,
-        unitPrice: unitPrice || product.price,
-        priceLevelLabel
+        unitPrice: finalUnitPrice,
+        priceLevelLabel: finalPriceLabel
       }]
     })
   }
@@ -1528,9 +1569,24 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (quantity <= 0) {
       setCart(prev => prev.filter(item => (item.cartItemId || item.id) !== cartItemId))
     } else {
-      setCart(prev => prev.map(item =>
-        (item.cartItemId || item.id) === cartItemId ? { ...item, quantity } : item
-      ))
+      const minWholesale = business?.catalogWholesaleMinQty || 0
+      setCart(prev => prev.map(item => {
+        if ((item.cartItemId || item.id) !== cartItemId) return item
+        const updated = { ...item, quantity }
+
+        // Auto-cambiar precio según cantidad mayorista
+        if (business?.multiplePricesEnabled && minWholesale > 1 && item.price2 && item.price2 > 0) {
+          if (quantity >= minWholesale) {
+            updated.unitPrice = item.price2
+            updated.priceLevelLabel = business.priceLabels?.price2 || 'Mayorista'
+          } else {
+            updated.unitPrice = item.price
+            updated.priceLevelLabel = null
+          }
+        }
+
+        return updated
+      }))
     }
   }
 
@@ -1882,21 +1938,34 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     {product.description && (
                       <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
                     )}
-                    {priceRange && business?.catalogWholesaleMinQty > 1 && (
-                      <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full mb-1 inline-block">
-                        Desde {business.catalogWholesaleMinQty} un.
-                      </span>
-                    )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
-                        <span className={`text-lg font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {priceRange
-                            ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
-                            : product.hasVariants && product.variants?.length > 0
-                              ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                              : `S/ ${product.price?.toFixed(2)}`
-                          }
-                        </span>
+                        <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
+                          {(() => {
+                            const showAllPrices = business?.catalogShowAllPrices !== false
+                            const prices = getProductPrices(product, business)
+                            if (showAllPrices && prices.length > 1) {
+                              return (
+                                <div className="flex flex-col">
+                                  {prices.map(p => (
+                                    <span key={p.key} className="text-sm leading-tight">
+                                      <span className="font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
+                                      <span className="text-xs text-gray-500 ml-1">{p.label}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )
+                            }
+                            return (
+                              <span className="text-lg font-bold text-gray-900">
+                                {product.hasVariants && product.variants?.length > 0
+                                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                                  : `S/ ${product.price?.toFixed(2)}`
+                                }
+                              </span>
+                            )
+                          })()}
+                        </div>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar</span>
                       )}
@@ -1968,21 +2037,34 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                         <p className="text-sm text-gray-500 line-clamp-2">{product.description}</p>
                       )}
                     </div>
-                    {priceRange && business?.catalogWholesaleMinQty > 1 && (
-                      <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full inline-block mt-1">
-                        Desde {business.catalogWholesaleMinQty} un.
-                      </span>
-                    )}
                     <div className="flex items-center justify-between mt-2">
                       {showPrices ? (
-                        <span className={`text-xl font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {priceRange
-                            ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
-                            : product.hasVariants && product.variants?.length > 0
-                              ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                              : `S/ ${product.price?.toFixed(2)}`
-                          }
-                        </span>
+                        <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
+                          {(() => {
+                            const showAllPrices = business?.catalogShowAllPrices !== false
+                            const prices = getProductPrices(product, business)
+                            if (showAllPrices && prices.length > 1) {
+                              return (
+                                <div className="flex flex-col">
+                                  {prices.map(p => (
+                                    <span key={p.key} className="text-sm leading-tight">
+                                      <span className="font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
+                                      <span className="text-xs text-gray-500 ml-1">{p.label}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )
+                            }
+                            return (
+                              <span className="text-xl font-bold text-gray-900">
+                                {product.hasVariants && product.variants?.length > 0
+                                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                                  : `S/ ${product.price?.toFixed(2)}`
+                                }
+                              </span>
+                            )
+                          })()}
+                        </div>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar precio</span>
                       )}

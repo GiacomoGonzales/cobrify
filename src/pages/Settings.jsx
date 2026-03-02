@@ -208,6 +208,7 @@ export default function Settings() {
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
   const [catalogWholesaleMinQty, setCatalogWholesaleMinQty] = useState(1)
+  const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -768,6 +769,7 @@ export default function Settings() {
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
+        setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
 
         // Cargar configuración de Libro de Reclamaciones
         setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
@@ -4770,6 +4772,18 @@ export default function Settings() {
                         className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                     </label>
+                    <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
+                        <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={catalogShowAllPrices}
+                        onChange={(e) => setCatalogShowAllPrices(e.target.checked)}
+                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </label>
                   </div>
 
                   {/* Cantidad mínima para precio mayorista */}
@@ -4857,6 +4871,7 @@ export default function Settings() {
                       catalogWhatsapp: catalogWhatsapp.trim(),
                       catalogObservations: catalogObservations.trim(),
                       catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
+                      catalogShowAllPrices,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')
