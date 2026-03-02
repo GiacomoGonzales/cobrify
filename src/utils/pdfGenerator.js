@@ -965,6 +965,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     leftY += dataLineHeight
   }
 
+  // Modelo de Vehículo
+  if (companySettings?.posCustomFields?.showVehicleModelField && invoice.customer?.vehicleModel) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('MODELO:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.customer.vehicleModel, leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
+  // Año de Vehículo
+  if (companySettings?.posCustomFields?.showVehicleYearField && invoice.customer?.vehicleYear) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('AÑO:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.customer.vehicleYear, leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
   // Vendedor (si existe)
   if (invoice.sellerName) {
     doc.setFont('helvetica', 'bold')

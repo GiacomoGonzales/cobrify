@@ -837,6 +837,12 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     if (customer?.vehiclePlate) {
       commands.push(ESCPOSCommands.text(convertSpanishText('Placa: ' + customer.vehiclePlate.toUpperCase()) + '\n'));
     }
+    if (customer?.vehicleModel) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Modelo: ' + customer.vehicleModel.toUpperCase()) + '\n'));
+    }
+    if (customer?.vehicleYear) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Ano: ' + customer.vehicleYear) + '\n'));
+    }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
 

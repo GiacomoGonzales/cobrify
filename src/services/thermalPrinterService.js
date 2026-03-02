@@ -951,6 +951,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       if (business?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
         printer = printer.text(convertSpanishText(`Placa: ${invoice.customer.vehiclePlate.toUpperCase()}\n`));
       }
+      if (business?.posCustomFields?.showVehicleModelField && invoice.customer?.vehicleModel) {
+        printer = printer.text(convertSpanishText(`Modelo: ${invoice.customer.vehicleModel}\n`));
+      }
+      if (business?.posCustomFields?.showVehicleYearField && invoice.customer?.vehicleYear) {
+        printer = printer.text(convertSpanishText(`Ano: ${invoice.customer.vehicleYear}\n`));
+      }
 
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
     }
@@ -2128,6 +2134,12 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
     // Placa de Vehículo (solo si está habilitado en configuración)
     if (business?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
       builder.text(`Placa: ${invoice.customer.vehiclePlate.toUpperCase()}`).newLine();
+    }
+    if (business?.posCustomFields?.showVehicleModelField && invoice.customer?.vehicleModel) {
+      builder.text(`Modelo: ${invoice.customer.vehicleModel}`).newLine();
+    }
+    if (business?.posCustomFields?.showVehicleYearField && invoice.customer?.vehicleYear) {
+      builder.text(`Ano: ${invoice.customer.vehicleYear}`).newLine();
     }
 
     builder.text(format.separator).newLine()

@@ -2692,10 +2692,16 @@ Gracias por tu preferencia.`
                 {viewingInvoice.customer?.address && (
                   <p className="text-sm text-gray-500">{viewingInvoice.customer.address}</p>
                 )}
-                {(viewingInvoice.customer?.vehiclePlate || viewingInvoice.customer?.studentName) && (
-                  <div className="flex gap-4 pt-2 border-t border-gray-100 text-sm">
+                {(viewingInvoice.customer?.vehiclePlate || viewingInvoice.customer?.vehicleModel || viewingInvoice.customer?.vehicleYear || viewingInvoice.customer?.studentName) && (
+                  <div className="flex flex-wrap gap-4 pt-2 border-t border-gray-100 text-sm">
                     {viewingInvoice.customer?.vehiclePlate && (
                       <span className="text-gray-600"><strong>Placa:</strong> {viewingInvoice.customer.vehiclePlate}</span>
+                    )}
+                    {viewingInvoice.customer?.vehicleModel && (
+                      <span className="text-gray-600"><strong>Modelo:</strong> {viewingInvoice.customer.vehicleModel}</span>
+                    )}
+                    {viewingInvoice.customer?.vehicleYear && (
+                      <span className="text-gray-600"><strong>Año:</strong> {viewingInvoice.customer.vehicleYear}</span>
                     )}
                     {viewingInvoice.customer?.studentName && (
                       <span className="text-gray-600"><strong>Alumno:</strong> {viewingInvoice.customer.studentName}</span>

@@ -416,6 +416,8 @@ export default function POS() {
     studentName: '', // Campo libre para nombre de alumno
     studentSchedule: '', // Horario/turno del alumno
     vehiclePlate: '', // Placa de vehículo
+    vehicleModel: '', // Modelo de vehículo
+    vehicleYear: '', // Año de vehículo
     // Campos para transporte de carga
     originAddress: '', // Dirección de origen
     destinationAddress: '', // Dirección de destino
@@ -775,6 +777,8 @@ export default function POS() {
           studentName: customer.studentName || '',
           studentSchedule: customer.studentSchedule || '',
           vehiclePlate: customer.vehiclePlate || '',
+          vehicleModel: customer.vehicleModel || '',
+          vehicleYear: customer.vehicleYear || '',
           originAddress: customer.originAddress || '',
           destinationAddress: customer.destinationAddress || '',
           tripDetail: customer.tripDetail || '',
@@ -894,6 +898,8 @@ export default function POS() {
         studentName: invoice.customer?.studentName || '',
         studentSchedule: invoice.customer?.studentSchedule || '',
         vehiclePlate: invoice.customer?.vehiclePlate || '',
+        vehicleModel: invoice.customer?.vehicleModel || '',
+        vehicleYear: invoice.customer?.vehicleYear || '',
         originAddress: invoice.customer?.originAddress || '',
         destinationAddress: invoice.customer?.destinationAddress || '',
         tripDetail: invoice.customer?.tripDetail || '',
@@ -1010,6 +1016,8 @@ export default function POS() {
         studentName: invoice.customer?.studentName || '',
         studentSchedule: invoice.customer?.studentSchedule || '',
         vehiclePlate: invoice.customer?.vehiclePlate || '',
+        vehicleModel: invoice.customer?.vehicleModel || '',
+        vehicleYear: invoice.customer?.vehicleYear || '',
         originAddress: invoice.customer?.originAddress || '',
         destinationAddress: invoice.customer?.destinationAddress || '',
         tripDetail: invoice.customer?.tripDetail || '',
@@ -2049,6 +2057,8 @@ export default function POS() {
       studentName: '',
       studentSchedule: '',
       vehiclePlate: '',
+      vehicleModel: '',
+      vehicleYear: '',
       // Campos de transporte de carga
       originAddress: '',
       destinationAddress: '',
@@ -2122,6 +2132,8 @@ export default function POS() {
               studentName: existingCustomer.studentName || prev.studentName || '',
               studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
               vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+              vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
+              vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
             }),
           }))
           toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
@@ -2139,6 +2151,8 @@ export default function POS() {
               studentName: existingCustomer.studentName || prev.studentName || '',
               studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
               vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+              vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
+              vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
             }),
           }))
           toast.success(`Datos encontrados: ${result.data.razonSocial}`)
@@ -2163,6 +2177,8 @@ export default function POS() {
             studentName: existingCustomer.studentName || prev.studentName || '',
             studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
             vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+            vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
+            vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
           }))
           toast.success(`Cliente registrado encontrado: ${existingCustomer.name || existingCustomer.businessName}`)
         } else {
@@ -2611,6 +2627,8 @@ export default function POS() {
                 studentName: customerData.studentName || '',
                 studentSchedule: customerData.studentSchedule || '',
                 vehiclePlate: customerData.vehiclePlate || '',
+                vehicleModel: customerData.vehicleModel || '',
+                vehicleYear: customerData.vehicleYear || '',
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -2634,6 +2652,8 @@ export default function POS() {
                 studentName: customerData.studentName || '',
                 studentSchedule: customerData.studentSchedule || '',
                 vehiclePlate: customerData.vehiclePlate || '',
+                vehicleModel: customerData.vehicleModel || '',
+                vehicleYear: customerData.vehicleYear || '',
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -2692,6 +2712,8 @@ export default function POS() {
           studentName: '',
           studentSchedule: '',
           vehiclePlate: '',
+          vehicleModel: '',
+          vehicleYear: '',
           // Campos de transporte de carga
           originAddress: '',
           destinationAddress: '',
@@ -2803,6 +2825,8 @@ export default function POS() {
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
               vehiclePlate: customerData.vehiclePlate || '',
+              vehicleModel: customerData.vehicleModel || '',
+              vehicleYear: customerData.vehicleYear || '',
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',
@@ -2826,6 +2850,8 @@ export default function POS() {
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
               vehiclePlate: customerData.vehiclePlate || '',
+              vehicleModel: customerData.vehicleModel || '',
+              vehicleYear: customerData.vehicleYear || '',
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',
@@ -4283,7 +4309,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               phone: '',
                               studentName: '',
                               studentSchedule: '',
-                              vehiclePlate: ''
+                              vehiclePlate: '',
+                              vehicleModel: '',
+                              vehicleYear: ''
                             })
                           }}
                           className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
@@ -4412,6 +4440,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
                         placeholder="Placa de Vehículo"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showVehicleModelField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleModel}
+                        onChange={e => setCustomerData({ ...customerData, vehicleModel: e.target.value })}
+                        placeholder="Modelo de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showVehicleYearField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleYear}
+                        onChange={e => setCustomerData({ ...customerData, vehicleYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        placeholder="Año de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
 
@@ -4835,6 +4881,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
                       />
                     )}
+                    {companySettings?.posCustomFields?.showVehicleModelField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleModel}
+                        onChange={e => setCustomerData({ ...customerData, vehicleModel: e.target.value })}
+                        placeholder="Modelo de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showVehicleYearField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleYear}
+                        onChange={e => setCustomerData({ ...customerData, vehicleYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        placeholder="Año de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
 
                     <input
                       type="text"
@@ -4944,6 +5008,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
                         placeholder="Placa de Vehículo (opcional)"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showVehicleModelField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleModel}
+                        onChange={e => setCustomerData({ ...customerData, vehicleModel: e.target.value })}
+                        placeholder="Modelo de Vehículo (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showVehicleYearField && (
+                      <input
+                        type="text"
+                        value={customerData.vehicleYear}
+                        onChange={e => setCustomerData({ ...customerData, vehicleYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        placeholder="Año de Vehículo (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
 

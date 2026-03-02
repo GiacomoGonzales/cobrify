@@ -777,6 +777,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <span style={{ textTransform: 'uppercase' }}>{invoice.customer.vehiclePlate}</span>
             </div>
           )}
+          {companySettings?.posCustomFields?.showVehicleModelField && invoice.customer?.vehicleModel && (
+            <div className="info-row">
+              <span className="info-label">Modelo:</span>
+              <span style={{ textTransform: 'uppercase' }}>{invoice.customer.vehicleModel}</span>
+            </div>
+          )}
+          {companySettings?.posCustomFields?.showVehicleYearField && invoice.customer?.vehicleYear && (
+            <div className="info-row">
+              <span className="info-label">Año:</span>
+              <span>{invoice.customer.vehicleYear}</span>
+            </div>
+          )}
         </div>
       )}
 
