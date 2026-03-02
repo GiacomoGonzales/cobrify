@@ -12,7 +12,7 @@ export default function ModifierSelectorModal({
   isOpen,
   onClose,
   product,
-  onConfirm
+  onConfirm,
 }) {
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [errors, setErrors] = useState({})
@@ -31,7 +31,7 @@ export default function ModifierSelectorModal({
 
   // Calcular precio total con ajustes de modificadores
   const calculateTotalPrice = () => {
-    let total = product.price || 0
+    let total = product._selectedPrice ?? product.price ?? 0
 
     Object.keys(selectedModifiers).forEach(modifierId => {
       const modifier = product.modifiers.find(m => m.id === modifierId)
@@ -142,7 +142,8 @@ export default function ModifierSelectorModal({
   }
 
   const totalPrice = calculateTotalPrice()
-  const priceAdjustment = totalPrice - (product.price || 0)
+  const basePrice = product._selectedPrice ?? product.price ?? 0
+  const priceAdjustment = totalPrice - basePrice
 
   return (
     <Modal
@@ -156,7 +157,7 @@ export default function ModifierSelectorModal({
         <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center">
             <span className="font-medium text-gray-900">{product.name}</span>
-            <span className="text-gray-600">{formatCurrency(product.price)}</span>
+            <span className="text-gray-600">{formatCurrency(basePrice)}</span>
           </div>
         </div>
 
@@ -276,7 +277,7 @@ export default function ModifierSelectorModal({
           <div className="space-y-2">
             <div className="flex justify-between text-sm text-gray-600">
               <span>Precio base:</span>
-              <span>{formatCurrency(product.price)}</span>
+              <span>{formatCurrency(basePrice)}</span>
             </div>
 
             {priceAdjustment > 0 && (

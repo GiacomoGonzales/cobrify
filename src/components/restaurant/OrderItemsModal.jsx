@@ -174,17 +174,17 @@ export default function OrderItemsModal({
   }
 
   const addToCart = (product, selectedPrice = null) => {
-    // Si el producto tiene modificadores, abrir modal de selección
-    if (product.modifiers && product.modifiers.length > 0) {
-      setProductForModifiers(product)
-      setIsModifierModalOpen(true)
-      return
-    }
-
-    // Si NO es desde mesas y el producto tiene múltiples precios, mostrar selector
+    // Si tiene múltiples precios y no se ha seleccionado uno, mostrar selector primero
     if (isNewOrder && !selectedPrice && (product.price2 || product.price3 || product.price4)) {
       setProductForPriceSelection(product)
       setShowPriceModal(true)
+      return
+    }
+
+    // Si el producto tiene modificadores, abrir modal de selección
+    if (product.modifiers && product.modifiers.length > 0) {
+      setProductForModifiers({ ...product, _selectedPrice: selectedPrice ?? product.price })
+      setIsModifierModalOpen(true)
       return
     }
 
@@ -236,21 +236,26 @@ export default function OrderItemsModal({
       selected = product.price4
     }
 
-    addToCart(product, selected)
     setShowPriceModal(false)
     setProductForPriceSelection(null)
+    addToCart(product, selected)
   }
 
   // Agregar al carrito con modificadores seleccionados
   const addToCartWithModifiers = (data) => {
     const { selectedModifiers, totalPrice } = data
+    const basePrice = productForModifiers._selectedPrice ?? productForModifiers.price
 
-    // Crear un identificador único basado en los modificadores seleccionados
+    // Crear un identificador único basado en los modificadores seleccionados + precio base
     const modifierKey = selectedModifiers
       .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
-      .join('|')
+      .join('|') + `|p:${basePrice}`
 
-    // Buscar si ya existe un item idéntico (mismo producto + mismos modificadores)
+    // Recalcular total usando el precio base seleccionado + ajustes de modificadores
+    const modifierAdjustment = totalPrice - (productForModifiers.price || 0)
+    const finalPrice = basePrice + modifierAdjustment
+
+    // Buscar si ya existe un item idéntico (mismo producto + mismos modificadores + mismo precio)
     const existingItem = cart.find(
       item =>
         item.productId === productForModifiers.id &&
@@ -262,7 +267,7 @@ export default function OrderItemsModal({
       setCart(
         cart.map((item) =>
           item.productId === productForModifiers.id && item.modifierKey === modifierKey
-            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * totalPrice }
+            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * finalPrice }
             : item
         )
       )
@@ -274,10 +279,10 @@ export default function OrderItemsModal({
           productId: productForModifiers.id,
           name: productForModifiers.name,
           code: productForModifiers.code,
-          price: totalPrice, // Precio con modificadores incluidos
-          basePrice: productForModifiers.price, // Precio base sin modificadores
+          price: finalPrice, // Precio base seleccionado + modificadores
+          basePrice: basePrice, // Precio base seleccionado (puede ser price2, price3, etc.)
           quantity: 1,
-          total: totalPrice,
+          total: finalPrice,
           notes: '',
           modifiers: selectedModifiers, // Guardar modificadores seleccionados
           modifierKey: modifierKey, // Para identificar items únicos
