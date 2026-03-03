@@ -4439,7 +4439,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         value={customerData.vehiclePlate}
                         onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
                         placeholder="Placa de Vehículo"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
                     {companySettings?.posCustomFields?.showVehicleModelField && (
@@ -4878,7 +4878,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         value={customerData.vehiclePlate}
                         onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
                         placeholder="Placa de Vehículo"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
                     {companySettings?.posCustomFields?.showVehicleModelField && (
@@ -5007,7 +5007,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         value={customerData.vehiclePlate}
                         onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
                         placeholder="Placa de Vehículo (opcional)"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
                     {companySettings?.posCustomFields?.showVehicleModelField && (
