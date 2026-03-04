@@ -58,6 +58,7 @@ import {
   getProductCategories,
   sendInvoiceToSunat,
   upsertCustomerFromSale,
+  getCashRegisterSession,
 } from '@/services/firestoreService'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -329,6 +330,9 @@ export default function POS() {
 
   // Estado para nota de venta (para marcar como convertida y skip stock al completar)
   const [pendingNotaVentaId, setPendingNotaVentaId] = useState(null)
+
+  // Cash register check
+  const [cashRegisterOpen, setCashRegisterOpen] = useState(true)
 
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
@@ -1177,6 +1181,12 @@ export default function POS() {
             rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
           }
           setRecargoConsumoConfig(rcConfig)
+        }
+
+        // Verificar si la caja diaria está abierta (si el setting lo requiere)
+        if (businessData.requireOpenCashRegister) {
+          const cashResult = await getCashRegisterSession(businessId, selectedBranch?.id || null, user?.uid || null)
+          setCashRegisterOpen(cashResult.success && cashResult.data !== null)
         }
       }
 
@@ -2444,6 +2454,12 @@ export default function POS() {
 
   const handleCheckout = async () => {
     if (!user?.uid) return
+
+    // Validar caja diaria abierta si el setting lo requiere
+    if (companySettings?.requireOpenCashRegister && !cashRegisterOpen) {
+      toast.error('Debe abrir la caja diaria antes de emitir ventas')
+      return
+    }
 
     // Validar carrito no vacío
     if (cart.length === 0) {
@@ -3713,6 +3729,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
   return (
     <div className="min-h-[calc(100vh-8rem)] animate-fade-in pb-6">
+      {companySettings?.requireOpenCashRegister && !cashRegisterOpen && (
+        <div className="mb-4 flex items-center gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-800">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-sm">Caja diaria no aperturada</p>
+            <p className="text-xs mt-0.5">Debe abrir la caja diaria antes de poder emitir ventas. Vaya a Caja Diaria para aperturar.</p>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Products Panel */}
         <div className="lg:col-span-2 space-y-4">

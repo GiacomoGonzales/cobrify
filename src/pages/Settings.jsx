@@ -156,6 +156,7 @@ export default function Settings() {
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
   const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
   const [allowPartialPayments, setAllowPartialPayments] = useState(false)
+  const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
 
   // Estados para configuración de comprobantes
   const [allowDeleteInvoices, setAllowDeleteInvoices] = useState(false)
@@ -722,6 +723,7 @@ export default function Settings() {
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
         setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
         setAllowPartialPayments(businessData.allowPartialPayments || false)
+        setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
 
         // Cargar configuración de comprobantes
         setAllowDeleteInvoices(businessData.allowDeleteInvoices || false)
@@ -3833,6 +3835,33 @@ export default function Settings() {
                       </div>
                     </div>
                   </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={requireOpenCashRegister}
+                      onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Requerir caja diaria abierta para vender
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {requireOpenCashRegister
+                          ? '✓ Habilitado: No se podrán emitir ventas en el POS si la caja diaria no está aperturada. El usuario deberá abrir caja antes de realizar ventas.'
+                          : '✗ Deshabilitado: Se pueden emitir ventas sin necesidad de tener la caja diaria abierta.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                        <Info className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs text-amber-700 font-medium">
+                          {requireOpenCashRegister
+                            ? 'Caja diaria obligatoria para emitir ventas'
+                            : 'Ventas sin restricción de caja'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -3865,6 +3894,7 @@ export default function Settings() {
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
+                      requireOpenCashRegister: requireOpenCashRegister,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       presentationsEnabled: presentationsEnabled,
