@@ -35,6 +35,8 @@ export async function getAdminStats() {
     let newThisMonth = 0
     let newLastMonth = 0
     let mrr = 0
+    let collectableThisMonth = 0
+    let collectableCount = 0
     let totalRevenue = 0
     let expiringThisWeek = 0
     const usersByPlan = {}
@@ -71,6 +73,14 @@ export async function getAdminStats() {
       // MRR (Monthly Recurring Revenue)
       if (data.status === 'active' && !data.accessBlocked && PLANS[data.plan]) {
         mrr += PLANS[data.plan].pricePerMonth || 0
+
+        // Por cobrar este mes: solo suscripciones cuyo período termina este mes
+        const periodEndDate = data.currentPeriodEnd?.toDate?.()
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+        if (periodEndDate && periodEndDate >= startOfMonth && periodEndDate <= endOfMonth) {
+          collectableThisMonth += PLANS[data.plan].pricePerMonth || 0
+          collectableCount++
+        }
       }
 
       // Nuevos este mes
@@ -168,6 +178,8 @@ export async function getAdminStats() {
       newLastMonth,
       growthRate: parseFloat(growthRate),
       mrr,
+      collectableThisMonth,
+      collectableCount,
       totalRevenue,
       expiringThisWeek,
       conversionRate: parseFloat(conversionRate),

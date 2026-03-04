@@ -102,7 +102,7 @@ export default function AdminDashboard() {
 
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
         {/* MRR */}
         <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between">
@@ -115,6 +115,22 @@ export default function AdminDashboard() {
             </div>
             <div className="p-3 sm:p-4 bg-gradient-to-br from-emerald-400 to-green-600 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg shadow-green-200 group-hover:scale-110 transition-transform duration-300">
               <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
+            </div>
+          </div>
+        </div>
+
+        {/* Por Cobrar Este Mes */}
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Por Cobrar</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-2 truncate">
+                S/ {stats?.collectableThisMonth?.toFixed(2) || '0.00'}
+              </p>
+              <p className="text-xs text-gray-500 mt-2 hidden sm:block">{stats?.collectableCount || 0} renovaciones</p>
+            </div>
+            <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-400 to-yellow-600 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform duration-300">
+              <Calendar className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
             </div>
           </div>
         </div>
