@@ -216,12 +216,7 @@ export default function Settings() {
   const qrCanvasRef = useRef(null)
 
   // Estados para QR de mesas (carta digital restaurante)
-  const [tableQrCodes, setTableQrCodes] = useState(() => {
-    try {
-      const saved = localStorage.getItem('tableQrCodes')
-      return saved ? JSON.parse(saved) : []
-    } catch { return [] }
-  })
+  const [tableQrCodes, setTableQrCodes] = useState([])
   const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
 
   // Estados para modo de negocio
@@ -417,6 +412,41 @@ export default function Settings() {
       setCatalogQrDataUrl('')
     }
   }, [catalogSlug, catalogEnabled, resellerCustomDomain])
+
+  // Auto-generar QRs de mesas cuando el catálogo esté habilitado y sea restaurante
+  useEffect(() => {
+    if (!catalogSlug || !catalogEnabled || businessMode !== 'restaurant') {
+      setTableQrCodes([])
+      return
+    }
+    const generateTableQrs = async () => {
+      setGeneratingTableQrs(true)
+      try {
+        const result = await getTables(getBusinessId())
+        if (!result.success || !result.data || result.data.length === 0) {
+          setTableQrCodes([])
+          return
+        }
+        const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
+        const qrs = []
+        for (const mesa of result.data) {
+          const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}`
+          const dataUrl = await QRCode.toDataURL(url, {
+            width: 300,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          })
+          qrs.push({ table: mesa.number, zone: mesa.zone || '', url, dataUrl })
+        }
+        setTableQrCodes(qrs)
+      } catch (error) {
+        console.error('Error generating table QR codes:', error)
+      } finally {
+        setGeneratingTableQrs(false)
+      }
+    }
+    generateTableQrs()
+  }, [catalogSlug, catalogEnabled, businessMode, resellerCustomDomain])
 
   // Generar QR del Libro de Reclamaciones cuando cambie el slug
   useEffect(() => {
@@ -4598,57 +4628,19 @@ export default function Settings() {
                           Genera códigos QR para cada mesa. Al escanear, el cliente verá la carta con su número de mesa pre-cargado.
                         </p>
 
-                        <div className="flex items-center gap-3 mb-4">
-                          <button
-                            type="button"
-                            disabled={generatingTableQrs}
-                            onClick={async () => {
-                              setGeneratingTableQrs(true)
-                              try {
-                                const result = await getTables(getBusinessId())
-                                if (!result.success || !result.data || result.data.length === 0) {
-                                  toast.error('No hay mesas configuradas. Ve a la página de Mesas para crearlas.')
-                                  return
-                                }
-                                const tables = result.data
-                                const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
-                                const qrs = []
-                                for (const mesa of tables) {
-                                  const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}`
-                                  const dataUrl = await QRCode.toDataURL(url, {
-                                    width: 300,
-                                    margin: 2,
-                                    color: { dark: '#000000', light: '#ffffff' }
-                                  })
-                                  qrs.push({ table: mesa.number, zone: mesa.zone || '', url, dataUrl })
-                                }
-                                setTableQrCodes(qrs)
-                                try { localStorage.setItem('tableQrCodes', JSON.stringify(qrs)) } catch {}
-                                toast.success(`${qrs.length} códigos QR generados`)
-                              } catch (error) {
-                                console.error('Error generating QR codes:', error)
-                                toast.error('Error al generar códigos QR')
-                              } finally {
-                                setGeneratingTableQrs(false)
-                              }
-                            }}
-                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium disabled:opacity-50"
-                          >
-                            {generatingTableQrs ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Generando...
-                              </>
-                            ) : (
-                              <>
-                                <QrCode className="w-4 h-4" />
-                                Generar QRs
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        {generatingTableQrs && (
+                          <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generando QRs de mesas...
+                          </div>
+                        )}
 
-                        {/* QRs Generados */}
+                        {!generatingTableQrs && tableQrCodes.length === 0 && (
+                          <p className="text-sm text-gray-500 italic mb-4">
+                            No hay mesas configuradas. Ve a la página de Mesas para crearlas.
+                          </p>
+                        )}
+
                         {tableQrCodes.length > 0 && (
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
