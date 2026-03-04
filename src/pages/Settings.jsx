@@ -34,6 +34,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
+import { getTables } from '@/services/tableService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
@@ -215,7 +216,6 @@ export default function Settings() {
   const qrCanvasRef = useRef(null)
 
   // Estados para QR de mesas (carta digital restaurante)
-  const [tableQrCount, setTableQrCount] = useState(10)
   const [tableQrCodes, setTableQrCodes] = useState([])
   const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
 
@@ -4594,34 +4594,31 @@ export default function Settings() {
                         </p>
 
                         <div className="flex items-center gap-3 mb-4">
-                          <label className="text-sm text-gray-700">Cantidad de mesas:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={tableQrCount}
-                            onChange={(e) => setTableQrCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                          />
                           <button
                             type="button"
                             disabled={generatingTableQrs}
                             onClick={async () => {
                               setGeneratingTableQrs(true)
                               try {
+                                const result = await getTables(getBusinessId())
+                                if (!result.success || !result.data || result.data.length === 0) {
+                                  toast.error('No hay mesas configuradas. Ve a la página de Mesas para crearlas.')
+                                  return
+                                }
+                                const tables = result.data
                                 const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
                                 const qrs = []
-                                for (let i = 1; i <= tableQrCount; i++) {
-                                  const url = `${baseUrl}/menu/${catalogSlug}?mesa=${i}`
+                                for (const mesa of tables) {
+                                  const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}`
                                   const dataUrl = await QRCode.toDataURL(url, {
                                     width: 300,
                                     margin: 2,
                                     color: { dark: '#000000', light: '#ffffff' }
                                   })
-                                  qrs.push({ table: i, url, dataUrl })
+                                  qrs.push({ table: mesa.number, zone: mesa.zone || '', url, dataUrl })
                                 }
                                 setTableQrCodes(qrs)
-                                toast.success(`${tableQrCount} códigos QR generados`)
+                                toast.success(`${qrs.length} códigos QR generados`)
                               } catch (error) {
                                 console.error('Error generating QR codes:', error)
                                 toast.error('Error al generar códigos QR')
@@ -4653,14 +4650,13 @@ export default function Settings() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  // Descargar todos como ZIP usando una técnica simple
                                   tableQrCodes.forEach((qr, index) => {
                                     setTimeout(() => {
                                       const link = document.createElement('a')
                                       link.download = `mesa-${qr.table}-qr.png`
                                       link.href = qr.dataUrl
                                       link.click()
-                                    }, index * 200) // Pequeño delay entre descargas
+                                    }, index * 200)
                                   })
                                   toast.success('Descargando todos los QRs...')
                                 }}
@@ -4674,8 +4670,10 @@ export default function Settings() {
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-96 overflow-y-auto p-2 bg-white rounded-lg">
                               {tableQrCodes.map((qr) => (
                                 <div key={qr.table} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
-                                  <img src={qr.dataUrl} alt={`Mesa ${qr.table}`} className="w-24 h-24" />
-                                  <span className="text-sm font-semibold text-gray-900 mt-1">Mesa {qr.table}</span>
+                                  <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
+                                  <span className="text-sm font-semibold text-gray-900 mt-1">
+                                    {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => {

@@ -1155,52 +1155,62 @@ function CartDrawer({
               {/* Opciones de restaurante */}
               {isRestaurantMenu && (
                 <div className="space-y-4 pt-2">
-                  {/* Tipo de orden */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de pedido
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {ORDER_TYPES.map((type) => {
-                        const Icon = type.icon
-                        const isSelected = orderType === type.id
-                        return (
-                          <button
-                            key={type.id}
-                            onClick={() => setOrderType(type.id)}
-                            className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                              isSelected
-                                ? `border-${type.color}-500 bg-${type.color}-50 text-${type.color}-700`
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            style={isSelected ? {
-                              borderColor: type.color === 'emerald' ? '#10B981' : type.color === 'blue' ? '#3B82F6' : '#F97316',
-                              backgroundColor: type.color === 'emerald' ? '#ECFDF5' : type.color === 'blue' ? '#EFF6FF' : '#FFF7ED'
-                            } : {}}
-                          >
-                            <Icon className="w-5 h-5" />
-                            <span className="text-xs font-medium">{type.label}</span>
-                          </button>
-                        )
-                      })}
+                  {/* Si viene de QR con mesa, mostrar indicador fijo */}
+                  {initialTableNumber ? (
+                    <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <Hash className="w-5 h-5 text-emerald-600" />
+                      <span className="text-sm font-medium text-emerald-800">Mesa {initialTableNumber} — Pedido para tu mesa</span>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Tipo de orden */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Tipo de pedido
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {ORDER_TYPES.map((type) => {
+                            const Icon = type.icon
+                            const isSelected = orderType === type.id
+                            return (
+                              <button
+                                key={type.id}
+                                onClick={() => setOrderType(type.id)}
+                                className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                                  isSelected
+                                    ? `border-${type.color}-500 bg-${type.color}-50 text-${type.color}-700`
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                                style={isSelected ? {
+                                  borderColor: type.color === 'emerald' ? '#10B981' : type.color === 'blue' ? '#3B82F6' : '#F97316',
+                                  backgroundColor: type.color === 'emerald' ? '#ECFDF5' : type.color === 'blue' ? '#EFF6FF' : '#FFF7ED'
+                                } : {}}
+                              >
+                                <Icon className="w-5 h-5" />
+                                <span className="text-xs font-medium">{type.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
 
-                  {/* Mesa (solo para dine_in) */}
-                  {orderType === 'dine_in' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <Hash className="w-4 h-4 inline mr-1" />
-                        Número de mesa
-                      </label>
-                      <input
-                        type="text"
-                        value={tableNumber}
-                        onChange={(e) => setTableNumber(e.target.value)}
-                        placeholder="Ej: 5"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                      />
-                    </div>
+                      {/* Mesa (solo para dine_in sin QR) */}
+                      {orderType === 'dine_in' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <Hash className="w-4 h-4 inline mr-1" />
+                            Número de mesa
+                          </label>
+                          <input
+                            type="text"
+                            value={tableNumber}
+                            onChange={(e) => setTableNumber(e.target.value)}
+                            placeholder="Ej: 5"
+                            className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* Nombre (para takeaway y delivery) */}
