@@ -83,6 +83,7 @@ export const useStore = create(
         customers: state.customers,
         products: state.products,
         companySettings: state.companySettings,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
     }
   )

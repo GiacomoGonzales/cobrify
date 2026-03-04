@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import { useYapeListener } from '@/hooks/useYapeListener'
 import { AlertTriangle, MessageCircle } from 'lucide-react'
+import { useStore } from '@/stores/useStore'
 
 // Mapeo de rutas a pageIds para verificación de permisos
 const routeToPageId = {
@@ -61,6 +62,7 @@ export default function MainLayout() {
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
+  const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
 
   // Iniciar listener de Yape automáticamente (solo en APK Android)
   useYapeListener()
@@ -261,7 +263,7 @@ export default function MainLayout() {
 
       {/* Banner de período de gracia */}
       {isInGracePeriod && (
-        <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 text-sm md:pl-64">
+        <div className={`bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 text-sm ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
@@ -283,7 +285,7 @@ export default function MainLayout() {
         <Sidebar />
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden md:ml-64">
+        <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
           {/* Navbar - Siempre fijo */}
           <Navbar />
 

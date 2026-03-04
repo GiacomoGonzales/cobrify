@@ -47,13 +47,15 @@ import {
   UserCheck,
   Award,
   BookOpen,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 
 function Sidebar() {
-  const { mobileMenuOpen, setMobileMenuOpen } = useStore()
+  const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar } = useStore()
   const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
@@ -832,12 +834,12 @@ function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 sidebar-ios flex flex-col overflow-hidden
+        className={`fixed left-0 top-0 h-screen h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 ${sidebarCollapsed ? 'md:w-16' : ''} sidebar-ios flex flex-col overflow-hidden
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
-      {/* Logo - Dinámico según branding del reseller */}
-      <div className="h-16 flex-shrink-0 flex items-center justify-center px-4 border-b border-gray-200">
+      {/* Logo + botón colapsar */}
+      <div className={`h-16 flex-shrink-0 flex items-center justify-between border-b border-gray-200 ${sidebarCollapsed ? 'md:px-2' : 'px-4'}`}>
         <div className="flex items-center space-x-3">
           {branding.logoUrl ? (
             <img
@@ -859,16 +861,23 @@ function Sidebar() {
             />
           )}
           <span
-            className="text-xl font-bold"
+            className={`text-xl font-bold ${sidebarCollapsed ? 'md:hidden' : ''}`}
             style={{ color: branding.primaryColor || '#111827' }}
           >
             {branding.companyName}
           </span>
         </div>
+        <button
+          onClick={toggleSidebar}
+          className="hidden md:flex items-center justify-center p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+        >
+          {sidebarCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="p-3 space-y-1 flex-1 min-h-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
+      <nav className="p-3 space-y-1 flex-1 min-h-0 overflow-y-auto overscroll-contain sidebar-scrollbar" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
         {/* Skeleton loader mientras carga businessMode */}
         {!businessMode && (
           <div className="space-y-2 animate-pulse">
@@ -885,8 +894,9 @@ function Sidebar() {
             key={item.path}
             to={getPath(item.path)}
             onClick={() => setMobileMenuOpen(false)}
+            title={item.label}
             className={({ isActive }) =>
-              `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
+              `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
                 isActive
                   ? ''
                   : 'text-gray-700 hover:bg-gray-100'
@@ -903,7 +913,7 @@ function Sidebar() {
                   className="w-5 h-5 flex-shrink-0"
                   style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
                 />
-                <span className="font-medium text-sm">{item.label}</span>
+                <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
               </>
             )}
           </NavLink>
@@ -918,8 +928,9 @@ function Sidebar() {
                 key={item.path}
                 to={itemPath}
                 onClick={() => setMobileMenuOpen(false)}
+                title={item.label}
                 className={({ isActive }) =>
-                  `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
+                  `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
                     isActive
                       ? ''
                       : 'text-gray-700 hover:bg-gray-100'
@@ -936,14 +947,14 @@ function Sidebar() {
                       className="w-5 h-5 flex-shrink-0"
                       style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
                     />
-                    <span className="font-medium text-sm">{item.label}</span>
+                    <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
                     {item.adminOnly && (
-                      <span className="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
+                      <span className={`ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
                         Admin
                       </span>
                     )}
                     {item.resellerOnly && (
-                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      <span className={`ml-auto text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
                         Reseller
                       </span>
                     )}
@@ -957,6 +968,7 @@ function Sidebar() {
         {/* Espaciador inferior para iOS - permite que el scroll muestre la última opción */}
         <div style={{ height: '34px', flexShrink: 0 }} />
       </nav>
+
     </aside>
     </>
   )

@@ -4,9 +4,11 @@ import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import { useEffect } from 'react'
 import { useBranding } from '@/contexts/BrandingContext'
+import { useStore } from '@/stores/useStore'
 
 export default function DemoLayout() {
   const { branding } = useBranding()
+  const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
   // Forzar overflow hidden en body y root
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -37,7 +39,7 @@ export default function DemoLayout() {
 
         {/* Demo Mode Banner */}
         <div
-          className="text-white shadow-sm z-50 flex-shrink-0 md:ml-64"
+          className={`text-white shadow-sm z-50 flex-shrink-0 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}
           style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.secondaryColor || branding.primaryColor})` }}
         >
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
@@ -60,7 +62,7 @@ export default function DemoLayout() {
           <Sidebar />
 
           {/* Main Content */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden md:ml-64">
+          <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
             {/* Navbar */}
             <Navbar />
 
