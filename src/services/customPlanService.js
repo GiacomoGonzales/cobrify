@@ -53,6 +53,7 @@ export async function createCustomPlan(planData) {
       pricePerMonth: planData.months > 0
         ? parseFloat((planData.totalPrice / planData.months).toFixed(2))
         : planData.totalPrice,
+      includesIgv: planData.includesIgv || false,
       emissionMethod: planData.emissionMethod || 'qpse',
       limits: {
         maxInvoicesPerMonth: planData.limits?.maxInvoicesPerMonth ?? 500,

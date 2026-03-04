@@ -1548,7 +1548,7 @@ export default function AdminUsers() {
   }
 
   // Función para registrar pago
-  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null) {
+  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, igvData = null) {
     setProcessingPayment(true)
     try {
       const plan = PLANS[planKey] || customPlans[planKey]
@@ -1583,7 +1583,12 @@ export default function AdminUsers() {
         planName: plan.name,
         months: plan.months,
         status: 'completed',
-        registeredBy: 'admin'
+        registeredBy: 'admin',
+        ...(igvData && {
+          includesIgv: true,
+          baseAmount: igvData.baseAmount,
+          igvAmount: igvData.igvAmount
+        })
       }
 
       // Actualizar suscripción

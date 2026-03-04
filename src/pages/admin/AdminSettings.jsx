@@ -205,7 +205,7 @@ function PlansSection({ plans }) {
   const [editingPlan, setEditingPlan] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: '', months: 1, totalPrice: 0, emissionMethod: 'qpse',
+    name: '', months: 1, totalPrice: 0, includesIgv: false, emissionMethod: 'qpse',
     maxInvoicesPerMonth: 500, maxBranches: 1,
     sunatIntegration: true, multiUser: true, notes: ''
   })
@@ -253,7 +253,7 @@ function PlansSection({ plans }) {
 
   function resetForm() {
     setForm({
-      name: '', months: 1, totalPrice: 0, emissionMethod: 'qpse',
+      name: '', months: 1, totalPrice: 0, includesIgv: false, emissionMethod: 'qpse',
       maxInvoicesPerMonth: 500, maxBranches: 1,
       sunatIntegration: true, multiUser: true, notes: ''
     })
@@ -267,6 +267,7 @@ function PlansSection({ plans }) {
       name: plan.name || '',
       months: plan.months || 1,
       totalPrice: plan.totalPrice || 0,
+      includesIgv: plan.includesIgv || false,
       emissionMethod: plan.emissionMethod || 'qpse',
       maxInvoicesPerMonth: plan.limits?.maxInvoicesPerMonth ?? 500,
       maxBranches: plan.limits?.maxBranches ?? 1,
@@ -285,6 +286,7 @@ function PlansSection({ plans }) {
         name: form.name.trim(),
         months: parseInt(form.months) || 1,
         totalPrice: parseFloat(form.totalPrice) || 0,
+        includesIgv: form.includesIgv,
         emissionMethod: form.emissionMethod,
         limits: {
           maxInvoicesPerMonth: parseInt(form.maxInvoicesPerMonth) || 500,
@@ -544,6 +546,14 @@ function PlansSection({ plans }) {
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
+                  type="checkbox" checked={form.includesIgv}
+                  onChange={(e) => setForm({ ...form, includesIgv: e.target.checked })}
+                  className="w-4 h-4 text-amber-600 rounded"
+                />
+                Precio incluye IGV (18%)
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
                   type="checkbox" checked={form.sunatIntegration}
                   onChange={(e) => setForm({ ...form, sunatIntegration: e.target.checked })}
                   className="w-4 h-4 text-amber-600 rounded"
@@ -572,9 +582,14 @@ function PlansSection({ plans }) {
             </div>
 
             {form.months > 0 && form.totalPrice > 0 && (
-              <p className="text-xs text-amber-700">
-                Precio por mes: S/ {(parseFloat(form.totalPrice) / parseInt(form.months)).toFixed(2)}
-              </p>
+              <div className="text-xs text-amber-700 space-y-0.5">
+                <p>Precio por mes: S/ {(parseFloat(form.totalPrice) / parseInt(form.months)).toFixed(2)}</p>
+                {form.includesIgv ? (
+                  <p>Desglose: Base S/ {(parseFloat(form.totalPrice) / 1.18).toFixed(2)} + IGV S/ {(parseFloat(form.totalPrice) - parseFloat(form.totalPrice) / 1.18).toFixed(2)} = Total S/ {parseFloat(form.totalPrice).toFixed(2)}</p>
+                ) : (
+                  <p>Con IGV: S/ {parseFloat(form.totalPrice).toFixed(2)} + IGV S/ {(parseFloat(form.totalPrice) * 0.18).toFixed(2)} = Total S/ {(parseFloat(form.totalPrice) * 1.18).toFixed(2)}</p>
+                )}
+              </div>
             )}
 
             <div className="flex gap-2 pt-1">
@@ -618,8 +633,24 @@ function PlansSection({ plans }) {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="text-gray-500">Precio total</span>
-                    <span className="font-bold text-amber-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
+                    <div className="text-right">
+                      <span className="font-bold text-amber-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${plan.includesIgv ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {plan.includesIgv ? 'Inc. IGV' : '+ IGV'}
+                      </span>
+                    </div>
                   </div>
+                  {plan.includesIgv ? (
+                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                      <span>Desglose</span>
+                      <span>Base S/ {(plan.totalPrice / 1.18).toFixed(2)} + IGV S/ {(plan.totalPrice - plan.totalPrice / 1.18).toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                      <span>Con IGV</span>
+                      <span>S/ {(plan.totalPrice * 1.18).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="text-gray-500">Período</span>
                     <span className="font-medium">{plan.months}m (S/ {plan.pricePerMonth?.toFixed?.(2) || '0.00'}/mes)</span>

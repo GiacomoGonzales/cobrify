@@ -34,6 +34,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [showPasswords, setShowPasswords] = useState(false);
+  const [addIgv, setAddIgv] = useState(false);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customEndDate, setCustomEndDate] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -74,9 +75,10 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   useEffect(() => {
     const plan = allPlans[selectedPlanForPayment];
     if (plan) {
-      setPaymentAmount(plan.totalPrice || 0);
+      const base = plan.totalPrice || 0;
+      setPaymentAmount(addIgv ? parseFloat((base * 1.18).toFixed(2)) : base);
     }
-  }, [selectedPlanForPayment]);
+  }, [selectedPlanForPayment, addIgv]);
 
   const periodEnd = user.currentPeriodEnd?.toDate?.() || user.currentPeriodEnd;
   const now = new Date();
@@ -662,7 +664,8 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   paymentAmount,
                   paymentMethod,
                   selectedPlanForPayment,
-                  useCustomDate && customEndDate ? new Date(customEndDate) : null
+                  useCustomDate && customEndDate ? new Date(customEndDate) : null,
+                  addIgv ? { includesIgv: true, baseAmount: selectedPlanConfig?.totalPrice || 0, igvAmount: parseFloat(((selectedPlanConfig?.totalPrice || 0) * 0.18).toFixed(2)) } : null
                 );
               }}
               className="space-y-4"
@@ -864,12 +867,41 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     <>
                       Plan de {selectedPlanConfig?.months} {selectedPlanConfig?.months === 1 ? 'mes' : 'meses'} -
                       S/ {selectedPlanConfig?.pricePerMonth}/mes
-                      {paymentAmount !== selectedPlanConfig?.totalPrice && (
+                      {!addIgv && paymentAmount !== selectedPlanConfig?.totalPrice && (
                         <span className="ml-2 text-amber-600 font-medium">(monto modificado)</span>
                       )}
                     </>
                   )}
                 </p>
+
+                {/* Checkbox IGV */}
+                <div className="mt-3 pt-3 border-t border-green-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={addIgv}
+                      onChange={(e) => setAddIgv(e.target.checked)}
+                      className="w-4 h-4 text-green-600 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Agregar IGV (18%)</span>
+                  </label>
+                  {addIgv && selectedPlanConfig && (
+                    <div className="mt-2 text-xs text-gray-600 bg-white/60 rounded px-3 py-2 space-y-0.5">
+                      <div className="flex justify-between">
+                        <span>Base (precio plan):</span>
+                        <span>S/ {(selectedPlanConfig.totalPrice || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>IGV (18%):</span>
+                        <span>S/ {((selectedPlanConfig.totalPrice || 0) * 0.18).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-semibold text-green-700 pt-1 border-t border-gray-200">
+                        <span>Total:</span>
+                        <span>S/ {((selectedPlanConfig.totalPrice || 0) * 1.18).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Método de Pago */}
