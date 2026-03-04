@@ -1185,6 +1185,7 @@ export default function Products() {
 
       // Escanear código de barras
       const { barcodes } = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
 
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
@@ -1196,6 +1197,7 @@ export default function Products() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
       if (error.message !== 'User cancelled the scan') {
         toast.error('Error al escanear el código de barras')
       }
@@ -1239,6 +1241,7 @@ export default function Products() {
 
       // Escanear código de barras
       const { barcodes } = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
 
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
@@ -1256,6 +1259,7 @@ export default function Products() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
       if (error.message !== 'User cancelled the scan') {
         toast.error('Error al escanear el código de barras')
       }

@@ -331,14 +331,36 @@ const ProductFormModal = ({
   }, [productImagePreview])
 
   // Barcode scanning
+  const scanningRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      if (scanningRef.current) {
+        BarcodeScanner.stopScan().catch(() => {})
+        scanningRef.current = false
+      }
+    }
+  }, [])
+
   const handleScanBarcode = async () => {
     if (!Capacitor.isNativePlatform()) {
       toast.error('El escaneo de códigos solo está disponible en la app móvil')
       return
     }
 
+    if (scanningRef.current) return
+    scanningRef.current = true
+    setIsScanningBarcode(true)
+
     try {
-      setIsScanningBarcode(true)
+      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
+      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+      if (!available) {
+        toast.info('Instalando módulo de escáner... Por favor espera')
+        await BarcodeScanner.installGoogleBarcodeScannerModule()
+        toast.success('Módulo instalado. Intenta escanear de nuevo.')
+        return
+      }
 
       // Check permissions
       const { camera } = await BarcodeScanner.checkPermissions()
@@ -352,6 +374,8 @@ const ProductFormModal = ({
 
       // Scan
       const result = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
+
       if (result.barcodes && result.barcodes.length > 0) {
         const code = result.barcodes[0].rawValue
         setValue('code', code)
@@ -359,12 +383,14 @@ const ProductFormModal = ({
       }
     } catch (error) {
       console.error('Error scanning barcode:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
       if (error.message?.includes('canceled')) {
         // User cancelled
       } else {
         toast.error('Error al escanear código')
       }
     } finally {
+      scanningRef.current = false
       setIsScanningBarcode(false)
     }
   }

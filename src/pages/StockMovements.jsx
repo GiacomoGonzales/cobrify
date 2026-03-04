@@ -421,6 +421,7 @@ export default function StockMovements() {
 
       // Escanear código de barras
       const { barcodes } = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
 
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
@@ -437,6 +438,7 @@ export default function StockMovements() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
       if (error.message !== 'scan canceled') {
         toast.error('Error al escanear código de barras')
       }

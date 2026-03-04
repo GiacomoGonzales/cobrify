@@ -29,6 +29,8 @@ import {
   Store,
   Warehouse,
   FileText,
+  PanelLeftClose,
+  PanelRightClose,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -336,6 +338,7 @@ export default function POS() {
 
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
+  const [expandedCart, setExpandedCart] = useState(false)
 
   // Sellers
   const [sellers, setSellers] = useState([])
@@ -1403,6 +1406,7 @@ export default function POS() {
 
       // Escanear código de barras
       const { barcodes } = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
 
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
@@ -1428,6 +1432,7 @@ export default function POS() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
       if (error.message !== 'User cancelled the scan') {
         toast.error('Error al escanear el código de barras')
       }
@@ -3740,12 +3745,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Products Panel */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}>
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Punto de Venta</h1>
+                <button
+                  onClick={() => setExpandedCart(prev => !prev)}
+                  className="hidden lg:flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  title={expandedCart ? 'Expandir productos' : 'Expandir documento'}
+                >
+                  {expandedCart ? <PanelRightClose className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+                </button>
                 {editingInvoiceId && (
                   <Badge variant="warning" className="bg-blue-600 text-white animate-pulse">
                     <Edit2 className="w-3 h-3 mr-1" />
@@ -4116,8 +4128,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         </div>
 
         {/* Cart Panel */}
-        <div className="lg:sticky lg:top-4 lg:self-start">
+        <div className={`${expandedCart ? 'lg:col-span-2' : 'lg:sticky lg:top-4 lg:self-start'}`}>
           <Card className="flex flex-col h-full">
+            <div className={expandedCart ? 'lg:grid lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-gray-100' : ''}>
             <CardContent className="p-4 space-y-3">
               {/* 1. Sucursal (para series de documentos) */}
               {(() => {
@@ -5102,7 +5115,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
             </CardContent>
 
-            <CardContent className="flex-1 flex flex-col p-4 pt-0 sm:p-6 sm:pt-0">
+            <CardContent className={`flex-1 flex flex-col p-4 pt-0 sm:p-6 sm:pt-0 ${expandedCart ? 'lg:!pt-4' : ''}`}>
               {/* Cart Items */}
               <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
                 <ShoppingCart className="w-3.5 h-3.5" />
@@ -5200,7 +5213,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            placeholder="Obs: IMEI, placa..."
+                            placeholder="Nota al producto..."
                             value={item.observations || ''}
                             onChange={(e) => updateItemObservations(itemId, e.target.value)}
                             className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -5935,6 +5948,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </div>
               )}
             </CardContent>
+            </div>{/* fin grid 2-cols expandido */}
           </Card>
         </div>
       </div>
