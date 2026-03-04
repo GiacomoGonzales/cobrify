@@ -288,6 +288,13 @@ export default function Tables() {
     return () => unsubscribe()
   }, [user, isDemoMode, demoData])
 
+  // Ref para acceder a tables sin re-suscribir el listener
+  const tablesRef2 = useRef(tables)
+  useEffect(() => { tablesRef2.current = tables }, [tables])
+
+  // Set para trackear órdenes ya procesadas
+  const processedOrdersRef = useRef(new Set())
+
   // Listener: cuando llega una orden dine_in con tableNumber, ocupar la mesa automáticamente
   useEffect(() => {
     if (!user?.uid || isDemoMode) return
@@ -302,8 +309,12 @@ export default function Tables() {
         const order = { id: change.doc.id, ...change.doc.data() }
         if (!order.tableNumber) return
 
-        // Buscar la mesa con ese número
-        const mesa = tables.find(t => t.number === order.tableNumber)
+        // Evitar procesar la misma orden dos veces
+        if (processedOrdersRef.current.has(order.id)) return
+        processedOrdersRef.current.add(order.id)
+
+        const currentTables = tablesRef2.current
+        const mesa = currentTables.find(t => t.number === order.tableNumber)
         if (!mesa) return
 
         if (mesa.status === 'available') {
@@ -332,7 +343,7 @@ export default function Tables() {
     })
 
     return () => unsubscribe()
-  }, [user, isDemoMode, tables])
+  }, [user, isDemoMode])
 
   // Cargar mozos al inicio
   useEffect(() => {
