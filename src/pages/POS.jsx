@@ -2903,8 +2903,8 @@ export default function POS() {
         // Guardar el primer método como principal para compatibilidad
         paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
         status: isCreditSaleForInvoice ? 'pending' : 'paid',
-        // Datos de pago parcial (solo para notas de venta)
-        ...(documentType === 'nota_venta' && {
+        // Datos de pago parcial (notas de venta y facturas al crédito)
+        ...((documentType === 'nota_venta' || isCreditSaleForFactura) && {
           paymentStatus: paymentStatus,
           amountPaid: amountPaid,
           balance: balance,

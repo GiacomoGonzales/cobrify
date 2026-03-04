@@ -1880,15 +1880,15 @@ Gracias por tu preferencia.`
 
                   {/* Fila extra: pago parcial/crédito + indicadores conversión */}
                   {(
-                    (invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending')) ||
+                    ((invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending')) ||
                     invoice.convertedTo ||
                     invoice.convertedFrom
                   ) && (
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'pending' && (
+                      {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && invoice.paymentStatus === 'pending' && (
                         <span className="text-xs text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</span>
                       )}
-                      {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                      {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && invoice.paymentStatus === 'partial' && (
                         <>
                           <span className="text-xs text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</span>
                           <span className="text-xs text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</span>
@@ -1999,7 +1999,7 @@ Gracias por tu preferencia.`
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
                         {/* Mostrar info de pago parcial o al crédito si aplica */}
-                        {invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
+                        {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <div className="text-xs space-y-0.5">
                             {invoice.paymentStatus === 'pending' ? (
                               <div className="text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</div>
@@ -2466,8 +2466,8 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
-                  {invoice.documentType === 'nota_venta' &&
+                  {/* Registrar Pago - Para notas de venta y facturas al crédito con saldo pendiente */}
+                  {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') &&
                    invoice.status !== 'cancelled' &&
                    (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') &&
                    (invoice.balance > 0 || invoice.status === 'pending') && (
