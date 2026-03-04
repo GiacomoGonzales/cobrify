@@ -947,6 +947,7 @@ function CartDrawer({
         try {
           const tablesRef = collection(db, 'businesses', business.id, 'tables')
           const tablesSnap = await getDocs(query(tablesRef, where('number', '==', tableNumber.trim())))
+          console.log('Buscando mesa:', tableNumber.trim(), 'en business:', business.id, 'encontradas:', tablesSnap.size)
 
           if (!tablesSnap.empty) {
             const tableDocSnap = tablesSnap.docs[0]
@@ -971,7 +972,7 @@ function CartDrawer({
             }
           }
         } catch (tableError) {
-          console.warn('No se pudo actualizar la mesa:', tableError)
+          console.error('No se pudo actualizar la mesa:', tableError.code, tableError.message)
         }
       }
 
