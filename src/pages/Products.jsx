@@ -1485,6 +1485,20 @@ export default function Products() {
 
               if (updateResult.success) {
                 updatedCount++
+                // Registrar movimiento de stock
+                if (stockValue > 0) {
+                  await createStockMovement(getBusinessId(), {
+                    productId: existingProduct.id,
+                    warehouseId: targetWarehouse.id,
+                    type: 'entry',
+                    quantity: stockValue,
+                    reason: 'Stock inicial',
+                    referenceType: 'initial_stock',
+                    referenceId: existingProduct.id,
+                    userId: user?.uid,
+                    notes: 'Ingreso de stock por importación masiva'
+                  })
+                }
                 // Actualizar el producto en el mapa para siguientes iteraciones
                 existingProduct.warehouseStocks = newWarehouseStocks
                 existingProduct.stock = totalStock
@@ -1519,6 +1533,20 @@ export default function Products() {
 
             if (result.success) {
               successCount++
+              // Registrar movimiento de stock inicial
+              if (product.trackStock && product.stock > 0 && targetWarehouse) {
+                await createStockMovement(getBusinessId(), {
+                  productId: result.id,
+                  warehouseId: targetWarehouse.id,
+                  type: 'entry',
+                  quantity: product.stock,
+                  reason: 'Stock inicial',
+                  referenceType: 'initial_stock',
+                  referenceId: result.id,
+                  userId: user?.uid,
+                  notes: 'Ingreso de stock inicial por importación masiva'
+                })
+              }
               // Agregar al mapa para detectar duplicados en el mismo archivo
               if (product.sku) productBySku.set(product.sku.toLowerCase().trim(), { ...product, id: result.id })
               if (product.code) productByCode.set(product.code.toLowerCase().trim(), { ...product, id: result.id })
