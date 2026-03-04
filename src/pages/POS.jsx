@@ -4014,6 +4014,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center justify-between sm:hidden gap-2">
                         <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                            <span className="text-[10px] font-normal text-gray-400 ml-1">
+                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                            </span>
+                          )}
                         </p>
                         {!product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
@@ -4022,6 +4027,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="hidden sm:block lg:hidden">
                         <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                            <span className="text-xs font-normal text-gray-400 ml-1">
+                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                            </span>
+                          )}
                         </p>
                         <div className="mt-1">
                           {!product.hasVariants && getStockBadge(product)}
@@ -4074,6 +4084,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center justify-between mt-1 pt-1">
                         <p className={`text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                            <span className="text-sm font-normal text-gray-400 ml-1">
+                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                            </span>
+                          )}
                         </p>
                         {!product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}

@@ -251,9 +251,8 @@ export default function OrderItemsModal({
       .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
       .join('|') + `|p:${basePrice}`
 
-    // Recalcular total usando el precio base seleccionado + ajustes de modificadores
-    const modifierAdjustment = totalPrice - (productForModifiers.price || 0)
-    const finalPrice = basePrice + modifierAdjustment
+    // El totalPrice del ModifierSelectorModal ya incluye el precio base seleccionado + ajustes
+    const finalPrice = totalPrice
 
     // Buscar si ya existe un item idéntico (mismo producto + mismos modificadores + mismo precio)
     const existingItem = cart.find(
