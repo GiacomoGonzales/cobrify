@@ -38,7 +38,7 @@ import {
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder } from '@/services/orderService'
 import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
-import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, where, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
@@ -287,6 +287,52 @@ export default function Tables() {
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
   }, [user, isDemoMode, demoData])
+
+  // Listener: cuando llega una orden dine_in con tableNumber, ocupar la mesa automáticamente
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+
+    const businessId = getBusinessId()
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    const q = query(ordersRef, where('orderType', '==', 'dine_in'), where('overallStatus', '==', 'active'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type !== 'added') return
+        const order = { id: change.doc.id, ...change.doc.data() }
+        if (!order.tableNumber) return
+
+        // Buscar la mesa con ese número
+        const mesa = tables.find(t => t.number === order.tableNumber)
+        if (!mesa) return
+
+        if (mesa.status === 'available') {
+          try {
+            await updateDoc(doc(db, 'businesses', businessId, 'tables', mesa.id), {
+              status: 'occupied',
+              currentOrder: order.id,
+              startTime: serverTimestamp(),
+              amount: order.total || 0,
+              updatedAt: serverTimestamp(),
+            })
+          } catch (err) {
+            console.error('Error al ocupar mesa automáticamente:', err)
+          }
+        } else if (mesa.status === 'occupied') {
+          try {
+            await updateDoc(doc(db, 'businesses', businessId, 'tables', mesa.id), {
+              amount: (mesa.amount || 0) + (order.total || 0),
+              updatedAt: serverTimestamp(),
+            })
+          } catch (err) {
+            console.error('Error al actualizar monto de mesa:', err)
+          }
+        }
+      })
+    })
+
+    return () => unsubscribe()
+  }, [user, isDemoMode, tables])
 
   // Cargar mozos al inicio
   useEffect(() => {

@@ -942,40 +942,6 @@ function CartDrawer({
 
       const orderDoc = await addDoc(ordersRef, newOrder)
 
-      // Si es pedido para mesa, ocupar la mesa automáticamente
-      if (orderType === 'dine_in' && tableNumber.trim()) {
-        try {
-          const tablesRef = collection(db, 'businesses', business.id, 'tables')
-          const tablesSnap = await getDocs(query(tablesRef, where('number', '==', tableNumber.trim())))
-          console.log('Buscando mesa:', tableNumber.trim(), 'en business:', business.id, 'encontradas:', tablesSnap.size)
-
-          if (!tablesSnap.empty) {
-            const tableDocSnap = tablesSnap.docs[0]
-            const tableData = tableDocSnap.data()
-
-            if (tableData.status === 'available') {
-              await updateDoc(doc(db, 'businesses', business.id, 'tables', tableDocSnap.id), {
-                status: 'occupied',
-                currentOrder: orderDoc.id,
-                startTime: serverTimestamp(),
-                amount: orderTotal,
-                waiter: null,
-                waiterId: null,
-                updatedAt: serverTimestamp(),
-              })
-            } else if (tableData.status === 'occupied' && tableData.currentOrder) {
-              // Mesa ya ocupada: sumar al monto sin pisar la orden existente
-              await updateDoc(doc(db, 'businesses', business.id, 'tables', tableDocSnap.id), {
-                amount: (tableData.amount || 0) + orderTotal,
-                updatedAt: serverTimestamp(),
-              })
-            }
-          }
-        } catch (tableError) {
-          console.error('No se pudo actualizar la mesa:', tableError.code, tableError.message)
-        }
-      }
-
       setOrderNumber(orderNum)
       setOrderSuccess(true)
 
