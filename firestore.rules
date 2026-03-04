@@ -311,6 +311,11 @@ service cloud.firestore {
       match /tables/{tableId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Permitir lectura y actualización pública desde carta digital (para ocupar mesa al hacer pedido)
+        allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
+        allow update: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'currentOrder', 'startTime', 'amount', 'waiter', 'waiterId', 'updatedAt']);
       }
 
       // Subcollection: Waiters (Mozos - para modo restaurante)

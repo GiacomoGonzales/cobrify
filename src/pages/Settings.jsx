@@ -216,7 +216,12 @@ export default function Settings() {
   const qrCanvasRef = useRef(null)
 
   // Estados para QR de mesas (carta digital restaurante)
-  const [tableQrCodes, setTableQrCodes] = useState([])
+  const [tableQrCodes, setTableQrCodes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tableQrCodes')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
   const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
 
   // Estados para modo de negocio
@@ -4618,6 +4623,7 @@ export default function Settings() {
                                   qrs.push({ table: mesa.number, zone: mesa.zone || '', url, dataUrl })
                                 }
                                 setTableQrCodes(qrs)
+                                try { localStorage.setItem('tableQrCodes', JSON.stringify(qrs)) } catch {}
                                 toast.success(`${qrs.length} códigos QR generados`)
                               } catch (error) {
                                 console.error('Error generating QR codes:', error)
