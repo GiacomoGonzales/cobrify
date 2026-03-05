@@ -1281,7 +1281,8 @@ function CartDrawer({
 
           {/* Footer */}
           {cart.length > 0 && (
-            <div className="border-t p-6 space-y-4 max-h-[60vh] overflow-y-auto catalog-scrollbar">
+            <div className="border-t flex flex-col max-h-[60vh]">
+            <div className="flex-1 overflow-y-auto catalog-scrollbar p-6 pb-2 space-y-4">
               {showPrices && (
                 <div className="flex items-center justify-between text-lg">
                   <span className="text-gray-600">Total</span>
@@ -1425,7 +1426,10 @@ function CartDrawer({
                 </div>
               )}
 
-              {/* Botón de checkout */}
+            </div>
+
+              {/* Botón de checkout - fijo abajo */}
+              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
               {isRestaurantMenu ? (
                 <button
                   onClick={handleRestaurantOrder}
@@ -1461,6 +1465,7 @@ function CartDrawer({
                   ? 'Tu pedido llegará directamente a cocina'
                   : 'Te contactaremos para confirmar tu pedido'}
               </p>
+              </div>
             </div>
           )}
         </div>
