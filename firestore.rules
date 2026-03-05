@@ -311,6 +311,15 @@ service cloud.firestore {
       match /tables/{tableId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Lectura pública de mesas para carta digital (buscar mesa por número)
+        allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
+
+        // Permitir actualización pública de mesas desde carta digital (ocupar mesa al hacer pedido)
+        // Solo permite cambiar status, currentOrder, startTime, amount, updatedAt
+        allow update: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'currentOrder', 'startTime', 'amount', 'updatedAt']);
       }
 
       // Subcollection: Waiters (Mozos - para modo restaurante)
@@ -336,6 +345,11 @@ service cloud.firestore {
                       && request.resource.data.source == 'menu_digital'
                       && request.resource.data.orderType != null
                       && request.resource.data.items != null;
+
+        // Permitir actualización pública limitada desde carta digital (vincular tableId)
+        allow update: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
+                      && resource.data.source == 'menu_digital'
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tableId']);
       }
 
       // Subcollection: Counters (Contadores - para números secuenciales)

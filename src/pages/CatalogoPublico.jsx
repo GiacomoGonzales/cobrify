@@ -942,6 +942,50 @@ function CartDrawer({
 
       const orderDoc = await addDoc(ordersRef, newOrder)
 
+      // Si es pedido para mesa, ocupar la mesa automáticamente
+      if (orderType === 'dine_in' && tableNumber.trim()) {
+        try {
+          const tablesRef = collection(db, 'businesses', business.id, 'tables')
+          const allTablesSnap = await getDocs(tablesRef)
+          const trimmedNumber = tableNumber.trim()
+
+          // Buscar mesa por número (comparar como string para evitar mismatch de tipos)
+          const matchedTableDoc = allTablesSnap.docs.find(d => {
+            const num = d.data().number
+            return String(num) === trimmedNumber
+          })
+
+          if (matchedTableDoc) {
+            const tableData = matchedTableDoc.data()
+            const tableRef = doc(db, 'businesses', business.id, 'tables', matchedTableDoc.id)
+
+            if (tableData.status === 'available' || tableData.status === 'reserved') {
+              // Mesa libre o reservada: ocuparla con esta orden
+              await updateDoc(tableRef, {
+                status: 'occupied',
+                currentOrder: orderDoc.id,
+                startTime: serverTimestamp(),
+                amount: orderTotal,
+                updatedAt: serverTimestamp(),
+              })
+              // Vincular tableId en la orden
+              await updateDoc(doc(db, 'businesses', business.id, 'orders', orderDoc.id), {
+                tableId: matchedTableDoc.id,
+              })
+            } else if (tableData.status === 'occupied' && tableData.currentOrder) {
+              // Mesa ya ocupada: solo actualizar monto
+              await updateDoc(tableRef, {
+                amount: (tableData.amount || 0) + orderTotal,
+                updatedAt: serverTimestamp(),
+              })
+            }
+          }
+        } catch (tableError) {
+          console.warn('No se pudo ocupar la mesa automáticamente:', tableError)
+          // No fallar el pedido si no se pudo ocupar la mesa
+        }
+      }
+
       setOrderNumber(orderNum)
       setOrderSuccess(true)
 
