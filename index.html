@@ -94,6 +94,19 @@
     <!-- Script para limpiar título si es dominio de reseller (antes de React) -->
     <script>
       (function() {
+        var path = window.location.pathname;
+        // En rutas de catálogo/menú público, limpiar título para evitar flash de "Cobrify"
+        if (path.startsWith('/catalogo/') || path.startsWith('/menu/')) {
+          document.title = 'Cargando...';
+          // Limpiar favicon por defecto para evitar flash del logo de Cobrify
+          var icon = document.querySelector('link[rel="icon"]');
+          if (icon) icon.setAttribute('href', 'data:,');
+          var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+          if (appleIcon) appleIcon.setAttribute('href', 'data:,');
+          var shortcut = document.querySelector('link[rel="shortcut icon"]');
+          if (shortcut) shortcut.setAttribute('href', 'data:,');
+          return;
+        }
         var host = window.location.hostname.toLowerCase();
         var ignoredDomains = ['localhost', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com'];
         var isResellerDomain = !ignoredDomains.some(function(d) { return host.includes(d); });

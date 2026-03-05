@@ -149,6 +149,10 @@ export function BrandingProvider({ children }) {
   useEffect(() => {
     if (!brandingLoaded) return
 
+    // No pisar título/favicon en rutas públicas de catálogo/menú (lo maneja CatalogoPublico)
+    const path = window.location.pathname
+    if (path.startsWith('/catalogo/') || path.startsWith('/menu/')) return
+
     // Actualizar título de la pestaña
     if (branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName) {
       document.title = `${branding.companyName} - Sistema de Facturación Electrónica`
