@@ -1158,9 +1158,9 @@ export default function CreatePurchase() {
             cost: roundedAverageCost,
             ...(selectedSupplier && {
               lastSupplier: {
-                id: selectedSupplier.id,
-                documentNumber: selectedSupplier.documentNumber,
-                businessName: selectedSupplier.businessName
+                id: selectedSupplier.id || '',
+                documentNumber: selectedSupplier.documentNumber || '',
+                businessName: selectedSupplier.businessName || ''
               }
             })
           }
@@ -1197,7 +1197,14 @@ export default function CreatePurchase() {
             }
           }
 
-          return updateProduct(businessId, grouped.productId, updates)
+          const result = await updateProduct(businessId, grouped.productId, updates)
+          if (!result.success) {
+            console.error('❌ Error actualizando producto:', grouped.productId, result.error, 'Updates:', JSON.stringify(updates, (key, value) => {
+              if (value instanceof Date) return `Date(${value.toISOString()})`
+              return value
+            }, 2))
+          }
+          return result
         }
       })
 
