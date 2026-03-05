@@ -44,6 +44,23 @@ const getSubcategoriesLocal = (cats, parentId) => {
   return migratedCats.filter(cat => cat.parentId === parentId)
 }
 
+// Limpiar valores undefined de un objeto (Firestore rechaza undefined)
+const cleanUndefined = (obj) => {
+  if (obj === null || obj === undefined) return obj
+  if (Array.isArray(obj)) return obj.map(cleanUndefined)
+  if (obj instanceof Date) return obj
+  if (typeof obj === 'object') {
+    const cleaned = {}
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanUndefined(value)
+      }
+    }
+    return cleaned
+  }
+  return obj
+}
+
 export default function CreatePurchase() {
   const { user } = useAuth()
   const { getBusinessId, businessMode } = useAppContext()
@@ -1054,13 +1071,13 @@ export default function CreatePurchase() {
           purchaseData.totalInstallments = originalPurchase.totalInstallments
           purchaseData.paidInstallments = originalPurchase.paidInstallments
         }
-        result = await updatePurchase(businessId, purchaseId, purchaseData)
+        result = await updatePurchase(businessId, purchaseId, cleanUndefined(purchaseData))
         if (!result.success) {
           throw new Error(result.error || 'Error al actualizar la compra')
         }
         resultId = purchaseId
       } else {
-        result = await createPurchase(businessId, purchaseData)
+        result = await createPurchase(businessId, cleanUndefined(purchaseData))
         if (!result.success) {
           throw new Error(result.error || 'Error al crear la compra')
         }
@@ -1197,7 +1214,7 @@ export default function CreatePurchase() {
             }
           }
 
-          const result = await updateProduct(businessId, grouped.productId, updates)
+          const result = await updateProduct(businessId, grouped.productId, cleanUndefined(updates))
           if (!result.success) {
             console.error('❌ Error actualizando producto:', grouped.productId, result.error, 'Updates:', JSON.stringify(updates, (key, value) => {
               if (value instanceof Date) return `Date(${value.toISOString()})`
