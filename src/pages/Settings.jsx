@@ -395,7 +395,9 @@ export default function Settings() {
       const baseUrl = resellerCustomDomain
         ? `https://${resellerCustomDomain}`
         : PRODUCTION_URL
-      const catalogUrl = `${baseUrl}/catalogo/${catalogSlug}`
+      const catalogUrl = businessMode === 'restaurant'
+        ? `${baseUrl}/menu/${catalogSlug}`
+        : `${baseUrl}/catalogo/${catalogSlug}`
       QRCode.toDataURL(catalogUrl, {
         width: 300,
         margin: 2,
@@ -1951,7 +1953,7 @@ export default function Settings() {
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
     { id: 'documentos', label: 'Documentos', icon: FileText },
-    { id: 'catalogo', label: 'Catálogo', icon: Globe },
+    { id: 'catalogo', label: businessMode === 'restaurant' ? 'Carta Digital' : 'Catálogo', icon: businessMode === 'restaurant' ? UtensilsCrossed : Globe },
     { id: 'series', label: 'Series', icon: Hash },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
@@ -4442,7 +4444,7 @@ export default function Settings() {
           <CardHeader>
             <div className="flex items-center space-x-2">
               <Globe className="w-5 h-5 text-primary-600" />
-              <CardTitle>Catálogo Virtual</CardTitle>
+              <CardTitle>{businessMode === 'restaurant' ? 'Carta Digital' : 'Catálogo Virtual'}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -4454,9 +4456,15 @@ export default function Settings() {
                     <Globe className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-emerald-900">Comparte tu catálogo con tus clientes</h3>
+                    <h3 className="font-semibold text-emerald-900">
+                      {businessMode === 'restaurant'
+                        ? 'Comparte tu carta digital con tus clientes'
+                        : 'Comparte tu catálogo con tus clientes'}
+                    </h3>
                     <p className="text-sm text-emerald-700 mt-1">
-                      Crea un catálogo online para que tus clientes vean tus productos, agreguen al carrito y hagan pedidos por WhatsApp. Sin necesidad de app ni registro.
+                      {businessMode === 'restaurant'
+                        ? 'Crea una carta digital para que tus clientes vean el menú desde su celular y hagan pedidos directamente a cocina. Ideal con QR en cada mesa.'
+                        : 'Crea un catálogo online para que tus clientes vean tus productos, agreguen al carrito y hagan pedidos por WhatsApp. Sin necesidad de app ni registro.'}
                     </p>
                   </div>
                 </div>
@@ -4472,12 +4480,14 @@ export default function Settings() {
                 />
                 <div className="flex-1">
                   <span className="text-base font-semibold text-gray-900">
-                    {catalogEnabled ? 'Catálogo habilitado' : 'Habilitar catálogo público'}
+                    {catalogEnabled
+                      ? (businessMode === 'restaurant' ? 'Carta digital habilitada' : 'Catálogo habilitado')
+                      : (businessMode === 'restaurant' ? 'Habilitar carta digital' : 'Habilitar catálogo público')}
                   </span>
                   <p className="text-sm text-gray-600 mt-1">
                     {catalogEnabled
-                      ? 'Tu catálogo está activo y visible para el público'
-                      : 'Activa esta opción para crear tu catálogo online'}
+                      ? (businessMode === 'restaurant' ? 'Tu carta digital está activa y visible para el público' : 'Tu catálogo está activo y visible para el público')
+                      : (businessMode === 'restaurant' ? 'Activa esta opción para crear tu carta digital' : 'Activa esta opción para crear tu catálogo online')}
                   </p>
                 </div>
               </label>
@@ -4488,34 +4498,36 @@ export default function Settings() {
                   {/* URL del catálogo */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      URL de tu catálogo
+                      {businessMode === 'restaurant' ? 'URL de tu carta digital' : 'URL de tu catálogo'}
                     </label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
                         <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
-                          cobrifyperu.com/app/catalogo/
+                          cobrifyperu.com/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
                         </span>
                         <input
                           type="text"
                           value={catalogSlug}
                           onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                          placeholder="mi-tienda"
+                          placeholder={businessMode === 'restaurant' ? 'mi-restaurante' : 'mi-tienda'}
                           className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-emerald-500 text-gray-900"
                         />
                       </div>
                       {catalogSlug && (
                         <button
                           type="button"
-                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/${catalogSlug}`, '_blank')}
+                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`, '_blank')}
                           className="p-2.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-                          title="Ver catálogo"
+                          title={businessMode === 'restaurant' ? 'Ver carta digital' : 'Ver catálogo'}
                         >
                           <ExternalLink className="w-5 h-5" />
                         </button>
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez
+                      {businessMode === 'restaurant'
+                        ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
+                        : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
                     </p>
                   </div>
 
@@ -4524,14 +4536,16 @@ export default function Settings() {
                     <div className="p-4 bg-gray-50 rounded-xl">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-500 mb-1">Enlace de tu catálogo:</p>
+                          <p className="text-xs text-gray-500 mb-1">
+                            {businessMode === 'restaurant' ? 'Enlace de tu carta digital:' : 'Enlace de tu catálogo:'}
+                          </p>
                           <p className="text-sm font-medium text-emerald-600 truncate">
-                            {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/{catalogSlug}
+                            {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/{catalogSlug}
                           </p>
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/${catalogSlug}`)
+                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`)
                             toast.success('Enlace copiado al portapapeles')
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
@@ -4543,18 +4557,20 @@ export default function Settings() {
                     </div>
                   )}
 
-                  {/* Código QR del catálogo */}
+                  {/* Código QR */}
                   {catalogSlug && catalogQrDataUrl && (
                     <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                       <div className="flex items-center gap-2 mb-3">
                         <QrCode className="w-5 h-5 text-emerald-600" />
-                        <h4 className="font-medium text-gray-900">Código QR de tu Catálogo</h4>
+                        <h4 className="font-medium text-gray-900">
+                          {businessMode === 'restaurant' ? 'Código QR de tu Carta Digital' : 'Código QR de tu Catálogo'}
+                        </h4>
                       </div>
                       <div className="flex flex-col sm:flex-row items-center gap-4">
                         <div className="bg-white p-3 rounded-xl shadow-sm">
                           <img
                             src={catalogQrDataUrl}
-                            alt="QR del catálogo"
+                            alt={businessMode === 'restaurant' ? 'QR de carta digital' : 'QR del catálogo'}
                             className="w-40 h-40"
                           />
                         </div>
@@ -4565,7 +4581,7 @@ export default function Settings() {
                           <button
                             onClick={() => {
                               const link = document.createElement('a')
-                              link.download = `catalogo-${catalogSlug}-qr.png`
+                              link.download = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
                               link.href = catalogQrDataUrl
                               link.click()
                               toast.success('QR descargado exitosamente')
@@ -4580,43 +4596,9 @@ export default function Settings() {
                     </div>
                   )}
 
-                  {/* Carta Digital para Restaurantes */}
+                  {/* QR por Mesa — solo restaurantes */}
                   {businessMode === 'restaurant' && catalogSlug && (
                     <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
-                      <div className="flex items-center gap-2 mb-3">
-                        <UtensilsCrossed className="w-5 h-5 text-orange-600" />
-                        <h4 className="font-medium text-gray-900">Carta Digital para tu Restaurante</h4>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Tus clientes pueden ver el menú y hacer pedidos directamente desde su celular. Los pedidos llegan automáticamente a tu sistema.
-                      </p>
-                      <div className="bg-white p-3 rounded-lg mb-3">
-                        <p className="text-xs text-gray-500 mb-1">URL de tu carta digital:</p>
-                        <p className="text-sm font-medium text-orange-600 break-all">
-                          {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/{catalogSlug}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/${catalogSlug}`)
-                            toast.success('Enlace de carta digital copiado')
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
-                        >
-                          <Copy className="w-4 h-4" />
-                          Copiar enlace
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/${catalogSlug}`, '_blank')}
-                          className="flex items-center gap-2 px-3 py-2 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 transition-colors text-sm font-medium"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          Ver carta
-                        </button>
-                      </div>
 
                       {/* Generador de QR por Mesa */}
                       <div className="border-t border-orange-200 pt-4 mt-4">
@@ -4907,7 +4889,7 @@ export default function Settings() {
                   }
 
                   if (catalogEnabled && !catalogSlug) {
-                    toast.error('Ingresa una URL para tu catálogo')
+                    toast.error(businessMode === 'restaurant' ? 'Ingresa una URL para tu carta digital' : 'Ingresa una URL para tu catálogo')
                     return
                   }
 
@@ -4928,7 +4910,9 @@ export default function Settings() {
                       catalogShowAllPrices,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
-                    toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')
+                    toast.success(catalogEnabled
+                      ? (businessMode === 'restaurant' ? 'Carta digital configurada exitosamente' : 'Catálogo configurado exitosamente')
+                      : (businessMode === 'restaurant' ? 'Carta digital deshabilitada' : 'Catálogo deshabilitado'))
                   } catch (error) {
                     console.error('Error al guardar catálogo:', error)
                     toast.error('Error al guardar la configuración')

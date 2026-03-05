@@ -1179,8 +1179,8 @@ function CartDrawer({
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Tipo de pedido
                         </label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {ORDER_TYPES.map((type) => {
+                        <div className="grid grid-cols-2 gap-2">
+                          {ORDER_TYPES.filter(t => t.id !== 'dine_in').map((type) => {
                             const Icon = type.icon
                             const isSelected = orderType === type.id
                             return (
