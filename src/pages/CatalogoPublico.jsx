@@ -33,11 +33,12 @@ import {
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
 @keyframes catalogFadeInUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .catalog-fade-in {
-  animation: catalogFadeInUp 0.4s ease-out both;
+  animation: catalogFadeInUp 0.3s ease-out both;
+  will-change: opacity, transform;
 }
 .catalog-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -1609,6 +1610,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }
   }, [slug, isDemo, isRestaurantMenu])
 
+  // Actualizar título y favicon de la pestaña con datos del negocio
+  useEffect(() => {
+    if (!business) return
+    const businessName = business.name || business.businessName || ''
+    if (businessName) {
+      document.title = isRestaurantMenu
+        ? `${businessName} - Menú Digital`
+        : `${businessName} - Catálogo`
+    }
+    if (business.logoUrl) {
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
+      favicons.forEach(el => el.setAttribute('href', business.logoUrl))
+    }
+    // Restaurar al desmontar
+    return () => {
+      document.title = 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
+      favicons.forEach(el => el.setAttribute('href', '/logo.png'))
+    }
+  }, [business, isRestaurantMenu])
+
   // Obtener categorías raíz (sin parentId) para mostrar en el catálogo
   const rootCategories = useMemo(() => {
     return categories.filter(cat => !cat.parentId && cat.showInCatalog !== false)
@@ -1890,7 +1912,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={business.logoUrl}
                   alt={business.name}
-                  className="h-10 md:h-12 max-w-[200px] object-contain"
+                  loading="eager"
+                  fetchpriority="high"
+                  className="h-10 md:h-12 max-w-[160px] md:max-w-[200px] object-contain"
                 />
               ) : (
                 <div
@@ -2110,8 +2134,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
-                  style={{ animationDelay: `${index * 60}ms` }}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  style={{ animationDelay: `${Math.min(index * 60, 600)}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
@@ -2119,7 +2143,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className={`w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                        loading="lazy"
+                        className={`w-full h-auto object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
                       <div className={`w-full aspect-square flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
@@ -2220,8 +2245,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
-                  style={{ animationDelay: `${index * 60}ms` }}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer flex ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  style={{ animationDelay: `${Math.min(index * 60, 600)}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -2229,6 +2254,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <img
                         src={product.imageUrl}
                         alt={product.name}
+                        loading="lazy"
                         className={`w-full h-full object-cover ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
