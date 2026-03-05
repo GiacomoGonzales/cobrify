@@ -845,8 +845,8 @@ export default function CreatePurchase() {
       const purchaseData = {
         supplier: selectedSupplier ? {
           id: selectedSupplier.id,
-          documentType: selectedSupplier.documentType,
-          documentNumber: selectedSupplier.documentNumber,
+          documentType: selectedSupplier.documentType || '',
+          documentNumber: selectedSupplier.documentNumber || '',
           businessName: selectedSupplier.businessName,
           contactName: selectedSupplier.contactName || '',
           email: selectedSupplier.email || '',
