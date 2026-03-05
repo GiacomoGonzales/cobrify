@@ -350,8 +350,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setDestinationDistrict('')
       }
 
-      // Agregar factura como documento relacionado
-      if (referenceInvoice.number) {
+      // Agregar documento como referencia relacionada (solo para facturas/boletas, no cotizaciones)
+      if (referenceInvoice.number && referenceInvoice.documentType !== 'cotizacion') {
         const docType = referenceInvoice.documentType === 'factura' ? '01' : '03'
         setRelatedDocuments([{
           id: 1,
@@ -646,7 +646,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const businessId = getBusinessId()
 
       const dispatchGuide = {
-        referencedInvoice: referenceInvoice ? {
+        referencedInvoice: referenceInvoice && referenceInvoice.documentType !== 'cotizacion' ? {
           id: referenceInvoice.id,
           documentType: referenceInvoice.documentType === 'factura' ? '01' : '03',
           series: referenceInvoice.number?.split('-')[0] || '',

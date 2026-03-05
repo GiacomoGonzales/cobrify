@@ -21,6 +21,7 @@ import {
   Receipt,
   Store,
   Copy,
+  Truck,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -42,6 +43,7 @@ import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/serv
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
+import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
@@ -60,6 +62,7 @@ export default function Quotations() {
   const [convertingQuotation, setConvertingQuotation] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
+  const [dispatchGuideQuotation, setDispatchGuideQuotation] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
 
@@ -189,6 +192,32 @@ export default function Quotations() {
       setIsDeleting(false)
     }
   }
+
+  // Mapear cotización al formato que espera CreateDispatchGuideModal (referenceInvoice)
+  const mapQuotationForDispatchGuide = (quotation) => ({
+    id: quotation.id,
+    number: quotation.number,
+    documentType: 'cotizacion',
+    branchId: quotation.branchId || null,
+    customer: quotation.customer ? {
+      documentType: quotation.customer.documentType || '',
+      documentNumber: quotation.customer.documentNumber || '',
+      name: quotation.customer.name || quotation.customer.businessName || '',
+      address: quotation.customer.address || '',
+      email: quotation.customer.email || '',
+      department: quotation.customer.department || '',
+      province: quotation.customer.province || '',
+      district: quotation.customer.district || '',
+    } : null,
+    items: (quotation.items || []).map(item => ({
+      productId: item.productId || '',
+      code: item.code || '',
+      name: item.name || '',
+      description: item.description || item.name || '',
+      quantity: item.quantity || 0,
+      unit: item.unit || 'NIU',
+    })),
+  })
 
   const handleConvertToInvoice = async () => {
     if (!convertingQuotation || !user?.uid) return
@@ -637,6 +666,13 @@ export default function Quotations() {
                             </button>
                           </>
                         )}
+                        <button
+                          onClick={() => { setOpenMenuId(null); setDispatchGuideQuotation(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Truck className="w-4 h-4 text-orange-600" />
+                          <span>Crear Guía Remitente</span>
+                        </button>
                         <div className="border-t border-gray-100 my-1" />
                         <button
                           onClick={() => { setOpenMenuId(null); setDeletingQuotation(quotation) }}
@@ -831,6 +867,18 @@ export default function Quotations() {
                                       </button>
                                     </>
                                   )}
+
+                                {/* Crear Guía Remitente */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    setDispatchGuideQuotation(quotation)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Truck className="w-4 h-4 text-orange-600" />
+                                  <span>Crear Guía Remitente</span>
+                                </button>
 
                                 {/* Eliminar */}
                                 <div className="border-t border-gray-100 my-1" />
@@ -1120,6 +1168,13 @@ export default function Quotations() {
           </div>
         </div>
       </Modal>
+
+      {/* Dispatch Guide Modal from Quotation */}
+      <CreateDispatchGuideModal
+        isOpen={!!dispatchGuideQuotation}
+        onClose={() => setDispatchGuideQuotation(null)}
+        referenceInvoice={dispatchGuideQuotation ? mapQuotationForDispatchGuide(dispatchGuideQuotation) : null}
+      />
     </div>
   )
 }
