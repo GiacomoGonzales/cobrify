@@ -4672,28 +4672,18 @@ export default function Settings() {
                                   <span className="text-sm font-semibold text-gray-900 mt-1">
                                     {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
                                   </span>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const link = document.createElement('a')
-                                        link.download = `mesa-${qr.table}-qr.png`
-                                        link.href = qr.dataUrl
-                                        link.click()
-                                      }}
-                                      className="text-xs text-orange-600 hover:text-orange-700"
-                                    >
-                                      Descargar
-                                    </button>
-                                    <a
-                                      href={qr.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:text-blue-700"
-                                    >
-                                      Probar
-                                    </a>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const link = document.createElement('a')
+                                      link.download = `mesa-${qr.table}-qr.png`
+                                      link.href = qr.dataUrl
+                                      link.click()
+                                    }}
+                                    className="mt-1 text-xs text-orange-600 hover:text-orange-700"
+                                  >
+                                    Descargar
+                                  </button>
                                 </div>
                               ))}
                             </div>
