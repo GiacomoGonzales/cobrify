@@ -2620,6 +2620,13 @@ export default function POS() {
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
           ...(item.modifiers && { modifiers: item.modifiers }),
+          ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
+          ...(item.marca && { marca: item.marca }),
+          ...(item.genericName && { genericName: item.genericName }),
+          ...(item.concentration && { concentration: item.concentration }),
+          ...(item.presentation && { presentation: item.presentation }),
+          ...(item.activeIngredient && { activeIngredient: item.activeIngredient }),
+          ...(item.sanitaryRegistry && { sanitaryRegistry: item.sanitaryRegistry }),
         }))
 
         // Crear datos simulados de factura
@@ -2800,6 +2807,13 @@ export default function POS() {
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
         ...(item.marca && { marca: item.marca }),
+        ...(item.genericName && { genericName: item.genericName }),
+        ...(item.concentration && { concentration: item.concentration }),
+        ...(item.presentation && { presentation: item.presentation }),
+        ...(item.activeIngredient && { activeIngredient: item.activeIngredient }),
+        ...(item.therapeuticAction && { therapeuticAction: item.therapeuticAction }),
+        ...(item.saleCondition && { saleCondition: item.saleCondition }),
+        ...(item.sanitaryRegistry && { sanitaryRegistry: item.sanitaryRegistry }),
         ...(item.modifiers && { modifiers: item.modifiers }),
       }))
 

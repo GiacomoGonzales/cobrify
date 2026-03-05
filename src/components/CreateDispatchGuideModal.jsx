@@ -91,7 +91,8 @@ const getTomorrowDateString = () => {
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, user } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode } = useAppContext()
+  const isPharmacy = businessMode === 'pharmacy'
 
   // Sucursales disponibles
   const [branches, setBranches] = useState([])
@@ -167,6 +168,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
   const [isSaving, setIsSaving] = useState(false)
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
+
+  // Mapa de productos y lista (para búsqueda y lotes en farmacia)
+  const [productsMap, setProductsMap] = useState({})
+  const [productsList, setProductsList] = useState([])
+  const [showProductSearch, setShowProductSearch] = useState(null) // índice del item con búsqueda abierta
 
   // Resetear campos cuando se cierra el modal
   useEffect(() => {
@@ -249,7 +255,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       // Cargar productos para obtener SKU actualizado
       const loadItemsWithSku = async () => {
         const businessId = getBusinessId()
-        let productsMap = {}
+        let pMap = {}
 
         // Buscar productos para obtener SKU actualizado
         if (businessId) {
@@ -257,8 +263,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             const result = await getProducts(businessId)
             if (result.success && result.data) {
               result.data.forEach(p => {
-                productsMap[p.id] = p
+                pMap[p.id] = p
               })
+              setProductsMap(pMap)
+              setProductsList(result.data)
             }
           } catch (error) {
             console.error('Error cargando productos:', error)
@@ -268,20 +276,42 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         // Pre-llenar items usando SKU del producto original
         const invoiceItems = referenceInvoice.items?.map((item, index) => {
           // Buscar SKU del producto original
-          const product = item.productId ? productsMap[item.productId] : null
+          const product = item.productId ? pMap[item.productId] : null
           const sku = product?.sku || item.sku || item.code || ''
 
+          // En farmacia, auto-seleccionar el lote FEFO (primer vencimiento)
+          let batchNumber = ''
+          let batchExpiryDate = ''
+          if (isPharmacy && product?.batches && Array.isArray(product.batches)) {
+            const availableBatches = product.batches
+              .filter(b => b.quantity > 0 && !b.isExpired)
+              .sort((a, b) => {
+                const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
+                const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
+                return dA - dB
+              })
+            if (availableBatches.length > 0) {
+              const fefo = availableBatches[0]
+              batchNumber = fefo.lotNumber || fefo.batchNumber || ''
+              batchExpiryDate = fefo.expiryDate || fefo.expirationDate || ''
+            }
+          }
+
+          const desc = item.description || item.name || ''
           return {
             id: index + 1,
             productId: item.productId || '',
             code: sku,
-            description: item.description || item.name || '',
+            description: desc,
+            searchTerm: desc,
             quantity: item.quantity || 0,
             unit: item.unit || 'NIU',
             sunatCode: '',
             gtin: '',
             subpCode: '',
             isNormalized: false,
+            batchNumber,
+            batchExpiryDate,
           }
         }) || []
 
@@ -289,7 +319,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         // Calcular peso estimado usando el peso unitario de cada producto
         const estimatedWeight = (referenceInvoice.items || []).reduce((sum, item) => {
-          const product = item.productId ? productsMap[item.productId] : null
+          const product = item.productId ? pMap[item.productId] : null
           return sum + ((item.quantity || 0) * (product?.weight || 0))
         }, 0)
         setTotalWeight(estimatedWeight.toString())
@@ -363,6 +393,28 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       }
     }
   }, [referenceInvoice])
+
+  // Cargar productos cuando se abre el modal sin referencia (creación manual)
+  useEffect(() => {
+    if (isOpen && !referenceInvoice && productsList.length === 0) {
+      const loadProducts = async () => {
+        const businessId = getBusinessId()
+        if (!businessId) return
+        try {
+          const result = await getProducts(businessId)
+          if (result.success && result.data) {
+            const pMap = {}
+            result.data.forEach(p => { pMap[p.id] = p })
+            setProductsMap(pMap)
+            setProductsList(result.data)
+          }
+        } catch (error) {
+          console.error('Error cargando productos:', error)
+        }
+      }
+      loadProducts()
+    }
+  }, [isOpen, referenceInvoice])
 
   // Cargar configuración de envío automático al abrir el modal
   useEffect(() => {
@@ -489,18 +541,117 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     ))
   }
 
+  // Filtrar productos según búsqueda
+  const getFilteredProducts = (searchTerm) => {
+    if (!searchTerm) return productsList.slice(0, 8)
+    const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(w => w.length > 0)
+    return productsList
+      .filter(p => {
+        const text = [p.name || '', p.code || '', p.sku || '', p.genericName || ''].join(' ').toLowerCase()
+        return searchWords.every(w => text.includes(w))
+      })
+      .slice(0, 10)
+  }
+
+  // Seleccionar producto para un item
+  const selectProduct = (itemId, product) => {
+    // Auto-seleccionar lote FEFO en farmacia
+    let batchNumber = ''
+    let batchExpiryDate = ''
+    if (isPharmacy && product.batches && Array.isArray(product.batches)) {
+      const available = product.batches
+        .filter(b => b.quantity > 0 && !b.isExpired)
+        .sort((a, b) => {
+          const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
+          const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
+          return dA - dB
+        })
+      if (available.length > 0) {
+        batchNumber = available[0].lotNumber || available[0].batchNumber || ''
+        batchExpiryDate = available[0].expiryDate || available[0].expirationDate || ''
+      }
+    }
+
+    setItems(items.map(item => {
+      if (item.id !== itemId) return item
+      return {
+        ...item,
+        productId: product.id,
+        code: product.sku || product.code || '',
+        description: product.name || '',
+        unit: product.unit === 'UNIDAD' ? 'NIU' : (product.unit || 'NIU'),
+        searchTerm: product.name || '',
+        batchNumber,
+        batchExpiryDate,
+      }
+    }))
+    setShowProductSearch(null)
+  }
+
+  // Limpiar selección de producto
+  const clearProductSelection = (itemId) => {
+    setItems(items.map(item => {
+      if (item.id !== itemId) return item
+      return { ...item, productId: '', code: '', description: '', searchTerm: '', batchNumber: '', batchExpiryDate: '' }
+    }))
+  }
+
+  // Helper: obtener lotes disponibles de un producto ordenados por FEFO
+  const getAvailableBatches = (productId) => {
+    const product = productsMap[productId]
+    if (!product?.batches || !Array.isArray(product.batches)) return []
+    return product.batches
+      .filter(b => b.quantity > 0 && !b.isExpired)
+      .map(b => ({
+        ...b,
+        lotNumber: b.lotNumber || b.batchNumber || 'S/N',
+        expiryDate: b.expiryDate || b.expirationDate || null,
+      }))
+      .sort((a, b) => {
+        const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
+        const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
+        return dA - dB
+      })
+  }
+
+  // Helper: formatear fecha de vencimiento
+  const formatBatchExpiry = (date) => {
+    if (!date) return ''
+    const d = date.toDate ? date.toDate() : new Date(date)
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  // Manejar cambio de lote seleccionado
+  const handleBatchChange = (itemId, lotNumber) => {
+    setItems(items.map(item => {
+      if (item.id !== itemId) return item
+      if (!lotNumber) return { ...item, batchNumber: '', batchExpiryDate: '' }
+      const batches = getAvailableBatches(item.productId)
+      const batch = batches.find(b => b.lotNumber === lotNumber)
+      return {
+        ...item,
+        batchNumber: batch?.lotNumber || '',
+        batchExpiryDate: batch?.expiryDate || '',
+      }
+    }))
+  }
+
   // Agregar item
   const addItem = () => {
     setItems([...items, {
       id: Date.now(),
+      productId: '',
       code: '',
       description: '',
+      searchTerm: '',
       quantity: 1,
       unit: 'NIU',
       sunatCode: '',
       gtin: '',
       subpCode: '',
       isNormalized: false,
+      batchNumber: '',
+      batchExpiryDate: '',
     }])
   }
 
@@ -1514,110 +1665,206 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               </div>
             </div>
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unidad</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cod. SUNAT</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">GTIN</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bien norm.</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {items.map((item, index) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-sm text-gray-900">{index + 1}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                            min="0.01"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <select
-                            value={item.unit}
-                            onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                          >
-                            {UNIT_CODES.map(unit => (
-                              <option key={unit.value} value={unit.value}>
-                                {unit.value}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            value={item.code}
-                            onChange={(e) => updateItem(item.id, 'code', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                            placeholder="Código"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                            className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
-                            placeholder="Descripción"
-                            required
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            value={item.sunatCode}
-                            onChange={(e) => updateItem(item.id, 'sunatCode', e.target.value)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                            placeholder="Opcional"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            value={item.gtin}
-                            onChange={(e) => updateItem(item.id, 'gtin', e.target.value)}
-                            className="w-28 px-2 py-1 border border-gray-300 rounded text-sm"
-                            placeholder="Opcional"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <label className="flex items-center justify-center">
-                            <input
-                              type="checkbox"
-                              checked={item.isNormalized}
-                              onChange={(e) => updateItem(item.id, 'isNormalized', e.target.checked)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                            />
-                          </label>
-                        </td>
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="space-y-3">
+              {items.map((item, index) => (
+                <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-500">ITEM {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.id)}
+                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Búsqueda de producto */}
+                  <div className="relative mb-2">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={item.productId ? item.description : (item.searchTerm || '')}
+                        onChange={e => {
+                          if (item.productId) {
+                            updateItem(item.id, 'description', e.target.value)
+                          } else {
+                            setItems(items.map(it =>
+                              it.id === item.id ? { ...it, searchTerm: e.target.value, description: e.target.value } : it
+                            ))
+                            setShowProductSearch(item.id)
+                          }
+                        }}
+                        onFocus={() => !item.productId && setShowProductSearch(item.id)}
+                        placeholder="Buscar producto o escribir descripción..."
+                        className={`w-full pl-8 pr-8 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                          item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                        }`}
+                      />
+                      {item.productId && (
+                        <button
+                          type="button"
+                          onClick={() => clearProductSelection(item.id)}
+                          className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Dropdown de resultados */}
+                    {showProductSearch === item.id && !item.productId && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowProductSearch(null)}
+                        />
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {getFilteredProducts(item.searchTerm).length > 0 ? (
+                            getFilteredProducts(item.searchTerm).map(product => (
+                              <button
+                                key={product.id}
+                                type="button"
+                                onClick={() => selectProduct(item.id, product)}
+                                className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{product.name}</p>
+                                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    {product.sku && <span>SKU: {product.sku}</span>}
+                                    {product.code && <span>Cód: {product.code}</span>}
+                                    {isPharmacy && product.laboratoryName && (
+                                      <span className="text-blue-600">Lab: {product.laboratoryName}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {product.stock != null && (
+                                  <span className={`text-xs ml-2 flex-shrink-0 ${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                    Stock: {product.stock}
+                                  </span>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                              No se encontraron productos
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Campos del item en grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">Código</label>
+                      <input
+                        type="text"
+                        value={item.code}
+                        onChange={(e) => updateItem(item.id, 'code', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-50"
+                        placeholder="Código"
+                        readOnly={!!item.productId}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">Cantidad</label>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        min="0.01"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">Unidad</label>
+                      <select
+                        value={item.unit}
+                        onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                      >
+                        {UNIT_CODES.map(unit => (
+                          <option key={unit.value} value={unit.value}>
+                            {unit.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">Cod. SUNAT</label>
+                      <input
+                        type="text"
+                        value={item.sunatCode}
+                        onChange={(e) => updateItem(item.id, 'sunatCode', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        placeholder="Opcional"
+                      />
+                    </div>
+
+                    {/* Lote en farmacia */}
+                    {isPharmacy && (
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-0.5">Lote / Vencimiento</label>
+                        {(() => {
+                          const batches = getAvailableBatches(item.productId)
+                          if (!item.productId) {
+                            return <span className="text-xs text-gray-400 py-1 block">Seleccione un producto</span>
+                          }
+                          if (batches.length === 0) {
+                            return <span className="text-xs text-gray-400 py-1 block">Sin lotes disponibles</span>
+                          }
+                          return (
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={item.batchNumber || ''}
+                                onChange={(e) => handleBatchChange(item.id, e.target.value)}
+                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                              >
+                                <option value="">Seleccionar lote</option>
+                                {batches.map(b => (
+                                  <option key={b.lotNumber} value={b.lotNumber}>
+                                    {b.lotNumber} (Stock: {b.quantity}) {b.expiryDate ? `- Venc: ${formatBatchExpiry(b.expiryDate)}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                              {item.batchExpiryDate && (
+                                <span className="text-xs text-orange-600 whitespace-nowrap">
+                                  Vence: {formatBatchExpiry(item.batchExpiryDate)}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">GTIN</label>
+                      <input
+                        type="text"
+                        value={item.gtin}
+                        onChange={(e) => updateItem(item.id, 'gtin', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        placeholder="Opcional"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 py-1">
+                        <input
+                          type="checkbox"
+                          checked={item.isNormalized}
+                          onChange={(e) => updateItem(item.id, 'isNormalized', e.target.checked)}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                        />
+                        Bien normalizado
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <Button

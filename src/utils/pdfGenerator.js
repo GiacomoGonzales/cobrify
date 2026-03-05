@@ -1173,26 +1173,28 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
 
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
-  // Farmacia con descuento: CANT(7%) | U.M.(7%) | DESCRIPCIÓN(27%) | LABORATORIO(15%) | P.UNIT.(13%) | DCTO(13%) | IMPORTE(18%)
-  // Farmacia sin descuento: CANT(7%) | U.M.(7%) | DESCRIPCIÓN(34%) | LABORATORIO(17%) | P.UNIT.(17%) | IMPORTE(18%)
+  // Farmacia con descuento: CANT(7%) | U.M.(6%) | DESCRIPCIÓN(22%) | LAB(12%) | MARCA(10%) | P.UNIT.(12%) | DCTO(12%) | IMPORTE(19%)
+  // Farmacia sin descuento: CANT(7%) | U.M.(6%) | DESCRIPCIÓN(27%) | LAB(14%) | MARCA(11%) | P.UNIT.(16%) | IMPORTE(19%)
   // Normal con descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | DCTO. | IMPORTE
   // Normal sin descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
   const colWidths = hasAnyItemDiscount ? {
     cant: CONTENT_WIDTH * 0.07,
-    um: CONTENT_WIDTH * 0.07,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.27 : CONTENT_WIDTH * 0.40,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.15 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.13 : CONTENT_WIDTH * 0.15,
-    dcto: CONTENT_WIDTH * 0.13,
-    total: CONTENT_WIDTH * 0.18
+    um: CONTENT_WIDTH * 0.06,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.22 : CONTENT_WIDTH * 0.40,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.15,
+    dcto: CONTENT_WIDTH * 0.12,
+    total: CONTENT_WIDTH * 0.19
   } : {
     cant: CONTENT_WIDTH * 0.07,
-    um: CONTENT_WIDTH * 0.07,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.34 : CONTENT_WIDTH * 0.49,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.17 : CONTENT_WIDTH * 0.17,
+    um: CONTENT_WIDTH * 0.06,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.27 : CONTENT_WIDTH * 0.49,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.14 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.11 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.16 : CONTENT_WIDTH * 0.17,
     dcto: 0,
-    total: CONTENT_WIDTH * 0.18
+    total: CONTENT_WIDTH * 0.19
   }
 
   let colX = MARGIN_LEFT
@@ -1201,7 +1203,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
     lab: colX += colWidths.desc,
-    pu: colX += colWidths.lab,
+    marca: colX += colWidths.lab,
+    pu: colX += colWidths.marca,
     dcto: colX += colWidths.pu,
     total: colX += colWidths.dcto
   } : {
@@ -1209,7 +1212,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
     lab: colX += colWidths.desc,
-    pu: colX += colWidths.lab,
+    marca: colX += colWidths.lab,
+    pu: colX += colWidths.marca,
     dcto: 0,
     total: colX += colWidths.pu
   }
@@ -1228,16 +1232,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         .join(', ')
       if (attrs) itemDesc += ` (${attrs})`
     }
-    // Concatenar información del lote si existe (modo farmacia)
-    if (item.batchNumber) {
-      const expiryStr = item.batchExpiryDate
-        ? (() => {
-          const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)
-          return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        })()
-        : ''
-      itemDesc += ` | Lote: ${item.batchNumber}${expiryStr ? ` (Venc: ${expiryStr})` : ''}`
-    }
     // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
     if (item.observations) {
       itemDesc += ` - ${item.observations}`
@@ -1246,9 +1240,37 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Usar el ancho de descripción correcto según si hay descuentos
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
-    const baseHeight = descLines.length * lineHeight + (spacious ? 10 : 6)
+
+    // Líneas de detalle farmacéutico (solo farmacia)
+    let pharmaLines = []
+    if (isPharmacy) {
+      const parts = []
+      if (item.presentation) parts.push(`Pres: ${item.presentation}`)
+      if (item.concentration) parts.push(`Conc: ${item.concentration}`)
+      if (item.genericName) parts.push(`DCI: ${item.genericName}`)
+      if (item.activeIngredient) parts.push(`P.A: ${item.activeIngredient}`)
+      if (item.batchNumber) {
+        let batchStr = `Lote: ${item.batchNumber}`
+        if (item.batchExpiryDate) {
+          const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)
+          if (!isNaN(d.getTime())) {
+            batchStr += ` (Venc: ${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })})`
+          }
+        }
+        parts.push(batchStr)
+      }
+      if (item.sanitaryRegistry) parts.push(`R.S: ${item.sanitaryRegistry}`)
+      if (parts.length > 0) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        pharmaLines = doc.splitTextToSize(parts.join('  |  '), descWidth)
+      }
+    }
+
+    const totalLines = descLines.length + pharmaLines.length
+    const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6)
     const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
-    return { height: calculatedHeight, descLines }
+    return { height: calculatedHeight, descLines, pharmaLines }
   }
 
   // Calcular alturas de todos los items
@@ -1273,6 +1295,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
   if (isPharmacy) {
     doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+    doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
   }
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   if (hasAnyItemDiscount) {
@@ -1292,7 +1315,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   for (let i = 0; i < items.length; i++) {
-    const { height: rowHeight, descLines } = itemHeights[i]
+    const { height: rowHeight, descLines, pharmaLines } = itemHeights[i]
 
     // Fondo alternado: filas pares gris, filas impares blanco
     if (i % 2 === 0) {
@@ -1326,6 +1349,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
 
+    // Líneas farmacéuticas debajo de la descripción
+    if (pharmaLines && pharmaLines.length > 0) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(6.5)
+      doc.setTextColor(80, 100, 120) // Azul-gris
+      const pharmaStartY = descStartY + (descLines.length * lineHeight)
+      pharmaLines.forEach((line, lineIdx) => {
+        doc.text(line, cols.desc + 4, pharmaStartY + (lineIdx * lineHeight))
+      })
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...BLACK)
+    }
+
     // Laboratorio (solo modo farmacia) - centrado verticalmente
     if (isPharmacy) {
       doc.setFontSize(7)
@@ -1333,6 +1369,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       if (labText) {
         const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
         doc.text(labLines[0], cols.lab + colWidths.lab / 2, centerY, { align: 'center' })
+      }
+
+      // Marca
+      const marcaText = item.marca || ''
+      if (marcaText) {
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
+        doc.text(marcaLines[0], cols.marca + colWidths.marca / 2, centerY, { align: 'center' })
       }
     }
 

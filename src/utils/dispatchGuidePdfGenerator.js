@@ -308,11 +308,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const headerHeight = 85
   const logoWidth = 70
   const docBoxWidth = 150
-  const centerWidth = CONTENT_WIDTH - logoWidth - docBoxWidth - 20
 
   // Logo (placeholder si no hay)
   const logoX = MARGIN_LEFT
   const logoY = currentY
+  let renderedLogoWidth = logoWidth // Ancho real del logo renderizado
 
   if (companySettings?.logoUrl) {
     try {
@@ -402,6 +402,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       }
 
       doc.addImage(imgData, format, logoX, logoY + (headerHeight - finalLogoHeight) / 2, finalLogoWidth, finalLogoHeight, undefined, 'FAST')
+      renderedLogoWidth = finalLogoWidth
     } catch (error) {
       // Dibujar placeholder de logo
       doc.setDrawColor(...LIGHT_GRAY)
@@ -426,8 +427,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text('AQUÍ', logoX + logoWidth/2, logoY + 56, { align: 'center' })
   }
 
-  // Datos de la empresa (centro) - mismo estilo que GRE Transportista y facturas
-  const centerX = logoX + logoWidth + 10
+  // Datos de la empresa (centro) - ajustar inicio según ancho real del logo
+  const centerX = logoX + renderedLogoWidth + 8
+  const centerWidth = PAGE_WIDTH - MARGIN_RIGHT - docBoxWidth - centerX - 5
 
   const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
@@ -444,9 +446,13 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Calcular altura total del texto para centrarlo verticalmente
+  const maxTextWidth = centerWidth - 15
+  doc.setFontSize(7)
+  const addrLineCount = fullAddress ? Math.min(doc.splitTextToSize(fullAddress, maxTextWidth).length, 3) : 0
   let totalTextHeight = 14 // Nombre comercial
   if (legalName && legalName !== commercialName) totalTextHeight += 12
-  if (fullAddress || phone) totalTextHeight += 18
+  if (fullAddress) totalTextHeight += addrLineCount * 9
+  if (phone) totalTextHeight += 9
   if (email) totalTextHeight += 10
 
   let centerY = currentY + (headerHeight - totalTextHeight) / 2 + 10
@@ -472,13 +478,20 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    let addressLine = fullAddress
-    if (phone) addressLine += (fullAddress ? ' - ' : '') + 'Tel: ' + phone
-    const addressLines = doc.splitTextToSize(addressLine, centerWidth - 10)
-    addressLines.slice(0, 2).forEach((line, i) => {
-      doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
-    })
-    centerY += addressLines.slice(0, 2).length * 9
+    const maxTextWidth = centerWidth - 15
+    // Dirección en líneas separadas
+    if (fullAddress) {
+      const addrLines = doc.splitTextToSize(fullAddress, maxTextWidth)
+      addrLines.slice(0, 3).forEach((line, i) => {
+        doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
+      })
+      centerY += Math.min(addrLines.length, 3) * 9
+    }
+    // Teléfono en línea aparte
+    if (phone) {
+      doc.text('Tel: ' + phone, centerX + centerWidth/2, centerY, { align: 'center' })
+      centerY += 9
+    }
   }
 
   // Email
@@ -696,8 +709,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     let batchLine = ''
     if (isPharmacy) {
       const product = item.productId ? productsMap[item.productId] : null
-      const batch = product?.batchNumber || ''
-      const expDate = product?.expirationDate || ''
+      // Priorizar datos del item (seleccionados en el formulario) sobre los del producto
+      const batch = item.batchNumber || product?.batchNumber || ''
+      const rawExpDate = item.batchExpiryDate || product?.expirationDate || ''
+      let expDate = ''
+      if (rawExpDate) {
+        const d = rawExpDate.toDate ? rawExpDate.toDate() : new Date(rawExpDate)
+        if (!isNaN(d.getTime())) {
+          expDate = d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        }
+      }
       const parts = []
       if (batch) parts.push(`Lote: ${batch}`)
       if (expDate) parts.push(`Venc: ${expDate}`)

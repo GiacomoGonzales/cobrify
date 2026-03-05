@@ -803,7 +803,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       if (item.concentration) parts.push(`Conc: ${item.concentration}`)
       if (item.genericName) parts.push(`DCI: ${item.genericName}`)
       if (item.activeIngredient) parts.push(`P.A: ${item.activeIngredient}`)
-      if (item.batchNumber) parts.push(`Lote: ${item.batchNumber}`)
       if (item.sanitaryRegistry) parts.push(`R.S: ${item.sanitaryRegistry}`)
       if (parts.length > 0) {
         doc.setFont('helvetica', 'normal')
