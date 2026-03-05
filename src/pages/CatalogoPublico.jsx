@@ -30,6 +30,52 @@ import {
   Info
 } from 'lucide-react'
 
+// Estilos de animacion para fade-in escalonado
+const fadeInStyle = `
+@keyframes catalogFadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.catalog-fade-in {
+  animation: catalogFadeInUp 0.4s ease-out both;
+}
+.catalog-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.catalog-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.catalog-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.3);
+  border-radius: 4px;
+}
+.catalog-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.5);
+}
+.catalog-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150,150,150,0.3) transparent;
+}
+html::-webkit-scrollbar {
+  width: 6px;
+}
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+html::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 6px;
+}
+html::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.45);
+}
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150,150,150,0.25) transparent;
+}
+`
+
 // Componente de skeleton para carga
 function ProductSkeleton() {
   return (
@@ -349,7 +395,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto catalog-scrollbar shadow-2xl">
         {/* Botón cerrar flotante */}
         <button
           onClick={onClose}
@@ -358,7 +404,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <X className="w-5 h-5" />
         </button>
         {cartQuantity > 0 && (
-          <div className="absolute top-4 left-4 z-10 bg-emerald-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+          <div className="absolute top-4 left-4 z-10 text-white px-3 py-1 rounded-full text-sm font-medium" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
             {cartQuantity} en carrito
           </div>
         )}
@@ -469,26 +515,26 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
-                        isSelected
-                          ? 'bg-emerald-50'
-                          : 'hover:bg-gray-50'
+                        isSelected ? '' : 'hover:bg-gray-50'
                       }`}
+                      style={isSelected ? { backgroundColor: `${business?.catalogColor || '#10B981'}10` } : {}}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                        }`}>
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                        >
                           {isSelected && (
                             <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
                         </div>
-                        <span className={`font-medium ${isSelected ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                           {priceItem.label}
                         </span>
                       </div>
-                      <span className={`font-bold ${isSelected ? 'text-emerald-700' : 'text-gray-900'}`}>
+                      <span className="font-bold" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#111827' }}>
                         S/ {priceItem.value.toFixed(2)}
                       </span>
                     </button>
@@ -537,11 +583,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         outOfStock
                           ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
                           : isSelected
-                            ? 'border-emerald-500 bg-emerald-50'
+                            ? ''
                             : 'border-gray-200 hover:border-gray-300'
                       }`}
+                      style={isSelected && !outOfStock ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: `${business?.catalogColor || '#10B981'}10` } : {}}
                     >
-                      <span className={isSelected ? 'text-emerald-700 font-medium' : 'text-gray-700'}>
+                      <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                         {attrsLabel}
                         {outOfStock && <span className="ml-2 text-xs text-gray-400">(Agotado)</span>}
                       </span>
@@ -551,9 +598,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                             S/ {variant.price.toFixed(2)}
                           </span>
                         )}
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                        }`}>
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                        >
                           {isSelected && (
                             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -586,26 +634,26 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
-                        isSelected
-                          ? 'bg-emerald-50'
-                          : 'hover:bg-gray-50'
+                        isSelected ? '' : 'hover:bg-gray-50'
                       }`}
+                      style={isSelected ? { backgroundColor: `${business?.catalogColor || '#10B981'}10` } : {}}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                        }`}>
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                        >
                           {isSelected && (
                             <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
                         </div>
-                        <span className={`font-medium ${isSelected ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                           {priceItem.label}
                         </span>
                       </div>
-                      <span className={`font-bold ${isSelected ? 'text-emerald-700' : 'text-gray-900'}`}>
+                      <span className="font-bold" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#111827' }}>
                         S/ {priceItem.value.toFixed(2)}
                       </span>
                     </button>
@@ -648,21 +696,21 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                           key={option.id}
                           onClick={() => handleOptionToggle(modifier.id, option.id)}
                           className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
-                            isSelected
-                              ? 'border-emerald-500 bg-emerald-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                            isSelected ? '' : 'border-gray-200 hover:border-gray-300'
                           }`}
+                          style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: `${business?.catalogColor || '#10B981'}10` } : {}}
                         >
-                          <span className={isSelected ? 'text-emerald-700 font-medium' : 'text-gray-700'}>
+                          <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                             {option.name}
                           </span>
                           <div className="flex items-center gap-2">
                             {showPrices && option.priceAdjustment > 0 && (
                               <span className="text-sm text-gray-500">+S/ {option.priceAdjustment.toFixed(2)}</span>
                             )}
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                              isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                            }`}>
+                            <div
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                              style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                            >
                               {isSelected && (
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -722,11 +770,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <button
             onClick={handleAddToCart}
             disabled={outOfStock}
-            className={`w-full py-4 rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 transition-colors ${
+            className={`w-full py-4 rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 transition-opacity ${
               outOfStock
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gray-900 text-white hover:bg-gray-800'
+                : 'text-white hover:opacity-80'
             }`}
+            style={!outOfStock ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
           >
             {outOfStock ? (
               <>
@@ -773,6 +822,7 @@ function CartDrawer({
   const [tableNumber, setTableNumber] = useState(initialTableNumber)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
@@ -804,6 +854,7 @@ function CartDrawer({
         setTableNumber(initialTableNumber)
         setCustomerName('')
         setCustomerPhone('')
+        setCustomerAddress('')
         setNotes('')
       }, 300)
     }
@@ -851,6 +902,10 @@ function CartDrawer({
     }
     if (orderType === 'delivery' && !customerPhone.trim()) {
       setOrderError('Ingresa tu teléfono para delivery')
+      return
+    }
+    if (orderType === 'delivery' && !customerAddress.trim()) {
+      setOrderError('Ingresa tu dirección para delivery')
       return
     }
 
@@ -912,6 +967,7 @@ function CartDrawer({
         // Info del cliente
         ...(customerName && { customerName: customerName.trim() }),
         ...(customerPhone && { customerPhone: customerPhone.trim() }),
+        ...(customerAddress && { customerAddress: customerAddress.trim() }),
 
         // Items
         items,
@@ -1019,12 +1075,12 @@ function CartDrawer({
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}>
           <div className="flex flex-col h-full items-center justify-center p-8 text-center">
-            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: `${business?.catalogColor || '#10B981'}20` }}>
+              <CheckCircle2 className="w-10 h-10" style={{ color: business?.catalogColor || '#10B981' }} />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Pedido enviado!</h2>
             <p className="text-gray-600 mb-4">Tu pedido ha sido recibido</p>
-            <div className="text-4xl font-bold text-emerald-600 mb-6">{orderNumber}</div>
+            <div className="text-4xl font-bold mb-6" style={{ color: business?.catalogColor || '#10B981' }}>{orderNumber}</div>
             <p className="text-sm text-gray-500 mb-8">
               {orderType === 'dine_in'
                 ? `Mesa ${tableNumber} - Te llevaremos tu pedido pronto`
@@ -1034,7 +1090,8 @@ function CartDrawer({
             </p>
             <button
               onClick={onClose}
-              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-colors"
+              className="w-full py-4 text-white rounded-2xl font-semibold transition-opacity hover:opacity-80"
+              style={{ backgroundColor: business?.catalogColor || '#10B981' }}
             >
               Cerrar
             </button>
@@ -1077,7 +1134,7 @@ function CartDrawer({
           </div>
 
           {/* Items */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto catalog-scrollbar p-6">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
@@ -1155,7 +1212,7 @@ function CartDrawer({
 
           {/* Footer */}
           {cart.length > 0 && (
-            <div className="border-t p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div className="border-t p-6 space-y-4 max-h-[60vh] overflow-y-auto catalog-scrollbar">
               {showPrices && (
                 <div className="flex items-center justify-between text-lg">
                   <span className="text-gray-600">Total</span>
@@ -1168,9 +1225,9 @@ function CartDrawer({
                 <div className="space-y-4 pt-2">
                   {/* Si viene de QR con mesa, mostrar indicador fijo */}
                   {initialTableNumber ? (
-                    <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                      <Hash className="w-5 h-5 text-emerald-600" />
-                      <span className="text-sm font-medium text-emerald-800">Mesa {initialTableNumber} — Pedido para tu mesa</span>
+                    <div className="flex items-center gap-2 p-3 rounded-xl" style={{ backgroundColor: `${business?.catalogColor || '#10B981'}15`, border: `1px solid ${business?.catalogColor || '#10B981'}40` }}>
+                      <Hash className="w-5 h-5" style={{ color: business?.catalogColor || '#10B981' }} />
+                      <span className="text-sm font-medium" style={{ color: business?.catalogColor || '#10B981' }}>Mesa {initialTableNumber} — Pedido para tu mesa</span>
                     </div>
                   ) : (
                     <>
@@ -1217,7 +1274,7 @@ function CartDrawer({
                             value={tableNumber}
                             onChange={(e) => setTableNumber(e.target.value)}
                             placeholder="Ej: 5"
-                            className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
                           />
                         </div>
                       )}
@@ -1236,7 +1293,7 @@ function CartDrawer({
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Nombre para el pedido"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
                       />
                     </div>
                   )}
@@ -1253,7 +1310,24 @@ function CartDrawer({
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         placeholder="Para coordinar entrega"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Dirección (para delivery) */}
+                  {orderType === 'delivery' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <MapPin className="w-4 h-4 inline mr-1" />
+                        Dirección de entrega
+                      </label>
+                      <input
+                        type="text"
+                        value={customerAddress}
+                        onChange={(e) => setCustomerAddress(e.target.value)}
+                        placeholder="Av. ejemplo 123, distrito"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
                       />
                     </div>
                   )}
@@ -1268,7 +1342,7 @@ function CartDrawer({
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Sin cebolla, extra salsa, etc."
                       rows={2}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400 resize-none"
                     />
                   </div>
 
@@ -1287,7 +1361,8 @@ function CartDrawer({
                 <button
                   onClick={handleRestaurantOrder}
                   disabled={submitting}
-                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                 >
                   {submitting ? (
                     <>
@@ -1304,7 +1379,8 @@ function CartDrawer({
               ) : (
                 <button
                   onClick={onCheckout}
-                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                 >
                   <MessageCircle className="w-5 h-5" />
                   Hacer pedido por WhatsApp
@@ -1376,7 +1452,7 @@ const DEMO_RESTAURANT_DATA = {
     address: 'Av. Gastronómica 456, Lima',
     phone: '01-9876543',
     email: 'reservas@labuenamesa.com',
-    logoUrl: null,
+    logoUrl: '/demologo.png',
     catalogEnabled: true,
     menuEnabled: true,
     catalogSlug: 'demo',
@@ -1567,6 +1643,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
   const ignoreStock = business?.catalogIgnoreStock === true
+  const isDark = business?.catalogTheme === 'dark'
 
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
@@ -1715,8 +1792,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm">
+      <div className={`min-h-screen ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
+        <div className={`shadow-sm ${isDark ? "bg-gray-900" : "bg-white"}`}>
           <div className="max-w-7xl mx-auto px-4 py-6">
             <div className="animate-pulse">
               <div className="h-8 bg-gray-200 rounded w-48 mb-2" />
@@ -1738,15 +1815,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
         <div className="text-center">
           {isRestaurantMenu ? (
             <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           ) : (
             <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           )}
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{error}</h1>
-          <p className="text-gray-600">
+          <h1 className={`text-2xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>{error}</h1>
+          <p className={isDark ? "text-gray-400" : "text-gray-600"}>
             {isRestaurantMenu
               ? 'El menú que buscas no existe o no está disponible'
               : 'El catálogo que buscas no existe o no está disponible'}
@@ -1757,17 +1834,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+      <style>{fadeInStyle}</style>
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
-        <div className="bg-emerald-600 text-white py-2 px-4 text-center text-sm font-medium">
+        <div className="text-white py-2 px-4 text-center text-sm font-medium" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
           <UtensilsCrossed className="w-4 h-4 inline mr-2" />
           Mesa {tableFromUrl} - Haz tu pedido desde tu celular
         </div>
       )}
 
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
+      <header className={`${isDark ? 'bg-gray-900 shadow-gray-800/50' : 'bg-white'} shadow-sm sticky top-0 z-40`}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre */}
@@ -1776,7 +1854,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={business.logoUrl}
                   alt={business.name}
-                  className="w-10 h-10 md:w-12 md:h-12 rounded-xl object-cover"
+                  className="h-10 md:h-12 max-w-[200px] object-contain"
                 />
               ) : (
                 <div
@@ -1791,11 +1869,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               )}
               <div>
-                <h1 className="font-bold text-gray-900 text-lg md:text-xl">
+                <h1 className={`font-bold text-lg md:text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {business?.name || business?.businessName}
                 </h1>
                 {business?.catalogTagline && (
-                  <p className="text-sm text-gray-500 hidden md:block">{business.catalogTagline}</p>
+                  <p className={`text-sm hidden md:block ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{business.catalogTagline}</p>
                 )}
               </div>
             </div>
@@ -1803,12 +1881,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             {/* Carrito */}
             <button
               onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+              className="relative flex items-center gap-2 px-4 py-2 rounded-full transition-opacity text-white hover:opacity-80"
+              style={{ backgroundColor: business?.catalogColor || '#10B981' }}
             >
               <ShoppingBag className="w-5 h-5" />
               <span className="hidden md:inline font-medium">{isRestaurantMenu ? 'Pedido' : 'Carrito'}</span>
               {cartItemsCount > 0 && (
-                <span className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-sm font-bold">
+                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                  style={{ backgroundColor: isDark ? '#fff' : '#000', color: isDark ? '#000' : '#fff' }}
+                >
                   {cartItemsCount}
                 </span>
               )}
@@ -1819,12 +1900,29 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Hero / Búsqueda */}
       <div
-        className="bg-gradient-to-br from-gray-900 to-gray-800 text-white"
-        style={business?.catalogColor ? {
-          background: `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
-        } : {}}
+        className="relative text-white overflow-hidden"
+        style={{
+          background: business?.catalogCoverImage
+            ? 'none'
+            : business?.catalogColor
+              ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
+              : 'linear-gradient(135deg, #1F2937 0%, #111827 100%)'
+        }}
       >
-        <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
+        {business?.catalogCoverImage && (
+          <>
+            <img
+              src={business.catalogCoverImage}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div
+              className="absolute inset-0"
+              style={{ backgroundColor: `${business?.catalogColor || '#000000'}cc` }}
+            />
+          </>
+        )}
+        <div className="relative max-w-7xl mx-auto px-4 py-8 md:py-12">
           {business?.catalogWelcome && (
             <p className="text-white/80 mb-4 text-center md:text-left">
               {business.catalogWelcome}
@@ -1839,7 +1937,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               placeholder="Buscar productos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white text-gray-900 placeholder-gray-400 shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30"
+              className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 ${
+                isDark
+                  ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
+                  : 'bg-white text-gray-900 placeholder-gray-400'
+              }`}
             />
           </div>
         </div>
@@ -1850,27 +1952,31 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className="max-w-7xl mx-auto px-4 mt-4">
           <div
             className="rounded-xl p-4 flex items-start gap-3"
-            style={{ backgroundColor: `${business.catalogColor || '#10B981'}10`, borderLeft: `4px solid ${business.catalogColor || '#10B981'}` }}
+            style={{
+              backgroundColor: isDark ? `${business.catalogColor || '#10B981'}20` : `${business.catalogColor || '#10B981'}10`,
+              borderLeft: `4px solid ${business.catalogColor || '#10B981'}`
+            }}
           >
             <Info className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: business.catalogColor || '#10B981' }} />
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{business.catalogObservations}</p>
+            <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{business.catalogObservations}</p>
           </div>
         </div>
       )}
 
       {/* Categorías */}
       {rootCategories.length > 0 && (
-        <div className="bg-white border-b sticky top-16 md:top-20 z-30">
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white'} border-b sticky top-16 md:top-20 z-30`}>
           <div className="max-w-7xl mx-auto px-4">
             {/* Categorías raíz */}
-            <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 py-3 overflow-x-auto catalog-scrollbar">
               <button
                 onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
                 className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   !selectedCategory
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'text-white'
+                    : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
+                style={!selectedCategory ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
               >
                 Todos
               </button>
@@ -1880,9 +1986,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
                   className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     selectedCategory === category.id
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'text-white'
+                      : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
+                  style={selectedCategory === category.id ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
                 >
                   {category.name}
                 </button>
@@ -1890,7 +1997,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
             {/* Subcategorías de la categoría seleccionada */}
             {activeSubcategories.length > 0 && (
-              <div className="flex items-center gap-2 pb-3 overflow-x-auto scrollbar-hide">
+              <div className="flex items-center gap-2 pb-3 overflow-x-auto catalog-scrollbar">
                 <button
                   onClick={() => setSelectedSubcategory(null)}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -1924,7 +2031,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       <main className="max-w-7xl mx-auto px-4 py-6 md:py-8">
         {/* Header de resultados */}
         <div className="flex items-center justify-between mb-6">
-          <p className="text-gray-600">
+          <p className={isDark ? "text-gray-400" : "text-gray-600"}>
             {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
             {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
               <span> en <strong>
@@ -1938,13 +2045,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg ${viewMode === 'grid' ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : (isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100')}`}
             >
               <Grid3X3 className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg ${viewMode === 'list' ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : (isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100')}`}
             >
               <List className="w-5 h-5" />
             </button>
@@ -1954,20 +2061,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         {filteredProducts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron productos</h3>
-            <p className="text-gray-600">Intenta con otra búsqueda o categoría</p>
+            <h3 className={`text-lg font-medium mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>No se encontraron productos</h3>
+            <p className={isDark ? "text-gray-400" : "text-gray-600"}>Intenta con otra búsqueda o categoría</p>
           </div>
         ) : viewMode === 'grid' ? (
           // Vista Grid
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6">
-            {filteredProducts.map(product => {
+            {filteredProducts.map((product, index) => {
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
               return (
                 <div
                   key={product.id}
-                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  style={{ animationDelay: `${index * 60}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
@@ -1990,15 +2098,26 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       </div>
                     )}
                     {cartQty > 0 && !outOfStock && (
-                      <div className="absolute top-3 right-3 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
+                      <div className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
                         {cartQty}
                       </div>
                     )}
+                    {!selectedCategory && product.category && (() => {
+                      const cat = categories.find(c => c.id === product.category)
+                      if (!cat) return null
+                      const parentCat = cat.parentId ? categories.find(c => c.id === cat.parentId) : null
+                      const displayCat = parentCat || cat
+                      return (
+                        <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium shadow-sm ${isDark ? 'bg-gray-800/90 text-gray-300' : 'bg-white/90 text-gray-600'}`}>
+                          {displayCat.name}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{product.name}</h3>
+                    <h3 className={`font-semibold mb-1 line-clamp-2 ${isDark ? "text-white" : "text-gray-900"}`}>{product.name}</h3>
                     {product.description && (
-                      <p className="text-sm text-gray-500 mb-2 line-clamp-2 whitespace-pre-line">{product.description}</p>
+                      <p className={`text-sm mb-2 line-clamp-2 whitespace-pre-line ${isDark ? "text-gray-400" : "text-gray-500"}`}>{product.description}</p>
                     )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
@@ -2011,15 +2130,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className="font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
-                                      <span className="text-xs text-gray-500 ml-1">{p.label}</span>
+                                      <span className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`text-xs ml-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{p.label}</span>
                                     </span>
                                   ))}
                                 </div>
                               )
                             }
                             return (
-                              <span className="text-lg font-bold text-gray-900">
+                              <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -2043,7 +2162,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               addToCart(product)
                             }
                           }}
-                          className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                          className="w-10 h-10 rounded-full flex items-center justify-center transition-opacity text-white hover:opacity-80"
+                          style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                         >
                           <Plus className="w-5 h-5" />
                         </button>
@@ -2057,14 +2177,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ) : (
           // Vista Lista
           <div className="space-y-4">
-            {filteredProducts.map(product => {
+            {filteredProducts.map((product, index) => {
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
               return (
                 <div
                   key={product.id}
-                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  style={{ animationDelay: `${index * 60}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -2087,16 +2208,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       </div>
                     )}
                     {cartQty > 0 && !outOfStock && (
-                      <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
                         {cartQty}
                       </div>
                     )}
                   </div>
                   <div className="flex-1 p-4 flex flex-col justify-between">
                     <div>
-                      <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
+                      <h3 className={`font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>{product.name}</h3>
+                      {!selectedCategory && product.category && (() => {
+                        const cat = categories.find(c => c.id === product.category)
+                        if (!cat) return null
+                        const parentCat = cat.parentId ? categories.find(c => c.id === cat.parentId) : null
+                        const displayCat = parentCat || cat
+                        return (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mb-1 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                            {displayCat.name}
+                          </span>
+                        )
+                      })()}
                       {product.description && (
-                        <p className="text-sm text-gray-500 line-clamp-2 whitespace-pre-line">{product.description}</p>
+                        <p className={`text-sm line-clamp-2 whitespace-pre-line ${isDark ? "text-gray-400" : "text-gray-500"}`}>{product.description}</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
@@ -2110,15 +2242,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className="font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
-                                      <span className="text-xs text-gray-500 ml-1">{p.label}</span>
+                                      <span className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`text-xs ml-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{p.label}</span>
                                     </span>
                                   ))}
                                 </div>
                               )
                             }
                             return (
-                              <span className="text-xl font-bold text-gray-900">
+                              <span className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -2144,7 +2276,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               addToCart(product)
                             }
                           }}
-                          className="px-4 py-2 rounded-full bg-gray-900 text-white flex items-center gap-2 hover:bg-gray-800 transition-colors"
+                          className="px-4 py-2 rounded-full flex items-center gap-2 transition-opacity text-white hover:opacity-80"
+                          style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                         >
                           <Plus className="w-4 h-4" />
                           <span className="hidden md:inline">Agregar</span>
@@ -2160,7 +2293,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       </main>
 
       {/* Footer con info del negocio */}
-      <footer className="bg-white border-t mt-12">
+      <footer className={`${isDark ? "bg-gray-900 border-gray-800" : "bg-white"} border-t mt-12`}>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -2168,7 +2301,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={business.logoUrl}
                   alt={business.name}
-                  className="w-12 h-12 rounded-xl object-cover"
+                  className="h-12 max-w-[200px] object-contain"
                 />
               ) : (
                 <div
@@ -2179,11 +2312,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               )}
               <div>
-                <h2 className="font-bold text-gray-900">
+                <h2 className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                   {business?.name || business?.businessName}
                 </h2>
                 {business?.address && (
-                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                  <p className={`text-sm flex items-center gap-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                     <MapPin className="w-4 h-4" />
                     {business.address}
                   </p>
@@ -2197,7 +2330,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   href={`https://wa.me/${(business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 text-white rounded-full transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                 >
                   <MessageCircle className="w-5 h-5" />
                   WhatsApp
@@ -2215,8 +2349,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
 
-          <div className="mt-8 pt-6 border-t text-center text-sm text-gray-400">
-            Catálogo powered by <a href="https://cobrifyperu.com" className="text-gray-600 hover:underline">Cobrify</a>
+          <div className={`mt-8 pt-6 border-t text-center text-sm ${isDark ? "text-gray-500 border-gray-800" : "text-gray-400"}`}>
+            Catálogo powered by <a href="https://cobrifyperu.com" className={`hover:underline ${isDark ? "text-gray-400" : "text-gray-600"}`}>Cobrify</a>
           </div>
         </div>
       </footer>
@@ -2226,9 +2360,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className="fixed bottom-6 left-4 right-4 md:hidden z-40">
           <button
             onClick={() => setCartOpen(true)}
-            className={`w-full py-4 text-white rounded-2xl font-semibold shadow-2xl flex items-center justify-center gap-3 ${
-              isRestaurantMenu ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-900'
-            }`}
+            className="w-full py-4 rounded-2xl font-semibold shadow-2xl flex items-center justify-center gap-3 text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: business?.catalogColor || '#10B981' }}
           >
             {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
             {isRestaurantMenu ? `Ver pedido (${cartItemsCount})` : `Ver carrito (${cartItemsCount})`}

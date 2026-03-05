@@ -203,6 +203,9 @@ export default function Settings() {
   const [complaintsBookResponseDays, setComplaintsBookResponseDays] = useState(30)
   const [complaintsBookQrDataUrl, setComplaintsBookQrDataUrl] = useState('')
   const [catalogColor, setCatalogColor] = useState('#10B981')
+  const [catalogTheme, setCatalogTheme] = useState('light')
+  const [catalogCoverImage, setCatalogCoverImage] = useState('')
+  const [uploadingCover, setUploadingCover] = useState(false)
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
@@ -801,6 +804,8 @@ export default function Settings() {
         setCatalogEnabled(businessData.catalogEnabled || false)
         setCatalogSlug(businessData.catalogSlug || '')
         setCatalogColor(businessData.catalogColor || '#10B981')
+        setCatalogTheme(businessData.catalogTheme || 'light')
+        setCatalogCoverImage(businessData.catalogCoverImage || '')
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
@@ -4780,6 +4785,136 @@ export default function Settings() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Imagen de portada */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Imagen de portada (opcional)
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">Se muestra como fondo en la cabecera del catálogo</p>
+                      {catalogCoverImage ? (
+                        <div className="relative rounded-xl overflow-hidden h-32 mb-2">
+                          <img src={catalogCoverImage} alt="Portada" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2">
+                            <label className="px-3 py-1.5 bg-white/90 text-gray-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-white">
+                              Cambiar
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingCover(true)
+                                  try {
+                                    const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
+                                    await uploadBytes(coverRef, file)
+                                    const url = await getDownloadURL(coverRef)
+                                    setCatalogCoverImage(url)
+                                  } catch (err) {
+                                    console.error('Error uploading cover:', err)
+                                    toast.error('Error al subir imagen')
+                                  } finally {
+                                    setUploadingCover(false)
+                                  }
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
+                                  await deleteObject(coverRef).catch(() => {})
+                                } catch {}
+                                setCatalogCoverImage('')
+                              }}
+                              className="px-3 py-1.5 bg-red-500/90 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                          uploadingCover ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                        }`}>
+                          {uploadingCover ? (
+                            <span className="text-sm text-gray-500">Subiendo...</span>
+                          ) : (
+                            <>
+                              <span className="text-sm text-gray-500">Click para subir imagen</span>
+                              <span className="text-xs text-gray-400 mt-1">JPG, PNG (recomendado 1200x400)</span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingCover}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              setUploadingCover(true)
+                              try {
+                                const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
+                                await uploadBytes(coverRef, file)
+                                const url = await getDownloadURL(coverRef)
+                                setCatalogCoverImage(url)
+                              } catch (err) {
+                                console.error('Error uploading cover:', err)
+                                toast.error('Error al subir imagen')
+                              } finally {
+                                setUploadingCover(false)
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {/* Tema del catálogo */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tema visual
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setCatalogTheme('light')}
+                          className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                            catalogTheme === 'light'
+                              ? 'border-gray-900 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                            <div className="w-5 h-3 bg-white rounded-sm border border-gray-300" />
+                          </div>
+                          <div className="text-left">
+                            <span className="text-sm font-medium text-gray-900 block">Claro</span>
+                            <span className="text-xs text-gray-500">Fondo blanco</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCatalogTheme('dark')}
+                          className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                            catalogTheme === 'dark'
+                              ? 'border-gray-900 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
+                            <div className="w-5 h-3 bg-gray-700 rounded-sm border border-gray-600" />
+                          </div>
+                          <div className="text-left">
+                            <span className="text-sm font-medium text-gray-900 block">Oscuro</span>
+                            <span className="text-xs text-gray-500">Look premium</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Opciones adicionales */}
@@ -4900,6 +5035,8 @@ export default function Settings() {
                       catalogEnabled,
                       catalogSlug: catalogSlug.toLowerCase().trim(),
                       catalogColor,
+                      catalogTheme,
+                      catalogCoverImage,
                       catalogWelcome,
                       catalogTagline,
                       catalogShowPrices,
