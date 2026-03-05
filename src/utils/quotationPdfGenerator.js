@@ -795,12 +795,29 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       descLines = doc.splitTextToSize(productDescription, colWidths.desc - 15)
     }
 
-    const totalLines = nameLines.length + descLines.length
+    // Líneas de detalle farmacéutico (solo farmacia)
+    let pharmaLines = []
+    if (isPharmacy) {
+      const parts = []
+      if (item.presentation) parts.push(`Pres: ${item.presentation}`)
+      if (item.concentration) parts.push(`Conc: ${item.concentration}`)
+      if (item.genericName) parts.push(`DCI: ${item.genericName}`)
+      if (item.activeIngredient) parts.push(`P.A: ${item.activeIngredient}`)
+      if (item.batchNumber) parts.push(`Lote: ${item.batchNumber}`)
+      if (item.sanitaryRegistry) parts.push(`R.S: ${item.sanitaryRegistry}`)
+      if (parts.length > 0) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        pharmaLines = doc.splitTextToSize(parts.join('  |  '), colWidths.desc - 15)
+      }
+    }
+
+    const totalLines = nameLines.length + descLines.length + pharmaLines.length
     const minHeight = baseHeight
     const lineH = spacious ? 10 : 9
     const calculatedHeight = Math.max(minHeight, (spacious ? 14 : 10) + (totalLines * lineH))
 
-    return { height: calculatedHeight, nameLines, descLines }
+    return { height: calculatedHeight, nameLines, descLines, pharmaLines }
   }
 
   // Calcular alturas de todos los items
@@ -838,7 +855,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // Renderizar items con paginación automática
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
-    const { height: rowHeight, nameLines, descLines } = itemHeights[i]
+    const { height: rowHeight, nameLines, descLines, pharmaLines } = itemHeights[i]
 
     // Verificar si el item cabe en la página actual
     if (dataRowY + rowHeight > PAGE_BOTTOM) {
@@ -883,6 +900,18 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setFontSize(8)
       doc.setTextColor(...MEDIUM_GRAY)
       descLines.forEach((line) => {
+        doc.text(line, cols.desc + 4, currentDescY)
+        currentDescY += descLineH
+      })
+      doc.setTextColor(...BLACK)
+    }
+
+    // Detalle farmacéutico (debajo de descripción, en azul oscuro)
+    if (pharmaLines.length > 0) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(80, 80, 120)
+      pharmaLines.forEach((line) => {
         doc.text(line, cols.desc + 4, currentDescY)
         currentDescY += descLineH
       })

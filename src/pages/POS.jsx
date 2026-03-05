@@ -1507,9 +1507,9 @@ export default function POS() {
       return
     }
 
-    // FARMACIA: Verificar si tiene múltiples lotes y no viene con lote seleccionado
+    // FARMACIA: Verificar si tiene lotes y no viene con lote seleccionado
     const availableBatches = getAvailableBatches(product)
-    if (availableBatches.length > 1 && selectedBatch === null) {
+    if (availableBatches.length >= 1 && selectedBatch === null) {
       setProductForBatchSelection(product)
       setPendingPriceForBatch(selectedPrice) // Guardar precio seleccionado para usarlo después
       setShowBatchModal(true)
@@ -5185,6 +5185,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   {item.presentationName} (×{item.presentationFactor})
                                 </p>
                               )}
+                              {item.batchNumber && (
+                                <p className="text-xs text-orange-600 mt-0.5">
+                                  Lote: {item.batchNumber}
+                                  {item.batchExpiryDate && ` | Vence: ${formatBatchExpiry(item.batchExpiryDate)}`}
+                                </p>
+                              )}
                               {item.modifiers && item.modifiers.length > 0 && (
                                 <div className="mt-0.5">
                                   {item.modifiers.map((mod, idx) => (
@@ -6368,7 +6374,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         {productForBatchSelection && (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Este producto tiene múltiples lotes. Selecciona el lote a vender (FEFO recomendado):
+              Selecciona el lote a vender (FEFO - primero el que vence antes):
             </p>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {getAvailableBatches(productForBatchSelection).map((batch, idx) => (

@@ -447,6 +447,14 @@ export default function CreateQuotation() {
     newItems[index].presentationFactor = selectedPresentation?.factor || 1
     newItems[index].laboratoryName = product.laboratoryName || ''
     newItems[index].marca = product.marca || ''
+    newItems[index].genericName = product.genericName || ''
+    newItems[index].concentration = product.concentration || ''
+    newItems[index].presentation = product.presentation || ''
+    newItems[index].batchNumber = product.batchNumber || ''
+    newItems[index].activeIngredient = product.activeIngredient || ''
+    newItems[index].therapeuticAction = product.therapeuticAction || ''
+    newItems[index].saleCondition = product.saleCondition || ''
+    newItems[index].sanitaryRegistry = product.sanitaryRegistry || ''
     setQuotationItems(newItems)
     setShowProductSearch(null)
     setPendingProductSelection(null)
@@ -751,6 +759,14 @@ export default function CreateQuotation() {
         subtotal: calculateItemTotal(item),
         laboratoryName: item.laboratoryName || '',
         marca: item.marca || '',
+        genericName: item.genericName || '',
+        concentration: item.concentration || '',
+        presentation: item.presentation || '',
+        batchNumber: item.batchNumber || '',
+        activeIngredient: item.activeIngredient || '',
+        therapeuticAction: item.therapeuticAction || '',
+        saleCondition: item.saleCondition || '',
+        sanitaryRegistry: item.sanitaryRegistry || '',
       }))
 
       // Calcular fecha de expiración
