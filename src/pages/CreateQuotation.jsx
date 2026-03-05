@@ -749,6 +749,8 @@ export default function CreateQuotation() {
         unitPrice: parseFloat(item.unitPrice),
         unit: item.unit,
         subtotal: calculateItemTotal(item),
+        laboratoryName: item.laboratoryName || '',
+        marca: item.marca || '',
       }))
 
       // Calcular fecha de expiración

@@ -748,12 +748,13 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const showProductCode = companySettings?.showProductCodeInQuotation === true
 
   const colWidths = {
-    cant: CONTENT_WIDTH * 0.08,
-    um: CONTENT_WIDTH * 0.08,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.30 : CONTENT_WIDTH * 0.44,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.17 : CONTENT_WIDTH * 0.20,
-    total: CONTENT_WIDTH * 0.20
+    cant: CONTENT_WIDTH * 0.07,
+    um: CONTENT_WIDTH * 0.07,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.26 : CONTENT_WIDTH * 0.44,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.14 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.15 : CONTENT_WIDTH * 0.20,
+    total: CONTENT_WIDTH * 0.19
   }
 
   let colX = MARGIN_LEFT
@@ -762,7 +763,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
     lab: colX += colWidths.desc,
-    pu: colX += colWidths.lab,
+    marca: colX += colWidths.lab,
+    pu: colX += colWidths.marca,
     total: colX += colWidths.pu
   }
 
@@ -776,8 +778,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     const itemDesc = (showProductCode && isValidCode) ? `${rawCode} - ${itemName}` : itemName
-    // La descripción adicional del producto
-    const productDescription = item.description || ''
+    // La descripción adicional del producto (no mostrar si es igual al nombre)
+    const rawDescription = item.description || ''
+    const productDescription = rawDescription.trim().toLowerCase() === itemName.trim().toLowerCase() ? '' : rawDescription
 
     // Calcular líneas necesarias para el nombre (usar mismo tamaño que al renderizar: 8pt)
     doc.setFont('helvetica', 'bold')
@@ -816,6 +819,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.text('DESCRIPCIÓN', cols.desc + 5, hTextY)
     if (isPharmacy) {
       doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, hTextY, { align: 'center' })
+      doc.text('MARCA', cols.marca + colWidths.marca / 2, hTextY, { align: 'center' })
     }
     doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, hTextY, { align: 'center' })
     doc.text('IMPORTE', cols.total + colWidths.total / 2, hTextY, { align: 'center' })
@@ -885,7 +889,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio (solo modo farmacia)
+    // Laboratorio y Marca (solo modo farmacia)
     if (isPharmacy) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
@@ -893,6 +897,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       if (labText) {
         const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
         doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
+      }
+      const marcaText = item.marca || ''
+      if (marcaText) {
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
+        doc.text(marcaLines[0], cols.marca + colWidths.marca / 2, textY, { align: 'center' })
       }
     }
 

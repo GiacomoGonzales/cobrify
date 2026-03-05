@@ -273,6 +273,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
           return {
             id: index + 1,
+            productId: item.productId || '',
             code: sku,
             description: item.description || item.name || '',
             quantity: item.quantity || 0,

@@ -664,16 +664,18 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const tableWidth = CONTENT_WIDTH
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
   const colWidths = isPharmacy ? {
-    num: 25,
-    code: 70,
-    marca: 70,
-    desc: tableWidth - 25 - 70 - 70 - 55 - 65,
-    qty: 55,
-    unit: 65
+    num: 22,
+    code: 58,
+    marca: 58,
+    lab: 62,
+    desc: tableWidth - 22 - 58 - 58 - 62 - 50 - 55,
+    qty: 50,
+    unit: 55
   } : {
     num: 30,
     code: 80,
     marca: 0,
+    lab: 0,
     desc: tableWidth - 30 - 80 - 60 - 70,
     qty: 60,
     unit: 70
@@ -689,8 +691,22 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const itemDesc = item.description || item.name || '-'
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    const calculatedHeight = Math.max(minRowHeight, descLines.length * lineHeight + (spacious ? 12 : 8))
-    return { height: calculatedHeight, descLines }
+
+    // En farmacia, agregar línea de lote/vencimiento si existe
+    let batchLine = ''
+    if (isPharmacy) {
+      const product = item.productId ? productsMap[item.productId] : null
+      const batch = product?.batchNumber || ''
+      const expDate = product?.expirationDate || ''
+      const parts = []
+      if (batch) parts.push(`Lote: ${batch}`)
+      if (expDate) parts.push(`Venc: ${expDate}`)
+      batchLine = parts.join('  |  ')
+    }
+
+    const totalLines = descLines.length + (batchLine ? 1 : 0)
+    const calculatedHeight = Math.max(minRowHeight, totalLines * lineHeight + (spacious ? 12 : 8))
+    return { height: calculatedHeight, descLines, batchLine }
   }
 
   // Función para dibujar el encabezado de la tabla (se usa en cada página)
@@ -720,6 +736,10 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       doc.text('MARCA', hColX + colWidths.marca/2, currentY + tableHeaderTextY, { align: 'center' })
       doc.line(hColX + colWidths.marca, currentY, hColX + colWidths.marca, currentY + tableHeaderHeight)
       hColX += colWidths.marca
+
+      doc.text('LABORAT.', hColX + colWidths.lab/2, currentY + tableHeaderTextY, { align: 'center' })
+      doc.line(hColX + colWidths.lab, currentY, hColX + colWidths.lab, currentY + tableHeaderHeight)
+      hColX += colWidths.lab
     }
 
     doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + tableHeaderTextY, { align: 'center' })
@@ -738,7 +758,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Función para dibujar una fila de item
-  const drawItemRow = (item, index, rowHeight, descLines) => {
+  const drawItemRow = (item, index, rowHeight, descLines, batchLine) => {
     const centerYRow = currentY + rowHeight / 2 + 3
 
     // Fondo de la fila
@@ -777,13 +797,34 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       }
       doc.line(itemColX + colWidths.marca, currentY, itemColX + colWidths.marca, currentY + rowHeight)
       itemColX += colWidths.marca
+
+      // Laboratorio
+      const labText = product?.laboratoryName || ''
+      if (labText) {
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
+        doc.text(labLines[0], itemColX + colWidths.lab/2, centerYRow, { align: 'center' })
+      }
+      doc.line(itemColX + colWidths.lab, currentY, itemColX + colWidths.lab, currentY + rowHeight)
+      itemColX += colWidths.lab
     }
 
     // Descripción - múltiples líneas
     const descStartY = currentY + (spacious ? 13 : 10)
+    doc.setFont('helvetica', 'bold')
     descLines.forEach((line, lineIdx) => {
       doc.text(line, itemColX + 5, descStartY + (lineIdx * lineHeight))
     })
+
+    // Lote y vencimiento debajo de la descripción (solo farmacia)
+    if (batchLine) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(100, 100, 100)
+      const batchY = descStartY + (descLines.length * lineHeight)
+      doc.text(batchLine, itemColX + 5, batchY)
+      doc.setTextColor(...BLACK)
+      doc.setFontSize(8)
+    }
 
     // Línea vertical Descripción
     doc.line(itemColX + colWidths.desc, currentY, itemColX + colWidths.desc, currentY + rowHeight)
@@ -808,7 +849,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFontSize(8)
 
   items.forEach((item, index) => {
-    const { height: rowHeight, descLines } = calculateItemHeight(item)
+    const { height: rowHeight, descLines, batchLine } = calculateItemHeight(item)
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
@@ -819,7 +860,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       drawTableHeader()
     }
 
-    drawItemRow(item, index, rowHeight, descLines)
+    drawItemRow(item, index, rowHeight, descLines, batchLine)
   })
 
   // Si no hay items, dibujar un espacio mínimo

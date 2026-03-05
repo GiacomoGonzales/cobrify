@@ -862,8 +862,8 @@ export default function CreatePurchase() {
           productName: item.productName,
           itemType: item.itemType || 'product', // 'product' o 'ingredient'
           unit: item.unit || 'NIU',
-          quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.cost), // Precio unitario de compra (costo)
+          quantity: parseFloat(item.quantity) || 0,
+          unitPrice: parseFloat(item.cost) || 0, // Precio unitario de compra (costo)
           // Campos de farmacia (lote y vencimiento)
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
@@ -1172,11 +1172,11 @@ export default function CreatePurchase() {
             const newBatches = itemsWithBatch.map(item => ({
               id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               batchNumber: item.batchNumber || '',
-              quantity: parseFloat(item.quantity),
+              quantity: parseFloat(item.quantity) || 0,
               expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
               purchaseId: resultId || null,
               purchaseDate: new Date(invoiceDate),
-              costPrice: parseFloat(item.cost),
+              costPrice: parseFloat(item.cost) || 0,
               createdAt: new Date()
             }))
 
@@ -1216,7 +1216,7 @@ export default function CreatePurchase() {
             productId: item.productId,
             warehouseId: selectedWarehouse?.id || '',
             type: 'entry',
-            quantity: parseFloat(item.quantity),
+            quantity: parseFloat(item.quantity) || 0,
             reason: warehouseChangedInEdit ? 'Compra editada (nuevo almacén)' : 'Compra',
             referenceType: 'purchase',
             referenceId: resultId || '',
