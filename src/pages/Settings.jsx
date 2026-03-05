@@ -212,6 +212,18 @@ export default function Settings() {
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
+  const [businessHours, setBusinessHours] = useState({
+    enabled: false,
+    days: {
+      1: { open: true, from: '09:00', to: '18:00' }, // Lunes
+      2: { open: true, from: '09:00', to: '18:00' },
+      3: { open: true, from: '09:00', to: '18:00' },
+      4: { open: true, from: '09:00', to: '18:00' },
+      5: { open: true, from: '09:00', to: '18:00' },
+      6: { open: true, from: '09:00', to: '14:00' }, // Sábado
+      0: { open: false, from: '09:00', to: '14:00' }, // Domingo
+    }
+  })
   const [catalogWholesaleMinQty, setCatalogWholesaleMinQty] = useState(1)
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
@@ -814,6 +826,9 @@ export default function Settings() {
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
+        if (businessData.businessHours) {
+          setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
+        }
 
         // Cargar configuración de Libro de Reclamaciones
         setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
@@ -4734,6 +4749,81 @@ export default function Settings() {
                         <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
                       </div>
 
+                      {/* Horario de atención */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Horario de atención
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={businessHours.enabled}
+                              onChange={(e) => setBusinessHours(prev => ({ ...prev, enabled: e.target.checked }))}
+                              className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                            />
+                            <span className="text-sm text-gray-600">Activar</span>
+                          </label>
+                        </div>
+                        {businessHours.enabled && (
+                          <div className="space-y-2 bg-gray-50 rounded-lg p-3">
+                            {[
+                              { key: 1, name: 'Lunes' },
+                              { key: 2, name: 'Martes' },
+                              { key: 3, name: 'Miércoles' },
+                              { key: 4, name: 'Jueves' },
+                              { key: 5, name: 'Viernes' },
+                              { key: 6, name: 'Sábado' },
+                              { key: 0, name: 'Domingo' },
+                            ].map(day => (
+                              <div key={day.key} className="flex items-center gap-2">
+                                <label className="flex items-center gap-2 w-28 flex-shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={businessHours.days[day.key]?.open || false}
+                                    onChange={(e) => setBusinessHours(prev => ({
+                                      ...prev,
+                                      days: { ...prev.days, [day.key]: { ...prev.days[day.key], open: e.target.checked } }
+                                    }))}
+                                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                                  />
+                                  <span className={`text-sm ${businessHours.days[day.key]?.open ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
+                                    {day.name}
+                                  </span>
+                                </label>
+                                {businessHours.days[day.key]?.open && (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.from || '09:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], from: e.target.value } }
+                                      }))}
+                                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                                    />
+                                    <span className="text-gray-400 text-sm">a</span>
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.to || '18:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], to: e.target.value } }
+                                      }))}
+                                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                                    />
+                                  </div>
+                                )}
+                                {!businessHours.days[day.key]?.open && (
+                                  <span className="text-xs text-red-400">Cerrado</span>
+                                )}
+                              </div>
+                            ))}
+                            <p className="text-xs text-gray-500 mt-2">Se muestra en el catálogo y bloquea pedidos fuera de horario</p>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Color */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5045,6 +5135,7 @@ export default function Settings() {
                       catalogObservations: catalogObservations.trim(),
                       catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
                       catalogShowAllPrices,
+                      businessHours,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled

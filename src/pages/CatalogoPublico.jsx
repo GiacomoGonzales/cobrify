@@ -32,13 +32,8 @@ import {
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
-@keyframes catalogFadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 .catalog-fade-in {
-  animation: catalogFadeInUp 0.3s ease-out both;
-  will-change: opacity, transform;
+  opacity: 1;
 }
 .catalog-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -76,6 +71,36 @@ html {
   scrollbar-color: rgba(150,150,150,0.25) transparent;
 }
 `
+
+// Helper: nombres de días y verificación de horario
+const DAY_NAMES = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 0: 'Domingo' }
+const DAY_SHORT = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 0: 'Dom' }
+
+const isBusinessOpen = (businessHours) => {
+  if (!businessHours?.enabled) return { open: true, message: '' }
+  const now = new Date()
+  const peruTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Lima' }))
+  const dayOfWeek = peruTime.getDay()
+  const currentTime = peruTime.getHours() * 60 + peruTime.getMinutes()
+  const dayConfig = businessHours.days?.[dayOfWeek]
+
+  if (!dayConfig?.open) {
+    return { open: false, message: `Hoy ${DAY_NAMES[dayOfWeek]} estamos cerrados` }
+  }
+
+  const [fromH, fromM] = (dayConfig.from || '09:00').split(':').map(Number)
+  const [toH, toM] = (dayConfig.to || '18:00').split(':').map(Number)
+  const openMin = fromH * 60 + fromM
+  const closeMin = toH * 60 + toM
+
+  if (currentTime < openMin) {
+    return { open: false, message: `Abrimos hoy a las ${dayConfig.from}` }
+  }
+  if (currentTime >= closeMin) {
+    return { open: false, message: `Cerramos a las ${dayConfig.to}. ¡Vuelve mañana!` }
+  }
+  return { open: true, message: `Abierto hasta las ${dayConfig.to}` }
+}
 
 // Componente de skeleton para carga
 function ProductSkeleton() {
@@ -893,6 +918,13 @@ function CartDrawer({
   // Enviar pedido al sistema de restaurante
   const handleRestaurantOrder = async () => {
     if (cart.length === 0) return
+
+    // Verificar horario de atención
+    const hoursStatus = isBusinessOpen(business?.businessHours)
+    if (!hoursStatus.open) {
+      setOrderError(`🕐 ${hoursStatus.message}. No se pueden realizar pedidos fuera del horario de atención.`)
+      return
+    }
 
     // Validaciones
     if (orderType === 'dine_in' && !tableNumber.trim()) {
@@ -1798,6 +1830,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Checkout por WhatsApp
   const handleCheckout = () => {
+    // Verificar horario de atención
+    const hoursStatus = isBusinessOpen(business?.businessHours)
+    if (!hoursStatus.open) {
+      alert(`🕐 ${hoursStatus.message}. No se pueden realizar pedidos fuera del horario de atención.`)
+      return
+    }
+
     if (!business?.catalogWhatsapp && !business?.whatsapp && !business?.phone) {
       alert('Este negocio no tiene WhatsApp configurado')
       return
@@ -1907,18 +1946,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
               {business?.logoUrl ? (
                 <img
                   src={business.logoUrl}
                   alt={business.name}
-                  loading="eager"
-                  fetchpriority="high"
-                  className="h-10 md:h-12 max-w-[160px] md:max-w-[200px] object-contain"
+                  className="h-9 md:h-12 w-auto max-w-[100px] md:max-w-[200px] object-contain flex-shrink-0"
                 />
               ) : (
                 <div
-                  className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center"
+                  className="w-9 h-9 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                 >
                   {isRestaurantMenu ? (
@@ -1928,8 +1965,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   )}
                 </div>
               )}
-              <div>
-                <h1 className={`font-bold text-lg md:text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              <div className="min-w-0">
+                <h1 className={`font-bold text-base md:text-xl truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {business?.name || business?.businessName}
                 </h1>
                 {business?.catalogTagline && (
@@ -2135,7 +2172,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <div
                   key={product.id}
                   className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
-                  style={{ animationDelay: `${Math.min(index * 60, 600)}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
@@ -2246,7 +2282,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <div
                   key={product.id}
                   className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer flex ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
-                  style={{ animationDelay: `${Math.min(index * 60, 600)}ms` }}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -2385,6 +2420,38 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 )}
               </div>
             </div>
+
+            {/* Horario de atención */}
+            {business?.businessHours?.enabled && (
+              <div className={`w-full md:w-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-sm font-semibold">Horario de atención</span>
+                  {(() => {
+                    const status = isBusinessOpen(business.businessHours)
+                    return (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.open ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {status.open ? 'Abierto' : 'Cerrado'}
+                      </span>
+                    )
+                  })()}
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
+                  {[1, 2, 3, 4, 5, 6, 0].map(day => {
+                    const config = business.businessHours.days?.[day]
+                    const isToday = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })).getDay() === day
+                    return (
+                      <div key={day} className={`flex justify-between gap-2 ${isToday ? 'font-bold' : ''}`}>
+                        <span>{DAY_SHORT[day]}</span>
+                        <span className={config?.open ? '' : 'text-red-400'}>
+                          {config?.open ? `${config.from} - ${config.to}` : 'Cerrado'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-4">
               {(business?.catalogWhatsapp || business?.whatsapp || business?.phone) && (
