@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
  * Componente de Ticket Imprimible para Guía de Remisión
  * Formato idéntico a InvoiceTicket para impresoras térmicas 80mm/58mm
  */
-const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 80, safePrintMargins = true }, ref) => {
+const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 80, printMargins = 8 }, ref) => {
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
 
@@ -186,7 +186,7 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
             width: ${paperWidth}mm !important;
             max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: ${safePrintMargins ? (is58mm ? '1.5mm 6mm' : '2mm 8mm') : (is58mm ? '1.5mm' : '2mm')} !important;
+            padding: ${is58mm ? '1.5mm' : '2mm'} ${printMargins}mm !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             font-size: ${is58mm ? '7pt' : '8pt'};

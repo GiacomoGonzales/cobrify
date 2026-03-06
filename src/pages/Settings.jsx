@@ -6734,31 +6734,54 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Márgenes seguros para impresión */}
+              {/* Márgenes laterales para impresión */}
               <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
-                <div className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    id="safePrintMargins"
-                    checked={printerConfig.safePrintMargins !== false}
-                    onChange={async (e) => {
-                      const newConfig = {
-                        ...printerConfig,
-                        safePrintMargins: e.target.checked
-                      }
-                      setPrinterConfig(newConfig)
-                      await savePrinterConfig(getBusinessId(), newConfig)
-                      toast.success(e.target.checked ? 'Márgenes seguros activados' : 'Márgenes seguros desactivados')
-                    }}
-                    className="mt-1 h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
-                  />
-                  <div className="flex-1">
-                    <label htmlFor="safePrintMargins" className="block text-sm font-medium text-gray-900 cursor-pointer">
-                      Márgenes seguros para impresión web
-                    </label>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Agrega márgenes laterales al imprimir desde el navegador para evitar que el texto se corte en impresoras con área de impresión reducida. Desactívalo si tu ticket sale con mucho espacio a los lados y el texto se recorta a la derecha.
-                    </p>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Márgenes laterales de impresión web
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Controla el espacio lateral (en mm) al imprimir desde el navegador. Usa 0 si tu ticket se ve bien en la vista previa. Aumenta si el texto se corta en tu impresora.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      id="printMargins"
+                      min="0"
+                      max="15"
+                      step="1"
+                      value={printerConfig.printMargins ?? 8}
+                      onChange={(e) => {
+                        const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                        setPrinterConfig({ ...printerConfig, printMargins: val })
+                      }}
+                      onBlur={async (e) => {
+                        const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                        const newConfig = { ...printerConfig, printMargins: val }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success(`Márgenes de impresión: ${val}mm`)
+                      }}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                    <span className="text-sm text-gray-600">mm</span>
+                    <div className="flex gap-1 ml-2">
+                      {[0, 2, 4, 8].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={async () => {
+                            const newConfig = { ...printerConfig, printMargins: val }
+                            setPrinterConfig(newConfig)
+                            await savePrinterConfig(getBusinessId(), newConfig)
+                            toast.success(`Márgenes de impresión: ${val}mm`)
+                          }}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.printMargins ?? 8) === val ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -14,7 +14,7 @@ import { QRCodeSVG } from 'qrcode.react'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, safePrintMargins = true }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8 }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -209,7 +209,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             width: ${paperWidth}mm !important;
             max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: ${safePrintMargins ? (is58mm ? '1.5mm 8mm' : '2mm 8mm') : (is58mm ? '1.5mm' : '2mm')} !important;
+            padding: ${is58mm ? '1.5mm' : '2mm'} ${printMargins}mm !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
@@ -531,7 +531,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         .ticket-container {
           font-size: ${is58mm ? '6pt' : '6.5pt'} !important;
           line-height: 1.1 !important;
-          padding: ${safePrintMargins ? (is58mm ? '1mm 6mm' : '1mm 6mm') : '1mm'} !important;
+          padding: 1mm ${printMargins ? Math.max(1, printMargins - 2) : 0}mm !important;
         }
         .ticket-header {
           margin-bottom: 1px !important;
@@ -628,7 +628,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           .ticket-container {
             font-size: ${is58mm ? '5.5pt' : '6pt'} !important;
             line-height: 1.1 !important;
-            padding: ${safePrintMargins ? (is58mm ? '1mm 6mm' : '1mm 6mm') : '1mm'} !important;
+            padding: 1mm ${printMargins ? Math.max(1, printMargins - 2) : 0}mm !important;
           }
         }
         ` : ''}

@@ -111,7 +111,7 @@ export default function DispatchGuides() {
   const [isVoidingGuide, setIsVoidingGuide] = useState(false) // Proceso en curso
   const [voidGuideReason, setVoidGuideReason] = useState('ANULACION DE GUIA DE REMISION')
 
-  const [safePrintMargins, setSafePrintMargins] = useState(true)
+  const [printMargins, setPrintMargins] = useState(8)
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -128,7 +128,7 @@ export default function DispatchGuides() {
         const { getPrinterConfig } = await import('@/services/thermalPrinterService')
         const result = await getPrinterConfig(getBusinessId())
         if (result.success && result.config) {
-          setSafePrintMargins(result.config.safePrintMargins !== false)
+          setPrintMargins(result.config.printMargins ?? 8)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1581,7 +1581,7 @@ export default function DispatchGuides() {
           guide={printingTicket}
           companySettings={companySettings}
           paperWidth={80}
-          safePrintMargins={safePrintMargins}
+          printMargins={printMargins}
         />
       )}
     </div>

@@ -170,7 +170,7 @@ export default function InvoiceList() {
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
-  const [safePrintMargins, setSafePrintMargins] = useState(true)
+  const [printMargins, setPrintMargins] = useState(8)
 
   // Cargar configuración de impresora para webPrintLegible y compactPrint
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function InvoiceList() {
         console.log('📄 InvoiceList - webPrintLegible cargado:', webPrintValue)
         setWebPrintLegible(webPrintValue)
         setCompactPrint(printerConfigResult.config.compactPrint || false)
-        setSafePrintMargins(printerConfigResult.config.safePrintMargins !== false)
+        setPrintMargins(printerConfigResult.config.printMargins ?? 8)
       }
     }
     loadPrinterConfig()
@@ -3668,7 +3668,7 @@ Gracias por tu preferencia.`
       {/* Hidden Ticket Component for Printing - Individual */}
       {viewingInvoice && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} safePrintMargins={safePrintMargins} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} />
         </div>
       )}
 
@@ -3687,7 +3687,7 @@ Gracias por tu preferencia.`
             }
           `}</style>
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
-            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} safePrintMargins={safePrintMargins} />
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} />
           ))}
         </div>
       )}
