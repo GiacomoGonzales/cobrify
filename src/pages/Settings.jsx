@@ -6766,7 +6766,7 @@ export default function Settings() {
                     />
                     <span className="text-sm text-gray-600">mm</span>
                     <div className="flex gap-1 ml-2">
-                      {[0, 2, 4, 8].map(val => (
+                      {[0, 2, 4, 8, 12].map(val => (
                         <button
                           key={val}
                           type="button"
