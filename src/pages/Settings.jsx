@@ -6733,6 +6733,35 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {/* Márgenes seguros para impresión */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="safePrintMargins"
+                    checked={printerConfig.safePrintMargins !== false}
+                    onChange={async (e) => {
+                      const newConfig = {
+                        ...printerConfig,
+                        safePrintMargins: e.target.checked
+                      }
+                      setPrinterConfig(newConfig)
+                      await savePrinterConfig(getBusinessId(), newConfig)
+                      toast.success(e.target.checked ? 'Márgenes seguros activados' : 'Márgenes seguros desactivados')
+                    }}
+                    className="mt-1 h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="safePrintMargins" className="block text-sm font-medium text-gray-900 cursor-pointer">
+                      Márgenes seguros para impresión web
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Agrega márgenes laterales al imprimir desde el navegador para evitar que el texto se corte en impresoras con área de impresión reducida. Desactívalo si tu ticket sale con mucho espacio a los lados y el texto se recorta a la derecha.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

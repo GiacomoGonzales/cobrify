@@ -111,12 +111,31 @@ export default function DispatchGuides() {
   const [isVoidingGuide, setIsVoidingGuide] = useState(false) // Proceso en curso
   const [voidGuideReason, setVoidGuideReason] = useState('ANULACION DE GUIA DE REMISION')
 
+  const [safePrintMargins, setSafePrintMargins] = useState(true)
+
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
 
   // Detectar si estamos en móvil
   const isNativePlatform = Capacitor.isNativePlatform()
+
+  // Cargar configuración de impresora
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid) return
+      try {
+        const { getPrinterConfig } = await import('@/services/thermalPrinterService')
+        const result = await getPrinterConfig(getBusinessId())
+        if (result.success && result.config) {
+          setSafePrintMargins(result.config.safePrintMargins !== false)
+        }
+      } catch (error) {
+        console.error('Error loading printer config:', error)
+      }
+    }
+    loadPrinterConfig()
+  }, [user])
 
   // Cargar guías y datos de empresa al montar el componente
   useEffect(() => {
@@ -1562,6 +1581,7 @@ export default function DispatchGuides() {
           guide={printingTicket}
           companySettings={companySettings}
           paperWidth={80}
+          safePrintMargins={safePrintMargins}
         />
       )}
     </div>

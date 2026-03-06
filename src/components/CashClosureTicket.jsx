@@ -11,7 +11,8 @@ const CashClosureTicket = forwardRef(({
   invoices = [],
   companySettings,
   paperWidth = 80,
-  branchName = null
+  branchName = null,
+  safePrintMargins = true
 }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
@@ -137,7 +138,7 @@ const CashClosureTicket = forwardRef(({
             width: ${paperWidth}mm !important;
             max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: ${is58mm ? '1.5mm 8mm' : '2mm 8mm'} !important;
+            padding: ${safePrintMargins ? (is58mm ? '1.5mm 8mm' : '2mm 8mm') : (is58mm ? '1.5mm' : '2mm')} !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             font-size: ${is58mm ? '7pt' : '8pt'};

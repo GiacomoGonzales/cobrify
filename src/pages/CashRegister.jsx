@@ -2843,6 +2843,7 @@ export default function CashRegister() {
             companySettings={companySettings}
             paperWidth={80}
             branchName={selectedBranch?.name || null}
+            safePrintMargins={printerConfig?.safePrintMargins !== false}
           />
         </div>
       )}

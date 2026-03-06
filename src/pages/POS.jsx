@@ -403,6 +403,7 @@ export default function POS() {
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
+  const [safePrintMargins, setSafePrintMargins] = useState(true)
 
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
@@ -577,6 +578,7 @@ export default function POS() {
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
           setCompactPrint(printerConfigResult.config.compactPrint || false)
+          setSafePrintMargins(printerConfigResult.config.safePrintMargins !== false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -6587,6 +6589,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             paperWidth={80}
             webPrintLegible={webPrintLegible}
             compactPrint={compactPrint}
+            safePrintMargins={safePrintMargins}
           />
         </div>
       )}
