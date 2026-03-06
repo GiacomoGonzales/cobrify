@@ -742,7 +742,7 @@ const ProductFormModal = ({
                   ? (businessSettings?.priceLabels?.price1 || 'Precio 1')
                   : "Precio de Venta"}
                 type="number"
-                step="0.01"
+                step="any"
                 required
                 placeholder="0.00"
                 error={errors.price?.message}
@@ -753,7 +753,7 @@ const ProductFormModal = ({
                 <Input
                   label="Costo"
                   type="number"
-                  step="0.01"
+                  step="any"
                   placeholder="0.00"
                   error={errors.cost?.message}
                   {...register('cost')}
@@ -767,7 +767,7 @@ const ProductFormModal = ({
                   <Input
                     label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price2?.message}
                     {...register('price2')}
@@ -775,7 +775,7 @@ const ProductFormModal = ({
                   <Input
                     label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price3?.message}
                     {...register('price3')}
@@ -783,7 +783,7 @@ const ProductFormModal = ({
                   <Input
                     label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price4?.message}
                     {...register('price4')}
@@ -857,7 +857,7 @@ const ProductFormModal = ({
                 <Input
                   label="Peso (kg)"
                   type="number"
-                  step="0.01"
+                  step="any"
                   placeholder="0.00"
                   error={errors.weight?.message}
                   {...register('weight')}
@@ -1173,7 +1173,7 @@ const ProductFormModal = ({
                 <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="any"
                   placeholder="0.00"
                   value={newPresentation.price}
                   onChange={(e) => setNewPresentation(prev => ({ ...prev, price: e.target.value }))}

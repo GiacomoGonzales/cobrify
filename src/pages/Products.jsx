@@ -3677,7 +3677,7 @@ export default function Products() {
                 <Input
                   label="Costo"
                   type="number"
-                  step="0.01"
+                  step="any"
                   placeholder="0.00"
                   error={errors.cost?.message}
                   {...register('cost')}
@@ -3689,7 +3689,7 @@ export default function Products() {
                 <Input
                   label="Peso (kg)"
                   type="number"
-                  step="0.01"
+                  step="any"
                   placeholder="0.00"
                   error={errors.weight?.message}
                   {...register('weight')}
@@ -3702,7 +3702,7 @@ export default function Products() {
                 <Input
                   label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
                   type="number"
-                  step="0.01"
+                  step="any"
                   required
                   placeholder="0.00"
                   error={errors.price?.message}
@@ -3716,7 +3716,7 @@ export default function Products() {
                   <Input
                     label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price2?.message}
                     {...register('price2')}
@@ -3724,7 +3724,7 @@ export default function Products() {
                   <Input
                     label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price3?.message}
                     {...register('price3')}
@@ -3732,7 +3732,7 @@ export default function Products() {
                   <Input
                     label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.price4?.message}
                     {...register('price4')}
@@ -4034,7 +4034,7 @@ export default function Products() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="0.00"
                     value={newPresentation.price}
                     onChange={(e) => setNewPresentation(prev => ({ ...prev, price: e.target.value }))}
@@ -4473,7 +4473,7 @@ export default function Products() {
                           </label>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             value={newVariant.price}
                             onChange={e => handleNewVariantChange('price', e.target.value)}
                             placeholder="0.00"
@@ -4488,7 +4488,7 @@ export default function Products() {
                               </label>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="any"
                                 value={newVariant.price2}
                                 onChange={e => handleNewVariantChange('price2', e.target.value)}
                                 placeholder="0.00 (opcional)"
@@ -4501,7 +4501,7 @@ export default function Products() {
                               </label>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="any"
                                 value={newVariant.price3}
                                 onChange={e => handleNewVariantChange('price3', e.target.value)}
                                 placeholder="0.00 (opcional)"
@@ -4514,7 +4514,7 @@ export default function Products() {
                               </label>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="any"
                                 value={newVariant.price4}
                                 onChange={e => handleNewVariantChange('price4', e.target.value)}
                                 placeholder="0.00 (opcional)"
@@ -4597,18 +4597,18 @@ export default function Products() {
                                     </td>
                                   ))}
                                   <td className="px-2 py-1">
-                                    <input type="number" step="0.01" value={editingVariant.price} onChange={e => setEditingVariant({ ...editingVariant, price: e.target.value })} className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                    <input type="number" step="any" value={editingVariant.price} onChange={e => setEditingVariant({ ...editingVariant, price: e.target.value })} className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
                                   </td>
                                   {businessSettings?.multiplePricesEnabled && (
                                     <>
                                       <td className="px-2 py-1">
-                                        <input type="number" step="0.01" value={editingVariant.price2} onChange={e => setEditingVariant({ ...editingVariant, price2: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                        <input type="number" step="any" value={editingVariant.price2} onChange={e => setEditingVariant({ ...editingVariant, price2: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
                                       </td>
                                       <td className="px-2 py-1">
-                                        <input type="number" step="0.01" value={editingVariant.price3} onChange={e => setEditingVariant({ ...editingVariant, price3: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                        <input type="number" step="any" value={editingVariant.price3} onChange={e => setEditingVariant({ ...editingVariant, price3: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
                                       </td>
                                       <td className="px-2 py-1">
-                                        <input type="number" step="0.01" value={editingVariant.price4} onChange={e => setEditingVariant({ ...editingVariant, price4: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                        <input type="number" step="any" value={editingVariant.price4} onChange={e => setEditingVariant({ ...editingVariant, price4: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
                                       </td>
                                     </>
                                   )}
