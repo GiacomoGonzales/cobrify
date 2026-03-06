@@ -14,7 +14,7 @@ import { QRCodeSVG } from 'qrcode.react'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8 }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -323,8 +323,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           font-weight: 700;
           margin: 3px 0 2px 0;
           padding: 2px 4px;
+          ${simplePrint ? `
+          border-top: 2px solid #000;
+          border-bottom: 2px solid #000;
+          color: #000;
+          ` : `
           background: #000;
           color: #fff;
+          `}
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
@@ -482,10 +488,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           font-weight: 700;
           margin-top: 2px;
           padding: 4px 2px;
+          ${simplePrint ? `
+          border-top: 2px solid #000;
+          border-bottom: 2px solid #000;
+          color: #000;
+          ` : `
           background: #000;
           color: #fff;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
+          `}
         }
 
         .ticket-footer {

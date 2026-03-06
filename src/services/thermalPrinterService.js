@@ -441,6 +441,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
       compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
       printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
+      simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
       updatedAt: new Date().toISOString()
     };
 

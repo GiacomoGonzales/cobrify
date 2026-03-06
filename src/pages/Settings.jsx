@@ -6785,6 +6785,35 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {/* Impresión simple */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-orange-50">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="simplePrint"
+                    checked={printerConfig.simplePrint || false}
+                    onChange={async (e) => {
+                      const newConfig = {
+                        ...printerConfig,
+                        simplePrint: e.target.checked
+                      }
+                      setPrinterConfig(newConfig)
+                      await savePrinterConfig(getBusinessId(), newConfig)
+                      toast.success(e.target.checked ? 'Impresión simple activada' : 'Impresión simple desactivada')
+                    }}
+                    className="mt-1 h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="simplePrint" className="block text-sm font-medium text-gray-900 cursor-pointer">
+                      Impresión simple (sin fondos negros)
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Reemplaza los fondos negros (tipo de documento, total a pagar) por bordes simples con texto negro. Actívalo si tu impresora no muestra bien los fondos oscuros o el texto blanco desaparece.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

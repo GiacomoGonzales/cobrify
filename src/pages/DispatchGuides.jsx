@@ -112,6 +112,7 @@ export default function DispatchGuides() {
   const [voidGuideReason, setVoidGuideReason] = useState('ANULACION DE GUIA DE REMISION')
 
   const [printMargins, setPrintMargins] = useState(8)
+  const [simplePrint, setSimplePrint] = useState(false)
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -129,6 +130,7 @@ export default function DispatchGuides() {
         const result = await getPrinterConfig(getBusinessId())
         if (result.success && result.config) {
           setPrintMargins(result.config.printMargins ?? 8)
+          setSimplePrint(result.config.simplePrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1582,6 +1584,7 @@ export default function DispatchGuides() {
           companySettings={companySettings}
           paperWidth={80}
           printMargins={printMargins}
+          simplePrint={simplePrint}
         />
       )}
     </div>

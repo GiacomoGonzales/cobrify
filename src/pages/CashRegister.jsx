@@ -2844,6 +2844,7 @@ export default function CashRegister() {
             paperWidth={80}
             branchName={selectedBranch?.name || null}
             printMargins={printerConfig?.printMargins ?? 8}
+            simplePrint={printerConfig?.simplePrint || false}
           />
         </div>
       )}

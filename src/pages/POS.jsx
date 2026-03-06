@@ -404,6 +404,7 @@ export default function POS() {
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
+  const [simplePrint, setSimplePrint] = useState(false)
 
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
@@ -579,6 +580,7 @@ export default function POS() {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setPrintMargins(printerConfigResult.config.printMargins ?? 8)
+          setSimplePrint(printerConfigResult.config.simplePrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -6590,6 +6592,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             webPrintLegible={webPrintLegible}
             compactPrint={compactPrint}
             printMargins={printMargins}
+            simplePrint={simplePrint}
           />
         </div>
       )}

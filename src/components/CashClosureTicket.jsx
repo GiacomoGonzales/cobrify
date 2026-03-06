@@ -12,7 +12,8 @@ const CashClosureTicket = forwardRef(({
   companySettings,
   paperWidth = 80,
   branchName = null,
-  printMargins = 8
+  printMargins = 8,
+  simplePrint = false
 }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
@@ -211,8 +212,14 @@ const CashClosureTicket = forwardRef(({
           font-weight: 700;
           margin: 6px 0 4px 0;
           padding: 3px 6px;
+          ${simplePrint ? `
+          border-top: 2px solid #000;
+          border-bottom: 2px solid #000;
+          color: #000;
+          ` : `
           background: #000;
           color: #fff;
+          `}
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
@@ -292,25 +299,28 @@ const CashClosureTicket = forwardRef(({
           font-weight: 700;
           margin-top: 4px;
           padding: 4px 2px;
+          ${simplePrint ? `
+          border-top: 2px solid #000;
+          border-bottom: 2px solid #000;
+          color: #000;
+          ` : `
           background: #000;
           color: #fff;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
+          `}
         }
 
         .total-row.difference-positive {
-          background: #16a34a;
-          color: #fff;
+          ${simplePrint ? 'border-top: 2px solid #000; border-bottom: 2px solid #000; color: #000;' : 'background: #16a34a; color: #fff;'}
         }
 
         .total-row.difference-negative {
-          background: #dc2626;
-          color: #fff;
+          ${simplePrint ? 'border-top: 2px solid #000; border-bottom: 2px solid #000; color: #000;' : 'background: #dc2626; color: #fff;'}
         }
 
         .total-row.difference-zero {
-          background: #000;
-          color: #fff;
+          ${simplePrint ? 'border-top: 2px solid #000; border-bottom: 2px solid #000; color: #000;' : 'background: #000; color: #fff;'}
         }
 
         .separator {
