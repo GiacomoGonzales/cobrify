@@ -1122,31 +1122,44 @@ export default function POS() {
       const businessId = getBusinessId()
       console.log('🛒 POS loadInitialData - businessId:', businessId, '| user.uid:', user?.uid)
 
-      // Cargar productos
-      const productsResult = await getProducts(businessId)
+      // Cargar todo en paralelo para máxima velocidad
+      const [
+        productsResult,
+        customersResult,
+        settingsResult,
+        categoriesResult,
+        warehousesResult,
+        branchesResult,
+        sellersResult
+      ] = await Promise.all([
+        getProducts(businessId),
+        getCustomers(businessId),
+        getCompanySettings(businessId),
+        getProductCategories(businessId),
+        getWarehouses(businessId),
+        getActiveBranches(businessId),
+        getSellers(businessId)
+      ])
+
+      // Procesar productos
       console.log('🛒 POS getProducts resultado:', productsResult.success, '| cantidad:', productsResult.data?.length, '| error:', productsResult.error)
       if (productsResult.success) {
-        // Mostrar todos los productos (los sin stock se mostrarán deshabilitados)
         setProducts(productsResult.data || [])
       }
 
-      // Cargar clientes
-      const customersResult = await getCustomers(businessId)
+      // Procesar clientes
       if (customersResult.success) {
         setCustomers(customersResult.data || [])
       }
 
-      // Cargar configuración de empresa
-      const settingsResult = await getCompanySettings(businessId)
+      // Procesar configuración de empresa
       if (settingsResult.success && settingsResult.data) {
         const businessData = settingsResult.data
         setCompanySettings(businessData)
 
         // Pre-cargar logo en background para que esté listo al generar PDF
         if (businessData.logoUrl) {
-          preloadLogo(businessData.logoUrl).catch(() => {
-            // Ignorar errores de pre-carga, se intentará de nuevo al generar PDF
-          })
+          preloadLogo(businessData.logoUrl).catch(() => {})
         }
 
         // Establecer tipo de documento por defecto si está configurado y no hay borrador
@@ -1197,69 +1210,53 @@ export default function POS() {
         }
       }
 
-      // Cargar categorías
-      const categoriesResult = await getProductCategories(businessId)
+      // Procesar categorías
       if (categoriesResult.success) {
         const migratedCategories = migrateLegacyCategories(categoriesResult.data || [])
         setCategories(migratedCategories)
       }
 
-      // Cargar almacenes y seleccionar el default
+      // Procesar almacenes y seleccionar el default
       let warehouseList = []
-      const warehousesResult = await getWarehouses(businessId)
       if (warehousesResult.success) {
         const allWarehouses = warehousesResult.data || []
-        // Filtrar almacenes según permisos del usuario
         warehouseList = filterWarehousesByAccess(allWarehouses)
         setWarehouses(warehouseList)
       }
 
-      // Cargar sucursales adicionales (la principal es implícita y usa series globales)
-      const branchesResult = await getActiveBranches(businessId)
+      // Procesar sucursales
       if (branchesResult.success) {
         const allBranches = branchesResult.data || []
-        // Filtrar sucursales según permisos del usuario
         const branchList = filterBranchesByAccess(allBranches)
         setBranches(branchList)
 
-        // Verificar si el usuario tiene acceso a la Sucursal Principal
-        // Si allowedBranches tiene valores y NO incluye 'main', NO tiene acceso a la principal
         const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
 
         if (hasMainAccess) {
-          // Usuario tiene acceso a la principal
           setSelectedBranch(null)
-          // Seleccionar almacén por defecto de la sucursal principal
           const mainWarehouses = warehouseList.filter(w => w.isActive && !w.branchId)
           if (mainWarehouses.length > 0) {
             setSelectedWarehouse(mainWarehouses.find(w => w.isDefault) || mainWarehouses[0])
           } else if (warehouseList.length > 0) {
-            // Fallback: cualquier almacén disponible
             setSelectedWarehouse(warehouseList.find(w => w.isDefault) || warehouseList[0])
           }
         } else if (branchList.length > 0) {
-          // Usuario NO tiene acceso a la principal, seleccionar la primera sucursal permitida
           setSelectedBranch(branchList[0])
-          // También seleccionar el almacén de esa sucursal
           const branchWarehouses = warehouseList.filter(w => w.isActive && w.branchId === branchList[0].id)
           if (branchWarehouses.length > 0) {
             setSelectedWarehouse(branchWarehouses.find(w => w.isDefault) || branchWarehouses[0])
           }
         }
       } else {
-        // Si no hay sucursales, usar almacén por defecto
         if (warehouseList.length > 0) {
           setSelectedWarehouse(warehouseList.find(w => w.isDefault) || warehouseList[0])
         }
       }
 
-      // Cargar vendedores activos
-      const sellersResult = await getSellers(businessId)
+      // Procesar vendedores
       if (sellersResult.success) {
-        // Filtrar solo vendedores activos
         const activeSellers = (sellersResult.data || []).filter(s => s.status === 'active')
         setSellers(activeSellers)
-        // Auto-seleccionar vendedor asignado al sub-usuario
         if (assignedSellerId) {
           const assigned = activeSellers.find(s => s.id === assignedSellerId)
           if (assigned) setSelectedSeller(assigned)
