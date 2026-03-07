@@ -828,6 +828,87 @@ const ORDER_TYPES = [
   { id: 'delivery', label: 'Delivery', icon: Bike, color: 'orange' },
 ]
 
+// Modal de cuenta activa de la mesa
+function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddMore }) {
+  if (!isOpen || !activeTableOrder) return null
+
+  const color = business?.catalogColor || '#10B981'
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity duration-300"
+        onClick={onClose}
+      />
+      <div className="fixed inset-x-4 top-[10%] bottom-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md bg-white z-50 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-5 text-white rounded-t-2xl" style={{ backgroundColor: color }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <UtensilsCrossed className="w-5 h-5" />
+              <h2 className="text-lg font-bold">Tu cuenta</h2>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex items-center justify-between text-sm opacity-90">
+            <span>Mesa {activeTableOrder.items?.[0]?.tableNumber || ''} • Orden {activeTableOrder.orderNumber}</span>
+            {activeTableOrder.waiter && <span>Mozo: {activeTableOrder.waiter}</span>}
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Productos ordenados</p>
+          <div className="space-y-3">
+            {activeTableOrder.items.map((item, idx) => (
+              <div key={item.itemId || idx} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-gray-600">{item.quantity}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900 text-sm">{item.name}</span>
+                    {item.source === 'menu_digital' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium">QR</span>
+                    )}
+                  </div>
+                  {item.modifiers?.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {item.modifiers.map(m => m.options?.map(o => o.optionName).join(', ')).join(' • ')}
+                    </p>
+                  )}
+                  {item.notes && <p className="text-xs text-gray-400 mt-0.5">{item.notes}</p>}
+                </div>
+                <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+                  S/ {item.total?.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer con total y botón */}
+        <div className="p-5 border-t bg-gray-50">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-base font-bold text-gray-900">Total</span>
+            <span className="text-xl font-bold" style={{ color }}>S/ {activeTableOrder.total.toFixed(2)}</span>
+          </div>
+          <button
+            onClick={() => { onClose(); onAddMore() }}
+            className="w-full py-3.5 text-white rounded-xl font-semibold transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+            style={{ backgroundColor: color }}
+          >
+            <Plus className="w-5 h-5" />
+            Agregar más productos
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // Carrito lateral
 function CartDrawer({
   isOpen,
@@ -1265,56 +1346,13 @@ function CartDrawer({
             </button>
           </div>
 
-          {/* Resumen de orden activa en la mesa */}
-          {activeTableOrder && isRestaurantMenu && orderType === 'dine_in' && (
-            <div className="px-6 py-3 border-b bg-amber-50">
-              <div className="flex items-center gap-2 mb-2">
-                <UtensilsCrossed className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-semibold text-amber-800">
-                  Orden en mesa {initialTableNumber} {activeTableOrder.orderNumber && `• ${activeTableOrder.orderNumber}`}
-                </span>
-                {activeTableOrder.waiter && (
-                  <span className="text-xs text-amber-600 ml-auto">Mozo: {activeTableOrder.waiter}</span>
-                )}
-              </div>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {activeTableOrder.items.map((item, idx) => (
-                  <div key={item.itemId || idx} className="flex justify-between text-sm">
-                    <span className="text-gray-700">
-                      {item.quantity}x {item.name}
-                      {item.source === 'menu_digital' && (
-                        <span className="text-xs text-amber-500 ml-1">(QR)</span>
-                      )}
-                    </span>
-                    <span className="text-gray-600 font-medium">S/ {item.total?.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 pt-2 border-t border-amber-200">
-                <span className="text-sm font-semibold text-amber-800">Total actual</span>
-                <span className="text-sm font-bold text-amber-900">S/ {activeTableOrder.total.toFixed(2)}</span>
-              </div>
-              {cart.length === 0 && (
-                <p className="text-xs text-amber-600 mt-2 text-center">
-                  Agrega productos del menú para añadirlos a esta orden
-                </p>
-              )}
-            </div>
-          )}
-
           {/* Items */}
           <div className="flex-1 overflow-y-auto catalog-scrollbar p-6">
-            {cart.length === 0 && !activeTableOrder ? (
+            {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
-                <p className="text-lg">{isRestaurantMenu ? 'Tu pedido está vacío' : 'Tu carrito está vacío'}</p>
-                <p className="text-sm mt-1">Agrega productos para comenzar</p>
-              </div>
-            ) : cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
-                <p className="text-lg">¿Deseas agregar algo más?</p>
-                <p className="text-sm mt-1">Selecciona productos del menú</p>
+                <p className="text-lg">{isRestaurantMenu ? (activeTableOrder ? '¿Deseas agregar algo más?' : 'Tu pedido está vacío') : 'Tu carrito está vacío'}</p>
+                <p className="text-sm mt-1">{activeTableOrder ? 'Selecciona productos del menú' : 'Agrega productos para comenzar'}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1692,6 +1730,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Estado para mesa activa (orden existente del mozo)
   const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
   const [loadingTableOrder, setLoadingTableOrder] = useState(false)
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
 
   // Cargar datos del negocio y productos
   useEffect(() => {
@@ -2105,11 +2144,29 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       <style>{fadeInStyle}</style>
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
-        <div className="text-white py-2 px-4 text-center text-sm font-medium" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
-          <UtensilsCrossed className="w-4 h-4 inline mr-2" />
-          Mesa {tableFromUrl} {activeTableOrder
-            ? `- Orden activa ${activeTableOrder.orderNumber} • S/ ${activeTableOrder.total.toFixed(2)}`
-            : '- Haz tu pedido desde tu celular'}
+        <div className="text-white py-2.5 px-4" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
+          {activeTableOrder ? (
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+              <div className="flex items-center gap-2 min-w-0">
+                <UtensilsCrossed className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm font-medium truncate">
+                  Mesa {tableFromUrl} • Orden {activeTableOrder.orderNumber}
+                </span>
+              </div>
+              <button
+                onClick={() => setAccountModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full text-sm font-semibold transition-colors flex-shrink-0"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                Ver mi cuenta
+              </button>
+            </div>
+          ) : (
+            <div className="text-center text-sm font-medium">
+              <UtensilsCrossed className="w-4 h-4 inline mr-2" />
+              Mesa {tableFromUrl} - Haz tu pedido desde tu celular
+            </div>
+          )}
         </div>
       )}
 
@@ -2730,6 +2787,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             reloadOrder()
           }
         }}
+      />
+
+      {/* Modal de cuenta de la mesa */}
+      <TableAccountModal
+        isOpen={accountModalOpen}
+        onClose={() => setAccountModalOpen(false)}
+        activeTableOrder={activeTableOrder}
+        business={business}
+        onAddMore={() => {}}
       />
     </div>
   )
