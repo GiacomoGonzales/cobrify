@@ -839,7 +839,9 @@ function CartDrawer({
   onCheckout,
   showPrices = true,
   isRestaurantMenu = false,
-  tableNumber: initialTableNumber = ''
+  tableNumber: initialTableNumber = '',
+  activeTableOrder = null,
+  onOrderAdded = null,
 }) {
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
@@ -1032,6 +1034,63 @@ function CartDrawer({
         }]
       }
 
+      // Si hay orden activa en la mesa, agregar items a esa orden
+      if (activeTableOrder && orderType === 'dine_in') {
+        const orderRef = doc(db, 'businesses', business.id, 'orders', activeTableOrder.orderId)
+        const orderSnap = await getDoc(orderRef)
+
+        if (orderSnap.exists()) {
+          const existingData = orderSnap.data()
+          const existingItems = existingData.items || []
+
+          // Marcar items nuevos como provenientes del menú digital
+          const newItemsWithSource = items.map(item => ({
+            ...item,
+            source: 'menu_digital',
+          }))
+
+          const updatedItems = [...existingItems, ...newItemsWithSource]
+          const newTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
+
+          // Recalcular totales
+          let newSubtotal, newTax
+          if (igvExempt) {
+            newSubtotal = newTotal
+            newTax = 0
+          } else {
+            newSubtotal = newTotal / (1 + igvRate / 100)
+            newTax = newTotal - newSubtotal
+          }
+
+          await updateDoc(orderRef, {
+            items: updatedItems,
+            subtotal: newSubtotal,
+            tax: newTax,
+            total: newTotal,
+            updatedAt: serverTimestamp(),
+          })
+
+          // Actualizar monto de la mesa
+          if (activeTableOrder.tableId) {
+            const tableRef = doc(db, 'businesses', business.id, 'tables', activeTableOrder.tableId)
+            await updateDoc(tableRef, {
+              amount: newTotal,
+              updatedAt: serverTimestamp(),
+            })
+          }
+
+          setOrderNumber(activeTableOrder.orderNumber || orderNum)
+          setOrderConfirmItems([...cart])
+          setOrderSuccess(true)
+
+          // Limpiar carrito y recargar orden
+          cart.forEach(item => onRemove(item.cartItemId || item.id))
+          if (onOrderAdded) onOrderAdded()
+          return
+        }
+      }
+
+      // Si no hay orden activa, crear nueva orden
       const orderDoc = await addDoc(ordersRef, newOrder)
 
       // Si es pedido para mesa, ocupar la mesa automáticamente
@@ -1115,8 +1174,12 @@ function CartDrawer({
             <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: `${business?.catalogColor || '#10B981'}20` }}>
               <CheckCircle2 className="w-10 h-10" style={{ color: business?.catalogColor || '#10B981' }} />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Pedido enviado!</h2>
-            <p className="text-gray-600 mb-4">Tu pedido ha sido recibido</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {activeTableOrder && orderType === 'dine_in' ? '¡Agregado a tu orden!' : '¡Pedido enviado!'}
+            </h2>
+            <p className="text-gray-600 mb-4">
+              {activeTableOrder && orderType === 'dine_in' ? 'Los productos se agregaron a la orden de tu mesa' : 'Tu pedido ha sido recibido'}
+            </p>
             <div className="text-4xl font-bold mb-6" style={{ color: business?.catalogColor || '#10B981' }}>{orderNumber}</div>
             <p className="text-sm text-gray-500 mb-8">
               {orderType === 'dine_in'
@@ -1202,13 +1265,56 @@ function CartDrawer({
             </button>
           </div>
 
+          {/* Resumen de orden activa en la mesa */}
+          {activeTableOrder && isRestaurantMenu && orderType === 'dine_in' && (
+            <div className="px-6 py-3 border-b bg-amber-50">
+              <div className="flex items-center gap-2 mb-2">
+                <UtensilsCrossed className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">
+                  Orden en mesa {initialTableNumber} {activeTableOrder.orderNumber && `• ${activeTableOrder.orderNumber}`}
+                </span>
+                {activeTableOrder.waiter && (
+                  <span className="text-xs text-amber-600 ml-auto">Mozo: {activeTableOrder.waiter}</span>
+                )}
+              </div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {activeTableOrder.items.map((item, idx) => (
+                  <div key={item.itemId || idx} className="flex justify-between text-sm">
+                    <span className="text-gray-700">
+                      {item.quantity}x {item.name}
+                      {item.source === 'menu_digital' && (
+                        <span className="text-xs text-amber-500 ml-1">(QR)</span>
+                      )}
+                    </span>
+                    <span className="text-gray-600 font-medium">S/ {item.total?.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-amber-200">
+                <span className="text-sm font-semibold text-amber-800">Total actual</span>
+                <span className="text-sm font-bold text-amber-900">S/ {activeTableOrder.total.toFixed(2)}</span>
+              </div>
+              {cart.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2 text-center">
+                  Agrega productos del menú para añadirlos a esta orden
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Items */}
           <div className="flex-1 overflow-y-auto catalog-scrollbar p-6">
-            {cart.length === 0 ? (
+            {cart.length === 0 && !activeTableOrder ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-lg">{isRestaurantMenu ? 'Tu pedido está vacío' : 'Tu carrito está vacío'}</p>
                 <p className="text-sm mt-1">Agrega productos para comenzar</p>
+              </div>
+            ) : cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
+                <p className="text-lg">¿Deseas agregar algo más?</p>
+                <p className="text-sm mt-1">Selecciona productos del menú</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1440,12 +1546,12 @@ function CartDrawer({
                   {submitting ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Enviando...
+                      {activeTableOrder && orderType === 'dine_in' ? 'Agregando...' : 'Enviando...'}
                     </>
                   ) : (
                     <>
                       <UtensilsCrossed className="w-5 h-5" />
-                      Enviar pedido
+                      {activeTableOrder && orderType === 'dine_in' ? 'Agregar a la orden' : 'Enviar pedido'}
                     </>
                   )}
                 </button>
@@ -1583,6 +1689,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [cartOpen, setCartOpen] = useState(false)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
 
+  // Estado para mesa activa (orden existente del mozo)
+  const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
+  const [loadingTableOrder, setLoadingTableOrder] = useState(false)
+
   // Cargar datos del negocio y productos
   useEffect(() => {
     async function loadCatalog() {
@@ -1646,6 +1756,61 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       loadCatalog()
     }
   }, [slug, isDemo, isRestaurantMenu])
+
+  // Detectar mesa ocupada y cargar orden existente
+  useEffect(() => {
+    if (!business || !tableFromUrl || !isRestaurantMenu || isDemo) return
+
+    async function checkActiveTable() {
+      try {
+        setLoadingTableOrder(true)
+        const tablesRef = collection(db, 'businesses', business.id, 'tables')
+        const allTablesSnap = await getDocs(tablesRef)
+        const trimmedNumber = tableFromUrl.trim()
+
+        const matchedTableDoc = allTablesSnap.docs.find(d => {
+          const num = d.data().number
+          return String(num) === trimmedNumber
+        })
+
+        if (!matchedTableDoc) {
+          setActiveTableOrder(null)
+          return
+        }
+
+        const tableData = matchedTableDoc.data()
+
+        if (tableData.status === 'occupied' && tableData.currentOrder) {
+          // Mesa ocupada: cargar la orden existente
+          const orderRef = doc(db, 'businesses', business.id, 'orders', tableData.currentOrder)
+          const orderSnap = await getDoc(orderRef)
+
+          if (orderSnap.exists()) {
+            const orderData = orderSnap.data()
+            setActiveTableOrder({
+              orderId: orderSnap.id,
+              tableId: matchedTableDoc.id,
+              items: orderData.items || [],
+              total: orderData.total || 0,
+              orderNumber: orderData.orderNumber || '',
+              waiter: orderData.waiterName || tableData.waiter || '',
+            })
+          } else {
+            setActiveTableOrder(null)
+          }
+        } else {
+          setActiveTableOrder(null)
+        }
+      } catch (err) {
+        console.warn('Error checking active table:', err)
+        setActiveTableOrder(null)
+      } finally {
+        setLoadingTableOrder(false)
+      }
+    }
+
+    checkActiveTable()
+  }, [business, tableFromUrl, isRestaurantMenu, isDemo])
 
   // Actualizar título y favicon de la pestaña con datos del negocio
   useEffect(() => {
@@ -1942,7 +2107,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {isRestaurantMenu && tableFromUrl && (
         <div className="text-white py-2 px-4 text-center text-sm font-medium" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
           <UtensilsCrossed className="w-4 h-4 inline mr-2" />
-          Mesa {tableFromUrl} - Haz tu pedido desde tu celular
+          Mesa {tableFromUrl} {activeTableOrder
+            ? `- Orden activa ${activeTableOrder.orderNumber} • S/ ${activeTableOrder.total.toFixed(2)}`
+            : '- Haz tu pedido desde tu celular'}
         </div>
       )}
 
@@ -2532,6 +2699,37 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         showPrices={showPrices}
         isRestaurantMenu={isRestaurantMenu}
         tableNumber={tableFromUrl}
+        activeTableOrder={activeTableOrder}
+        onOrderAdded={() => {
+          // Recargar la orden activa después de agregar items
+          if (business && tableFromUrl) {
+            const reloadOrder = async () => {
+              try {
+                const tablesRef = collection(db, 'businesses', business.id, 'tables')
+                const allTablesSnap = await getDocs(tablesRef)
+                const matched = allTablesSnap.docs.find(d => String(d.data().number) === tableFromUrl.trim())
+                if (matched) {
+                  const td = matched.data()
+                  if (td.currentOrder) {
+                    const orderSnap = await getDoc(doc(db, 'businesses', business.id, 'orders', td.currentOrder))
+                    if (orderSnap.exists()) {
+                      const od = orderSnap.data()
+                      setActiveTableOrder({
+                        orderId: orderSnap.id,
+                        tableId: matched.id,
+                        items: od.items || [],
+                        total: od.total || 0,
+                        orderNumber: od.orderNumber || '',
+                        waiter: od.waiterName || td.waiter || '',
+                      })
+                    }
+                  }
+                }
+              } catch (e) { console.warn('Error reloading order:', e) }
+            }
+            reloadOrder()
+          }
+        }}
       />
     </div>
   )

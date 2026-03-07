@@ -359,10 +359,15 @@ service cloud.firestore {
                       && request.resource.data.orderType != null
                       && request.resource.data.items != null;
 
-        // Permitir actualización pública limitada desde carta digital (vincular tableId)
+        // Permitir lectura pública de órdenes cuando el negocio tiene catálogo habilitado
+        // Necesario para mostrar resumen de orden al cliente que escanea QR de mesa
+        allow get: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
+
+        // Permitir actualización pública limitada desde carta digital
+        // Solo campos permitidos: tableId, items, subtotal, tax, total, updatedAt
         allow update: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
-                      && resource.data.source == 'menu_digital'
-                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tableId']);
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['tableId', 'items', 'subtotal', 'tax', 'total', 'updatedAt']);
       }
 
       // Subcollection: Counters (Contadores - para números secuenciales)
