@@ -2428,39 +2428,42 @@ export default function Products() {
       {/* Search and Category Filter */}
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex gap-2 flex-1">
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
-                <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Buscar por código, nombre, categoría..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
-                />
-              </div>
-              {Capacitor.isNativePlatform() && (
-                <Button
-                  onClick={handleScanSearch}
-                  disabled={isScanningSearch}
-                  title="Escanear código de barras"
-                >
-                  {isScanningSearch ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <ScanBarcode className="w-4 h-4" />
-                  )}
-                </Button>
-              )}
+          {/* Fila 1: Búsqueda y escanear */}
+          <div className="flex gap-2">
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
+              <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Buscar por código, nombre, categoría..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+              />
             </div>
+            {Capacitor.isNativePlatform() && (
+              <Button
+                onClick={handleScanSearch}
+                disabled={isScanningSearch}
+                title="Escanear código de barras"
+              >
+                {isScanningSearch ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ScanBarcode className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+          </div>
 
+          {/* Fila 2: Filtros */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* Filtro de vencimiento */}
             {expiringProductsCount > 0 && (
               <Button
                 onClick={() => setShowExpiringOnly(!showExpiringOnly)}
                 variant={showExpiringOnly ? 'danger' : 'outline'}
                 className={showExpiringOnly ? '' : 'text-red-700 border-red-300 hover:bg-red-50'}
+                size="sm"
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 <span>Próximos a vencer</span>
@@ -2471,7 +2474,7 @@ export default function Products() {
             )}
           </div>
 
-          {/* Category Filter Chips */}
+          {/* Fila 3: Category Filter Chips */}
           {categories.length > 0 && (
             <div className="flex flex-wrap gap-2">
               <button
