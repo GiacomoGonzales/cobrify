@@ -669,7 +669,30 @@ Gracias por tu preferencia.`
           }
         }
 
-        toast.success('Nota de venta anulada y stock restaurado exitosamente')
+        // Revertir notas de venta si el comprobante fue convertido desde notas
+        if (voidingInvoice.convertedFrom) {
+          try {
+            const { doc, updateDoc, deleteField } = await import('firebase/firestore')
+            const { db } = await import('@/lib/firebase')
+
+            const notaIds = voidingInvoice.convertedFrom.ids
+              || (voidingInvoice.convertedFrom.id ? [voidingInvoice.convertedFrom.id] : [])
+
+            for (const notaId of notaIds) {
+              try {
+                const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
+                await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
+                console.log(`✅ Nota de venta ${notaId} revertida a no convertida`)
+              } catch (revertError) {
+                console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
+              }
+            }
+          } catch (error) {
+            console.warn('Error al revertir notas de venta:', error)
+          }
+        }
+
+        toast.success(`Nota de venta anulada y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
         setVoidingInvoice(null)
         setVoidReason('')
         loadInvoices()
@@ -818,11 +841,35 @@ Gracias por tu preferencia.`
           }
         }
 
+        // Revertir notas de venta si el comprobante fue convertido desde notas
+        if (voidingSunatInvoice.convertedFrom) {
+          try {
+            const { doc, updateDoc, deleteField } = await import('firebase/firestore')
+            const { db } = await import('@/lib/firebase')
+
+            // Soportar una o múltiples notas
+            const notaIds = voidingSunatInvoice.convertedFrom.ids
+              || (voidingSunatInvoice.convertedFrom.id ? [voidingSunatInvoice.convertedFrom.id] : [])
+
+            for (const notaId of notaIds) {
+              try {
+                const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
+                await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
+                console.log(`✅ Nota de venta ${notaId} revertida a no convertida`)
+              } catch (revertError) {
+                console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
+              }
+            }
+          } catch (error) {
+            console.warn('Error al revertir notas de venta:', error)
+          }
+        }
+
         // Mensaje específico según tipo de documento
         if (voidingSunatInvoice.documentType === 'nota_credito') {
           toast.success(`Nota de Crédito anulada exitosamente. La factura ${voidingSunatInvoice.referencedDocumentId || 'original'} ha sido restaurada.`)
         } else {
-          toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
+          toast.success(`${docTypeName} anulada exitosamente en SUNAT.${voidingSunatInvoice.convertedFrom ? ' Notas de venta revertidas.' : ''} Stock restaurado.`)
         }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
