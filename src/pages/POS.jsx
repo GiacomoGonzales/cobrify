@@ -330,8 +330,9 @@ export default function POS() {
   // Estado para cotización (para marcar como convertida al completar)
   const [pendingQuotationId, setPendingQuotationId] = useState(null)
 
-  // Estado para nota de venta (para marcar como convertida y skip stock al completar)
-  const [pendingNotaVentaId, setPendingNotaVentaId] = useState(null)
+  // Estado para nota(s) de venta (para marcar como convertida(s) y skip stock al completar)
+  // Puede ser un string (una nota) o un array (múltiples notas)
+  const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
 
   // Cash register check
   const [cashRegisterOpen, setCashRegisterOpen] = useState(true)
@@ -738,9 +739,13 @@ export default function POS() {
       // Marcar como cargado para evitar duplicados
       notaVentaLoadedRef.current = true
 
-      // Guardar info de la nota de venta para marcar como convertida al completar
-      if (notaVentaInfo.notaVentaId) {
-        setPendingNotaVentaId(notaVentaInfo.notaVentaId)
+      // Guardar info de la(s) nota(s) de venta para marcar como convertida(s) al completar
+      if (notaVentaInfo.notaVentaIds) {
+        // Múltiples notas de venta
+        setPendingNotaVentaIds(notaVentaInfo.notaVentaIds)
+      } else if (notaVentaInfo.notaVentaId) {
+        // Una sola nota de venta (compatibilidad)
+        setPendingNotaVentaIds([notaVentaInfo.notaVentaId])
       }
 
       // Cargar items de la nota de venta al carrito
@@ -2990,13 +2995,12 @@ export default function POS() {
             netPayable: Number((amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
           }),
         }),
-        // Si viene de una nota de venta, marcar para no descontar stock de nuevo
-        ...(pendingNotaVentaId && {
+        // Si viene de nota(s) de venta, marcar para no descontar stock de nuevo
+        ...(pendingNotaVentaIds && pendingNotaVentaIds.length > 0 && {
           skipStockDeduction: true,
-          convertedFrom: {
-            type: 'nota_venta',
-            id: pendingNotaVentaId,
-          },
+          convertedFrom: pendingNotaVentaIds.length === 1
+            ? { type: 'nota_venta', id: pendingNotaVentaIds[0] }
+            : { type: 'nota_venta', ids: pendingNotaVentaIds },
         }),
       }
 
@@ -3146,7 +3150,7 @@ export default function POS() {
 
       // 4. Actualizar stock de productos por almacén (con FEFO para farmacias)
       // NOTA: En modo edición o conversión de nota de venta NO actualizamos stock (ya fue descontado)
-      if (!isEditMode && !pendingNotaVentaId) {
+      if (!isEditMode && !(pendingNotaVentaIds && pendingNotaVentaIds.length > 0)) {
       const stockUpdates = cart
         .filter(item => !item.isCustom) // Excluir solo productos personalizados
         .map(async item => {
@@ -3300,7 +3304,7 @@ export default function POS() {
           console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
         }
       }
-      } // Fin del if (!isEditMode && !pendingNotaVentaId) - No actualizar stock en edición o conversión de nota de venta
+      } // Fin del if (!isEditMode && !pendingNotaVentaIds) - No actualizar stock en edición o conversión de nota de venta
 
       // 5. Actualizar métricas del mozo (si la venta fue atendida por un mozo)
       if (tableData?.waiterId) {
@@ -3416,25 +3420,25 @@ export default function POS() {
         }
       }
 
-      // 6.3. Si viene de una nota de venta, marcar como convertida
-      if (pendingNotaVentaId) {
+      // 6.3. Si viene de nota(s) de venta, marcar como convertida(s)
+      if (pendingNotaVentaIds && pendingNotaVentaIds.length > 0) {
         try {
-          const markConvertedResult = await markNotaVentaAsConverted(
-            businessId,
-            pendingNotaVentaId,
-            documentType,
-            invoiceId,
-            numberResult.number
+          const markPromises = pendingNotaVentaIds.map(notaId =>
+            markNotaVentaAsConverted(
+              businessId,
+              notaId,
+              documentType,
+              invoiceId,
+              numberResult.number
+            )
           )
-          if (markConvertedResult.success) {
-            console.log('✅ Nota de venta marcada como convertida:', pendingNotaVentaId)
-          } else {
-            console.warn('⚠️ No se pudo marcar la nota de venta como convertida:', markConvertedResult.error)
-          }
+          const results = await Promise.all(markPromises)
+          const successCount = results.filter(r => r.success).length
+          console.log(`✅ ${successCount}/${pendingNotaVentaIds.length} nota(s) de venta marcada(s) como convertida(s)`)
         } catch (error) {
-          console.error('Error al marcar nota de venta como convertida:', error)
+          console.error('Error al marcar notas de venta como convertidas:', error)
         } finally {
-          setPendingNotaVentaId(null)
+          setPendingNotaVentaIds(null)
         }
       }
 

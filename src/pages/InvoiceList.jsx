@@ -904,6 +904,63 @@ Gracias por tu preferencia.`
     })
   }
 
+  // Convertir múltiples notas de venta en un solo comprobante
+  const handleBulkConvertNotasVenta = () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
+
+    // Validar que todas sean notas de venta no convertidas y no anuladas
+    const validNotas = selectedInvoices.filter(
+      inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
+    )
+
+    if (validNotas.length === 0) {
+      toast.error('No hay notas de venta válidas para convertir')
+      return
+    }
+
+    if (validNotas.length !== selectedInvoices.length) {
+      toast.error('Algunas selecciones no son notas de venta convertibles. Selecciona solo notas de venta no convertidas.')
+      return
+    }
+
+    // Combinar items de todas las notas
+    const allItems = validNotas.flatMap(nota => nota.items || [])
+
+    // Usar el cliente de la primera nota (o null si no hay)
+    const firstCustomer = validNotas.find(n => n.customer)?.customer || null
+
+    // Combinar notas
+    const allNotes = validNotas
+      .map(n => n.notes)
+      .filter(Boolean)
+      .join(' | ')
+
+    // Números de las notas para referencia
+    const notaNumbers = validNotas.map(n => n.number).join(', ')
+
+    clearSelection()
+
+    appNavigate('pos', {
+      state: {
+        fromNotaVenta: true,
+        notaVentaIds: validNotas.map(n => n.id),
+        notaVentaNumber: notaNumbers,
+        items: allItems,
+        customer: firstCustomer,
+        paymentMethod: 'Efectivo',
+        payments: null,
+        notes: allNotes ? `Notas: ${notaNumbers}. ${allNotes}` : `Notas: ${notaNumbers}`,
+        discount: 0,
+        discountPercentage: 0,
+      }
+    })
+  }
+
   const handleRegisterPayment = async () => {
     if (!paymentInvoice || !user?.uid) return
     if (isDemoMode) {
@@ -2087,12 +2144,26 @@ Gracias por tu preferencia.`
       )}
 
       {/* Barra flotante de acciones masivas */}
-      {selectedInvoiceIds.size > 0 && (
+      {selectedInvoiceIds.size > 0 && (() => {
+        const selectedInvs = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
+        const allAreConvertibleNotas = selectedInvs.length > 0 && selectedInvs.every(
+          inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
+        )
+        return (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-4 print:hidden">
           <span className="text-sm font-medium whitespace-nowrap">
             {selectedInvoiceIds.size} seleccionado{selectedInvoiceIds.size !== 1 ? 's' : ''}
           </span>
           <div className="w-px h-6 bg-gray-600" />
+          {allAreConvertibleNotas && (
+            <Button
+              onClick={handleBulkConvertNotasVenta}
+              className="bg-green-500 text-white hover:bg-green-600 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+            >
+              <Receipt className="w-4 h-4" />
+              Convertir a Comprobante
+            </Button>
+          )}
           <Button
             onClick={handleBulkPrintTickets}
             disabled={isBulkPrinting || isBulkDownloadingPDF}
@@ -2136,7 +2207,8 @@ Gracias por tu preferencia.`
             <XCircle className="w-5 h-5" />
           </button>
         </div>
-      )}
+        )
+      })()}
 
       {/* Dropdown Menu (fuera de la tabla, con position fixed) */}
       {openMenuId && (
