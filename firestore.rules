@@ -187,6 +187,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // CollectionGroup: FCM Tokens (para que admins puedan hacer collectionGroup query)
+    match /{path=**}/fcmTokens/{tokenId} {
+      allow read: if isAdmin();
+    }
+
     // Notifications collection
     match /notifications/{notificationId} {
       // Users can only read/write their own notifications
