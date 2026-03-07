@@ -3,6 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getMessaging } from 'firebase-admin/messaging'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
 import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision, emitirGuiaRemisionTransportista } from './src/services/emissionRouter.js'
@@ -18,6 +19,7 @@ initializeApp()
 const db = getFirestore()
 const auth = getAuth()
 const storage = getStorage()
+const messaging = getMessaging()
 
 /**
  * Guarda un archivo XML/CDR en Firebase Storage
@@ -7511,7 +7513,7 @@ export const calculateGlobalBillingStats = onCall(
 
     // Verificar que es un admin (buscar en colección 'admins')
     const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists()) {
+    if (!adminDoc.exists) {
       throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
@@ -8105,7 +8107,7 @@ export const sendBulkPushNotifications = onCall(
 
     // Verificar que es admin
     const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists()) {
+    if (!adminDoc.exists) {
       throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
@@ -8121,7 +8123,7 @@ export const sendBulkPushNotifications = onCall(
       const campaignRef = db.collection('pushCampaigns').doc(campaignId)
       const campaignDoc = await campaignRef.get()
 
-      if (!campaignDoc.exists()) {
+      if (!campaignDoc.exists) {
         throw new HttpsError('not-found', 'Campaña no encontrada')
       }
 
@@ -8249,7 +8251,7 @@ export const sendBulkPushNotifications = onCall(
         }
 
         try {
-          const response = await admin.messaging().sendEachForMulticast(message)
+          const response = await messaging.sendEachForMulticast(message)
           totalSuccess += response.successCount
           totalFailure += response.failureCount
 
