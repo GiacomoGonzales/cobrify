@@ -103,6 +103,7 @@ export default function InvoiceList() {
   const [filterSeller, setFilterSeller] = useState('all')
   const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
+  const [filterConversion, setFilterConversion] = useState('all') // 'all', 'converted', 'not_converted'
   const [branches, setBranches] = useState([])
   const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
@@ -1436,7 +1437,17 @@ Gracias por tu preferencia.`
         }
       }
 
-      return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesBranch && matchesPayment
+      // Filtrar por conversión (notas de venta)
+      let matchesConversion = true
+      if (filterConversion !== 'all') {
+        if (filterConversion === 'converted') {
+          matchesConversion = !!invoice.convertedTo
+        } else if (filterConversion === 'not_converted') {
+          matchesConversion = !invoice.convertedTo && invoice.documentType === 'nota_venta' && invoice.status !== 'cancelled'
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesBranch && matchesPayment && matchesConversion
     })
 
   // Apply pagination
@@ -1463,7 +1474,7 @@ Gracias por tu preferencia.`
   useEffect(() => {
     setVisibleInvoicesCount(20)
     setSelectedInvoiceIds(new Set())
-  }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, dateFilter, filterStartDate, filterEndDate])
+  }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, filterConversion, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = (status, documentType) => {
     // Para Notas de Crédito y Notas de Débito, usar estados específicos
@@ -1827,10 +1838,20 @@ Gracias por tu preferencia.`
               <option value="PedidosYa">PedidosYa</option>
               <option value="DiDiFood">DiDiFood</option>
             </select>
+            {/* Filtro de conversión */}
+            <select
+              value={filterConversion}
+              onChange={e => setFilterConversion(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+            >
+              <option value="all">Conversión: Todas</option>
+              <option value="converted">Notas convertidas</option>
+              <option value="not_converted">Notas sin convertir</option>
+            </select>
           </div>
 
           {/* Botón limpiar filtros */}
-          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || filterPaymentMethod !== 'all' || dateFilter !== 'all') && (
+          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || filterPaymentMethod !== 'all' || filterConversion !== 'all' || dateFilter !== 'all') && (
             <div className="flex justify-end">
               <button
                 onClick={() => {
@@ -1842,6 +1863,7 @@ Gracias por tu preferencia.`
                   setFilterSeller('all')
                   setFilterBranch('all')
                   setFilterPaymentMethod('all')
+                  setFilterConversion('all')
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
