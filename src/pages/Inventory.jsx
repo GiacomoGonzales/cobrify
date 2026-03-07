@@ -1611,37 +1611,35 @@ export default function Inventory() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
-            {/* Search */}
-            <div className="flex-1 min-w-0">
-              <div className="flex gap-2">
-                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
-                  <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por código, nombre o categoría..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
-                  />
-                </div>
-                <Button
-                  onClick={handleScanBarcode}
-                  disabled={isScanning}
-                  size="sm"
-                  title="Escanear código de barras"
-                >
-                  {isScanning ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ScanBarcode className="w-5 h-5" />
-                  )}
-                </Button>
+          <div className="space-y-3">
+            {/* Fila 1: Búsqueda */}
+            <div className="flex gap-2">
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
+                <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Buscar por código, nombre o categoría..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                />
               </div>
+              <Button
+                onClick={handleScanBarcode}
+                disabled={isScanning}
+                size="sm"
+                title="Escanear código de barras"
+              >
+                {isScanning ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ScanBarcode className="w-5 h-5" />
+                )}
+              </Button>
             </div>
 
-            {/* Filters Group */}
-            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-3 lg:gap-4 sm:flex-wrap">
+            {/* Fila 2: Filtros */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-3 sm:flex-wrap">
               {/* Category Multi-Select Filter */}
               <div className="relative">
                 <button
