@@ -2144,7 +2144,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       <style>{fadeInStyle}</style>
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
-        <div className="text-white py-2.5 px-4" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
+        <div className="text-white py-2.5 px-4 sticky top-0 z-50" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
           {activeTableOrder ? (
             <div className="flex items-center justify-between max-w-7xl mx-auto">
               <div className="flex items-center gap-2 min-w-0">
@@ -2171,7 +2171,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       )}
 
       {/* Header */}
-      <header className={`${isDark ? 'bg-gray-900 shadow-gray-800/50' : 'bg-white'} shadow-sm sticky top-0 z-40`}>
+      <header className={`${isDark ? 'bg-gray-900 shadow-gray-800/50' : 'bg-white'} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre */}
