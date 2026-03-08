@@ -42,6 +42,8 @@ export default function CarrierDispatchGuides() {
   const [companySettings, setCompanySettings] = useState(null)
   const [selectedGuide, setSelectedGuide] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Estado para editar número de guía rechazada
   const [editingGuide, setEditingGuide] = useState(null)
@@ -299,6 +301,14 @@ export default function CarrierDispatchGuides() {
       guide.shipper?.businessName?.toLowerCase().includes(search)
   })
 
+  const displayedGuides = filteredGuides.slice(0, visibleCount)
+  const hasMore = filteredGuides.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm])
+
   // Estadísticas
   const stats = {
     total: filteredGuides.length,
@@ -494,7 +504,7 @@ export default function CarrierDispatchGuides() {
             <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredGuides.map((guide) => (
+              {displayedGuides.map((guide) => (
                 <div key={guide.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                   {/* Fila 1: Número + fecha + acciones */}
                   <div className="flex items-center justify-between">
@@ -577,7 +587,7 @@ export default function CarrierDispatchGuides() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredGuides.map((guide) => (
+                  {displayedGuides.map((guide) => (
                     <tr key={guide.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -646,6 +656,18 @@ export default function CarrierDispatchGuides() {
           )}
         </CardContent>
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más guías ({filteredGuides.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Dropdown Menu (fuera del contenedor, con position fixed) */}
       {openMenuId && (

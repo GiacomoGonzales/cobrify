@@ -168,6 +168,8 @@ export default function Expenses() {
   // Mobile menu states
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Form state
   const [form, setForm] = useState({
@@ -276,6 +278,13 @@ export default function Expenses() {
 
     return result
   }, [expenses, searchTerm, categoryFilter, paymentMethodFilter, branchFilter, sortField, sortDirection])
+
+  const displayedExpenses = filteredExpenses.slice(0, visibleCount)
+  const hasMore = filteredExpenses.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, categoryFilter, paymentMethodFilter, branchFilter, sortField, sortDirection])
 
   // Helper para obtener nombre de sucursal
   const getBranchName = (branchId) => {
@@ -644,7 +653,7 @@ export default function Expenses() {
           </div>
         ) : (
           <>
-            {filteredExpenses.map(expense => {
+            {displayedExpenses.map(expense => {
               const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
               const categoryColor = CATEGORY_COLORS[expense.category] || CATEGORY_COLORS.otros
               return (
@@ -807,7 +816,7 @@ export default function Expenses() {
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map(expense => {
+                displayedExpenses.map(expense => {
                   const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
                   const categoryColor = CATEGORY_COLORS[expense.category] || CATEGORY_COLORS.otros
 
@@ -886,6 +895,18 @@ export default function Expenses() {
           </table>
         </div>
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más gastos ({filteredExpenses.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       {showModal && createPortal(

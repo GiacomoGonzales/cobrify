@@ -28,7 +28,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import {
@@ -158,6 +158,11 @@ export default function Reports() {
     loadBranches()
   }, [user])
 
+  // Recargar datos cuando cambia el rango de fecha
+  useEffect(() => {
+    if (user?.uid) loadData()
+  }, [dateRange, customStartDate, customEndDate])
+
   // Cargar sucursales para filtro
   const loadBranches = async () => {
     if (!user?.uid || isDemoMode) return
@@ -188,8 +193,35 @@ export default function Reports() {
         return
       }
 
+      // Optimización: cargar facturas según rango de fecha seleccionado
+      let invoicesFetcher
+      if (dateRange === 'all') {
+        invoicesFetcher = getInvoices(getBusinessId())
+      } else {
+        // Calcular fecha de inicio según el rango (con margen extra para comparativa)
+        const sinceDate = new Date()
+        switch (dateRange) {
+          case 'week': sinceDate.setDate(sinceDate.getDate() - 21); break // 3 semanas para comparativa
+          case 'month': sinceDate.setMonth(sinceDate.getMonth() - 2); break // 2 meses para comparativa
+          case 'quarter': sinceDate.setMonth(sinceDate.getMonth() - 6); break
+          case 'year': sinceDate.setFullYear(sinceDate.getFullYear() - 2); break
+          case 'custom':
+            if (customStartDate) {
+              const cs = new Date(customStartDate + 'T00:00:00')
+              const duration = customEndDate ? new Date(customEndDate + 'T23:59:59') - cs : 0
+              sinceDate.setTime(cs.getTime() - duration - 86400000) // extra for comparison
+            } else {
+              sinceDate.setMonth(sinceDate.getMonth() - 2)
+            }
+            break
+          default: sinceDate.setMonth(sinceDate.getMonth() - 2)
+        }
+        sinceDate.setHours(0, 0, 0, 0)
+        invoicesFetcher = getRecentInvoices(getBusinessId(), sinceDate)
+      }
+
       const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult] = await Promise.all([
-        getInvoices(getBusinessId()),
+        invoicesFetcher,
         getCustomersWithStats(getBusinessId()),
         getProducts(getBusinessId()),
         getRecipes(getBusinessId()),

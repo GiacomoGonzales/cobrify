@@ -3051,7 +3051,7 @@ export default function POS() {
       // isEditMode ya está definido arriba
 
       if (isEditMode) {
-        // MODO EDICIÓN: Actualizar documento existente
+        // MODO EDICIÓN: Actualizar documento existente (sincrónico - no es venta frecuente)
         console.log('📝 Actualizando documento existente:', editingInvoiceId)
 
         const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
@@ -3085,384 +3085,358 @@ export default function POS() {
         setEditingInvoiceData(null)
         editInvoiceLoadedRef.current = false
 
+        // Auto-imprimir en modo edición
+        if (companySettings?.autoPrintTicket) {
+          setTimeout(() => handlePrintTicket(invoiceData), 500)
+        }
+
       } else {
-        // MODO NORMAL: Crear nuevo documento
-        const result = await createInvoice(businessId, invoiceData)
-        if (!result.success) {
-          throw new Error(result.error || 'Error al crear la factura')
-        }
-        invoiceId = result.id
-      }
+        // ========================================
+        // MODO NORMAL: Venta rápida (print-first)
+        // Primero: mostrar éxito + imprimir ticket
+        // Después: guardar en Firestore en background
+        // ========================================
 
-      // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget (no bloquea)
-      const shouldAutoSend = companySettings?.autoSendToSunat === true
-      const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
+        // INMEDIATO: Mostrar éxito y preparar impresión
+        const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
+        toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
-      // Verificar si el envío está pausado globalmente para restaurantes con IGV reducido (solo facturas, boletas se envían normalmente)
-      let isPausedByAdmin = false
-      if (shouldAutoSend && documentType === 'factura') {
-        try {
-          const { doc: docRef, getDoc: getDocSnap } = await import('firebase/firestore')
-          const { db: fireDb } = await import('@/lib/firebase')
-          const adminSettingsSnap = await getDocSnap(docRef(fireDb, 'config', 'adminSettings'))
-          if (adminSettingsSnap.exists()) {
-            const adminConfig = adminSettingsSnap.data()
-            const isReducedIgv = taxConfig.taxType === 'reduced' || taxConfig.igvRate === 10.5
-            if (adminConfig.system?.pauseSunatRestaurants && isReducedIgv) {
-              isPausedByAdmin = true
-              console.log('⏸️ Envío de factura a SUNAT pausado por admin (restaurantes IGV reducido)')
-              toast.warning('Envío de facturas a SUNAT pausado temporalmente por el administrador. La factura queda pendiente.', 6000)
-            }
-          }
-        } catch (adminCheckError) {
-          console.warn('No se pudo verificar config admin:', adminCheckError)
-        }
-      }
+        setLastInvoiceNumber(numberResult.number)
+        setLastInvoiceData(invoiceData)
+        setSaleCompleted(true)
 
-      if (shouldAutoSend && canSendToSunat && !isPausedByAdmin) {
-        console.log('🚀 Enviando automáticamente a SUNAT (background)...')
-        toast.info('Enviando a SUNAT en segundo plano...', 3000)
-
-        // Fire & Forget: No esperamos la respuesta para no bloquear la UI
-        sendInvoiceToSunat(businessId, invoiceId)
-          .then(() => {
-            console.log('✅ Comprobante enviado a SUNAT exitosamente')
-            toast.success('✅ Comprobante aceptado por SUNAT', 4000)
-          })
-          .catch((sunatError) => {
-            console.error('❌ Error al enviar a SUNAT:', sunatError)
-            toast.warning('Error al enviar a SUNAT. Reenvía desde Ventas.', 5000)
-          })
-      }
-
-      // 3.2. Guardar cliente automáticamente (si tiene documento válido)
-      try {
-        const customerResult = await upsertCustomerFromSale(businessId, customerData)
-        if (customerResult.created) {
-          console.log('✅ Cliente guardado automáticamente:', customerData.documentNumber)
-        } else if (customerResult.updated) {
-          console.log('✅ Cliente actualizado:', customerData.documentNumber)
-        }
-      } catch (customerError) {
-        // No interrumpir la venta si falla el guardado del cliente
-        console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
-      }
-
-      // 4. Actualizar stock de productos por almacén (con FEFO para farmacias)
-      // NOTA: En modo edición o conversión de nota de venta NO actualizamos stock (ya fue descontado)
-      if (!isEditMode && !(pendingNotaVentaIds && pendingNotaVentaIds.length > 0)) {
-      const stockUpdates = cart
-        .filter(item => !item.isCustom) // Excluir solo productos personalizados
-        .map(async item => {
-          const productData = products.find(p => p.id === item.id)
-          if (!productData) return
-
-          // Solo actualizar si el producto maneja stock
-          // NO actualizar si:
-          // - trackStock === false (explícitamente sin control de stock)
-          // - stock === null (producto sin control de inventario)
-          if (productData.trackStock === false || productData.stock === null) return
-
-          // Actualizar stock usando el helper de almacén
-          // Si tiene presentación, multiplicar por el factor
-          const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
-          const updatedProduct = updateWarehouseStock(
-            productData,
-            selectedWarehouse?.id || '',
-            -quantityToDeduct // Negativo porque es una salida
-          )
-
-          const updates = {
-            stock: updatedProduct.stock,
-            warehouseStocks: updatedProduct.warehouseStocks
-          }
-
-          // FEFO: Si el producto tiene lotes, descontar del más próximo a vencer
-          if (productData.batches && productData.batches.length > 0) {
-            let remainingToDeduct = item.quantity
-            const updatedBatches = [...productData.batches]
-
-            // Ordenar lotes por fecha de vencimiento (FEFO - primero el que vence antes)
-            updatedBatches.sort((a, b) => {
-              if (!a.expirationDate) return 1
-              if (!b.expirationDate) return -1
-              const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-              const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
-              return dateA - dateB
-            })
-
-            // Descontar de cada lote en orden FEFO
-            for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
-              const batch = updatedBatches[i]
-              if (batch.quantity > 0) {
-                const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
-                updatedBatches[i] = {
-                  ...batch,
-                  quantity: batch.quantity - deductFromBatch
-                }
-                remainingToDeduct -= deductFromBatch
+        // INMEDIATO: Actualizar stock localmente (sin esperar Firestore)
+        setProducts(prev => prev.map(product => {
+          const cartItem = cart.find(ci => ci.id === product.id || ci.productId === product.id)
+          if (!cartItem) return product
+          if (product.hasVariants && product.variants?.length > 0) {
+            const updatedVariants = product.variants.map(v => {
+              if (v.sku === cartItem.variantSku || v.name === cartItem.variantName) {
+                return { ...v, stock: Math.max(0, (v.stock || 0) - cartItem.quantity) }
               }
-            }
-
-            updates.batches = updatedBatches
-
-            // Recalcular el vencimiento más próximo de lotes con stock > 0
-            const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
-            if (activeBatches.length > 0) {
-              activeBatches.sort((a, b) => {
-                const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-                const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
-                return dateA - dateB
-              })
-              const nearestBatch = activeBatches[0]
-              updates.expirationDate = nearestBatch.expirationDate
-              updates.batchNumber = nearestBatch.batchNumber
-            } else {
-              // No hay lotes activos, limpiar vencimiento
-              updates.expirationDate = null
-              updates.batchNumber = null
-            }
+              return v
+            })
+            return { ...product, variants: updatedVariants }
           }
-
-          // Guardar en Firestore
-          return updateProduct(businessId, item.id, updates)
-        })
-
-      await Promise.all(stockUpdates)
-
-      // 4.1. Registrar movimientos de stock para historial
-      const itemsForMovement = cart.filter(item => {
-        if (item.isCustom) return false
-        const productData = products.find(p => p.id === item.id)
-        if (!productData) {
-          console.log('📦 [StockMovement] Producto no encontrado:', item.id)
-          return false
-        }
-        if (productData.trackStock === false) {
-          console.log('📦 [StockMovement] Producto sin control de stock:', item.name)
-          return false
-        }
-        if (productData.stock === null) {
-          console.log('📦 [StockMovement] Producto con stock null (servicio):', item.name)
-          return false
-        }
-        return true
-      })
-
-      console.log('📦 [StockMovement] Items para registrar movimiento:', itemsForMovement.length)
-
-      for (const item of itemsForMovement) {
-        try {
-          // Si tiene presentación, multiplicar por el factor
-          const quantityForMovement = item.quantity * (item.presentationFactor || 1)
-          const movementResult = await createStockMovement(businessId, {
-            productId: item.id,
-            warehouseId: selectedWarehouse?.id || '',
-            type: 'sale',
-            quantity: -quantityForMovement,
-            reason: 'Venta',
-            referenceType: 'invoice',
-            referenceId: invoiceId || '',
-            userId: user?.uid,
-            notes: item.presentationName
-              ? `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'} - ${item.quantity} ${item.presentationName}`
-              : `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
-          })
-          console.log('📦 [StockMovement] Movimiento creado para:', item.name, movementResult)
-        } catch (err) {
-          console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
-        }
-      }
-
-      // 4.5. Descontar ingredientes del inventario (para restaurantes)
-      // Procesar cada producto del carrito y descontar sus ingredientes si tiene receta
-      for (const item of cart) {
-        if (item.isCustom) continue // Saltar productos personalizados
-
-        try {
-          const recipeResult = await getRecipeByProductId(businessId, item.id)
-
-          if (recipeResult.success && recipeResult.data) {
-            const recipe = recipeResult.data
-
-            // Calcular ingredientes necesarios para la cantidad vendida
-            const ingredientsToDeduct = recipe.ingredients.map(ing => ({
-              ...ing,
-              quantity: ing.quantity * item.quantity // Multiplicar por cantidad vendida
-            }))
-
-            // Descontar ingredientes del stock
-            await deductIngredients(
-              businessId,
-              ingredientsToDeduct,
-              invoiceId,
-              item.name
-            )
+          if (product.stock != null) {
+            return { ...product, stock: Math.max(0, product.stock - cartItem.quantity) }
           }
-        } catch (error) {
-          // No bloquear la venta si falla el descuento de ingredientes
-          console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
+          return product
+        }))
+
+        // INMEDIATO: Limpiar borrador
+        clearDraft()
+
+        // INMEDIATO: Auto-imprimir ticket (sin esperar guardado)
+        if (companySettings?.autoPrintTicket) {
+          setTimeout(() => handlePrintTicket(invoiceData), 100)
         }
-      }
-      } // Fin del if (!isEditMode && !pendingNotaVentaIds) - No actualizar stock en edición o conversión de nota de venta
 
-      // 5. Actualizar métricas del mozo (si la venta fue atendida por un mozo)
-      if (tableData?.waiterId) {
-        try {
-          const { increment } = await import('firebase/firestore')
-          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
-          const { db } = await import('@/lib/firebase')
-
-          const waiterRef = doc(db, 'businesses', businessId, 'waiters', tableData.waiterId)
-          await updateDoc(waiterRef, {
-            todaySales: increment(amounts.total),
-            todayOrders: increment(1),
-            totalSales: increment(amounts.total),
-            totalOrders: increment(1),
-            updatedAt: serverTimestamp(),
-          }).catch(err => {
-            console.warn('No se pudo actualizar métricas del mozo:', err)
-            // No fallar si no se puede actualizar las métricas
-          })
-        } catch (error) {
-          console.warn('Error al actualizar métricas del mozo:', error)
-        }
-      }
-
-      // 5.1. Actualizar métricas del vendedor seleccionado
-      if (selectedSeller?.id) {
-        try {
-          const { increment } = await import('firebase/firestore')
-          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
-          const { db } = await import('@/lib/firebase')
-
-          const sellerRef = doc(db, 'businesses', businessId, 'sellers', selectedSeller.id)
-          await updateDoc(sellerRef, {
-            todaySales: increment(amounts.total),
-            todayOrders: increment(1),
-            totalSales: increment(amounts.total),
-            totalOrders: increment(1),
-            updatedAt: serverTimestamp(),
-          }).catch(err => {
-            console.warn('No se pudo actualizar métricas del vendedor:', err)
-            // No fallar si no se puede actualizar las métricas
-          })
-        } catch (error) {
-          console.warn('Error al actualizar métricas del vendedor:', error)
-        }
-      }
-
-      // 6. Si viene de una mesa, liberar la mesa o actualizar orden (cobro parcial)
-      if (tableData?.tableId && tableData?.partialClose) {
-        // Cobro parcial: actualizar orden con items restantes, NO liberar mesa
-        try {
-          const remaining = tableData.remainingItems || []
-          const newTotal = remaining.reduce((sum, item) => sum + (item.total || 0), 0)
-
-          await updateOrder(businessId, tableData.orderId, {
-            items: remaining,
-            total: newTotal,
-          })
-          await updateTableAmount(businessId, tableData.tableId, newTotal)
-          setTableData(null)
-        } catch (error) {
-          console.error('Error al actualizar orden parcial:', error)
-          toast.warning('Comprobante generado, pero no se pudo actualizar la orden de la mesa')
-        }
-      } else if (tableData?.tableId) {
-        try {
-          const releaseResult = await releaseTable(businessId, tableData.tableId)
-          if (releaseResult.success) {
-            // No mostrar toast aquí, solo limpiar datos de mesa
-            // El toast de éxito ya se muestra más abajo
-            setTableData(null)
-          } else {
-            toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
-          }
-        } catch (error) {
-          console.error('Error al liberar mesa:', error)
-          toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
-        }
-      }
-
-      // 6.1. Si viene de una orden de restaurante, marcar como pagada
-      if (pendingOrderId && markOrderPaidOnComplete) {
-        try {
-          const markPaidResult = await markOrderAsPaid(businessId, pendingOrderId)
-          if (markPaidResult.success) {
-            console.log('✅ Orden marcada como pagada:', pendingOrderId)
-          } else {
-            console.warn('⚠️ No se pudo marcar la orden como pagada:', markPaidResult.error)
-          }
-        } catch (error) {
-          console.error('Error al marcar orden como pagada:', error)
-        } finally {
-          // Limpiar estado de orden pendiente
+        // Limpiar estado de mesa/orden/cotización inmediatamente para liberar UI
+        const _tableData = tableData
+        const _pendingOrderId = pendingOrderId
+        const _markOrderPaidOnComplete = markOrderPaidOnComplete
+        const _pendingQuotationId = pendingQuotationId
+        const _pendingNotaVentaIds = pendingNotaVentaIds
+        if (_tableData) setTableData(null)
+        if (_pendingOrderId) {
           setPendingOrderId(null)
           setMarkOrderPaidOnComplete(false)
         }
-      }
+        if (_pendingQuotationId) setPendingQuotationId(null)
+        if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
 
-      // 6.2. Si viene de una cotización, marcar como convertida
-      if (pendingQuotationId) {
-        try {
-          const markConvertedResult = await markQuotationAsConverted(businessId, pendingQuotationId, invoiceId)
-          if (markConvertedResult.success) {
-            console.log('✅ Cotización marcada como convertida:', pendingQuotationId)
-          } else {
-            console.warn('⚠️ No se pudo marcar la cotización como convertida:', markConvertedResult.error)
+        // Capturar datos necesarios para el background (los estados pueden cambiar)
+        const bgCart = [...cart]
+        const bgProducts = [...products]
+        const bgSelectedWarehouse = selectedWarehouse
+        const bgDocumentType = documentType
+        const bgTaxConfig = taxConfig
+        const bgAmounts = { ...amounts }
+        const bgCustomerData = { ...customerData }
+        const bgSelectedSeller = selectedSeller ? { ...selectedSeller } : null
+        const bgNumberResult = { ...numberResult }
+        const bgUserUid = user.uid
+        const bgUserEmail = user.email
+        const bgUserDisplayName = user.displayName
+
+        // ========================================
+        // BACKGROUND: Todas las operaciones de Firestore
+        // ========================================
+        const backgroundSave = async () => {
+          try {
+            // 3. Guardar factura en Firestore
+            const result = await createInvoice(businessId, invoiceData)
+            if (!result.success) {
+              console.error('❌ Error al guardar factura en Firestore:', result.error)
+              toast.error('Error al guardar la venta. Verifica en el listado de ventas.', 5000)
+              return
+            }
+            const bgInvoiceId = result.id
+            console.log('✅ Factura guardada en Firestore:', bgInvoiceId)
+
+            // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget
+            const shouldAutoSend = companySettings?.autoSendToSunat === true
+            const canSendToSunat = bgDocumentType === 'factura' || bgDocumentType === 'boleta'
+
+            let isPausedByAdmin = false
+            if (shouldAutoSend && bgDocumentType === 'factura') {
+              try {
+                const { doc: docRef, getDoc: getDocSnap } = await import('firebase/firestore')
+                const { db: fireDb } = await import('@/lib/firebase')
+                const adminSettingsSnap = await getDocSnap(docRef(fireDb, 'config', 'adminSettings'))
+                if (adminSettingsSnap.exists()) {
+                  const adminConfig = adminSettingsSnap.data()
+                  const isReducedIgv = bgTaxConfig.taxType === 'reduced' || bgTaxConfig.igvRate === 10.5
+                  if (adminConfig.system?.pauseSunatRestaurants && isReducedIgv) {
+                    isPausedByAdmin = true
+                    console.log('⏸️ Envío de factura a SUNAT pausado por admin (restaurantes IGV reducido)')
+                    toast.warning('Envío de facturas a SUNAT pausado temporalmente por el administrador.', 6000)
+                  }
+                }
+              } catch (adminCheckError) {
+                console.warn('No se pudo verificar config admin:', adminCheckError)
+              }
+            }
+
+            if (shouldAutoSend && canSendToSunat && !isPausedByAdmin) {
+              console.log('🚀 Enviando automáticamente a SUNAT (background)...')
+              sendInvoiceToSunat(businessId, bgInvoiceId)
+                .then(() => {
+                  console.log('✅ Comprobante enviado a SUNAT exitosamente')
+                  toast.success('Comprobante aceptado por SUNAT', 4000)
+                })
+                .catch((sunatError) => {
+                  console.error('❌ Error al enviar a SUNAT:', sunatError)
+                  toast.warning('Error al enviar a SUNAT. Reenvía desde Ventas.', 5000)
+                })
+            }
+
+            // 3.2. Guardar cliente automáticamente
+            try {
+              await upsertCustomerFromSale(businessId, bgCustomerData)
+            } catch (customerError) {
+              console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
+            }
+
+            // 4. Actualizar stock en Firestore
+            if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0)) {
+              const stockUpdates = bgCart
+                .filter(item => !item.isCustom)
+                .map(async item => {
+                  const productData = bgProducts.find(p => p.id === item.id)
+                  if (!productData) return
+                  if (productData.trackStock === false || productData.stock === null) return
+
+                  const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
+                  const updatedProduct = updateWarehouseStock(
+                    productData,
+                    bgSelectedWarehouse?.id || '',
+                    -quantityToDeduct
+                  )
+
+                  const updates = {
+                    stock: updatedProduct.stock,
+                    warehouseStocks: updatedProduct.warehouseStocks
+                  }
+
+                  // FEFO: Si el producto tiene lotes, descontar del más próximo a vencer
+                  if (productData.batches && productData.batches.length > 0) {
+                    let remainingToDeduct = item.quantity
+                    const updatedBatches = [...productData.batches]
+
+                    updatedBatches.sort((a, b) => {
+                      if (!a.expirationDate) return 1
+                      if (!b.expirationDate) return -1
+                      const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                      const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                      return dateA - dateB
+                    })
+
+                    for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
+                      const batch = updatedBatches[i]
+                      if (batch.quantity > 0) {
+                        const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
+                        updatedBatches[i] = {
+                          ...batch,
+                          quantity: batch.quantity - deductFromBatch
+                        }
+                        remainingToDeduct -= deductFromBatch
+                      }
+                    }
+
+                    updates.batches = updatedBatches
+
+                    const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
+                    if (activeBatches.length > 0) {
+                      activeBatches.sort((a, b) => {
+                        const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                        const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                        return dateA - dateB
+                      })
+                      const nearestBatch = activeBatches[0]
+                      updates.expirationDate = nearestBatch.expirationDate
+                      updates.batchNumber = nearestBatch.batchNumber
+                    } else {
+                      updates.expirationDate = null
+                      updates.batchNumber = null
+                    }
+                  }
+
+                  return updateProduct(businessId, item.id, updates)
+                })
+
+              await Promise.all(stockUpdates)
+
+              // 4.1. Registrar movimientos de stock
+              const itemsForMovement = bgCart.filter(item => {
+                if (item.isCustom) return false
+                const productData = bgProducts.find(p => p.id === item.id)
+                if (!productData) return false
+                if (productData.trackStock === false) return false
+                if (productData.stock === null) return false
+                return true
+              })
+
+              for (const item of itemsForMovement) {
+                try {
+                  const quantityForMovement = item.quantity * (item.presentationFactor || 1)
+                  await createStockMovement(businessId, {
+                    productId: item.id,
+                    warehouseId: bgSelectedWarehouse?.id || '',
+                    type: 'sale',
+                    quantity: -quantityForMovement,
+                    reason: 'Venta',
+                    referenceType: 'invoice',
+                    referenceId: bgInvoiceId || '',
+                    userId: bgUserUid,
+                    notes: item.presentationName
+                      ? `Venta - ${bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'} - ${item.quantity} ${item.presentationName}`
+                      : `Venta - ${bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
+                  })
+                } catch (err) {
+                  console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
+                }
+              }
+
+              // 4.5. Descontar ingredientes del inventario (para restaurantes)
+              for (const item of bgCart) {
+                if (item.isCustom) continue
+                try {
+                  const recipeResult = await getRecipeByProductId(businessId, item.id)
+                  if (recipeResult.success && recipeResult.data) {
+                    const recipe = recipeResult.data
+                    const ingredientsToDeduct = recipe.ingredients.map(ing => ({
+                      ...ing,
+                      quantity: ing.quantity * item.quantity
+                    }))
+                    await deductIngredients(
+                      businessId,
+                      ingredientsToDeduct,
+                      bgInvoiceId,
+                      item.name
+                    )
+                  }
+                } catch (error) {
+                  console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
+                }
+              }
+            }
+
+            // 5. Actualizar métricas del mozo
+            if (_tableData?.waiterId) {
+              try {
+                const { increment } = await import('firebase/firestore')
+                const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+                const { db } = await import('@/lib/firebase')
+                const waiterRef = doc(db, 'businesses', businessId, 'waiters', _tableData.waiterId)
+                await updateDoc(waiterRef, {
+                  todaySales: increment(bgAmounts.total),
+                  todayOrders: increment(1),
+                  totalSales: increment(bgAmounts.total),
+                  totalOrders: increment(1),
+                  updatedAt: serverTimestamp(),
+                }).catch(err => console.warn('No se pudo actualizar métricas del mozo:', err))
+              } catch (error) {
+                console.warn('Error al actualizar métricas del mozo:', error)
+              }
+            }
+
+            // 5.1. Actualizar métricas del vendedor
+            if (bgSelectedSeller?.id) {
+              try {
+                const { increment } = await import('firebase/firestore')
+                const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+                const { db } = await import('@/lib/firebase')
+                const sellerRef = doc(db, 'businesses', businessId, 'sellers', bgSelectedSeller.id)
+                await updateDoc(sellerRef, {
+                  todaySales: increment(bgAmounts.total),
+                  todayOrders: increment(1),
+                  totalSales: increment(bgAmounts.total),
+                  totalOrders: increment(1),
+                  updatedAt: serverTimestamp(),
+                }).catch(err => console.warn('No se pudo actualizar métricas del vendedor:', err))
+              } catch (error) {
+                console.warn('Error al actualizar métricas del vendedor:', error)
+              }
+            }
+
+            // 6. Liberar mesa o actualizar orden
+            if (_tableData?.tableId && _tableData?.partialClose) {
+              try {
+                const remaining = _tableData.remainingItems || []
+                const newTotal = remaining.reduce((sum, item) => sum + (item.total || 0), 0)
+                await updateOrder(businessId, _tableData.orderId, { items: remaining, total: newTotal })
+                await updateTableAmount(businessId, _tableData.tableId, newTotal)
+              } catch (error) {
+                console.error('Error al actualizar orden parcial:', error)
+              }
+            } else if (_tableData?.tableId) {
+              try {
+                await releaseTable(businessId, _tableData.tableId)
+              } catch (error) {
+                console.error('Error al liberar mesa:', error)
+              }
+            }
+
+            // 6.1. Marcar orden como pagada
+            if (_pendingOrderId && _markOrderPaidOnComplete) {
+              try {
+                await markOrderAsPaid(businessId, _pendingOrderId)
+              } catch (error) {
+                console.error('Error al marcar orden como pagada:', error)
+              }
+            }
+
+            // 6.2. Marcar cotización como convertida
+            if (_pendingQuotationId) {
+              try {
+                await markQuotationAsConverted(businessId, _pendingQuotationId, bgInvoiceId)
+              } catch (error) {
+                console.error('Error al marcar cotización como convertida:', error)
+              }
+            }
+
+            // 6.3. Marcar nota(s) de venta como convertida(s)
+            if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
+              try {
+                await Promise.all(_pendingNotaVentaIds.map(notaId =>
+                  markNotaVentaAsConverted(businessId, notaId, bgDocumentType, bgInvoiceId, bgNumberResult.number)
+                ))
+              } catch (error) {
+                console.error('Error al marcar notas de venta como convertidas:', error)
+              }
+            }
+
+            console.log('✅ Todas las operaciones de background completadas')
+          } catch (bgError) {
+            console.error('❌ Error en operaciones de background:', bgError)
+            toast.error('Error al guardar datos. Verifica en el listado de ventas.', 5000)
           }
-        } catch (error) {
-          console.error('Error al marcar cotización como convertida:', error)
-        } finally {
-          // Limpiar estado de cotización pendiente
-          setPendingQuotationId(null)
         }
-      }
 
-      // 6.3. Si viene de nota(s) de venta, marcar como convertida(s)
-      if (pendingNotaVentaIds && pendingNotaVentaIds.length > 0) {
-        try {
-          const markPromises = pendingNotaVentaIds.map(notaId =>
-            markNotaVentaAsConverted(
-              businessId,
-              notaId,
-              documentType,
-              invoiceId,
-              numberResult.number
-            )
-          )
-          const results = await Promise.all(markPromises)
-          const successCount = results.filter(r => r.success).length
-          console.log(`✅ ${successCount}/${pendingNotaVentaIds.length} nota(s) de venta marcada(s) como convertida(s)`)
-        } catch (error) {
-          console.error('Error al marcar notas de venta como convertidas:', error)
-        } finally {
-          setPendingNotaVentaIds(null)
-        }
-      }
-
-      // 7. Mostrar éxito
-      setLastInvoiceNumber(numberResult.number)
-      setLastInvoiceData(invoiceData)
-      setSaleCompleted(true) // Bloquear carrito hasta que se inicie nueva venta
-
-      // Mostrar mensaje de éxito con toast
-      const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
-      toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
-
-      // 7. Recargar productos para actualizar stock
-      const productsResult = await getProducts(businessId)
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
-      }
-
-      // 8. Limpiar borrador del localStorage (venta exitosa)
-      clearDraft()
-
-      // 9. Auto-imprimir ticket si está habilitado
-      if (companySettings?.autoPrintTicket) {
-        setTimeout(() => handlePrintTicket(invoiceData), 500)
+        // Ejecutar todo en background (fire & forget)
+        backgroundSave()
       }
     } catch (error) {
       console.error('Error al procesar venta:', error)

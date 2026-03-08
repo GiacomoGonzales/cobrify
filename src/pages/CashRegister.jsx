@@ -320,28 +320,24 @@ export default function CashRegister() {
         }
 
         // Obtener facturas de la sesión actual (desde apertura hasta ahora)
-        // Filtrar por sucursal directamente desde el servicio
-        const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId)
-        if (invoicesResult.success && sessionResult.success && sessionResult.data) {
+        // Pasar fecha de apertura a Firestore para no traer todas las facturas
+        if (sessionResult.success && sessionResult.data) {
           const sessionOpenedAt = sessionResult.data.openedAt?.toDate
             ? sessionResult.data.openedAt.toDate()
             : new Date(sessionResult.data.openedAt)
-          const now = new Date()
 
-          // Filtrar por período de sesión y por usuario que creó la factura
-          const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
-            const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-            if (invoiceDate < sessionOpenedAt || invoiceDate > now) return false
-            // Si allowedCreatedByUids es null, no filtrar (caja compartida - todas las ventas suman)
-            if (allowedCreatedByUids) {
-              // Compatibilidad: facturas antiguas sin createdBy se muestran a todos
-              if (invoice.createdBy && !allowedCreatedByUids.has(invoice.createdBy)) return false
-            }
-            return true
-          })
-          setTodayInvoices(sessionInvoicesList)
-        } else if (invoicesResult.success) {
-          // Si no hay sesión abierta, no mostrar facturas
+          const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
+          if (invoicesResult.success) {
+            // Filtrar por usuario que creó la factura
+            const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
+              if (allowedCreatedByUids) {
+                if (invoice.createdBy && !allowedCreatedByUids.has(invoice.createdBy)) return false
+              }
+              return true
+            })
+            setTodayInvoices(sessionInvoicesList)
+          }
+        } else {
           setTodayInvoices([])
         }
       }

@@ -45,6 +45,8 @@ export default function Suppliers() {
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   const {
     register,
@@ -268,6 +270,14 @@ export default function Suppliers() {
     )
   })
 
+  const displayedSuppliers = filteredSuppliers.slice(0, visibleCount)
+  const hasMore = filteredSuppliers.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm])
+
   const getDocumentBadge = type => {
     const badges = {
       [ID_TYPES.RUC]: <Badge variant="primary">RUC</Badge>,
@@ -361,7 +371,7 @@ export default function Suppliers() {
           <div className="overflow-hidden">
             {/* Vista móvil - Tarjetas */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredSuppliers.map(supplier => (
+              {displayedSuppliers.map(supplier => (
                 <div key={supplier.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between gap-2">
@@ -433,7 +443,7 @@ export default function Suppliers() {
                 <div className="col-span-1 text-right">Acciones</div>
               </div>
               <div className="divide-y divide-gray-100">
-                {filteredSuppliers.map(supplier => (
+                {displayedSuppliers.map(supplier => (
                   <div key={supplier.id} className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-gray-50">
                     <div className="col-span-3">
                       <p className="font-medium text-sm">{supplier.businessName}</p>
@@ -514,6 +524,18 @@ export default function Suppliers() {
           </div>
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más proveedores ({filteredSuppliers.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Modal Crear/Editar */}
       <Modal

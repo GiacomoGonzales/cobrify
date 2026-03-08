@@ -42,6 +42,8 @@ export default function StockMovements() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [isScanning, setIsScanning] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(50)
+  const ITEMS_PER_PAGE = 50
 
   useEffect(() => {
     loadData()
@@ -389,6 +391,14 @@ export default function StockMovements() {
     }))
   })()
 
+  const displayedMovements = movementsWithBalance.slice(0, visibleCount)
+  const hasMore = movementsWithBalance.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, filterBranch, filterWarehouse, filterType, filterDateFrom, filterDateTo])
+
   // Escanear código de barras
   const handleScanBarcode = async () => {
     // Solo disponible en plataformas nativas
@@ -648,7 +658,7 @@ export default function StockMovements() {
           <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {movementsWithBalance.map(movement => {
+              {displayedMovements.map(movement => {
                 const typeInfo = getMovementTypeInfo(movement.type)
                 const Icon = typeInfo.icon
                 return (
@@ -714,7 +724,7 @@ export default function StockMovements() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {movementsWithBalance.map(movement => {
+                  {displayedMovements.map(movement => {
                     const typeInfo = getMovementTypeInfo(movement.type)
                     const Icon = typeInfo.icon
                     return (
@@ -821,6 +831,18 @@ export default function StockMovements() {
             </>
           )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más movimientos ({movementsWithBalance.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
     </div>
   )
 }

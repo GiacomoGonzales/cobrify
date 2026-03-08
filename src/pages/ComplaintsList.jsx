@@ -145,6 +145,8 @@ export default function ComplaintsList() {
   const [showResponseModal, setShowResponseModal] = useState(false)
   const [responseText, setResponseText] = useState('')
   const [isResponding, setIsResponding] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Cargar reclamos
   const loadComplaints = async () => {
@@ -213,6 +215,13 @@ export default function ComplaintsList() {
 
     return result
   }, [complaints, searchTerm, statusFilter, typeFilter, showExpiredOnly])
+
+  const displayedComplaints = filteredComplaints.slice(0, visibleCount)
+  const hasMore = filteredComplaints.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, statusFilter, typeFilter, showExpiredOnly])
 
   // Ver detalle
   const handleViewDetail = (complaint) => {
@@ -484,7 +493,7 @@ export default function ComplaintsList() {
             </div>
           ) : (
             <div className="divide-y">
-              {filteredComplaints.map((complaint) => (
+              {displayedComplaints.map((complaint) => (
                 <div
                   key={complaint.id}
                   className={`p-4 hover:bg-gray-50 transition-colors ${
@@ -557,6 +566,18 @@ export default function ComplaintsList() {
           )}
         </CardContent>
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más reclamos ({filteredComplaints.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Modal de detalle */}
       <Modal

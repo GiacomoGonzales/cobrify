@@ -48,7 +48,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
-import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -105,7 +105,7 @@ export default function InvoiceList() {
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
   const [filterConversion, setFilterConversion] = useState('all') // 'all', 'converted', 'not_converted'
   const [branches, setBranches] = useState([])
-  const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
+  const [dateFilter, setDateFilter] = useState('30days') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
@@ -467,6 +467,11 @@ Gracias por tu preferencia.`
     loadBranches()
   }, [user])
 
+  // Recargar facturas cuando cambia el filtro de fecha (porque la query de Firestore cambia)
+  useEffect(() => {
+    if (user?.uid) loadInvoices()
+  }, [dateFilter, filterStartDate, filterEndDate])
+
   // Cargar sucursales para filtro (solo las que el usuario tiene acceso)
   const loadBranches = async () => {
     if (!user?.uid || isDemoMode) return
@@ -496,10 +501,15 @@ Gracias por tu preferencia.`
       }
 
       const businessId = getBusinessId()
-      console.log('🔍 InvoiceList - Using businessId:', businessId, 'for user:', user.email)
+
+      // Optimización: si hay filtro de fecha, usar query con rango para no traer todo
+      const dateRange = getDateRange()
+      const invoicesFetcher = dateRange
+        ? getRecentInvoices(businessId, dateRange.start)
+        : getInvoices(businessId)
 
       const [invoicesResult, settingsResult] = await Promise.all([
-        getInvoices(businessId),
+        invoicesFetcher,
         getCompanySettings(businessId)
       ])
 

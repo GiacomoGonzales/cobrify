@@ -22,7 +22,7 @@ import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
+import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
 
@@ -108,8 +108,13 @@ export default function Dashboard() {
         return
       }
 
+      // Solo cargar facturas de los últimos 14 días (para gráfico de 7 días + comparativa)
+      const fourteenDaysAgo = new Date()
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+      fourteenDaysAgo.setHours(0, 0, 0, 0)
+
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
-        getInvoices(businessId),
+        getRecentInvoices(businessId, fourteenDaysAgo),
         getCustomers(businessId),
         getProducts(businessId),
       ])

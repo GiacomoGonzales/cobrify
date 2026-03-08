@@ -42,6 +42,30 @@ export const createInvoice = async (userId, invoiceData) => {
 }
 
 /**
+ * Obtener facturas recientes (por rango de fechas) - optimizado para Dashboard
+ * @param {string} userId - ID del negocio
+ * @param {Date} sinceDate - Fecha desde la cual obtener facturas
+ */
+export const getRecentInvoices = async (userId, sinceDate) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', userId, 'invoices'),
+      where('createdAt', '>=', sinceDate),
+      orderBy('createdAt', 'desc')
+    )
+    const querySnapshot = await getDocs(q)
+    const invoices = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+    return { success: true, data: invoices }
+  } catch (error) {
+    console.error('Error al obtener facturas recientes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener facturas de un usuario
  */
 export const getInvoices = async userId => {
@@ -71,15 +95,22 @@ export const getInvoices = async userId => {
  * Obtener facturas de un usuario filtradas por sucursal
  * @param {string} userId - ID del negocio
  * @param {string|null} branchId - ID de la sucursal (null para sucursal principal)
+ * @param {Date|null} sinceDate - Fecha desde la cual obtener facturas (opcional, para optimización)
  */
-export const getInvoicesByBranch = async (userId, branchId = null) => {
+export const getInvoicesByBranch = async (userId, branchId = null, sinceDate = null) => {
   try {
     const invoicesRef = collection(db, 'businesses', userId, 'invoices')
-    const querySnapshot = await getDocs(invoicesRef)
+
+    // Si hay fecha, usar query con filtro de Firestore para reducir documentos leídos
+    let querySnapshot
+    if (sinceDate) {
+      const q = query(invoicesRef, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc'))
+      querySnapshot = await getDocs(q)
+    } else {
+      querySnapshot = await getDocs(invoicesRef)
+    }
 
     // Filtrar por branchId en el cliente
-    // Si branchId es null, obtener facturas sin branchId (sucursal principal)
-    // Si branchId tiene valor, obtener facturas de esa sucursal
     const invoices = querySnapshot.docs
       .map(doc => ({
         id: doc.id,
@@ -93,12 +124,14 @@ export const getInvoicesByBranch = async (userId, branchId = null) => {
         }
       })
 
-    // Ordenar por fecha de creación (más reciente primero)
-    invoices.sort((a, b) => {
-      if (!a.createdAt) return 1
-      if (!b.createdAt) return -1
-      return b.createdAt.seconds - a.createdAt.seconds
-    })
+    // Ordenar por fecha de creación (más reciente primero) - solo si no venía ordenado de Firestore
+    if (!sinceDate) {
+      invoices.sort((a, b) => {
+        if (!a.createdAt) return 1
+        if (!b.createdAt) return -1
+        return b.createdAt.seconds - a.createdAt.seconds
+      })
+    }
 
     return { success: true, data: invoices }
   } catch (error) {
@@ -1795,14 +1828,16 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
   try {
     const { limit: maxResults = 30, branchId = null, userUid = null } = options
 
-    // Query simple sin orderBy para evitar necesitar índice compuesto
+    // Query con orderBy + limit para reducir documentos leídos desde Firestore
     const q = query(
       collection(db, 'businesses', userId, 'cashSessions'),
-      where('status', '==', 'closed')
+      where('status', '==', 'closed'),
+      orderBy('closedAt', 'desc'),
+      limit(maxResults * 3) // Traer extra para compensar filtros client-side
     )
     const snapshot = await getDocs(q)
 
-    // Filtrar por sucursal, usuario y ordenar en el cliente por closedAt descendente
+    // Filtrar por sucursal y usuario en el cliente
     const sessions = snapshot.docs
       .map(doc => ({
         id: doc.id,
@@ -1811,27 +1846,19 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
       .filter(session => {
         // Filtrar por sucursal
         if (branchId) {
-          // Sucursal específica
           if (session.branchId !== branchId) return false
         } else {
-          // Sucursal Principal (sin branchId)
           if (session.branchId) return false
         }
-        // Filtrar por usuario si se proporciona (sub-usuarios ven solo sus sesiones)
+        // Filtrar por usuario si se proporciona
         if (userUid) {
           if (session.openedByUserId) {
             if (session.openedByUserId !== userUid) return false
           } else {
-            // Sesiones antiguas sin openedByUserId pertenecen al owner (userId)
             if (userUid !== userId) return false
           }
         }
         return true
-      })
-      .sort((a, b) => {
-        const dateA = a.closedAt?.toDate?.() || new Date(0)
-        const dateB = b.closedAt?.toDate?.() || new Date(0)
-        return dateB - dateA // Más reciente primero
       })
       .slice(0, maxResults)
 

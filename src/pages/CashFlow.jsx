@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -291,8 +291,11 @@ export default function CashFlow() {
         return
       }
 
+      // Optimización: cargar facturas desde la fecha de inicio del rango
+      const sinceDate = new Date(dateRange.startDate + 'T00:00:00')
+
       const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes, branchesRes, warehousesRes] = await Promise.all([
-        getInvoices(user.uid),
+        getRecentInvoices(user.uid, sinceDate),
         getExpenses(user.uid, { startDate: dateRange.startDate, endDate: dateRange.endDate }),
         getPurchases(user.uid),
         getLoans(user.uid),

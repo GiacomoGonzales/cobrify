@@ -65,6 +65,8 @@ export default function Quotations() {
   const [dispatchGuideQuotation, setDispatchGuideQuotation] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Helper para manejar fechas de Firestore y Date objects
   const getDateFromTimestamp = (timestamp) => {
@@ -345,6 +347,14 @@ export default function Quotations() {
     return matchesSearch && matchesStatus && matchesBranch
   })
 
+  const displayedQuotations = filteredQuotations.slice(0, visibleCount)
+  const hasMore = filteredQuotations.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, filterStatus, filterBranch])
+
   const getStatusBadge = status => {
     switch (status) {
       case 'draft':
@@ -544,7 +554,7 @@ export default function Quotations() {
           <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredQuotations.map(quotation => (
+              {displayedQuotations.map(quotation => (
                 <div key={quotation.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                   {/* Fila superior: Número + acciones */}
                   <div className="flex items-center justify-between">
@@ -704,7 +714,7 @@ export default function Quotations() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredQuotations.map(quotation => (
+                {displayedQuotations.map(quotation => (
                   <TableRow key={quotation.id}>
                     <TableCell className="py-2.5 px-3">
                       <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
@@ -908,6 +918,18 @@ export default function Quotations() {
 
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más cotizaciones ({filteredQuotations.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* View Quotation Modal */}
       <Modal

@@ -103,6 +103,8 @@ export default function Ingredients() {
   const [isSaving, setIsSaving] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Form data
   const [formData, setFormData] = useState({
@@ -485,6 +487,13 @@ export default function Ingredients() {
     return matchesSearch && matchesCategory
   })
 
+  const displayedIngredients = filteredIngredients.slice(0, visibleCount)
+  const hasMore = filteredIngredients.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, filterCategory])
+
   // Stats (calculados según sucursal filtrada)
   const stats = useMemo(() => {
     return {
@@ -680,7 +689,7 @@ export default function Ingredients() {
           <div className="overflow-hidden">
             {/* Vista móvil - Tarjetas */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredIngredients.map(ingredient => (
+              {displayedIngredients.map(ingredient => (
                 <div key={ingredient.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between gap-2">
@@ -746,7 +755,7 @@ export default function Ingredients() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredIngredients.map(ingredient => (
+                  {displayedIngredients.map(ingredient => (
                     <TableRow key={ingredient.id}>
                       <TableCell>
                         <div>
@@ -877,6 +886,18 @@ export default function Ingredients() {
           </div>
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más ({filteredIngredients.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Add/Edit Ingredient Modal */}
       <Modal

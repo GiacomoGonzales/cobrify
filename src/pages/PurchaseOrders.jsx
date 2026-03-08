@@ -56,6 +56,8 @@ export default function PurchaseOrders() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingOrder, setEditingOrder] = useState(null)
   const [downloadingPdf, setDownloadingPdf] = useState(null)
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   useEffect(() => {
     loadData()
@@ -202,6 +204,13 @@ export default function PurchaseOrders() {
     return matchesSearch && matchesStatus
   })
 
+  const displayedOrders = filteredOrders.slice(0, visibleCount)
+  const hasMore = filteredOrders.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, filterStatus])
+
   const stats = {
     total: orders.length,
     draft: orders.filter(o => o.status === 'draft').length,
@@ -343,7 +352,7 @@ export default function PurchaseOrders() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredOrders.map((order) => (
+              {displayedOrders.map((order) => (
                 <div
                   key={order.id}
                   className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
@@ -396,6 +405,18 @@ export default function PurchaseOrders() {
           )}
         </CardContent>
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más órdenes ({filteredOrders.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Dropdown Menu (fixed position) */}
       {openMenuId && (

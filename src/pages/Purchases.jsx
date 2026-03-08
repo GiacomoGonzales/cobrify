@@ -81,6 +81,8 @@ export default function Purchases() {
   const [editingPaymentDate, setEditingPaymentDate] = useState(null) // { purchaseId, paymentIndex, date }
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
@@ -690,6 +692,14 @@ export default function Purchases() {
       return sortDirection === 'asc' ? comparison : -comparison
     })
 
+  const displayedPurchases = filteredPurchases.slice(0, visibleCount)
+  const hasMore = filteredPurchases.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, dateFilter, customStartDate, customEndDate, filterBranch, sortField, sortDirection])
+
   // Compras filtradas por fecha y sucursal (para las estadísticas, sin búsqueda de texto)
   const dateFilteredPurchases = useMemo(() => {
     return purchases.filter(filterByDate).filter(filterByBranch)
@@ -983,7 +993,7 @@ export default function Purchases() {
           <div className="overflow-hidden">
             {/* Vista móvil - Tarjetas */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredPurchases.map(purchase => (
+              {displayedPurchases.map(purchase => (
                 <div key={purchase.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Proveedor + acciones */}
                   <div className="flex items-center justify-between gap-2">
@@ -1089,7 +1099,7 @@ export default function Purchases() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPurchases.map(purchase => (
+                  {displayedPurchases.map(purchase => (
                     <TableRow key={purchase.id}>
                       <TableCell className="font-medium">{purchase.invoiceNumber || '-'}</TableCell>
                       <TableCell>
@@ -1312,6 +1322,18 @@ export default function Purchases() {
           </div>
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más compras ({filteredPurchases.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Modal Ver Detalles */}
       <Modal

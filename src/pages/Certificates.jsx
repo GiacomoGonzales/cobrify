@@ -166,6 +166,8 @@ export default function Certificates() {
   const [customers, setCustomers] = useState([])
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Modales
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -737,6 +739,13 @@ export default function Certificates() {
     )
   }) || []
 
+  const displayedCertificates = filteredCertificates.slice(0, visibleCount)
+  const hasMore = filteredCertificates.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, activeTab])
+
   // Stats
   const stats = {
     totalTraining: certificates.training?.length || 0,
@@ -877,7 +886,7 @@ export default function Certificates() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {filteredCertificates.map((cert) => (
+              {displayedCertificates.map((cert) => (
                 <div
                   key={cert.id}
                   className="p-4 hover:bg-gray-50 transition-colors"
@@ -943,6 +952,18 @@ export default function Certificates() {
           )}
         </CardContent>
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más certificados ({filteredCertificates.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Dropdown Menu (fuera del contenedor, con position fixed) */}
       {openMenuId && (

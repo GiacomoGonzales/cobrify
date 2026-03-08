@@ -36,6 +36,8 @@ export default function Customers() {
   const [isSaving, setIsSaving] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [sortBy, setSortBy] = useState('name') // name, orders, spent
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   const {
     register,
@@ -313,6 +315,14 @@ export default function Customers() {
       }
     })
 
+  const displayedCustomers = filteredCustomers.slice(0, visibleCount)
+  const hasMore = filteredCustomers.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, sortBy])
+
   const getDocumentBadge = type => {
     const badges = {
       [ID_TYPES.RUC]: <Badge variant="primary">RUC</Badge>,
@@ -481,7 +491,7 @@ export default function Customers() {
           <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredCustomers.map(customer => (
+              {displayedCustomers.map(customer => (
                 <div key={customer.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between">
@@ -573,7 +583,7 @@ export default function Customers() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCustomers.map(customer => (
+                {displayedCustomers.map(customer => (
                   <TableRow key={customer.id}>
                     <TableCell>
                       <div>
@@ -661,6 +671,18 @@ export default function Customers() {
 
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más clientes ({filteredCustomers.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Modal Crear/Editar */}
       <Modal

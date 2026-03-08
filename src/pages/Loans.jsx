@@ -148,6 +148,8 @@ export default function Loans() {
   // Menú móvil
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Formulario de nuevo préstamo
   const [formData, setFormData] = useState({
@@ -452,6 +454,13 @@ export default function Loans() {
       })
   }, [loans, typeFilter, statusFilter, searchTerm])
 
+  const displayedLoans = filteredLoans.slice(0, visibleCount)
+  const hasMore = filteredLoans.length > visibleCount
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [typeFilter, statusFilter, searchTerm])
+
   // Estadísticas
   const stats = useMemo(() => {
     const activeLoans = loans.filter(l => l.status === 'active')
@@ -642,7 +651,7 @@ export default function Loans() {
           <div className="overflow-hidden">
             {/* Vista móvil - Tarjetas */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredLoans.map(loan => (
+              {displayedLoans.map(loan => (
                 <div key={loan.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Prestamista + acciones */}
                   <div className="flex items-center justify-between gap-2">
@@ -723,7 +732,7 @@ export default function Loans() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLoans.map(loan => (
+                  {displayedLoans.map(loan => (
                     <TableRow key={loan.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -842,6 +851,18 @@ export default function Loans() {
           </div>
         )}
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más préstamos ({filteredLoans.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Modal Crear Préstamo */}
       <Modal

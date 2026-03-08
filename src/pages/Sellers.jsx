@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getSellers, deleteSeller, toggleSellerStatus } from '@/services/sellerService'
-import { getInvoices } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import SellerFormModal from '@/components/SellerFormModal'
@@ -84,12 +84,19 @@ export default function Sellers() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [datePreset, setDatePreset] = useState('all')
+  const [visibleCount, setVisibleCount] = useState(20)
+  const ITEMS_PER_PAGE = 20
 
   // Cargar datos de Firestore
   useEffect(() => {
     loadSellers()
     loadBranches()
   }, [])
+
+  // Recargar cuando cambia el filtro de fecha (la query de Firestore cambia)
+  useEffect(() => {
+    if (user?.uid) loadSellers()
+  }, [dateFrom])
 
   // Cargar sucursales para filtro
   const loadBranches = async () => {
@@ -261,6 +268,14 @@ export default function Sellers() {
     return matchesSearch && matchesBranch
   })
 
+  const displayedSellers = filteredSellers.slice(0, visibleCount)
+  const hasMore = filteredSellers.length > visibleCount
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE)
+  }, [searchTerm, filterBranch])
+
   const loadSellers = async () => {
     setIsLoading(true)
     try {
@@ -273,9 +288,14 @@ export default function Sellers() {
       }
 
       const businessId = getBusinessId()
+      // Solo cargar facturas del último mes (optimización)
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      thirtyDaysAgo.setHours(0, 0, 0, 0)
+
       const [sellersResult, invoicesResult] = await Promise.all([
         getSellers(businessId),
-        getInvoices(businessId),
+        dateFrom ? getRecentInvoices(businessId, new Date(dateFrom + 'T00:00:00')) : getRecentInvoices(businessId, thirtyDaysAgo),
       ])
 
       if (sellersResult.success) {
@@ -578,7 +598,7 @@ export default function Sellers() {
             <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredSellers.map((seller) => (
+              {displayedSellers.map((seller) => (
                 <div key={seller.id} className="px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setViewingSeller(seller)}>
                   {/* Fila 1: Código + nombre + acciones */}
                   <div className="flex items-center justify-between">
@@ -673,7 +693,7 @@ export default function Sellers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSellers.map((seller) => (
+                  {displayedSellers.map((seller) => (
                     <TableRow key={seller.id}>
                       <TableCell className="font-medium">{seller.code}</TableCell>
                       <TableCell>
@@ -815,6 +835,18 @@ export default function Sellers() {
           )}
         </CardContent>
       </Card>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más vendedores ({filteredSellers.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Form Modal */}
       <SellerFormModal
