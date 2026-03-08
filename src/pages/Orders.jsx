@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Bell, Volume2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -52,6 +52,44 @@ export default function Orders() {
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
+
+  // Notificaciones de nuevas órdenes / items agregados
+  const [orderAlerts, setOrderAlerts] = useState([]) // [{id, type, orderNumber, tableNumber, itemCount, timestamp}]
+  const prevOrdersRef = useRef(null) // Snapshot anterior para comparar
+  const firstLoadRef = useRef(true) // Para no alertar en la carga inicial
+  const audioContextRef = useRef(null)
+
+  // Función para reproducir sonido de notificación usando Web Audio API
+  const playNotificationSound = () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      }
+      const ctx = audioContextRef.current
+      if (ctx.state === 'suspended') ctx.resume()
+
+      // Sonido tipo campanita - dos tonos ascendentes
+      const playTone = (freq, startTime, duration) => {
+        const oscillator = ctx.createOscillator()
+        const gainNode = ctx.createGain()
+        oscillator.connect(gainNode)
+        gainNode.connect(ctx.destination)
+        oscillator.type = 'sine'
+        oscillator.frequency.setValueAtTime(freq, startTime)
+        gainNode.gain.setValueAtTime(0.3, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
+        oscillator.start(startTime)
+        oscillator.stop(startTime + duration)
+      }
+
+      const now = ctx.currentTime
+      playTone(880, now, 0.15)        // A5
+      playTone(1108, now + 0.15, 0.15) // C#6
+      playTone(1320, now + 0.3, 0.25)  // E6
+    } catch (error) {
+      console.warn('No se pudo reproducir sonido de notificación:', error)
+    }
+  }
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
@@ -333,6 +371,65 @@ export default function Orders() {
           totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
         }
         setStats(newStats)
+
+        // Detectar nuevas órdenes o items agregados desde menú digital
+        if (firstLoadRef.current) {
+          // Primera carga: solo guardar referencia, no alertar
+          firstLoadRef.current = false
+          prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0, updatedAt: o.updatedAt }]))
+        } else if (prevOrdersRef.current) {
+          const prevMap = prevOrdersRef.current
+          const newAlerts = []
+
+          for (const order of ordersData) {
+            const prev = prevMap.get(order.id)
+            if (!prev) {
+              // Orden completamente nueva
+              if (order.source === 'menu_digital') {
+                newAlerts.push({
+                  id: `new-${order.id}-${Date.now()}`,
+                  type: 'new_order',
+                  orderId: order.id,
+                  orderNumber: order.orderNumber || '?',
+                  tableNumber: order.tableNumber || null,
+                  orderType: order.orderType,
+                  customerName: order.customerName || '',
+                  itemCount: order.items?.length || 0,
+                  items: (order.items || []).slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+                  total: order.total || 0,
+                  timestamp: Date.now(),
+                })
+              }
+            } else {
+              // Orden existente: verificar si se agregaron items
+              const currentItemCount = order.items?.length || 0
+              if (currentItemCount > prev.itemCount && order.source === 'menu_digital') {
+                const newItems = (order.items || []).slice(prev.itemCount)
+                newAlerts.push({
+                  id: `update-${order.id}-${Date.now()}`,
+                  type: 'items_added',
+                  orderId: order.id,
+                  orderNumber: order.orderNumber || '?',
+                  tableNumber: order.tableNumber || null,
+                  orderType: order.orderType,
+                  customerName: order.customerName || '',
+                  itemCount: currentItemCount - prev.itemCount,
+                  items: newItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+                  total: order.total || 0,
+                  timestamp: Date.now(),
+                })
+              }
+            }
+          }
+
+          if (newAlerts.length > 0) {
+            playNotificationSound()
+            setOrderAlerts(prev => [...newAlerts, ...prev].slice(0, 10)) // Máximo 10 alertas
+          }
+
+          // Actualizar referencia
+          prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0, updatedAt: o.updatedAt }]))
+        }
 
         setIsLoading(false)
       },
@@ -640,6 +737,14 @@ export default function Orders() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
+  const dismissAlert = (alertId) => {
+    setOrderAlerts(prev => prev.filter(a => a.id !== alertId))
+  }
+
+  const dismissAllAlerts = () => {
+    setOrderAlerts([])
+  }
+
   const getStatusConfig = (status) => {
     switch (status) {
       case 'pending':
@@ -720,6 +825,61 @@ export default function Orders() {
           Nueva Orden
         </Button>
       </div>
+
+      {/* Alertas de nuevas órdenes / items desde menú digital */}
+      {orderAlerts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-orange-700">
+              <Bell className="w-5 h-5 animate-bounce" />
+              <span className="font-semibold text-sm">{orderAlerts.length} notificaci{orderAlerts.length === 1 ? 'ón' : 'ones'} nueva{orderAlerts.length === 1 ? '' : 's'}</span>
+            </div>
+            <button
+              onClick={dismissAllAlerts}
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              Descartar todas
+            </button>
+          </div>
+          {orderAlerts.map(alert => (
+            <div
+              key={alert.id}
+              className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3 shadow-md animate-pulse-once flex items-start gap-3"
+            >
+              <div className="flex-shrink-0 mt-0.5">
+                {alert.type === 'new_order' ? (
+                  <Smartphone className="w-6 h-6 text-orange-600" />
+                ) : (
+                  <Plus className="w-6 h-6 text-blue-600" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-gray-900">
+                  {alert.type === 'new_order'
+                    ? `Nueva orden ${alert.orderNumber}`
+                    : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} agregado${alert.itemCount > 1 ? 's' : ''} a orden ${alert.orderNumber}`
+                  }
+                  {alert.tableNumber ? ` - Mesa ${alert.tableNumber}` : ''}
+                  {alert.orderType === 'delivery' ? ' - Delivery' : ''}
+                  {alert.orderType === 'takeaway' ? ' - Para llevar' : ''}
+                </p>
+                {alert.customerName && (
+                  <p className="text-xs text-gray-600">{alert.customerName}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {alert.items.join(' | ')}
+                </p>
+              </div>
+              <button
+                onClick={() => dismissAlert(alert.id)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
