@@ -12,6 +12,7 @@ import { useYapeListener } from '@/hooks/useYapeListener'
 import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, Volume2 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { getAudioContext } from '@/lib/globalAudio'
+import { useToast } from '@/contexts/ToastContext'
 
 // Mapeo de rutas a pageIds para verificación de permisos
 const routeToPageId = {
@@ -59,6 +60,7 @@ const routeToPageId = {
 
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
+  const toast = useToast()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
@@ -210,6 +212,57 @@ export default function MainLayout() {
   const dismissAllGlobalAlerts = () => {
     setGlobalOrderAlerts([])
     stopNotificationSound()
+  }
+
+  // Imprimir comanda desde la alerta global (solo items nuevos)
+  const handlePrintFromAlert = async (alert) => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      // Construir objeto orden con solo los items nuevos
+      const printOrder = {
+        orderNumber: alert.orderNumber,
+        tableNumber: alert.tableNumber,
+        orderType: alert.orderType,
+        customerName: alert.customerName,
+        items: alert.newItems || [],
+        _printNote: alert.type === 'items_added' ? 'ITEMS AGREGADOS' : null,
+        source: 'menu_digital',
+      }
+
+      const isNative = Capacitor.isNativePlatform()
+
+      if (isNative) {
+        // Impresión térmica en Android
+        const { getPrinterConfig, connectPrinter, printKitchenOrder } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(businessId)
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+          if (connectResult.success) {
+            const result = await printKitchenOrder(printOrder, null, printerConfigResult.config.paperWidth || 58)
+            if (result.success) {
+              toast.success('Comanda impresa')
+            } else {
+              toast.error('Error al imprimir: ' + result.error)
+            }
+          } else {
+            toast.error('No se pudo conectar a la impresora')
+          }
+        } else {
+          toast.warning('No hay impresora configurada')
+        }
+      } else {
+        toast.info('Impresión térmica solo disponible en la app Android')
+      }
+    } catch (error) {
+      console.error('Error al imprimir desde alerta:', error)
+      toast.error('Error al imprimir')
+    }
+
+    // Marcar como recibido después de imprimir
+    dismissGlobalAlert(alert.id)
   }
 
   // Iniciar listener de Yape automáticamente (solo en APK Android)
@@ -482,6 +535,13 @@ export default function MainLayout() {
                       {alert.items.join(' | ')}
                     </p>
                     <div className="flex gap-2 mt-1.5">
+                      <button
+                        onClick={() => handlePrintFromAlert(alert)}
+                        className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Imprimir
+                      </button>
                       <button
                         onClick={() => dismissGlobalAlert(alert.id)}
                         className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
