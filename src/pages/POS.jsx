@@ -476,6 +476,24 @@ export default function POS() {
     }
   }, [allowedDocumentTypes])
 
+  // Auto-actualizar fecha de emisión cuando la pestaña vuelve a estar activa
+  // (cubre: PC apagada/encendida, pestaña en segundo plano, suspensión del sistema)
+  useEffect(() => {
+    if (businessSettings?.allowCustomEmissionDate) return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setEmissionDate(getLocalDateString())
+      }
+    }
+    const handleFocus = () => setEmissionDate(getLocalDateString())
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [businessSettings?.allowCustomEmissionDate])
+
   // Cargar borrador del localStorage al iniciar
   useEffect(() => {
     if (!user?.uid || draftLoadedRef.current) return
@@ -2466,6 +2484,14 @@ export default function POS() {
   const handleCheckout = async () => {
     if (!user?.uid) return
 
+    // Auto-actualizar fecha de emisión a la fecha actual del sistema
+    // (evita que quede congelada si el usuario no cerró el navegador por días)
+    const currentDate = getLocalDateString()
+    const emissionDateToUse = businessSettings?.allowCustomEmissionDate ? emissionDate : currentDate
+    if (emissionDate !== emissionDateToUse) {
+      setEmissionDate(emissionDateToUse)
+    }
+
     // Validar caja diaria abierta si el setting lo requiere
     if (companySettings?.requireOpenCashRegister && !cashRegisterOpen) {
       toast.error('Debe abrir la caja diaria antes de emitir ventas')
@@ -2723,8 +2749,8 @@ export default function POS() {
           sunatStatus: 'not_applicable',
           sunatResponse: null,
           sunatSentAt: null,
-          createdAt: new Date(emissionDate + 'T12:00:00'),
-          emissionDate: emissionDate,
+          createdAt: new Date(emissionDateToUse + 'T12:00:00'),
+          emissionDate: emissionDateToUse,
         }
 
         setLastInvoiceNumber(demoNumber)
@@ -2947,7 +2973,7 @@ export default function POS() {
         sunatResponse: null,
         sunatSentAt: null,
         // Fecha de emisión
-        emissionDate: emissionDate,
+        emissionDate: emissionDateToUse,
         // Información del vendedor
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
