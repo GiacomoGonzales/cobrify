@@ -236,6 +236,7 @@ export const createDeliveryRecord = async (businessId, data) => {
       orderId: data.orderId || '',
       orderNumber: data.orderNumber || '',
       customerName: data.customerName || '',
+      customerPhone: data.customerPhone || '',
       customerAddress: data.customerAddress || '',
       amount: parseFloat(data.amount) || 0,
       deliveryFee: parseFloat(data.deliveryFee) || 0,

@@ -1320,6 +1320,30 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
       printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
     }
 
+    // Datos del cliente para delivery/takeaway
+    if (order.customerName) {
+      printer = printer.text(`Cliente: ${convertSpanishText(order.customerName)}\n`);
+    }
+    if (order.customerPhone) {
+      printer = printer.text(`Tel: ${order.customerPhone}\n`);
+    }
+    if (order.customerAddress) {
+      printer = printer.text(`Dir: ${convertSpanishText(order.customerAddress)}\n`);
+    }
+    if (order.orderType && !table) {
+      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+      if (typeLabels[order.orderType]) {
+        printer = printer
+          .clearFormatting()
+          .align('center')
+          .doubleHeight()
+          .bold()
+          .text(`*** ${typeLabels[order.orderType]} ***\n`)
+          .clearFormatting()
+          .align('left');
+      }
+    }
+
     if (order.priority === 'urgent') {
       printer = printer
         .clearFormatting()
@@ -2343,6 +2367,30 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
     if (order.brandName) {
       builder.text(`Marca: ${order.brandName}`)
         .newLine();
+    }
+
+    // Datos del cliente para delivery/takeaway
+    if (order.customerName) {
+      builder.text(`Cliente: ${order.customerName}`).newLine();
+    }
+    if (order.customerPhone) {
+      builder.text(`Tel: ${order.customerPhone}`).newLine();
+    }
+    if (order.customerAddress) {
+      builder.text(`Dir: ${order.customerAddress}`).newLine();
+    }
+    if (order.orderType && !table) {
+      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+      if (typeLabels[order.orderType]) {
+        builder.bold(false)
+          .alignCenter()
+          .doubleHeight(true)
+          .bold(true)
+          .text(`*** ${typeLabels[order.orderType]} ***`)
+          .newLine()
+          .doubleHeight(false)
+          .alignLeft();
+      }
     }
 
     if (order.priority === 'urgent') {

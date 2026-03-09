@@ -6,6 +6,7 @@ import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/fire
 import { db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
 import { getCompanySettings } from '@/services/firestoreService'
+import { createDeliveryRecord } from '@/services/motoristaService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
@@ -188,11 +189,36 @@ export default function MainLayout() {
             tableNumber: order.tableNumber || null,
             orderType: order.orderType,
             customerName: order.customerName || '',
+            customerPhone: order.customerPhone || '',
+            customerAddress: order.customerAddress || '',
             itemCount: order.items?.length || 0,
             items: (order.items || []).slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
             newItems: order.items || [],
+            orderTotal: (order.items || []).reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0),
             timestamp: Date.now(),
           })
+
+          // Auto-crear registro de envío para órdenes delivery
+          if (order.orderType === 'delivery') {
+            createDeliveryRecord(businessId, {
+              motoristaId: '',
+              motoristaName: '',
+              orderId: order.id,
+              orderNumber: order.orderNumber || '',
+              customerName: order.customerName || '',
+              customerAddress: order.customerAddress || '',
+              customerPhone: order.customerPhone || '',
+              amount: (order.items || []).reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0),
+              deliveryFee: order.deliveryFee || 0,
+              paymentMethod: order.paymentMethod || 'cash',
+              cashCollected: 0,
+              status: 'pending',
+            }).then(result => {
+              if (result.success) {
+                console.log('Delivery record creado automáticamente:', result.id)
+              }
+            })
+          }
         } else if (prev && order.source === 'menu_digital') {
           const currentItemCount = order.items?.length || 0
           if (currentItemCount > prev.itemCount) {
@@ -205,6 +231,8 @@ export default function MainLayout() {
               tableNumber: order.tableNumber || null,
               orderType: order.orderType,
               customerName: order.customerName || '',
+              customerPhone: order.customerPhone || '',
+              customerAddress: order.customerAddress || '',
               itemCount: currentItemCount - prev.itemCount,
               items: addedItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
               newItems: addedItems,
@@ -248,6 +276,8 @@ export default function MainLayout() {
         tableNumber: alert.tableNumber,
         orderType: alert.orderType,
         customerName: alert.customerName,
+        customerPhone: alert.customerPhone || '',
+        customerAddress: alert.customerAddress || '',
         items: alert.newItems || [],
         _printNote: alert.type === 'items_added' ? 'ITEMS AGREGADOS' : null,
         source: 'menu_digital',
@@ -570,10 +600,13 @@ export default function MainLayout() {
                     {alert.customerName && (
                       <p className="text-xs text-gray-600">{alert.customerName}</p>
                     )}
+                    {alert.orderType === 'delivery' && alert.customerAddress && (
+                      <p className="text-xs text-gray-600">📍 {alert.customerAddress}</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-0.5">
                       {alert.items.join(' | ')}
                     </p>
-                    <div className="flex gap-2 mt-1.5">
+                    <div className="flex flex-wrap gap-2 mt-1.5">
                       <button
                         onClick={() => handlePrintFromAlert(alert)}
                         className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
@@ -581,6 +614,17 @@ export default function MainLayout() {
                         <Printer className="w-3.5 h-3.5" />
                         Imprimir
                       </button>
+                      {alert.orderType === 'delivery' && alert.customerPhone && (
+                        <a
+                          href={`https://wa.me/${alert.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${alert.customerName || ''}, su pedido #${alert.orderNumber} está siendo preparado.`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          WhatsApp
+                        </a>
+                      )}
                       <button
                         onClick={() => dismissGlobalAlert(alert.id)}
                         className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"

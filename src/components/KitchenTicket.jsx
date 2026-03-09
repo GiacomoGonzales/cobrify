@@ -470,7 +470,27 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
         {order.customerPhone && (
           <div className="info-row">
             <span className="info-label">TELÉFONO:</span>
-            <span>{order.customerPhone}</span>
+            <span>
+              {order.orderType === 'delivery' ? (
+                <a
+                  href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customerName || ''}, su pedido #${order.orderNumber || ''} está siendo preparado.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#25D366', textDecoration: 'underline', fontWeight: 900 }}
+                >
+                  {order.customerPhone} (WhatsApp)
+                </a>
+              ) : (
+                order.customerPhone
+              )}
+            </span>
+          </div>
+        )}
+
+        {order.customerAddress && (
+          <div className="info-row" style={{ flexDirection: 'column' }}>
+            <span className="info-label">DIRECCIÓN:</span>
+            <span style={{ fontWeight: 700 }}>{order.customerAddress}</span>
           </div>
         )}
 
