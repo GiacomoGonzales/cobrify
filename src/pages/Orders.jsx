@@ -59,6 +59,7 @@ export default function Orders() {
   const firstLoadRef = useRef(true) // Para no alertar en la carga inicial
   const audioContextRef = useRef(null)
   const audioUnlockedRef = useRef(false)
+  const soundIntervalRef = useRef(null) // Intervalo para repetir sonido
 
   // Desbloquear AudioContext con la primera interacción del usuario
   useEffect(() => {
@@ -82,7 +83,6 @@ export default function Orders() {
       }
     }
 
-    // Escuchar cualquier interacción para desbloquear
     document.addEventListener('click', unlockAudio, { once: false })
     document.addEventListener('touchstart', unlockAudio, { once: false })
     document.addEventListener('keydown', unlockAudio, { once: false })
@@ -94,8 +94,8 @@ export default function Orders() {
     }
   }, [])
 
-  // Función para reproducir sonido de notificación usando Web Audio API
-  const playNotificationSound = () => {
+  // Reproducir un ciclo de sonido
+  const playNotificationBeep = () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
@@ -103,7 +103,6 @@ export default function Orders() {
       const ctx = audioContextRef.current
       if (ctx.state === 'suspended') ctx.resume()
 
-      // Sonido tipo campanita - tres tonos ascendentes
       const playTone = (freq, startTime, duration) => {
         const oscillator = ctx.createOscillator()
         const gainNode = ctx.createGain()
@@ -118,17 +117,44 @@ export default function Orders() {
       }
 
       const now = ctx.currentTime
-      // Repetir 2 veces para que sea más notorio
-      playTone(880, now, 0.15)          // A5
-      playTone(1108, now + 0.15, 0.15)  // C#6
-      playTone(1320, now + 0.3, 0.3)    // E6
-      playTone(880, now + 0.7, 0.15)    // A5 (repetición)
-      playTone(1108, now + 0.85, 0.15)  // C#6
-      playTone(1320, now + 1.0, 0.3)    // E6
+      playTone(880, now, 0.15)
+      playTone(1108, now + 0.15, 0.15)
+      playTone(1320, now + 0.3, 0.3)
+      playTone(880, now + 0.7, 0.15)
+      playTone(1108, now + 0.85, 0.15)
+      playTone(1320, now + 1.0, 0.3)
     } catch (error) {
-      console.warn('No se pudo reproducir sonido de notificación:', error)
+      console.warn('No se pudo reproducir sonido:', error)
     }
   }
+
+  // Iniciar sonido en loop (cada 4 segundos) hasta que se acepte
+  const startSoundLoop = () => {
+    // Limpiar intervalo anterior si existe
+    if (soundIntervalRef.current) clearInterval(soundIntervalRef.current)
+    // Sonar inmediatamente
+    playNotificationBeep()
+    // Repetir cada 4 segundos
+    soundIntervalRef.current = setInterval(() => {
+      playNotificationBeep()
+    }, 4000)
+  }
+
+  // Detener sonido
+  const stopSoundLoop = () => {
+    if (soundIntervalRef.current) {
+      clearInterval(soundIntervalRef.current)
+      soundIntervalRef.current = null
+    }
+  }
+
+  // Detener sonido cuando no quedan alertas
+  useEffect(() => {
+    if (orderAlerts.length === 0) {
+      stopSoundLoop()
+    }
+    return () => stopSoundLoop()
+  }, [orderAlerts.length])
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
@@ -462,7 +488,7 @@ export default function Orders() {
           }
 
           if (newAlerts.length > 0) {
-            playNotificationSound()
+            startSoundLoop()
             setOrderAlerts(prev => [...newAlerts, ...prev].slice(0, 10)) // Máximo 10 alertas
           }
 
@@ -776,12 +802,21 @@ export default function Orders() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const dismissAlert = (alertId) => {
+  const acknowledgeAlert = (alertId) => {
     setOrderAlerts(prev => prev.filter(a => a.id !== alertId))
   }
 
-  const dismissAllAlerts = () => {
+  const acknowledgeAllAlerts = () => {
     setOrderAlerts([])
+  }
+
+  const acknowledgeAndPrint = (alert) => {
+    // Buscar la orden completa para imprimir
+    const order = orders.find(o => o.id === alert.orderId)
+    if (order) {
+      handlePrintKitchenTicket(order)
+    }
+    acknowledgeAlert(alert.id)
   }
 
   const getStatusConfig = (status) => {
@@ -870,20 +905,21 @@ export default function Orders() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-orange-700">
-              <Bell className="w-5 h-5 animate-bounce" />
-              <span className="font-semibold text-sm">{orderAlerts.length} notificaci{orderAlerts.length === 1 ? 'ón' : 'ones'} nueva{orderAlerts.length === 1 ? '' : 's'}</span>
+              <Volume2 className="w-5 h-5 animate-bounce" />
+              <span className="font-semibold text-sm">{orderAlerts.length} pedido{orderAlerts.length > 1 ? 's' : ''} del menú digital</span>
             </div>
             <button
-              onClick={dismissAllAlerts}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
+              onClick={acknowledgeAllAlerts}
+              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
             >
-              Descartar todas
+              <CheckCircle className="w-4 h-4" />
+              Recibir todos
             </button>
           </div>
           {orderAlerts.map(alert => (
             <div
               key={alert.id}
-              className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3 shadow-md animate-pulse-once flex items-start gap-3"
+              className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3 shadow-md flex items-start gap-3"
             >
               <div className="flex-shrink-0 mt-0.5">
                 {alert.type === 'new_order' ? (
@@ -908,13 +944,24 @@ export default function Orders() {
                 <p className="text-xs text-gray-500 mt-0.5">
                   {alert.items.join(' | ')}
                 </p>
+                {/* Botones de acción */}
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => acknowledgeAndPrint(alert)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Imprimir
+                  </button>
+                  <button
+                    onClick={() => acknowledgeAlert(alert.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Recibido
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => dismissAlert(alert.id)}
-                className="flex-shrink-0 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
           ))}
         </div>
