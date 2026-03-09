@@ -94,8 +94,8 @@ export default function Orders() {
     }
   }, [])
 
-  // Reproducir un ciclo de sonido
-  const playNotificationBeep = () => {
+  // Reproducir 10 repeticiones de campanita programadas en el AudioContext
+  const playNotificationSound = () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
@@ -110,51 +110,30 @@ export default function Orders() {
         gainNode.connect(ctx.destination)
         oscillator.type = 'sine'
         oscillator.frequency.setValueAtTime(freq, startTime)
-        gainNode.gain.setValueAtTime(0.4, startTime)
+        gainNode.gain.setValueAtTime(0.5, startTime)
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
         oscillator.start(startTime)
         oscillator.stop(startTime + duration)
       }
 
       const now = ctx.currentTime
-      playTone(880, now, 0.15)
-      playTone(1108, now + 0.15, 0.15)
-      playTone(1320, now + 0.3, 0.3)
-      playTone(880, now + 0.7, 0.15)
-      playTone(1108, now + 0.85, 0.15)
-      playTone(1320, now + 1.0, 0.3)
+      // 10 repeticiones del patrón de campanita, cada una dura ~1.3s, con pausa de 0.7s entre ellas = 2s por ciclo
+      for (let i = 0; i < 10; i++) {
+        const offset = i * 2.0
+        playTone(880, now + offset, 0.15)           // A5
+        playTone(1108, now + offset + 0.15, 0.15)   // C#6
+        playTone(1320, now + offset + 0.3, 0.3)     // E6
+        playTone(880, now + offset + 0.7, 0.15)     // A5 (repetición)
+        playTone(1108, now + offset + 0.85, 0.15)   // C#6
+        playTone(1320, now + offset + 1.0, 0.3)     // E6
+      }
     } catch (error) {
       console.warn('No se pudo reproducir sonido:', error)
     }
   }
 
-  // Iniciar sonido en loop (cada 4 segundos) hasta que se acepte
-  const startSoundLoop = () => {
-    // Limpiar intervalo anterior si existe
-    if (soundIntervalRef.current) clearInterval(soundIntervalRef.current)
-    // Sonar inmediatamente
-    playNotificationBeep()
-    // Repetir cada 4 segundos
-    soundIntervalRef.current = setInterval(() => {
-      playNotificationBeep()
-    }, 4000)
-  }
-
-  // Detener sonido
-  const stopSoundLoop = () => {
-    if (soundIntervalRef.current) {
-      clearInterval(soundIntervalRef.current)
-      soundIntervalRef.current = null
-    }
-  }
-
-  // Detener sonido cuando no quedan alertas
-  useEffect(() => {
-    if (orderAlerts.length === 0) {
-      stopSoundLoop()
-    }
-    return () => stopSoundLoop()
-  }, [orderAlerts.length])
+  // Alias para compatibilidad
+  const startSoundLoop = playNotificationSound
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
