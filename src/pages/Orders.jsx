@@ -58,6 +58,41 @@ export default function Orders() {
   const prevOrdersRef = useRef(null) // Snapshot anterior para comparar
   const firstLoadRef = useRef(true) // Para no alertar en la carga inicial
   const audioContextRef = useRef(null)
+  const audioUnlockedRef = useRef(false)
+
+  // Desbloquear AudioContext con la primera interacción del usuario
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioUnlockedRef.current) return
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+        }
+        const ctx = audioContextRef.current
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            audioUnlockedRef.current = true
+            console.log('Audio desbloqueado para notificaciones')
+          })
+        } else {
+          audioUnlockedRef.current = true
+        }
+      } catch (e) {
+        console.warn('No se pudo desbloquear audio:', e)
+      }
+    }
+
+    // Escuchar cualquier interacción para desbloquear
+    document.addEventListener('click', unlockAudio, { once: false })
+    document.addEventListener('touchstart', unlockAudio, { once: false })
+    document.addEventListener('keydown', unlockAudio, { once: false })
+
+    return () => {
+      document.removeEventListener('click', unlockAudio)
+      document.removeEventListener('touchstart', unlockAudio)
+      document.removeEventListener('keydown', unlockAudio)
+    }
+  }, [])
 
   // Función para reproducir sonido de notificación usando Web Audio API
   const playNotificationSound = () => {
@@ -68,7 +103,7 @@ export default function Orders() {
       const ctx = audioContextRef.current
       if (ctx.state === 'suspended') ctx.resume()
 
-      // Sonido tipo campanita - dos tonos ascendentes
+      // Sonido tipo campanita - tres tonos ascendentes
       const playTone = (freq, startTime, duration) => {
         const oscillator = ctx.createOscillator()
         const gainNode = ctx.createGain()
@@ -76,16 +111,20 @@ export default function Orders() {
         gainNode.connect(ctx.destination)
         oscillator.type = 'sine'
         oscillator.frequency.setValueAtTime(freq, startTime)
-        gainNode.gain.setValueAtTime(0.3, startTime)
+        gainNode.gain.setValueAtTime(0.4, startTime)
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
         oscillator.start(startTime)
         oscillator.stop(startTime + duration)
       }
 
       const now = ctx.currentTime
-      playTone(880, now, 0.15)        // A5
-      playTone(1108, now + 0.15, 0.15) // C#6
-      playTone(1320, now + 0.3, 0.25)  // E6
+      // Repetir 2 veces para que sea más notorio
+      playTone(880, now, 0.15)          // A5
+      playTone(1108, now + 0.15, 0.15)  // C#6
+      playTone(1320, now + 0.3, 0.3)    // E6
+      playTone(880, now + 0.7, 0.15)    // A5 (repetición)
+      playTone(1108, now + 0.85, 0.15)  // C#6
+      playTone(1320, now + 1.0, 0.3)    // E6
     } catch (error) {
       console.warn('No se pudo reproducir sonido de notificación:', error)
     }
