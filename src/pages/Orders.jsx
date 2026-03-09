@@ -61,7 +61,8 @@ export default function Orders() {
   const audioUnlockedRef = useRef(false)
   const soundIntervalRef = useRef(null) // Intervalo para repetir sonido
 
-  // Desbloquear AudioContext con la primera interacción del usuario
+  // Desbloquear AudioContext al montar el componente
+  // El usuario ya interactuó con la página (click en el menú lateral para llegar aquí)
   useEffect(() => {
     const unlockAudio = () => {
       if (audioUnlockedRef.current) return
@@ -83,6 +84,15 @@ export default function Orders() {
       }
     }
 
+    // Intentar desbloquear inmediatamente (el click en el sidebar ya cuenta como interacción)
+    if (navigator.userActivation?.hasBeenActive) {
+      unlockAudio()
+    } else {
+      // Intentar de todas formas - en muchos navegadores funciona si hubo interacción reciente
+      unlockAudio()
+    }
+
+    // Fallback: escuchar interacciones por si no se desbloqueó
     document.addEventListener('click', unlockAudio, { once: false })
     document.addEventListener('touchstart', unlockAudio, { once: false })
     document.addEventListener('keydown', unlockAudio, { once: false })
@@ -95,13 +105,17 @@ export default function Orders() {
   }, [])
 
   // Reproducir 10 repeticiones de campanita programadas en el AudioContext
-  const playNotificationSound = () => {
+  const playNotificationSound = async () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
       }
       const ctx = audioContextRef.current
-      if (ctx.state === 'suspended') ctx.resume()
+
+      // Esperar a que el contexto esté activo
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
+      }
 
       const playTone = (freq, startTime, duration) => {
         const oscillator = ctx.createOscillator()
