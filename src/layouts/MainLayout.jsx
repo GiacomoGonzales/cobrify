@@ -5,10 +5,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
+import { getCompanySettings } from '@/services/firestoreService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
+import KitchenTicket from '@/components/KitchenTicket'
 import { useYapeListener } from '@/hooks/useYapeListener'
+import { useReactToPrint } from 'react-to-print'
 import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, Volume2 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { getAudioContext } from '@/lib/globalAudio'
@@ -73,6 +76,25 @@ export default function MainLayout() {
   const prevOrdersRef = useRef(null)
   const firstLoadRef = useRef(true)
   const activeOscillatorsRef = useRef([]) // Para poder detener el sonido
+  const [alertOrderToPrint, setAlertOrderToPrint] = useState(null) // Orden para imprimir en web
+  const [alertCompanySettings, setAlertCompanySettings] = useState(null)
+  const alertKitchenTicketRef = useRef()
+
+  // Cargar company settings para el KitchenTicket (web print)
+  useEffect(() => {
+    if (!user?.uid || businessMode !== 'restaurant') return
+    getCompanySettings(getBusinessId()).then(result => {
+      if (result.success) setAlertCompanySettings(result.data)
+    })
+  }, [user?.uid, businessMode, getBusinessId])
+
+  // react-to-print para impresión web
+  const handleAlertWebPrint = useReactToPrint({
+    contentRef: alertKitchenTicketRef,
+    onAfterPrint: () => {
+      setAlertOrderToPrint(null)
+    },
+  })
 
   // Sincronizar alert count al store (para el sidebar badge)
   useEffect(() => {
@@ -234,27 +256,44 @@ export default function MainLayout() {
       const isNative = Capacitor.isNativePlatform()
 
       if (isNative) {
-        // Impresión térmica en Android
-        const { getPrinterConfig, connectPrinter, printKitchenOrder } = await import('@/services/thermalPrinterService')
-        const printerConfigResult = await getPrinterConfig(businessId)
+        // Android/iOS: Impresión térmica Bluetooth
+        try {
+          const { getPrinterConfig, connectPrinter, printKitchenOrder } = await import('@/services/thermalPrinterService')
+          const printerConfigResult = await getPrinterConfig(businessId)
 
-        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
-          const connectResult = await connectPrinter(printerConfigResult.config.address)
-          if (connectResult.success) {
-            const result = await printKitchenOrder(printOrder, null, printerConfigResult.config.paperWidth || 58)
-            if (result.success) {
-              toast.success('Comanda impresa')
+          if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+            const connectResult = await connectPrinter(printerConfigResult.config.address)
+            if (connectResult.success) {
+              const result = await printKitchenOrder(printOrder, null, printerConfigResult.config.paperWidth || 58)
+              if (result.success) {
+                toast.success('Comanda impresa en ticketera')
+              } else {
+                toast.error('Error al imprimir: ' + result.error)
+                // Fallback a impresión estándar
+                setAlertOrderToPrint(printOrder)
+                setTimeout(() => handleAlertWebPrint(), 300)
+              }
             } else {
-              toast.error('Error al imprimir: ' + result.error)
+              toast.error('No se pudo conectar a la impresora')
+              // Fallback a impresión estándar
+              setAlertOrderToPrint(printOrder)
+              setTimeout(() => handleAlertWebPrint(), 300)
             }
           } else {
-            toast.error('No se pudo conectar a la impresora')
+            // No hay impresora configurada, usar impresión estándar
+            setAlertOrderToPrint(printOrder)
+            setTimeout(() => handleAlertWebPrint(), 300)
           }
-        } else {
-          toast.warning('No hay impresora configurada')
+        } catch (error) {
+          console.error('Error impresión térmica:', error)
+          // Fallback a impresión estándar
+          setAlertOrderToPrint(printOrder)
+          setTimeout(() => handleAlertWebPrint(), 300)
         }
       } else {
-        toast.info('Impresión térmica solo disponible en la app Android')
+        // Web/Escritorio: Impresión estándar del navegador
+        setAlertOrderToPrint(printOrder)
+        setTimeout(() => handleAlertWebPrint(), 300)
       }
     } catch (error) {
       console.error('Error al imprimir desde alerta:', error)
@@ -565,6 +604,18 @@ export default function MainLayout() {
 
       {/* Indicador de estado offline */}
       <OfflineIndicator />
+
+      {/* Comanda oculta para impresión web (react-to-print) */}
+      {alertOrderToPrint && alertCompanySettings && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+          <div ref={alertKitchenTicketRef}>
+            <KitchenTicket
+              order={alertOrderToPrint}
+              companySettings={alertCompanySettings}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
