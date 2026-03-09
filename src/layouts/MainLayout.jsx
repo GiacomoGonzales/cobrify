@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import { useYapeListener } from '@/hooks/useYapeListener'
-import { AlertTriangle, MessageCircle } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, Volume2 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 
 // Mapeo de rutas a pageIds para verificación de permisos
@@ -63,6 +63,154 @@ export default function MainLayout() {
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
+
+  // ====== NOTIFICACIONES GLOBALES DE ÓRDENES DEL MENÚ DIGITAL ======
+  const [globalOrderAlerts, setGlobalOrderAlerts] = useState([])
+  const prevOrdersRef = useRef(null)
+  const firstLoadRef = useRef(true)
+  const audioContextRef = useRef(null)
+
+  // Desbloquear AudioContext al montar (el login ya cuenta como interacción)
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+        }
+        const ctx = audioContextRef.current
+        if (ctx.state === 'suspended') ctx.resume()
+      } catch (e) { /* silencioso */ }
+    }
+    // Intentar inmediatamente
+    unlockAudio()
+    // Fallback con interacción
+    document.addEventListener('click', unlockAudio, { once: true })
+    document.addEventListener('touchstart', unlockAudio, { once: true })
+    return () => {
+      document.removeEventListener('click', unlockAudio)
+      document.removeEventListener('touchstart', unlockAudio)
+    }
+  }, [])
+
+  // Sonido: 10 repeticiones de campanita
+  const playNotificationSound = useCallback(async () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      }
+      const ctx = audioContextRef.current
+      if (ctx.state === 'suspended') await ctx.resume()
+
+      const playTone = (freq, startTime, duration) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, startTime)
+        gain.gain.setValueAtTime(0.5, startTime)
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
+        osc.start(startTime)
+        osc.stop(startTime + duration)
+      }
+
+      const now = ctx.currentTime
+      for (let i = 0; i < 10; i++) {
+        const offset = i * 2.0
+        playTone(880, now + offset, 0.15)
+        playTone(1108, now + offset + 0.15, 0.15)
+        playTone(1320, now + offset + 0.3, 0.3)
+        playTone(880, now + offset + 0.7, 0.15)
+        playTone(1108, now + offset + 0.85, 0.15)
+        playTone(1320, now + offset + 1.0, 0.3)
+      }
+    } catch (e) {
+      console.warn('No se pudo reproducir sonido:', e)
+    }
+  }, [])
+
+  // Listener global de órdenes - solo para restaurantes
+  useEffect(() => {
+    if (!user?.uid || !businessMode || businessMode !== 'restaurant') return
+
+    const businessId = getBusinessId()
+    if (!businessId) return
+
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    const q = query(ordersRef, where('status', 'in', ['pending', 'preparing', 'ready', 'dispatched']))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ordersData = []
+      snapshot.forEach((doc) => {
+        ordersData.push({ id: doc.id, ...doc.data() })
+      })
+
+      if (firstLoadRef.current) {
+        firstLoadRef.current = false
+        prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0 }]))
+        return
+      }
+
+      if (!prevOrdersRef.current) return
+
+      const prevMap = prevOrdersRef.current
+      const newAlerts = []
+
+      for (const order of ordersData) {
+        const prev = prevMap.get(order.id)
+        if (!prev && order.source === 'menu_digital') {
+          newAlerts.push({
+            id: `new-${order.id}-${Date.now()}`,
+            type: 'new_order',
+            orderId: order.id,
+            orderNumber: order.orderNumber || '?',
+            tableNumber: order.tableNumber || null,
+            orderType: order.orderType,
+            customerName: order.customerName || '',
+            itemCount: order.items?.length || 0,
+            items: (order.items || []).slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+            newItems: order.items || [],
+            timestamp: Date.now(),
+          })
+        } else if (prev && order.source === 'menu_digital') {
+          const currentItemCount = order.items?.length || 0
+          if (currentItemCount > prev.itemCount) {
+            const addedItems = (order.items || []).slice(prev.itemCount)
+            newAlerts.push({
+              id: `update-${order.id}-${Date.now()}`,
+              type: 'items_added',
+              orderId: order.id,
+              orderNumber: order.orderNumber || '?',
+              tableNumber: order.tableNumber || null,
+              orderType: order.orderType,
+              customerName: order.customerName || '',
+              itemCount: currentItemCount - prev.itemCount,
+              items: addedItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+              newItems: addedItems,
+              timestamp: Date.now(),
+            })
+          }
+        }
+      }
+
+      if (newAlerts.length > 0) {
+        playNotificationSound()
+        setGlobalOrderAlerts(prev => [...newAlerts, ...prev].slice(0, 10))
+      }
+
+      prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0 }]))
+    })
+
+    return () => unsubscribe()
+  }, [user?.uid, businessMode, getBusinessId, playNotificationSound])
+
+  const dismissGlobalAlert = (alertId) => {
+    setGlobalOrderAlerts(prev => prev.filter(a => a.id !== alertId))
+  }
+
+  const dismissAllGlobalAlerts = () => {
+    setGlobalOrderAlerts([])
+  }
 
   // Iniciar listener de Yape automáticamente (solo en APK Android)
   useYapeListener()
@@ -288,6 +436,65 @@ export default function MainLayout() {
         <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
           {/* Navbar - Siempre fijo */}
           <Navbar />
+
+          {/* Banner global de alertas de órdenes del menú digital */}
+          {globalOrderAlerts.length > 0 && (
+            <div className="bg-orange-50 border-b-2 border-orange-400 px-3 py-2 flex-shrink-0 space-y-2 max-h-[40vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-orange-700">
+                  <Volume2 className="w-5 h-5 animate-bounce" />
+                  <span className="font-bold text-sm">{globalOrderAlerts.length} pedido{globalOrderAlerts.length > 1 ? 's' : ''} del menú digital</span>
+                </div>
+                <button
+                  onClick={dismissAllGlobalAlerts}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Recibir todos
+                </button>
+              </div>
+              {globalOrderAlerts.map(alert => (
+                <div
+                  key={alert.id}
+                  className="bg-white border-l-4 border-orange-500 rounded-lg p-3 shadow-sm flex items-start gap-3"
+                >
+                  <div className="flex-shrink-0 mt-0.5">
+                    {alert.type === 'new_order' ? (
+                      <Smartphone className="w-5 h-5 text-orange-600" />
+                    ) : (
+                      <Plus className="w-5 h-5 text-blue-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-900">
+                      {alert.type === 'new_order'
+                        ? `Nueva orden ${alert.orderNumber}`
+                        : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} en orden ${alert.orderNumber}`
+                      }
+                      {alert.tableNumber ? ` - Mesa ${alert.tableNumber}` : ''}
+                      {alert.orderType === 'delivery' ? ' - Delivery' : ''}
+                      {alert.orderType === 'takeaway' ? ' - Para llevar' : ''}
+                    </p>
+                    {alert.customerName && (
+                      <p className="text-xs text-gray-600">{alert.customerName}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {alert.items.join(' | ')}
+                    </p>
+                    <div className="flex gap-2 mt-1.5">
+                      <button
+                        onClick={() => dismissGlobalAlert(alert.id)}
+                        className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Recibido
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Page Content - Solo esta área hace scroll */}
           <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>

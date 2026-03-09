@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Bell, Volume2 } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -52,102 +52,6 @@ export default function Orders() {
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
-
-  // Notificaciones de nuevas órdenes / items agregados
-  const [orderAlerts, setOrderAlerts] = useState([]) // [{id, type, orderNumber, tableNumber, itemCount, timestamp}]
-  const prevOrdersRef = useRef(null) // Snapshot anterior para comparar
-  const firstLoadRef = useRef(true) // Para no alertar en la carga inicial
-  const audioContextRef = useRef(null)
-  const audioUnlockedRef = useRef(false)
-  const soundIntervalRef = useRef(null) // Intervalo para repetir sonido
-
-  // Desbloquear AudioContext al montar el componente
-  // El usuario ya interactuó con la página (click en el menú lateral para llegar aquí)
-  useEffect(() => {
-    const unlockAudio = () => {
-      if (audioUnlockedRef.current) return
-      try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
-        }
-        const ctx = audioContextRef.current
-        if (ctx.state === 'suspended') {
-          ctx.resume().then(() => {
-            audioUnlockedRef.current = true
-            console.log('Audio desbloqueado para notificaciones')
-          })
-        } else {
-          audioUnlockedRef.current = true
-        }
-      } catch (e) {
-        console.warn('No se pudo desbloquear audio:', e)
-      }
-    }
-
-    // Intentar desbloquear inmediatamente (el click en el sidebar ya cuenta como interacción)
-    if (navigator.userActivation?.hasBeenActive) {
-      unlockAudio()
-    } else {
-      // Intentar de todas formas - en muchos navegadores funciona si hubo interacción reciente
-      unlockAudio()
-    }
-
-    // Fallback: escuchar interacciones por si no se desbloqueó
-    document.addEventListener('click', unlockAudio, { once: false })
-    document.addEventListener('touchstart', unlockAudio, { once: false })
-    document.addEventListener('keydown', unlockAudio, { once: false })
-
-    return () => {
-      document.removeEventListener('click', unlockAudio)
-      document.removeEventListener('touchstart', unlockAudio)
-      document.removeEventListener('keydown', unlockAudio)
-    }
-  }, [])
-
-  // Reproducir 10 repeticiones de campanita programadas en el AudioContext
-  const playNotificationSound = async () => {
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
-      }
-      const ctx = audioContextRef.current
-
-      // Esperar a que el contexto esté activo
-      if (ctx.state === 'suspended') {
-        await ctx.resume()
-      }
-
-      const playTone = (freq, startTime, duration) => {
-        const oscillator = ctx.createOscillator()
-        const gainNode = ctx.createGain()
-        oscillator.connect(gainNode)
-        gainNode.connect(ctx.destination)
-        oscillator.type = 'sine'
-        oscillator.frequency.setValueAtTime(freq, startTime)
-        gainNode.gain.setValueAtTime(0.5, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
-        oscillator.start(startTime)
-        oscillator.stop(startTime + duration)
-      }
-
-      const now = ctx.currentTime
-      // 10 repeticiones del patrón de campanita, cada una dura ~1.3s, con pausa de 0.7s entre ellas = 2s por ciclo
-      for (let i = 0; i < 10; i++) {
-        const offset = i * 2.0
-        playTone(880, now + offset, 0.15)           // A5
-        playTone(1108, now + offset + 0.15, 0.15)   // C#6
-        playTone(1320, now + offset + 0.3, 0.3)     // E6
-        playTone(880, now + offset + 0.7, 0.15)     // A5 (repetición)
-        playTone(1108, now + offset + 0.85, 0.15)   // C#6
-        playTone(1320, now + offset + 1.0, 0.3)     // E6
-      }
-    } catch (error) {
-      console.warn('No se pudo reproducir sonido:', error)
-    }
-  }
-
-  // Alias para compatibilidad
-  const startSoundLoop = playNotificationSound
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
@@ -429,67 +333,6 @@ export default function Orders() {
           totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
         }
         setStats(newStats)
-
-        // Detectar nuevas órdenes o items agregados desde menú digital
-        if (firstLoadRef.current) {
-          // Primera carga: solo guardar referencia, no alertar
-          firstLoadRef.current = false
-          prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0, updatedAt: o.updatedAt }]))
-        } else if (prevOrdersRef.current) {
-          const prevMap = prevOrdersRef.current
-          const newAlerts = []
-
-          for (const order of ordersData) {
-            const prev = prevMap.get(order.id)
-            if (!prev) {
-              // Orden completamente nueva
-              if (order.source === 'menu_digital') {
-                newAlerts.push({
-                  id: `new-${order.id}-${Date.now()}`,
-                  type: 'new_order',
-                  orderId: order.id,
-                  orderNumber: order.orderNumber || '?',
-                  tableNumber: order.tableNumber || null,
-                  orderType: order.orderType,
-                  customerName: order.customerName || '',
-                  itemCount: order.items?.length || 0,
-                  items: (order.items || []).slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
-                  newItems: order.items || [], // Items completos para imprimir
-                  total: order.total || 0,
-                  timestamp: Date.now(),
-                })
-              }
-            } else {
-              // Orden existente: verificar si se agregaron items
-              const currentItemCount = order.items?.length || 0
-              if (currentItemCount > prev.itemCount && order.source === 'menu_digital') {
-                const addedItems = (order.items || []).slice(prev.itemCount)
-                newAlerts.push({
-                  id: `update-${order.id}-${Date.now()}`,
-                  type: 'items_added',
-                  orderId: order.id,
-                  orderNumber: order.orderNumber || '?',
-                  tableNumber: order.tableNumber || null,
-                  orderType: order.orderType,
-                  customerName: order.customerName || '',
-                  itemCount: currentItemCount - prev.itemCount,
-                  items: addedItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
-                  newItems: addedItems, // Solo los items nuevos para imprimir
-                  total: order.total || 0,
-                  timestamp: Date.now(),
-                })
-              }
-            }
-          }
-
-          if (newAlerts.length > 0) {
-            startSoundLoop()
-            setOrderAlerts(prev => [...newAlerts, ...prev].slice(0, 10)) // Máximo 10 alertas
-          }
-
-          // Actualizar referencia
-          prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0, updatedAt: o.updatedAt }]))
-        }
 
         setIsLoading(false)
       },
@@ -797,30 +640,6 @@ export default function Orders() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const acknowledgeAlert = (alertId) => {
-    setOrderAlerts(prev => prev.filter(a => a.id !== alertId))
-  }
-
-  const acknowledgeAllAlerts = () => {
-    setOrderAlerts([])
-  }
-
-  const acknowledgeAndPrint = (alert) => {
-    // Buscar la orden completa y crear una copia con solo los items nuevos
-    const order = orders.find(o => o.id === alert.orderId)
-    if (order && alert.newItems?.length > 0) {
-      const printOrder = {
-        ...order,
-        items: alert.newItems, // Solo imprimir los items nuevos/agregados
-        _printNote: alert.type === 'items_added' ? 'ITEMS AGREGADOS' : null,
-      }
-      handlePrintKitchenTicket(printOrder)
-    } else if (order) {
-      handlePrintKitchenTicket(order)
-    }
-    acknowledgeAlert(alert.id)
-  }
-
   const getStatusConfig = (status) => {
     switch (status) {
       case 'pending':
@@ -901,73 +720,6 @@ export default function Orders() {
           Nueva Orden
         </Button>
       </div>
-
-      {/* Alertas de nuevas órdenes / items desde menú digital */}
-      {orderAlerts.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-orange-700">
-              <Volume2 className="w-5 h-5 animate-bounce" />
-              <span className="font-semibold text-sm">{orderAlerts.length} pedido{orderAlerts.length > 1 ? 's' : ''} del menú digital</span>
-            </div>
-            <button
-              onClick={acknowledgeAllAlerts}
-              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Recibir todos
-            </button>
-          </div>
-          {orderAlerts.map(alert => (
-            <div
-              key={alert.id}
-              className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3 shadow-md flex items-start gap-3"
-            >
-              <div className="flex-shrink-0 mt-0.5">
-                {alert.type === 'new_order' ? (
-                  <Smartphone className="w-6 h-6 text-orange-600" />
-                ) : (
-                  <Plus className="w-6 h-6 text-blue-600" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm text-gray-900">
-                  {alert.type === 'new_order'
-                    ? `Nueva orden ${alert.orderNumber}`
-                    : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} agregado${alert.itemCount > 1 ? 's' : ''} a orden ${alert.orderNumber}`
-                  }
-                  {alert.tableNumber ? ` - Mesa ${alert.tableNumber}` : ''}
-                  {alert.orderType === 'delivery' ? ' - Delivery' : ''}
-                  {alert.orderType === 'takeaway' ? ' - Para llevar' : ''}
-                </p>
-                {alert.customerName && (
-                  <p className="text-xs text-gray-600">{alert.customerName}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {alert.items.join(' | ')}
-                </p>
-                {/* Botones de acción */}
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => acknowledgeAndPrint(alert)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    Imprimir
-                  </button>
-                  <button
-                    onClick={() => acknowledgeAlert(alert.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Recibido
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
