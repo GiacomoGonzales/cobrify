@@ -57,20 +57,27 @@ const routeToPageId = {
 }
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
+  const setOrderAlertCount = useStore(state => state.setOrderAlertCount)
 
   // ====== NOTIFICACIONES GLOBALES DE ÓRDENES DEL MENÚ DIGITAL ======
   const [globalOrderAlerts, setGlobalOrderAlerts] = useState([])
   const prevOrdersRef = useRef(null)
   const firstLoadRef = useRef(true)
   const audioContextRef = useRef(null)
+  const activeOscillatorsRef = useRef([]) // Para poder detener el sonido
 
-  // Desbloquear AudioContext al montar (el login ya cuenta como interacción)
+  // Sincronizar alert count al store (para el sidebar badge)
+  useEffect(() => {
+    setOrderAlertCount(globalOrderAlerts.length)
+  }, [globalOrderAlerts.length, setOrderAlertCount])
+
+  // Desbloquear AudioContext con cualquier interacción
   useEffect(() => {
     const unlockAudio = () => {
       try {
@@ -81,18 +88,16 @@ export default function MainLayout() {
         if (ctx.state === 'suspended') ctx.resume()
       } catch (e) { /* silencioso */ }
     }
-    // Intentar inmediatamente
-    unlockAudio()
-    // Fallback con interacción
-    document.addEventListener('click', unlockAudio, { once: true })
-    document.addEventListener('touchstart', unlockAudio, { once: true })
+    // Escuchar TODAS las interacciones (no once, porque puede fallar la primera vez)
+    document.addEventListener('click', unlockAudio)
+    document.addEventListener('touchstart', unlockAudio)
     return () => {
       document.removeEventListener('click', unlockAudio)
       document.removeEventListener('touchstart', unlockAudio)
     }
   }, [])
 
-  // Sonido: 10 repeticiones de campanita
+  // Sonido: 10 repeticiones de campanita (cancelable)
   const playNotificationSound = useCallback(async () => {
     try {
       if (!audioContextRef.current) {
@@ -101,6 +106,10 @@ export default function MainLayout() {
       const ctx = audioContextRef.current
       if (ctx.state === 'suspended') await ctx.resume()
 
+      // Detener sonidos anteriores
+      stopNotificationSound()
+
+      const oscillators = []
       const playTone = (freq, startTime, duration) => {
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
@@ -112,6 +121,7 @@ export default function MainLayout() {
         gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
         osc.start(startTime)
         osc.stop(startTime + duration)
+        oscillators.push(osc)
       }
 
       const now = ctx.currentTime
@@ -124,14 +134,23 @@ export default function MainLayout() {
         playTone(1108, now + offset + 0.85, 0.15)
         playTone(1320, now + offset + 1.0, 0.3)
       }
+      activeOscillatorsRef.current = oscillators
     } catch (e) {
       console.warn('No se pudo reproducir sonido:', e)
     }
   }, [])
 
+  // Detener sonido inmediatamente
+  const stopNotificationSound = useCallback(() => {
+    activeOscillatorsRef.current.forEach(osc => {
+      try { osc.stop() } catch (e) { /* ya terminó */ }
+    })
+    activeOscillatorsRef.current = []
+  }, [])
+
   // Listener global de órdenes - solo para restaurantes
   useEffect(() => {
-    if (!user?.uid || !businessMode || businessMode !== 'restaurant') return
+    if (!user?.uid || businessMode !== 'restaurant') return
 
     const businessId = getBusinessId()
     if (!businessId) return
@@ -141,8 +160,8 @@ export default function MainLayout() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = []
-      snapshot.forEach((doc) => {
-        ordersData.push({ id: doc.id, ...doc.data() })
+      snapshot.forEach((d) => {
+        ordersData.push({ id: d.id, ...d.data() })
       })
 
       if (firstLoadRef.current) {
@@ -205,11 +224,14 @@ export default function MainLayout() {
   }, [user?.uid, businessMode, getBusinessId, playNotificationSound])
 
   const dismissGlobalAlert = (alertId) => {
-    setGlobalOrderAlerts(prev => prev.filter(a => a.id !== alertId))
+    const newAlerts = globalOrderAlerts.filter(a => a.id !== alertId)
+    setGlobalOrderAlerts(newAlerts)
+    if (newAlerts.length === 0) stopNotificationSound()
   }
 
   const dismissAllGlobalAlerts = () => {
     setGlobalOrderAlerts([])
+    stopNotificationSound()
   }
 
   // Iniciar listener de Yape automáticamente (solo en APK Android)

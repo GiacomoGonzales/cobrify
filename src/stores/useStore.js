@@ -75,6 +75,10 @@ export const useStore = create(
       setMobileMenuOpen: open => set({ mobileMenuOpen: open }),
       toggleMobileMenu: () =>
         set(state => ({ mobileMenuOpen: !state.mobileMenuOpen })),
+
+      // Notificaciones de órdenes del menú digital
+      orderAlertCount: 0,
+      setOrderAlertCount: count => set({ orderAlertCount: count }),
     }),
     {
       name: 'cobrify-storage',

@@ -55,7 +55,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 
 function Sidebar() {
-  const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar } = useStore()
+  const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
   const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
@@ -889,35 +889,52 @@ function Sidebar() {
             ))}
           </div>
         )}
-        {filteredMenuItems.map(item => (
+        {filteredMenuItems.map(item => {
+          const hasOrderAlerts = item.pageId === 'orders' && orderAlertCount > 0
+          return (
           <NavLink
             key={item.path}
             to={getPath(item.path)}
             onClick={() => setMobileMenuOpen(false)}
             title={item.label}
             className={({ isActive }) =>
-              `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
+              `relative flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
                 isActive
                   ? ''
-                  : 'text-gray-700 hover:bg-gray-100'
+                  : hasOrderAlerts
+                    ? 'text-orange-700 bg-orange-50 hover:bg-orange-100 animate-pulse'
+                    : 'text-gray-700 hover:bg-gray-100'
               }`
             }
             style={({ isActive }) => isActive ? {
               backgroundColor: `${branding.primaryColor}15`,
               color: branding.primaryColor
+            } : hasOrderAlerts ? {
+              backgroundColor: '#FFF7ED',
             } : {}}
           >
             {({ isActive }) => (
               <>
                 <item.icon
-                  className="w-5 h-5 flex-shrink-0"
-                  style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
+                  className={`w-5 h-5 flex-shrink-0 ${hasOrderAlerts && !isActive ? 'animate-bounce' : ''}`}
+                  style={isActive ? { color: branding.primaryColor } : hasOrderAlerts ? { color: '#EA580C' } : { color: '#6B7280' }}
                 />
                 <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+                {hasOrderAlerts && !sidebarCollapsed && (
+                  <span className="ml-auto bg-orange-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                    {orderAlertCount}
+                  </span>
+                )}
+                {hasOrderAlerts && sidebarCollapsed && (
+                  <span className="absolute top-0 right-0 md:block hidden bg-orange-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {orderAlertCount}
+                  </span>
+                )}
               </>
             )}
           </NavLink>
-        ))}
+          )
+        })}
 
         {/* Separador */}
         <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
