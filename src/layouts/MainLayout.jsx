@@ -11,6 +11,7 @@ import OfflineIndicator from '@/components/OfflineIndicator'
 import { useYapeListener } from '@/hooks/useYapeListener'
 import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, Volume2 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
+import { getAudioContext } from '@/lib/globalAudio'
 
 // Mapeo de rutas a pageIds para verificación de permisos
 const routeToPageId = {
@@ -69,7 +70,6 @@ export default function MainLayout() {
   const [globalOrderAlerts, setGlobalOrderAlerts] = useState([])
   const prevOrdersRef = useRef(null)
   const firstLoadRef = useRef(true)
-  const audioContextRef = useRef(null)
   const activeOscillatorsRef = useRef([]) // Para poder detener el sonido
 
   // Sincronizar alert count al store (para el sidebar badge)
@@ -77,33 +77,11 @@ export default function MainLayout() {
     setOrderAlertCount(globalOrderAlerts.length)
   }, [globalOrderAlerts.length, setOrderAlertCount])
 
-  // Desbloquear AudioContext con cualquier interacción
-  useEffect(() => {
-    const unlockAudio = () => {
-      try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
-        }
-        const ctx = audioContextRef.current
-        if (ctx.state === 'suspended') ctx.resume()
-      } catch (e) { /* silencioso */ }
-    }
-    // Escuchar TODAS las interacciones (no once, porque puede fallar la primera vez)
-    document.addEventListener('click', unlockAudio)
-    document.addEventListener('touchstart', unlockAudio)
-    return () => {
-      document.removeEventListener('click', unlockAudio)
-      document.removeEventListener('touchstart', unlockAudio)
-    }
-  }, [])
-
   // Sonido: 10 repeticiones de campanita (cancelable)
+  // Usa AudioContext global que se desbloqueó con el click del login
   const playNotificationSound = useCallback(async () => {
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
-      }
-      const ctx = audioContextRef.current
+      const ctx = getAudioContext()
       if (ctx.state === 'suspended') await ctx.resume()
 
       // Detener sonidos anteriores
