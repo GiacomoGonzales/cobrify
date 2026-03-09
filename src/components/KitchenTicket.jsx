@@ -410,7 +410,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
 
       {/* HEADER */}
       <div className="kitchen-header">
-        <div className="kitchen-title">COMANDA</div>
+        <div className="kitchen-title">{order._printNote ? `COMANDA - ${order._printNote}` : 'COMANDA'}</div>
         {stationName && (
           <div className="station-name">★ {stationName.toUpperCase()} ★</div>
         )}

@@ -1288,7 +1288,7 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
       .align('center')
       .doubleHeight()
       .bold()
-      .text('*** COMANDA ***\n')
+      .text(order._printNote ? `*** COMANDA ***\n*** ${order._printNote} ***\n` : '*** COMANDA ***\n')
       .clearFormatting();
 
     if (stationName) {
@@ -2307,8 +2307,14 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
       .doubleHeight(true)
       .bold(true)
       .text('*** COMANDA ***')
-      .newLine()
-      .doubleHeight(false);
+      .newLine();
+
+    if (order._printNote) {
+      builder.text(`*** ${order._printNote} ***`)
+        .newLine();
+    }
+
+    builder.doubleHeight(false);
 
     if (stationName) {
       builder.bold(true)

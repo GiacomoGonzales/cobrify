@@ -461,6 +461,7 @@ export default function Orders() {
                   customerName: order.customerName || '',
                   itemCount: order.items?.length || 0,
                   items: (order.items || []).slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+                  newItems: order.items || [], // Items completos para imprimir
                   total: order.total || 0,
                   timestamp: Date.now(),
                 })
@@ -469,7 +470,7 @@ export default function Orders() {
               // Orden existente: verificar si se agregaron items
               const currentItemCount = order.items?.length || 0
               if (currentItemCount > prev.itemCount && order.source === 'menu_digital') {
-                const newItems = (order.items || []).slice(prev.itemCount)
+                const addedItems = (order.items || []).slice(prev.itemCount)
                 newAlerts.push({
                   id: `update-${order.id}-${Date.now()}`,
                   type: 'items_added',
@@ -479,7 +480,8 @@ export default function Orders() {
                   orderType: order.orderType,
                   customerName: order.customerName || '',
                   itemCount: currentItemCount - prev.itemCount,
-                  items: newItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+                  items: addedItems.slice(0, 5).map(i => `${i.quantity}x ${i.name}`),
+                  newItems: addedItems, // Solo los items nuevos para imprimir
                   total: order.total || 0,
                   timestamp: Date.now(),
                 })
@@ -811,9 +813,16 @@ export default function Orders() {
   }
 
   const acknowledgeAndPrint = (alert) => {
-    // Buscar la orden completa para imprimir
+    // Buscar la orden completa y crear una copia con solo los items nuevos
     const order = orders.find(o => o.id === alert.orderId)
-    if (order) {
+    if (order && alert.newItems?.length > 0) {
+      const printOrder = {
+        ...order,
+        items: alert.newItems, // Solo imprimir los items nuevos/agregados
+        _printNote: alert.type === 'items_added' ? 'ITEMS AGREGADOS' : null,
+      }
+      handlePrintKitchenTicket(printOrder)
+    } else if (order) {
       handlePrintKitchenTicket(order)
     }
     acknowledgeAlert(alert.id)
