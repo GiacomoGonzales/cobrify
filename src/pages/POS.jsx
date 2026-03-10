@@ -108,6 +108,14 @@ const ORDER_TYPES = {
 }
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
+// Abreviaturas cortas para mostrar en el carrito
+const UNIT_SHORT_LABELS = {
+  KGM: 'kg', GRM: 'g', LTR: 'lt', MTR: 'm', MTK: 'm²', MTQ: 'm³',
+  NIU: 'und', ZZ: 'srv', BX: 'caja', PK: 'paq', TNE: 'ton',
+  GLL: 'gal', MLT: 'ml', ONZ: 'oz', LBR: 'lb', DZN: 'doc',
+}
+const getUnitShortLabel = (code) => UNIT_SHORT_LABELS[code] || UNIT_TYPES.find(u => u.code === code)?.label || code
+
 const UNIT_TYPES = [
   { code: 'NIU', label: 'Unidad' },
   { code: 'ZZ', label: 'Servicio' },
@@ -410,6 +418,10 @@ export default function POS() {
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
   const [editingPrice, setEditingPrice] = useState('')
+
+  // Venta por monto (granel): ingresa S/ y calcula el peso
+  const [amountModeItemId, setAmountModeItemId] = useState(null)
+  const [amountModeValue, setAmountModeValue] = useState('')
 
   // Panel de cliente/documento colapsable
   const [showCustomerPanel, setShowCustomerPanel] = useState(false)
@@ -1954,8 +1966,10 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
-    const quantity = parseFloat(newQuantity)
-    if (isNaN(quantity) || quantity < 0) return
+    // Permitir string vacío o valores intermedios como "0", "0." mientras el usuario escribe
+    const rawValue = newQuantity === '' || newQuantity === '0' || newQuantity === '0.' ? newQuantity : newQuantity
+    const quantity = parseFloat(rawValue)
+    if (rawValue !== '' && rawValue !== '0' && rawValue !== '0.' && (isNaN(quantity) || quantity < 0)) return
 
     setCart(
       cart
@@ -1974,17 +1988,18 @@ export default function POS() {
                 }
               }
             }
-            return { ...item, quantity: quantity }
+            return { ...item, quantity: rawValue === '' || rawValue === '0' || rawValue === '0.' ? rawValue : quantity }
           }
           return item
         })
     )
   }
 
-  // Eliminar del carrito si la cantidad queda en 0 al salir del input
+  // Al salir del input, restaurar a 1 si quedó vacío o en 0
   const handleQuantityBlur = (itemId, currentQuantity) => {
-    if (currentQuantity <= 0) {
-      removeFromCart(itemId)
+    const qty = parseFloat(currentQuantity)
+    if (!currentQuantity || currentQuantity === '' || currentQuantity === '0' || currentQuantity === '0.' || isNaN(qty) || qty <= 0) {
+      setQuantityDirectly(itemId, 1)
     }
   }
 
@@ -5262,19 +5277,76 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
                                 {item.allowDecimalQuantity ? (
-                                  /* Input editable para productos por peso */
-                                  <div className="flex items-center gap-2">
+                                  /* Input editable para productos por peso/monto */
+                                  <div className="flex items-center gap-1.5">
                                     <input
                                       type="number"
-                                      value={item.quantity}
-                                      onChange={(e) => setQuantityDirectly(itemId, e.target.value)}
-                                      onBlur={() => handleQuantityBlur(itemId, item.quantity)}
+                                      value={amountModeItemId === itemId ? amountModeValue : item.quantity}
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        if (amountModeItemId === itemId) {
+                                          setAmountModeValue(val)
+                                          const amount = parseFloat(val)
+                                          const price = item.unitPrice || item.price
+                                          if (!isNaN(amount) && amount > 0 && price > 0) {
+                                            setQuantityDirectly(itemId, Math.round((amount / price) * 1000) / 1000)
+                                          }
+                                        } else {
+                                          setQuantityDirectly(itemId, val)
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if (amountModeItemId === itemId) {
+                                          if (!amountModeValue || parseFloat(amountModeValue) <= 0) {
+                                            setAmountModeItemId(null)
+                                            setAmountModeValue('')
+                                          }
+                                        } else {
+                                          handleQuantityBlur(itemId, item.quantity)
+                                        }
+                                      }}
                                       onFocus={(e) => e.target.select()}
-                                      step="0.001"
+                                      step={amountModeItemId === itemId ? '0.01' : '0.001'}
                                       min="0.001"
-                                      className="w-20 px-2 py-1.5 text-sm text-center font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                      placeholder={amountModeItemId === itemId ? '0.00' : ''}
+                                      className={`w-20 px-2 py-1.5 text-sm text-center font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                                        amountModeItemId === itemId ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
+                                      }`}
                                     />
-                                    <span className="text-sm text-gray-500">{item.unit || 'kg'}</span>
+                                    {/* Toggle kg / S/ */}
+                                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                      <button
+                                        onClick={() => { setAmountModeItemId(null); setAmountModeValue('') }}
+                                        className={`px-2 py-1.5 text-xs font-medium transition-colors ${
+                                          amountModeItemId !== itemId
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-white text-gray-500 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        {getUnitShortLabel(item.unit || 'KGM')}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          // Pre-calcular monto basado en peso actual
+                                          const price = item.unitPrice || item.price
+                                          const qty = parseFloat(item.quantity)
+                                          const amount = (!isNaN(qty) && qty > 0 && price > 0) ? Math.round(qty * price * 100) / 100 : ''
+                                          setAmountModeItemId(itemId)
+                                          setAmountModeValue(amount !== '' ? String(amount) : '')
+                                        }}
+                                        className={`px-2 py-1.5 text-xs font-medium transition-colors ${
+                                          amountModeItemId === itemId
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-white text-gray-500 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        S/
+                                      </button>
+                                    </div>
+                                    {/* Mostrar peso calculado en modo S/ */}
+                                    {amountModeItemId === itemId && item.quantity > 0 && (
+                                      <span className="text-xs text-gray-500">= {item.quantity} {getUnitShortLabel(item.unit || 'KGM')}</span>
+                                    )}
                                   </div>
                                 ) : (
                                   /* Botones +/- para productos normales con cantidad editable */

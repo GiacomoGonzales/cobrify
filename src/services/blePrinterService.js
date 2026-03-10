@@ -1091,7 +1091,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));
     }
 
-    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.feed(6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1177,7 +1177,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
-    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.feed(6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1309,7 +1309,7 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
     commands.push(ESCPOSCommands.lineFeed());
     commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
-    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.feed(6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);

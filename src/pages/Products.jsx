@@ -1658,23 +1658,30 @@ export default function Products() {
     const categoryToDelete = getCategoryById(categories, categoryId)
     if (!categoryToDelete) return
 
-    // Verificar si tiene productos asignados (comparando por ID o nombre para compatibilidad)
-    const hasProducts = products.some(p => p.category === categoryId || p.category === categoryToDelete.name)
-
     // Verificar si tiene subcategorías
     const hasSubcategories = getSubcategories(categories, categoryId).length > 0
 
-    if (hasProducts) {
-      toast.error('No puedes eliminar una categoría que tiene productos asignados', 5000)
+    if (hasSubcategories) {
+      toast.error('No puedes eliminar una categoría que tiene subcategorías. Elimina primero las subcategorías.', 5000)
       return
     }
 
-    if (hasSubcategories) {
-      toast.error('No puedes eliminar una categoría que tiene subcategorías', 5000)
-      return
-    }
+    // Buscar productos asignados a esta categoría
+    const affectedProducts = products.filter(p => p.category === categoryId || p.category === categoryToDelete.name)
 
     try {
+      // Si es subcategoría y tiene productos, moverlos a la categoría padre
+      if (affectedProducts.length > 0 && categoryToDelete.parentId) {
+        const parentCategory = getCategoryById(categories, categoryToDelete.parentId)
+        for (const product of affectedProducts) {
+          await updateProduct(getBusinessId(), product.id, { category: categoryToDelete.parentId })
+        }
+        toast.info(`${affectedProducts.length} producto(s) movidos a "${parentCategory?.name || 'categoría padre'}"`)
+      } else if (affectedProducts.length > 0 && !categoryToDelete.parentId) {
+        toast.error('No puedes eliminar una categoría raíz que tiene productos. Mueve los productos primero.', 5000)
+        return
+      }
+
       const updatedCategories = categories.filter(cat => cat.id !== categoryId)
       setCategories(updatedCategories)
 
@@ -1714,6 +1721,8 @@ export default function Products() {
     if (!category) return false
     const hasProducts = products.some(p => p.category === categoryId || p.category === category.name)
     const hasSubcategories = getSubcategories(categories, categoryId).length > 0
+    // Subcategorías con productos SÍ se pueden eliminar (productos se mueven al padre)
+    if (category.parentId && hasProducts && !hasSubcategories) return true
     return !hasProducts && !hasSubcategories
   }
 
@@ -1733,17 +1742,28 @@ export default function Products() {
 
     setIsDeletingCategories(true)
     try {
+      // Mover productos de subcategorías eliminadas a su categoría padre
+      let movedCount = 0
+      for (const catId of categoriesToDelete) {
+        const cat = getCategoryById(categories, catId)
+        if (!cat?.parentId) continue
+        const affected = products.filter(p => p.category === catId || p.category === cat.name)
+        for (const product of affected) {
+          await updateProduct(getBusinessId(), product.id, { category: cat.parentId })
+          movedCount++
+        }
+      }
+
       const updatedCategories = categories.filter(cat => !categoriesToDelete.includes(cat.id))
       setCategories(updatedCategories)
 
       const result = await saveProductCategories(getBusinessId(), updatedCategories)
       if (result.success) {
         const skipped = selectedCategories.size - categoriesToDelete.length
-        if (skipped > 0) {
-          toast.success(`${categoriesToDelete.length} categoría(s) eliminada(s). ${skipped} no se pudieron eliminar (tienen productos o subcategorías).`, 5000)
-        } else {
-          toast.success(`${categoriesToDelete.length} categoría(s) eliminada(s) exitosamente`)
-        }
+        let msg = `${categoriesToDelete.length} categoría(s) eliminada(s) exitosamente`
+        if (movedCount > 0) msg += `. ${movedCount} producto(s) movidos a su categoría padre`
+        if (skipped > 0) msg += `. ${skipped} no se pudieron eliminar`
+        toast.success(msg, 5000)
         setSelectedCategories(new Set())
       } else {
         throw new Error(result.error)
