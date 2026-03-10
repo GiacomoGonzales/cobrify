@@ -226,6 +226,8 @@ export default function Settings() {
   })
   const [catalogWholesaleMinQty, setCatalogWholesaleMinQty] = useState(1)
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
+  const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
+  const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -826,6 +828,8 @@ export default function Settings() {
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
+        setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
+        setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
         if (businessData.businessHours) {
           setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
         }
@@ -5047,6 +5051,37 @@ export default function Settings() {
                     </label>
                   </div>
 
+                  {/* Tipos de pedido en menú digital (solo restaurante) */}
+                  {businessMode === 'restaurant' && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Tipos de pedido en carta digital</p>
+                      <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Para Llevar</span>
+                          <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos para recoger desde la carta digital</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={catalogAllowTakeaway}
+                          onChange={(e) => setCatalogAllowTakeaway(e.target.checked)}
+                          className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Delivery</span>
+                          <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos con delivery desde la carta digital</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={catalogAllowDelivery}
+                          onChange={(e) => setCatalogAllowDelivery(e.target.checked)}
+                          className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                      </label>
+                    </div>
+                  )}
+
                   {/* Cantidad mínima para precio mayorista */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5135,6 +5170,8 @@ export default function Settings() {
                       catalogObservations: catalogObservations.trim(),
                       catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
                       catalogShowAllPrices,
+                      catalogAllowTakeaway,
+                      catalogAllowDelivery,
                       businessHours,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })

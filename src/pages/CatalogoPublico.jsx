@@ -927,7 +927,9 @@ function CartDrawer({
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
   // Estados para modo restaurante
-  const [orderType, setOrderType] = useState(initialTableNumber ? 'dine_in' : 'takeaway')
+  const defaultOrderType = initialTableNumber ? 'dine_in'
+    : (business?.catalogAllowTakeaway !== false ? 'takeaway' : business?.catalogAllowDelivery !== false ? 'delivery' : 'takeaway')
+  const [orderType, setOrderType] = useState(defaultOrderType)
   const [tableNumber, setTableNumber] = useState(initialTableNumber)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -961,7 +963,7 @@ function CartDrawer({
         setOrderSuccess(false)
         setOrderNumber('')
         setOrderConfirmItems([])
-        setOrderType(initialTableNumber ? 'dine_in' : 'takeaway')
+        setOrderType(defaultOrderType)
         setTableNumber(initialTableNumber)
         setCustomerName('')
         setCustomerPhone('')
@@ -1445,36 +1447,43 @@ function CartDrawer({
                     </div>
                   ) : (
                     <>
-                      {/* Tipo de orden */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Tipo de pedido
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {ORDER_TYPES.filter(t => t.id !== 'dine_in').map((type) => {
-                            const Icon = type.icon
-                            const isSelected = orderType === type.id
-                            return (
-                              <button
-                                key={type.id}
-                                onClick={() => setOrderType(type.id)}
-                                className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                                  isSelected
-                                    ? `border-${type.color}-500 bg-${type.color}-50 text-${type.color}-700`
-                                    : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                                style={isSelected ? {
-                                  borderColor: type.color === 'emerald' ? '#10B981' : type.color === 'blue' ? '#3B82F6' : '#F97316',
-                                  backgroundColor: type.color === 'emerald' ? '#ECFDF5' : type.color === 'blue' ? '#EFF6FF' : '#FFF7ED'
-                                } : {}}
-                              >
-                                <Icon className="w-5 h-5" />
-                                <span className="text-xs font-medium">{type.label}</span>
-                              </button>
-                            )
-                          })}
+                      {/* Tipo de orden (solo mostrar si hay más de una opción) */}
+                      {(business?.catalogAllowTakeaway !== false && business?.catalogAllowDelivery !== false) && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Tipo de pedido
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {ORDER_TYPES.filter(t => {
+                              if (t.id === 'dine_in') return false
+                              if (t.id === 'takeaway' && business?.catalogAllowTakeaway === false) return false
+                              if (t.id === 'delivery' && business?.catalogAllowDelivery === false) return false
+                              return true
+                            }).map((type) => {
+                              const Icon = type.icon
+                              const isSelected = orderType === type.id
+                              return (
+                                <button
+                                  key={type.id}
+                                  onClick={() => setOrderType(type.id)}
+                                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                                    isSelected
+                                      ? `border-${type.color}-500 bg-${type.color}-50 text-${type.color}-700`
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                  style={isSelected ? {
+                                    borderColor: type.color === 'emerald' ? '#10B981' : type.color === 'blue' ? '#3B82F6' : '#F97316',
+                                    backgroundColor: type.color === 'emerald' ? '#ECFDF5' : type.color === 'blue' ? '#EFF6FF' : '#FFF7ED'
+                                  } : {}}
+                                >
+                                  <Icon className="w-5 h-5" />
+                                  <span className="text-xs font-medium">{type.label}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Mesa (solo para dine_in sin QR) */}
                       {orderType === 'dine_in' && (
