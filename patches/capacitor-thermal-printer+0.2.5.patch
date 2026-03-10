@@ -1,0 +1,21 @@
+diff --git a/node_modules/capacitor-thermal-printer/android/src/main/java/com/malik12tree/bluetooth_print/CapacitorThermalPrinterPlugin.java b/node_modules/capacitor-thermal-printer/android/src/main/java/com/malik12tree/bluetooth_print/CapacitorThermalPrinterPlugin.java
+index be3cdc6..e210b04 100644
+--- a/node_modules/capacitor-thermal-printer/android/src/main/java/com/malik12tree/bluetooth_print/CapacitorThermalPrinterPlugin.java
++++ b/node_modules/capacitor-thermal-printer/android/src/main/java/com/malik12tree/bluetooth_print/CapacitorThermalPrinterPlugin.java
+@@ -156,8 +156,14 @@ public class CapacitorThermalPrinterPlugin extends Plugin implements PrinterObse
+     protected void handleOnDestroy() {
+         super.handleOnDestroy();
+ 
+-        getContext().unregisterReceiver(mBluetoothReceiver);
+-        mRegistered = false;
++        if (mRegistered && mBluetoothReceiver != null) {
++            try {
++                getContext().unregisterReceiver(mBluetoothReceiver);
++            } catch (IllegalArgumentException e) {
++                Log.w(TAG, "Receiver not registered, skipping unregister");
++            }
++            mRegistered = false;
++        }
+ 
+         PrinterObserverManager.getInstance().remove(this);
+     }
