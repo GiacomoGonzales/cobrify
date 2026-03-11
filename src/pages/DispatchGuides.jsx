@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -84,6 +85,7 @@ const DEMO_GUIDES = [
 ]
 
 export default function DispatchGuides() {
+  const navigate = useNavigate()
   const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user } = useAppContext()
 
   // Verificar si el usuario tiene acceso a la sucursal principal
@@ -1473,6 +1475,42 @@ export default function DispatchGuides() {
                     onClick={() => setSelectedGuide(null)}
                   >
                     Cerrar
+                  </Button>
+
+                  {/* Generar Factura desde Guía */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const guide = selectedGuide
+                      const recipient = guide.recipient || guide.customer || {}
+                      navigate('/app/pos', {
+                        state: {
+                          fromDispatchGuide: true,
+                          guideId: guide.id,
+                          guideNumber: guide.number,
+                          customer: {
+                            documentType: recipient.documentType || '6',
+                            documentNumber: recipient.documentNumber || '',
+                            name: recipient.name || '',
+                            businessName: recipient.businessName || recipient.name || '',
+                            address: recipient.address || '',
+                            email: recipient.email || '',
+                          },
+                          items: (guide.items || []).map(item => ({
+                            name: item.name || item.description || '',
+                            description: item.description || item.name || '',
+                            quantity: item.quantity || 1,
+                            unit: item.unit || 'NIU',
+                            price: 0,
+                          })),
+                        }
+                      })
+                      toast.info(`Guía ${guide.number} cargada en el POS. Completa los precios y emite la factura.`)
+                    }}
+                  >
+                    <ShoppingCart className="w-4 h-4 mr-1" />
+                    Generar Factura
                   </Button>
 
                   {/* Descargar XML - Solo si tiene XML guardado */}

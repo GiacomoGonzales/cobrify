@@ -626,6 +626,7 @@ export default function POS() {
   const orderLoadedRef = useRef(false)
   const quotationLoadedRef = useRef(false)
   const notaVentaLoadedRef = useRef(false)
+  const dispatchGuideLoadedRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -876,6 +877,63 @@ export default function POS() {
       toast.success(`Nota de Venta ${notaVentaInfo.notaVentaNumber} cargada - ${notaVentaInfo.items?.length || 0} items. Selecciona Boleta o Factura y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    // Detectar si viene de una guía de remisión
+    if (location.state?.fromDispatchGuide && !dispatchGuideLoadedRef.current) {
+      const guideInfo = location.state
+      dispatchGuideLoadedRef.current = true
+
+      // Cargar items de la guía al carrito (sin precios, el usuario los completa)
+      if (guideInfo.items && guideInfo.items.length > 0) {
+        const cartItems = guideInfo.items.map(item => ({
+          id: `guide-${Date.now()}-${Math.random()}`,
+          productId: '',
+          name: item.name || '',
+          description: item.description || '',
+          price: item.price || 0,
+          quantity: item.quantity || 1,
+          unit: item.unit || 'NIU',
+          code: '',
+        }))
+        setCart(cartItems)
+      }
+
+      // Cargar datos del destinatario como cliente
+      if (guideInfo.customer) {
+        const customer = guideInfo.customer
+        const existingCustomer = customers.find(
+          c => c.documentNumber === customer.documentNumber
+        )
+        if (existingCustomer) {
+          setSelectedCustomer(existingCustomer)
+        } else {
+          setSelectedCustomer({
+            id: null,
+            name: customer.name || '',
+            businessName: customer.businessName || '',
+            documentType: inferDocumentType(customer.documentType, customer.documentNumber),
+            documentNumber: customer.documentNumber || '',
+            email: customer.email || '',
+            phone: customer.phone || '',
+            address: customer.address || '',
+          })
+        }
+      }
+
+      // Cargar número de guía en el campo de referencia
+      if (guideInfo.guideNumber) {
+        setGuideNumber(guideInfo.guideNumber)
+      }
+
+      // Si el destinatario tiene RUC, seleccionar factura
+      if (guideInfo.customer?.documentNumber?.length === 11) {
+        setDocumentType('factura')
+      }
+
+      toast.success(`Guía ${guideInfo.guideNumber} cargada - ${guideInfo.items?.length || 0} items. Completa los precios y emite la factura.`)
+
       navigate(location.pathname, { replace: true, state: null })
     }
   }, [location.state, customers])
