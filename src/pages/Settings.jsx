@@ -211,6 +211,7 @@ export default function Settings() {
   const [catalogColor, setCatalogColor] = useState('#10B981')
   const [catalogTheme, setCatalogTheme] = useState('light')
   const [catalogCoverImage, setCatalogCoverImage] = useState('')
+  const [catalogHeroStyle, setCatalogHeroStyle] = useState('default')
   const [uploadingCover, setUploadingCover] = useState(false)
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
@@ -834,6 +835,7 @@ export default function Settings() {
         setCatalogColor(businessData.catalogColor || '#10B981')
         setCatalogTheme(businessData.catalogTheme || 'light')
         setCatalogCoverImage(businessData.catalogCoverImage || '')
+        setCatalogHeroStyle(businessData.catalogHeroStyle || 'default')
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
@@ -5051,6 +5053,50 @@ export default function Settings() {
                       )}
                     </div>
 
+                    {/* Estilo de portada */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Estilo de portada
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setCatalogHeroStyle('default')}
+                          className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                            catalogHeroStyle === 'default'
+                              ? 'border-gray-900 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="w-full h-12 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-end justify-center pb-1">
+                            <div className="w-16 h-3 bg-white/80 rounded-full" />
+                          </div>
+                          <div className="text-center">
+                            <span className="text-sm font-medium text-gray-900 block">Clásico</span>
+                            <span className="text-xs text-gray-500">Buscador con gradiente</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCatalogHeroStyle('banner')}
+                          className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                            catalogHeroStyle === 'banner'
+                              ? 'border-gray-900 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="w-full h-12 rounded-lg bg-gray-200 relative overflow-hidden">
+                            <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-black/60 to-transparent" />
+                            <div className="absolute bottom-1 left-2 w-10 h-2 bg-white/80 rounded-full" />
+                          </div>
+                          <div className="text-center">
+                            <span className="text-sm font-medium text-gray-900 block">Banner</span>
+                            <span className="text-xs text-gray-500">Imagen hero grande</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Tema del catálogo */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5245,6 +5291,7 @@ export default function Settings() {
                       catalogSlug: catalogSlug.toLowerCase().trim(),
                       catalogColor,
                       catalogTheme,
+                      catalogHeroStyle,
                       catalogCoverImage,
                       catalogWelcome,
                       catalogTagline,

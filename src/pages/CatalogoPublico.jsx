@@ -2420,53 +2420,108 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       </header>
 
       {/* Hero / Búsqueda */}
-      <div
-        className="relative text-white overflow-hidden"
-        style={{
-          background: business?.catalogCoverImage
-            ? 'none'
-            : business?.catalogColor
-              ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
-              : 'linear-gradient(135deg, #1F2937 0%, #111827 100%)'
-        }}
-      >
-        {business?.catalogCoverImage && (
-          <>
+      {business?.catalogHeroStyle === 'banner' && business?.catalogCoverImage ? (
+        /* === ESTILO BANNER: Imagen hero grande === */
+        <div className="relative overflow-hidden">
+          <div className="relative h-48 md:h-72">
             <img
               src={business.catalogCoverImage}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
             />
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: `${business?.catalogColor || '#000000'}cc` }}
-            />
-          </>
-        )}
-        <div className="relative max-w-7xl mx-auto px-4 py-8 md:py-12">
-          {business?.catalogWelcome && (
-            <p className="text-white/80 mb-4 text-center md:text-left">
-              {business.catalogWelcome}
-            </p>
-          )}
-
-          {/* Barra de búsqueda */}
-          <div className="relative max-w-2xl mx-auto md:mx-0">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar productos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 ${
-                isDark
-                  ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
-                  : 'bg-white text-gray-900 placeholder-gray-400'
-              }`}
-            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+            {/* Info sobre el banner */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 max-w-7xl mx-auto">
+              <div className="flex items-end gap-4">
+                {business?.logoUrl && (
+                  <img
+                    src={business.logoUrl}
+                    alt={business.name}
+                    className="h-14 md:h-20 w-auto max-w-[120px] md:max-w-[180px] object-contain bg-white/90 rounded-xl p-1.5 shadow-lg flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0 pb-1">
+                  {business?.catalogWelcome && (
+                    <p className="text-white/80 text-sm mb-1 truncate">{business.catalogWelcome}</p>
+                  )}
+                  <h2 className="text-white font-bold text-lg md:text-2xl truncate drop-shadow-lg">
+                    {business?.name || business?.businessName}
+                  </h2>
+                  {business?.catalogTagline && (
+                    <p className="text-white/70 text-sm mt-0.5 truncate">{business.catalogTagline}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Barra de búsqueda debajo del banner */}
+          <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} px-4 py-3`}>
+            <div className="relative max-w-7xl mx-auto">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${
+                  isDark
+                    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700 focus:ring-gray-600'
+                    : 'bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:ring-gray-300'
+                }`}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* === ESTILO CLÁSICO (default) === */
+        <div
+          className="relative text-white overflow-hidden"
+          style={{
+            background: business?.catalogCoverImage
+              ? 'none'
+              : business?.catalogColor
+                ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
+                : 'linear-gradient(135deg, #1F2937 0%, #111827 100%)'
+          }}
+        >
+          {business?.catalogCoverImage && (
+            <>
+              <img
+                src={business.catalogCoverImage}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div
+                className="absolute inset-0"
+                style={{ backgroundColor: `${business?.catalogColor || '#000000'}cc` }}
+              />
+            </>
+          )}
+          <div className="relative max-w-7xl mx-auto px-4 py-8 md:py-12">
+            {business?.catalogWelcome && (
+              <p className="text-white/80 mb-4 text-center md:text-left">
+                {business.catalogWelcome}
+              </p>
+            )}
+
+            {/* Barra de búsqueda */}
+            <div className="relative max-w-2xl mx-auto md:mx-0">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 ${
+                  isDark
+                    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
+                    : 'bg-white text-gray-900 placeholder-gray-400'
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Observaciones del catálogo */}
       {business?.catalogObservations && (
