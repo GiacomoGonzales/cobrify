@@ -1532,11 +1532,13 @@ export default function POS() {
     }
 
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
-    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (
+      hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')
+    )
     if (hasMultiplePrices && selectedPrice === null && selectedPresentation === null) {
       if (selectedCustomer?.priceLevel) {
         const priceKey = selectedCustomer.priceLevel
-        const autoPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
+        const autoPrice = resolvePrice(product, priceKey) || product.price
         return addToCart({ ...product, price: autoPrice }, autoPrice, null, selectedBatch)
       }
       setProductForPriceSelection(product)
@@ -1672,20 +1674,32 @@ export default function POS() {
     setProductForModifiers(null)
   }
 
+  // Resolver precio para un nivel dado, considerando: precio manual > porcentaje automático > precio base
+  const resolvePrice = (priceSource, priceKey) => {
+    if (priceKey === 'price1') return priceSource.price
+    // Si el producto tiene precio manual, usarlo
+    if (priceSource[priceKey]) return priceSource[priceKey]
+    // Si hay porcentaje configurado, calcularlo
+    const pctConfig = businessSettings?.pricePercentages?.[priceKey]
+    if (pctConfig?.enabled && pctConfig.discount > 0) {
+      return Math.round(priceSource.price * (1 - pctConfig.discount / 100) * 100) / 100
+    }
+    return null
+  }
+
+  // Verificar si un nivel de precio está disponible (manual o por porcentaje)
+  const hasPriceLevel = (priceSource, priceKey) => {
+    if (priceSource[priceKey]) return true
+    const pctConfig = businessSettings?.pricePercentages?.[priceKey]
+    return pctConfig?.enabled && pctConfig.discount > 0
+  }
+
   // Manejar selección de precio desde el modal
   const handlePriceSelection = (priceLevel) => {
     // Manejar variante con múltiples precios
     if (variantForPriceSelection) {
       const { product, variant } = variantForPriceSelection
-      let selectedPrice = variant.price // default price1
-
-      if (priceLevel === 'price2' && variant.price2) {
-        selectedPrice = variant.price2
-      } else if (priceLevel === 'price3' && variant.price3) {
-        selectedPrice = variant.price3
-      } else if (priceLevel === 'price4' && variant.price4) {
-        selectedPrice = variant.price4
-      }
+      const selectedPrice = resolvePrice(variant, priceLevel) || variant.price
 
       // Agregar variante al carrito con el precio seleccionado
       addVariantToCart(product, variant, selectedPrice)
@@ -1700,15 +1714,7 @@ export default function POS() {
     if (!productForPriceSelection) return
 
     const product = productForPriceSelection
-    let selectedPrice = product.price // default price1
-
-    if (priceLevel === 'price2' && product.price2) {
-      selectedPrice = product.price2
-    } else if (priceLevel === 'price3' && product.price3) {
-      selectedPrice = product.price3
-    } else if (priceLevel === 'price4' && product.price4) {
-      selectedPrice = product.price4
-    }
+    const selectedPrice = resolvePrice(product, priceLevel) || product.price
 
     // Agregar al carrito con el precio seleccionado
     addToCart({ ...product, price: selectedPrice }, selectedPrice)
@@ -1738,7 +1744,7 @@ export default function POS() {
     // Verificar stock considerando el factor
     const warehouseStock = getCurrentWarehouseStock(product)
     if (product.stock !== null && warehouseStock < presentation.factor && !companySettings?.allowNegativeStock) {
-      toast.error(`Stock insuficiente. Se requieren ${presentation.factor} unidades, disponible: ${warehouseStock}`)
+      toast.error(`Stock insuficiente. Se requieren ${presentation.factor} unidades, disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
       setShowPresentationModal(false)
       setProductForPresentationSelection(null)
       return
@@ -1751,7 +1757,7 @@ export default function POS() {
       // Verificar si hay suficiente stock para otra unidad
       const newTotalUnits = (existingItem.quantity + 1) * presentation.factor
       if (product.stock !== null && newTotalUnits > warehouseStock && !companySettings?.allowNegativeStock) {
-        toast.error(`Stock insuficiente. Se requieren ${newTotalUnits} unidades, disponible: ${warehouseStock}`)
+        toast.error(`Stock insuficiente. Se requieren ${newTotalUnits} unidades, disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
         setShowPresentationModal(false)
         setProductForPresentationSelection(null)
         return
@@ -1798,12 +1804,14 @@ export default function POS() {
     }
 
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
-    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (variant.price2 || variant.price3 || variant.price4)
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (
+      hasPriceLevel(variant, 'price2') || hasPriceLevel(variant, 'price3') || hasPriceLevel(variant, 'price4')
+    )
     if (hasMultiplePrices && selectedPrice === null) {
       // Si el cliente tiene un nivel de precio asignado, usarlo automáticamente
       if (selectedCustomer?.priceLevel) {
         const priceKey = selectedCustomer.priceLevel
-        const autoPrice = variant[priceKey] || variant.price
+        const autoPrice = resolvePrice(variant, priceKey) || variant.price
         return addVariantToCart(product, variant, autoPrice)
       }
       // Mostrar modal de selección de precio
@@ -1947,7 +1955,7 @@ export default function POS() {
               if (productData) {
                 const warehouseStock = getCurrentWarehouseStock(productData)
                 if (newQuantity > warehouseStock) {
-                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
+                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
                   return item
                 }
               }
@@ -1984,7 +1992,7 @@ export default function POS() {
               if (productData) {
                 const warehouseStock = getCurrentWarehouseStock(productData)
                 if (quantity > warehouseStock) {
-                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
+                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
                   return item
                 }
               }
@@ -3340,8 +3348,10 @@ export default function POS() {
               for (const item of itemsForMovement) {
                 try {
                   const quantityForMovement = item.quantity * (item.presentationFactor || 1)
+                  const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
                   await createStockMovement(businessId, {
                     productId: item.id,
+                    productName: item.name || '',
                     warehouseId: bgSelectedWarehouse?.id || '',
                     type: 'sale',
                     quantity: -quantityForMovement,
@@ -3350,8 +3360,8 @@ export default function POS() {
                     referenceId: bgInvoiceId || '',
                     userId: bgUserUid,
                     notes: item.presentationName
-                      ? `Venta - ${bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'} - ${item.quantity} ${item.presentationName}`
-                      : `Venta - ${bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
+                      ? `Venta ${item.name} - ${docTypeName} - ${item.quantity} ${item.presentationName}`
+                      : `Venta ${item.name} - ${docTypeName}`
                   })
                 } catch (err) {
                   console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
@@ -3746,11 +3756,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       return <span className="text-xs text-red-600 font-semibold">Sin stock</span>
     }
 
+    const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
+
     if (warehouseStock < 4) {
-      return <span className="text-xs text-yellow-600">Stock: {warehouseStock}</span>
+      return <span className="text-xs text-yellow-600">Stock: {displayStock}</span>
     }
 
-    return <span className="text-xs text-green-600">Stock: {warehouseStock}</span>
+    return <span className="text-xs text-green-600">Stock: {displayStock}</span>
   }
 
   if (isLoading) {
@@ -4058,9 +4070,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center justify-between sm:hidden gap-2">
                         <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-[10px] font-normal text-gray-400 ml-1">
-                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
                             </span>
                           )}
                         </p>
@@ -4071,9 +4083,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="hidden sm:block lg:hidden">
                         <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-xs font-normal text-gray-400 ml-1">
-                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
                             </span>
                           )}
                         </p>
@@ -4128,9 +4140,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center justify-between mt-1 pt-1">
                         <p className={`text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4) && (
+                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-sm font-normal text-gray-400 ml-1">
-                              - {formatCurrency(product.price4 || product.price3 || product.price2)}
+                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
                             </span>
                           )}
                         </p>
@@ -6308,7 +6320,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 : 'text-red-600'
                             }`}
                           >
-                            {variant.stock > 0 ? `Stock: ${variant.stock}` : 'Sin stock'}
+                            {variant.stock > 0 ? `Stock: ${Number.isInteger(variant.stock) ? variant.stock : parseFloat(variant.stock.toFixed(2))}` : 'Sin stock'}
                           </span>
                         )}
                       </div>
@@ -6384,65 +6396,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 </button>
 
-                {/* Precio 2 */}
-                {priceSource.price2 && (
-                  <button
-                    onClick={() => handlePriceSelection('price2')}
-                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                {/* Precios 2, 3, 4 */}
+                {[
+                  { key: 'price2', color: 'green', label: businessSettings?.priceLabels?.price2 || 'Precio 2' },
+                  { key: 'price3', color: 'amber', label: businessSettings?.priceLabels?.price3 || 'Precio 3' },
+                  { key: 'price4', color: 'purple', label: businessSettings?.priceLabels?.price4 || 'Precio 4' }
+                ].map(({ key, color, label }) => {
+                  const resolved = resolvePrice(priceSource, key)
+                  if (!resolved) return null
+                  const isAutomatic = !priceSource[key]
+                  const pctDiscount = businessSettings?.pricePercentages?.[key]?.discount
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => handlePriceSelection(key)}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{label}</p>
+                          <p className="text-xs text-gray-500">
+                            {isAutomatic ? `-${pctDiscount}% del precio base` : 'Precio manual'}
+                          </p>
+                        </div>
+                        <p className={`text-xl font-bold text-${color}-600`}>
+                          {formatCurrency(resolved)}
                         </p>
-                        <p className="text-xs text-gray-500">Precio alternativo</p>
                       </div>
-                      <p className="text-xl font-bold text-green-600">
-                        {formatCurrency(priceSource.price2)}
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {/* Precio 3 */}
-                {priceSource.price3 && (
-                  <button
-                    onClick={() => handlePriceSelection('price3')}
-                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {businessSettings?.priceLabels?.price3 || 'Precio 3'}
-                        </p>
-                        <p className="text-xs text-gray-500">Precio especial</p>
-                      </div>
-                      <p className="text-xl font-bold text-amber-600">
-                        {formatCurrency(priceSource.price3)}
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {/* Precio 4 */}
-                {priceSource.price4 && (
-                  <button
-                    onClick={() => handlePriceSelection('price4')}
-                    className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {businessSettings?.priceLabels?.price4 || 'Precio 4'}
-                        </p>
-                        <p className="text-xs text-gray-500">Precio personalizado</p>
-                      </div>
-                      <p className="text-xl font-bold text-purple-600">
-                        {formatCurrency(priceSource.price4)}
-                      </p>
-                    </div>
-                  </button>
-                )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )

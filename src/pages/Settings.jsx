@@ -176,6 +176,11 @@ export default function Settings() {
     price3: 'VIP',
     price4: 'Especial'
   })
+  const [pricePercentages, setPricePercentages] = useState({
+    price2: { enabled: false, discount: 0 },
+    price3: { enabled: false, discount: 0 },
+    price4: { enabled: false, discount: 0 }
+  })
 
   // Estado para presentaciones de venta
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
@@ -798,6 +803,13 @@ export default function Settings() {
             price2: businessData.priceLabels.price2 || 'Mayorista',
             price3: businessData.priceLabels.price3 || 'VIP',
             price4: businessData.priceLabels.price4 || 'Especial'
+          })
+        }
+        if (businessData.pricePercentages) {
+          setPricePercentages({
+            price2: businessData.pricePercentages.price2 || { enabled: false, discount: 0 },
+            price3: businessData.pricePercentages.price3 || { enabled: false, discount: 0 },
+            price4: businessData.pricePercentages.price4 || { enabled: false, discount: 0 }
           })
         }
 
@@ -3758,6 +3770,51 @@ export default function Settings() {
                             />
                           </div>
                         </div>
+
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-xs text-gray-500 mb-3">
+                            Descuento automático por porcentaje (opcional). Si lo activas, los productos que no tengan un precio manual asignado calcularán el precio automáticamente a partir del precio base.
+                          </p>
+                          <div className="space-y-3">
+                            {['price2', 'price3', 'price4'].map((key, idx) => (
+                              <div key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                <input
+                                  type="checkbox"
+                                  checked={pricePercentages[key]?.enabled || false}
+                                  onChange={(e) => setPricePercentages(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], enabled: e.target.checked }
+                                  }))}
+                                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                />
+                                <span className="text-sm text-gray-700 min-w-[80px]">
+                                  {priceLabels[key] || `Precio ${idx + 2}`}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">-</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={pricePercentages[key]?.discount || ''}
+                                    onChange={(e) => setPricePercentages(prev => ({
+                                      ...prev,
+                                      [key]: { ...prev[key], discount: parseFloat(e.target.value) || 0 }
+                                    }))}
+                                    disabled={!pricePercentages[key]?.enabled}
+                                    className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-xs text-gray-500">% menos que {priceLabels.price1 || 'Precio 1'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-2 italic">
+                            Si un producto ya tiene un precio manual ingresado, se usará ese precio en lugar del porcentaje.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3958,6 +4015,7 @@ export default function Settings() {
                       requireOpenCashRegister: requireOpenCashRegister,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
+                      pricePercentages: pricePercentages,
                       presentationsEnabled: presentationsEnabled,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
