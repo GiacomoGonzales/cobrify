@@ -2428,6 +2428,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               src={business.catalogCoverImage}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
+              fetchPriority="high"
+              decoding="async"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
             {/* Info sobre el banner */}
@@ -2544,10 +2546,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white'} border-b sticky top-16 md:top-20 z-30`}>
           <div className="max-w-7xl mx-auto px-4">
             {/* Categorías raíz */}
-            <div className="flex items-center gap-2 py-3 overflow-x-auto catalog-scrollbar">
+            <div className="flex flex-wrap justify-center gap-2 py-3">
               <button
                 onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   !selectedCategory
                     ? 'text-white'
                     : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -2560,7 +2562,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <button
                   key={category.id}
                   onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
-                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     selectedCategory === category.id
                       ? 'text-white'
                       : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -2573,10 +2575,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
             {/* Subcategorías de la categoría seleccionada */}
             {activeSubcategories.length > 0 && (
-              <div className="flex items-center gap-2 pb-3 overflow-x-auto catalog-scrollbar">
+              <div className="flex flex-wrap justify-center gap-2 pb-3">
                 <button
                   onClick={() => setSelectedSubcategory(null)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                     !selectedSubcategory
                       ? 'bg-primary-600 text-white'
                       : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
@@ -2588,7 +2590,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <button
                     key={sub.id}
                     onClick={() => setSelectedSubcategory(sub.id)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                       selectedSubcategory === sub.id
                         ? 'bg-primary-600 text-white'
                         : 'bg-primary-50 text-primary-700 hover:bg-primary-100'

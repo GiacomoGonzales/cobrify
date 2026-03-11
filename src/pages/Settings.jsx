@@ -18,6 +18,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
+import { compressImage } from '@/services/productImageService'
 import { consultarRUC } from '@/services/documentLookupService'
 import {
   scanPrinters,
@@ -4987,8 +4988,9 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCover(true)
                                   try {
+                                    const compressed = await compressImage(file, 1600, 0.85)
                                     const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
-                                    await uploadBytes(coverRef, file)
+                                    await uploadBytes(coverRef, compressed, { contentType: 'image/jpeg' })
                                     const url = await getDownloadURL(coverRef)
                                     setCatalogCoverImage(url)
                                   } catch (err) {

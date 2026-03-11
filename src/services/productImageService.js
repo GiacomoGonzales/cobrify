@@ -8,7 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
  * @param {number} quality - Calidad JPEG (0-1, default 0.8)
  * @returns {Promise<Blob>} - Blob de la imagen comprimida
  */
-const compressImage = (file, maxWidth = 800, quality = 0.8) => {
+export const compressImage = (file, maxWidth = 800, quality = 0.8) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.readAsDataURL(file)
