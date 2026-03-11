@@ -205,6 +205,13 @@ function Sidebar() {
       menuId: 'purchase-orders',
     },
     {
+      path: '/ingredientes/historial',
+      icon: History,
+      label: 'Historial de Compras',
+      pageId: 'purchase-history',
+      menuId: 'purchase-history',
+    },
+    {
       path: '/prestamos',
       icon: Landmark,
       label: 'Préstamos',
@@ -590,6 +597,13 @@ function Sidebar() {
       label: 'Órdenes de Compra',
       pageId: 'purchase-orders',
       menuId: 'purchase-orders',
+    },
+    {
+      path: '/ingredientes/historial',
+      icon: History,
+      label: 'Historial de Compras',
+      pageId: 'purchase-history',
+      menuId: 'purchase-history',
     },
     {
       path: '/prestamos',

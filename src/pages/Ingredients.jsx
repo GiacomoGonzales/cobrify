@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store, MoreVertical } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store, MoreVertical, RefreshCw } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -22,7 +22,7 @@ import {
   getIngredientStockForBranch
 } from '@/services/ingredientService'
 import { getActiveBranches } from '@/services/branchService'
-import { getWarehouses } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement } from '@/services/warehouseService'
 import { generateIngredientsExcel } from '@/services/ingredientExportService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
@@ -98,6 +98,8 @@ export default function Ingredients() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showAdjustModal, setShowAdjustModal] = useState(false)
+  const [adjustData, setAdjustData] = useState({ newStock: '', reason: '' })
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -402,6 +404,93 @@ export default function Ingredients() {
   const openDeleteModal = (ingredient) => {
     setSelectedIngredient(ingredient)
     setShowDeleteModal(true)
+  }
+
+  const openAdjustModal = (ingredient) => {
+    setSelectedIngredient(ingredient)
+    setAdjustData({ newStock: getStockForBranch(ingredient).toString(), reason: '' })
+    setShowAdjustModal(true)
+  }
+
+  const handleAdjustStock = async () => {
+    if (!selectedIngredient) return
+    const newStock = parseFloat(adjustData.newStock)
+    if (isNaN(newStock) || newStock < 0) {
+      toast.error('Ingresa un stock válido')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const businessId = getBusinessId()
+      const currentStock = getStockForBranch(selectedIngredient)
+      const difference = newStock - currentStock
+
+      if (difference === 0) {
+        toast.info('El stock no ha cambiado')
+        setShowAdjustModal(false)
+        setIsSaving(false)
+        return
+      }
+
+      // Actualizar stock del ingrediente
+      const warehouseStocks = [...(selectedIngredient.warehouseStocks || [])]
+      // Determinar almacén: si hay filtro de sucursal, usar ese almacén, si no el primero
+      const targetWarehouseId = filterBranch !== 'all'
+        ? filterBranch
+        : (warehouseStocks.length > 0 ? warehouseStocks[0].warehouseId : null)
+
+      if (targetWarehouseId && warehouseStocks.length > 0) {
+        const wsIndex = warehouseStocks.findIndex(ws => ws.warehouseId === targetWarehouseId)
+        if (wsIndex >= 0) {
+          warehouseStocks[wsIndex] = {
+            ...warehouseStocks[wsIndex],
+            stock: Math.max(0, (warehouseStocks[wsIndex].stock || 0) + difference)
+          }
+        }
+      }
+
+      const totalStock = warehouseStocks.length > 0
+        ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        : newStock
+
+      const updates = {
+        currentStock: totalStock,
+        ...(warehouseStocks.length > 0 && { warehouseStocks })
+      }
+
+      const result = await updateIngredient(businessId, selectedIngredient.id, updates)
+      if (!result.success) {
+        toast.error(result.error || 'Error al ajustar stock')
+        setIsSaving(false)
+        return
+      }
+
+      // Crear movimiento de stock
+      await createStockMovement(businessId, {
+        ingredientId: selectedIngredient.id,
+        ingredientName: selectedIngredient.name,
+        type: 'adjustment',
+        quantity: difference,
+        warehouseId: targetWarehouseId || null,
+        reason: adjustData.reason || `Ajuste de stock: ${selectedIngredient.name}`,
+      })
+
+      // Actualizar lista local
+      setIngredients(prev => prev.map(ing =>
+        ing.id === selectedIngredient.id
+          ? { ...ing, currentStock: totalStock, warehouseStocks }
+          : ing
+      ))
+
+      toast.success(`Stock ajustado: ${currentStock.toFixed(2)} → ${newStock.toFixed(2)} ${selectedIngredient.purchaseUnit}`)
+      setShowAdjustModal(false)
+      setSelectedIngredient(null)
+    } catch (error) {
+      toast.error('Error al ajustar stock')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const resetForm = () => {
@@ -785,45 +874,27 @@ export default function Ingredients() {
                         {getStockStatus(ingredient)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openPurchaseModal(ingredient)}
-                            className="text-green-600 hover:bg-green-50"
-                            title="Registrar compra"
-                          >
-                            <ShoppingCart className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const basePath = isDemoMode ? '/demo' : '/app'
-                              navigate(`${basePath}/ingredientes/historial?ingredientId=${ingredient.id}`)
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (openMenuId === ingredient.id) {
+                                setOpenMenuId(null)
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const spaceBelow = window.innerHeight - rect.bottom
+                                setMenuPosition({
+                                  top: spaceBelow < 250 ? rect.top : rect.bottom,
+                                  right: window.innerWidth - rect.right,
+                                  openUpward: spaceBelow < 250
+                                })
+                                setOpenMenuId(ingredient.id)
+                              }
                             }}
-                            className="text-purple-600 hover:bg-purple-50"
-                            title="Ver historial"
+                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                           >
-                            <History className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(ingredient)}
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteModal(ingredient)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -864,6 +935,13 @@ export default function Ingredients() {
                     >
                       <History className="w-4 h-4" />
                       Ver historial
+                    </button>
+                    <button
+                      onClick={() => { openAdjustModal(menuIngredient); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Ajustar stock
                     </button>
                     <button
                       onClick={() => { openEditModal(menuIngredient); setOpenMenuId(null) }}
@@ -1166,6 +1244,63 @@ export default function Ingredients() {
               ) : (
                 'Eliminar'
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Ajustar Stock */}
+      <Modal
+        isOpen={showAdjustModal}
+        onClose={() => { setShowAdjustModal(false); setSelectedIngredient(null) }}
+        title={`Ajustar stock: ${selectedIngredient?.name || ''}`}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">Stock actual</p>
+            <p className="text-lg font-bold">{parseFloat(getStockForBranch(selectedIngredient || { currentStock: 0 })).toFixed(2)} {selectedIngredient?.purchaseUnit}</p>
+          </div>
+
+          <Input
+            label={`Stock real (${selectedIngredient?.purchaseUnit || ''})`}
+            type="number"
+            step="0.01"
+            min="0"
+            value={adjustData.newStock}
+            onChange={(e) => setAdjustData(prev => ({ ...prev, newStock: e.target.value }))}
+            placeholder="Ingresa el stock real"
+          />
+
+          {adjustData.newStock !== '' && (() => {
+            const current = getStockForBranch(selectedIngredient || { currentStock: 0 })
+            const diff = parseFloat(adjustData.newStock) - current
+            if (isNaN(diff) || diff === 0) return null
+            return (
+              <div className={`p-3 rounded-lg ${diff > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className="flex items-center gap-2">
+                  {diff > 0 ? <TrendingUp className="w-4 h-4 text-green-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+                  <span className={`text-sm font-medium ${diff > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {diff > 0 ? '+' : ''}{diff.toFixed(2)} {selectedIngredient?.purchaseUnit}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
+
+          <Input
+            label="Motivo (opcional)"
+            value={adjustData.reason}
+            onChange={(e) => setAdjustData(prev => ({ ...prev, reason: e.target.value }))}
+            placeholder="Ej: Recuento físico, merma, etc."
+          />
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => { setShowAdjustModal(false); setSelectedIngredient(null) }} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAdjustStock} disabled={isSaving}>
+              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</> : 'Guardar ajuste'}
             </Button>
           </div>
         </div>

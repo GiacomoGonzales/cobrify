@@ -53,6 +53,7 @@ export const RETAIL_PAGES = [
   // Compras y Proveedores
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
+  { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
   // Ventas
   { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
@@ -134,6 +135,7 @@ export const TRANSPORT_PAGES = [
   // Compras y Proveedores
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
+  { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
   // Ventas
   { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },

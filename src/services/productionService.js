@@ -2,7 +2,10 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   addDoc,
+  deleteDoc,
+  writeBatch,
   query,
   orderBy,
   Timestamp,
@@ -218,6 +221,163 @@ export const getProductions = async (businessId, filters = {}) => {
     return { success: true, data: productions }
   } catch (error) {
     console.error('Error al obtener producciones:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar un registro de producción
+ * @param {boolean} reverseStock - Si es true, revierte los cambios de stock
+ */
+export const deleteProduction = async (businessId, productionId, reverseStock = false) => {
+  try {
+    const productionRef = doc(db, 'businesses', businessId, 'productions', productionId)
+
+    if (!reverseStock) {
+      await deleteDoc(productionRef)
+      return { success: true }
+    }
+
+    // Obtener datos de la producción para revertir
+    const productionDoc = await getDoc(productionRef)
+    if (!productionDoc.exists()) {
+      return { success: false, error: 'Producción no encontrada' }
+    }
+    const production = productionDoc.data()
+    const { productId, quantity, warehouseId, mode, ingredientsDeducted } = production
+
+    const batch = writeBatch(db)
+
+    // 1. Revertir stock del producto producido (restar lo que se añadió)
+    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    const productDoc = await getDoc(productRef)
+
+    if (productDoc.exists()) {
+      const productData = productDoc.data()
+      if (productData.stock !== null && productData.trackStock !== false) {
+        const warehouseStocks = [...(productData.warehouseStocks || [])]
+        const wsIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+        if (wsIndex >= 0) {
+          warehouseStocks[wsIndex] = {
+            ...warehouseStocks[wsIndex],
+            stock: Math.max(0, (warehouseStocks[wsIndex].stock || 0) - quantity)
+          }
+        }
+
+        const newStock = warehouseStocks.length > 0
+          ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+          : Math.max(0, (productData.stock || 0) - quantity)
+
+        batch.update(productRef, {
+          stock: newStock,
+          warehouseStocks,
+          updatedAt: Timestamp.now()
+        })
+
+        // Movimiento de reversión del producto
+        const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+        batch.set(doc(movementsRef), {
+          productId,
+          productName: production.productName,
+          type: 'production_reversal',
+          quantity: -quantity,
+          warehouseId: warehouseId || null,
+          reason: `Reversión de producción: ${production.productName}`,
+          createdAt: Timestamp.now()
+        })
+      }
+    }
+
+    // 2. Para producciones con receta: devolver stock de insumos
+    if (mode === 'recipe' && ingredientsDeducted?.length > 0) {
+      for (const ing of ingredientsDeducted) {
+        // Intentar primero como producto terminado
+        const asProductRef = doc(db, 'businesses', businessId, 'products', ing.ingredientId)
+        const asProductDoc = await getDoc(asProductRef)
+
+        if (asProductDoc.exists()) {
+          // Es un producto terminado usado como insumo
+          const pData = asProductDoc.data()
+          if (pData.stock !== null && pData.trackStock !== false) {
+            const wStocks = [...(pData.warehouseStocks || [])]
+            const wIdx = wStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+            if (wIdx >= 0) {
+              wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + ing.quantity }
+            } else if (wStocks.length > 0) {
+              wStocks.push({ warehouseId, stock: ing.quantity, minStock: 0 })
+            }
+
+            const newStock = wStocks.length > 0
+              ? wStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+              : (pData.stock || 0) + ing.quantity
+
+            batch.update(asProductRef, {
+              stock: newStock,
+              warehouseStocks: wStocks,
+              updatedAt: Timestamp.now()
+            })
+
+            const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+            batch.set(doc(movementsRef), {
+              productId: ing.ingredientId,
+              productName: ing.ingredientName,
+              type: 'production_reversal',
+              quantity: ing.quantity,
+              warehouseId: warehouseId || null,
+              reason: `Reversión insumo: ${ing.ingredientName} (producción ${production.productName})`,
+              createdAt: Timestamp.now()
+            })
+          }
+        } else {
+          // Intentar como ingrediente crudo
+          const ingRef = doc(db, 'businesses', businessId, 'ingredients', ing.ingredientId)
+          const ingDoc = await getDoc(ingRef)
+
+          if (ingDoc.exists()) {
+            const iData = ingDoc.data()
+            const wStocks = [...(iData.warehouseStocks || [])]
+            const wIdx = wStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+            if (wIdx >= 0) {
+              wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + ing.quantity }
+            } else if (wStocks.length > 0) {
+              wStocks.push({ warehouseId, stock: ing.quantity, minStock: 0 })
+            }
+
+            const newStock = wStocks.length > 0
+              ? wStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+              : (iData.currentStock || 0) + ing.quantity
+
+            batch.update(ingRef, {
+              currentStock: newStock,
+              warehouseStocks: wStocks,
+              updatedAt: Timestamp.now()
+            })
+
+            const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+            batch.set(doc(movementsRef), {
+              ingredientId: ing.ingredientId,
+              ingredientName: ing.ingredientName,
+              type: 'production_reversal',
+              quantity: ing.quantity,
+              warehouseId: warehouseId || null,
+              reason: `Reversión insumo: ${ing.ingredientName} (producción ${production.productName})`,
+              createdAt: Timestamp.now()
+            })
+          }
+        }
+      }
+    }
+
+    // 3. Eliminar el documento de producción
+    batch.delete(productionRef)
+
+    await batch.commit()
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar producción:', error)
     return { success: false, error: error.message }
   }
 }

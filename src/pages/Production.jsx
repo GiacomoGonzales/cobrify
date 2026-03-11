@@ -26,7 +26,7 @@ import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getRecipeByProductId } from '@/services/recipeService'
-import { getProductions, executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
+import { getProductions, executeRecipeProduction, executeManualProduction, checkProductionReadiness, deleteProduction } from '@/services/productionService'
 
 export default function Production() {
   const { user, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
@@ -56,6 +56,10 @@ export default function Production() {
   const [modalWarehouseId, setModalWarehouseId] = useState('')
   const [modalNotes, setModalNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Eliminar producción
+  const [productionToDelete, setProductionToDelete] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -375,6 +379,26 @@ export default function Production() {
     })
   }
 
+  const handleDeleteProduction = async (reverseStock = false) => {
+    if (!productionToDelete) return
+    setIsDeleting(true)
+    try {
+      const businessId = getBusinessId()
+      const result = await deleteProduction(businessId, productionToDelete.id, reverseStock)
+      if (result.success) {
+        setProductions(prev => prev.filter(p => p.id !== productionToDelete.id))
+        toast.success(reverseStock ? 'Producción eliminada y stock revertido' : 'Registro de producción eliminado')
+      } else {
+        toast.error(result.error || 'Error al eliminar')
+      }
+    } catch (error) {
+      toast.error('Error al eliminar producción')
+    } finally {
+      setIsDeleting(false)
+      setProductionToDelete(null)
+    }
+  }
+
   const getModeBadge = (mode) => {
     if (mode === 'recipe') {
       return <Badge variant="info"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
@@ -553,12 +577,20 @@ export default function Production() {
                         <span className="truncate">{warehouseName}</span>
                       </div>
 
-                      {/* Fila 3: Modo + Costo */}
+                      {/* Fila 3: Modo + Costo + Eliminar */}
                       <div className="flex items-center justify-between mt-2">
                         {getModeBadge(production.mode)}
-                        <span className="text-sm text-gray-600">
-                          {production.totalCost ? formatCurrency(production.totalCost) : '-'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-600">
+                            {production.totalCost ? formatCurrency(production.totalCost) : '-'}
+                          </span>
+                          <button
+                            onClick={() => setProductionToDelete(production)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Fila 4: Notas (si hay) */}
@@ -582,6 +614,7 @@ export default function Production() {
                       <TableHead>Almacén</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead>Notas</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -609,6 +642,14 @@ export default function Production() {
                           </TableCell>
                           <TableCell className="text-sm text-gray-500 max-w-[200px] truncate">
                             {production.notes || '-'}
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              onClick={() => setProductionToDelete(production)}
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </TableCell>
                         </TableRow>
                       )
@@ -853,6 +894,57 @@ export default function Production() {
                   Confirmar Producción ({productionItems.length})
                 </>
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de confirmación de eliminación */}
+      <Modal
+        isOpen={!!productionToDelete}
+        onClose={() => !isDeleting && setProductionToDelete(null)}
+        title="Eliminar producción"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            ¿Cómo deseas eliminar la producción de <span className="font-medium">{productionToDelete?.productName}</span> ({productionToDelete?.quantity} und)?
+          </p>
+
+          <div className="space-y-2">
+            <button
+              onClick={() => handleDeleteProduction(false)}
+              disabled={isDeleting}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg text-left hover:border-red-300 hover:bg-red-50 transition-all disabled:opacity-50"
+            >
+              <p className="text-sm font-medium text-gray-900">Solo eliminar registro</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Elimina el registro de producción. El stock actual no se modifica.
+              </p>
+            </button>
+
+            <button
+              onClick={() => handleDeleteProduction(true)}
+              disabled={isDeleting}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg text-left hover:border-amber-300 hover:bg-amber-50 transition-all disabled:opacity-50"
+            >
+              <p className="text-sm font-medium text-gray-900">Eliminar y revertir stock</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Elimina el registro, descuenta el stock producido{productionToDelete?.mode === 'recipe' ? ' y devuelve los insumos consumidos' : ''}.
+              </p>
+            </button>
+          </div>
+
+          {isDeleting && (
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Procesando...
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setProductionToDelete(null)} disabled={isDeleting}>
+              Cancelar
             </Button>
           </div>
         </div>
