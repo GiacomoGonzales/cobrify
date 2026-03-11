@@ -1161,9 +1161,9 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
-            let optText = '  > ' + convertSpanishText(option.optionName);
+            let optText = '  > ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
             if (option.priceAdjustment > 0) {
-              optText += ' (+S/' + option.priceAdjustment.toFixed(2) + ')';
+              optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
             }
             commands.push(ESCPOSCommands.text(optText + '\n'));
           }
@@ -1263,9 +1263,9 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
-            let optText = '  + ' + convertSpanishText(option.optionName);
+            let optText = '  + ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
             if (option.priceAdjustment > 0) {
-              optText += ' (+S/' + option.priceAdjustment.toFixed(2) + ')';
+              optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
             }
             commands.push(ESCPOSCommands.text(optText + '\n'));
           }

@@ -521,8 +521,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
                     <div className="modifier-options">
                       {modifier.options.map((opt, optIdx) => (
                         <div key={optIdx}>
-                          → {opt.optionName}
-                          {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
+                          → {opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
+                          {opt.priceAdjustment > 0 && ` (+S/ ${((opt.priceAdjustment || 0) * (opt.quantity || 1)).toFixed(2)})`}
                         </div>
                       ))}
                     </div>

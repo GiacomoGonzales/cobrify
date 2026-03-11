@@ -256,7 +256,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
       if (product?.modifiers?.length > 0) {
         const initial = {}
         product.modifiers.forEach(mod => {
-          initial[mod.id] = []
+          initial[mod.id] = mod.allowRepeat ? {} : []
         })
         setSelectedModifiers(initial)
       } else {
@@ -276,7 +276,15 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   const outOfStock = isProductOutOfStock(product, ignoreStock)
   const hasModifiers = product.modifiers?.length > 0
 
-  // Manejar selección de opción de modificador
+  // Helper: obtener total de selecciones para un modificador
+  const getModSelectedCount = (modifier) => {
+    const sel = selectedModifiers[modifier.id]
+    if (!sel) return 0
+    if (modifier.allowRepeat) return Object.values(sel).reduce((sum, c) => sum + c, 0)
+    return sel.length
+  }
+
+  // Manejar selección de opción de modificador (modo normal)
   const handleOptionToggle = (modifierId, optionId) => {
     const modifier = product.modifiers.find(m => m.id === modifierId)
     if (!modifier) return
@@ -301,7 +309,34 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
       return { ...prev, [modifierId]: updated }
     })
 
-    // Limpiar error
+    clearModifierError(modifierId)
+  }
+
+  // Manejar incremento (modo multi-opción)
+  const handleRepeatIncrement = (modifierId, optionId) => {
+    const modifier = product.modifiers.find(m => m.id === modifierId)
+    if (!modifier) return
+    setSelectedModifiers(prev => {
+      const current = prev[modifierId] || {}
+      const totalCount = Object.values(current).reduce((sum, c) => sum + c, 0)
+      if (totalCount >= modifier.maxSelection) return prev
+      return { ...prev, [modifierId]: { ...current, [optionId]: (current[optionId] || 0) + 1 } }
+    })
+    clearModifierError(modifierId)
+  }
+
+  // Manejar decremento (modo multi-opción)
+  const handleRepeatDecrement = (modifierId, optionId) => {
+    setSelectedModifiers(prev => {
+      const current = { ...(prev[modifierId] || {}) }
+      if (!current[optionId] || current[optionId] <= 0) return prev
+      current[optionId] = current[optionId] - 1
+      if (current[optionId] === 0) delete current[optionId]
+      return { ...prev, [modifierId]: current }
+    })
+  }
+
+  const clearModifierError = (modifierId) => {
     if (modifierErrors[modifierId]) {
       setModifierErrors(prev => {
         const newErrors = { ...prev }
@@ -337,12 +372,17 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     if (hasModifiers) {
       Object.keys(selectedModifiers).forEach(modifierId => {
         const modifier = product.modifiers.find(m => m.id === modifierId)
-        if (modifier) {
-          selectedModifiers[modifierId].forEach(optionId => {
+        if (!modifier) return
+        const sel = selectedModifiers[modifierId]
+        if (modifier.allowRepeat) {
+          Object.entries(sel || {}).forEach(([optionId, count]) => {
             const option = modifier.options?.find(o => o.id === optionId)
-            if (option?.priceAdjustment) {
-              total += option.priceAdjustment
-            }
+            if (option?.priceAdjustment && count > 0) total += option.priceAdjustment * count
+          })
+        } else {
+          (sel || []).forEach(optionId => {
+            const option = modifier.options?.find(o => o.id === optionId)
+            if (option?.priceAdjustment) total += option.priceAdjustment
           })
         }
       })
@@ -363,8 +403,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
       const errors = {}
       product.modifiers.forEach(mod => {
         if (mod.required) {
-          const selected = selectedModifiers[mod.id] || []
-          if (selected.length === 0) {
+          const count = getModSelectedCount(mod)
+          if (count === 0) {
             errors[mod.id] = `Selecciona una opción`
           }
         }
@@ -380,12 +420,23 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     if (hasModifiers) {
       modifiersData = product.modifiers
         .map(mod => {
-          const selectedOptions = selectedModifiers[mod.id] || []
-          if (selectedOptions.length === 0) return null
-          return {
-            modifierId: mod.id,
-            modifierName: mod.name,
-            options: selectedOptions.map(optId => {
+          const sel = selectedModifiers[mod.id]
+          let options = []
+
+          if (mod.allowRepeat) {
+            Object.entries(sel || {}).forEach(([optId, count]) => {
+              if (count > 0) {
+                const opt = mod.options?.find(o => o.id === optId)
+                options.push({
+                  optionId: optId,
+                  optionName: opt?.name || '',
+                  priceAdjustment: opt?.priceAdjustment || 0,
+                  quantity: count
+                })
+              }
+            })
+          } else {
+            options = (sel || []).map(optId => {
               const opt = mod.options?.find(o => o.id === optId)
               return {
                 optionId: optId,
@@ -393,6 +444,14 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                 priceAdjustment: opt?.priceAdjustment || 0
               }
             })
+          }
+
+          if (options.length === 0) return null
+          return {
+            modifierId: mod.id,
+            modifierName: mod.name,
+            allowRepeat: mod.allowRepeat || false,
+            options
           }
         })
         .filter(Boolean)
@@ -699,7 +758,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           {/* Modificadores */}
           {hasModifiers && (
             <div className="mb-6 space-y-4">
-              {product.modifiers.map(modifier => (
+              {product.modifiers.map(modifier => {
+                const modSelCount = getModSelectedCount(modifier)
+                const accentColor = business?.catalogColor || '#10B981'
+                return (
                 <div key={modifier.id} className="border rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
@@ -707,6 +769,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       <p className="text-sm text-gray-500">
                         {modifier.required ? 'Obligatorio' : 'Opcional'}
                         {modifier.maxSelection > 1 && ` - Máx. ${modifier.maxSelection}`}
+                        {modifier.allowRepeat && ' (puedes repetir)'}
+                        {modSelCount > 0 && (
+                          <span className="ml-1 font-medium" style={{ color: accentColor }}>
+                            ({modSelCount} seleccionada{modSelCount > 1 ? 's' : ''})
+                          </span>
+                        )}
                       </p>
                     </div>
                     {modifierErrors[modifier.id] && (
@@ -717,6 +785,57 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   </div>
                   <div className="space-y-2">
                     {modifier.options?.map(option => {
+                      if (modifier.allowRepeat) {
+                        // Modo multi-opción con +/-
+                        const count = (selectedModifiers[modifier.id] || {})[option.id] || 0
+                        const canIncrement = modSelCount < modifier.maxSelection
+                        return (
+                          <div
+                            key={option.id}
+                            className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : 'border-gray-200'}`}
+                            style={count > 0 ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
+                          >
+                            <div>
+                              <span className="font-medium" style={count > 0 ? { color: accentColor } : { color: '#374151' }}>
+                                {option.name}
+                              </span>
+                              {showPrices && option.priceAdjustment > 0 && (
+                                <span className="text-sm text-gray-500 ml-2">+S/ {option.priceAdjustment.toFixed(2)} c/u</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {showPrices && count > 0 && option.priceAdjustment > 0 && (
+                                <span className="text-xs font-medium" style={{ color: accentColor }}>
+                                  +S/ {(option.priceAdjustment * count).toFixed(2)}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRepeatDecrement(modifier.id, option.id)}
+                                disabled={count === 0}
+                                className="w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all"
+                                style={count > 0 ? { borderColor: accentColor, color: accentColor } : { borderColor: '#D1D5DB', color: '#D1D5DB' }}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M5 12h14" /></svg>
+                              </button>
+                              <span className="w-6 text-center text-sm font-bold" style={{ color: count > 0 ? accentColor : '#9CA3AF' }}>
+                                {count}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRepeatIncrement(modifier.id, option.id)}
+                                disabled={!canIncrement}
+                                className="w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all"
+                                style={canIncrement ? { borderColor: accentColor, color: accentColor } : { borderColor: '#D1D5DB', color: '#D1D5DB' }}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      // Modo normal - toggle
                       const isSelected = selectedModifiers[modifier.id]?.includes(option.id)
                       return (
                         <button
@@ -725,9 +844,9 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                           className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
                             isSelected ? '' : 'border-gray-200 hover:border-gray-300'
                           }`}
-                          style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: `${business?.catalogColor || '#10B981'}10` } : {}}
+                          style={isSelected ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
                         >
-                          <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
+                          <span className="font-medium" style={isSelected ? { color: accentColor } : { color: '#374151' }}>
                             {option.name}
                           </span>
                           <div className="flex items-center gap-2">
@@ -736,7 +855,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                             )}
                             <div
                               className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
-                              style={isSelected ? { borderColor: business?.catalogColor || '#10B981', backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                              style={isSelected ? { borderColor: accentColor, backgroundColor: accentColor } : {}}
                             >
                               {isSelected && (
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -750,7 +869,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -877,7 +997,7 @@ function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddM
                   </div>
                   {item.modifiers?.length > 0 && (
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {item.modifiers.map(m => m.options?.map(o => o.optionName).join(', ')).join(' • ')}
+                      {item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(' • ')}
                     </p>
                   )}
                   {item.notes && <p className="text-xs text-gray-400 mt-0.5">{item.notes}</p>}
@@ -1285,7 +1405,7 @@ function CartDrawer({
                   const orderItems = (orderConfirmItems || []).map(item => {
                     let line = `• ${item.quantity}x ${item.name}`
                     if (item.modifiers?.length > 0) {
-                      line += ` (${item.modifiers.map(m => m.options?.map(o => o.optionName).join(', ')).join(', ')})`
+                      line += ` (${item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(', ')})`
                     }
                     return line
                   }).join('\n')
@@ -1397,7 +1517,7 @@ function CartDrawer({
                         <div className="mt-1 space-y-0.5">
                           {item.selectedModifiers.map((mod, idx) => (
                             <p key={idx} className="text-xs text-gray-500">
-                              {mod.modifierName}: {mod.options.map(o => o.optionName).join(', ')}
+                              {mod.modifierName}: {mod.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')}
                             </p>
                           ))}
                         </div>
@@ -2142,7 +2262,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       // Agregar modificadores si existen
       if (item.selectedModifiers?.length > 0) {
         const modsText = item.selectedModifiers
-          .map(mod => `  - ${mod.modifierName}: ${mod.options.map(o => o.optionName).join(', ')}`)
+          .map(mod => `  - ${mod.modifierName}: ${mod.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')}`)
           .join('\n')
         itemText += `\n${modsText}`
       }

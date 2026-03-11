@@ -1641,7 +1641,7 @@ export default function POS() {
 
     // Crear identificador único basado en los modificadores seleccionados
     const modifierKey = selectedModifiers
-      .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
+      .map(m => `${m.modifierId}:${m.options.map(o => o.quantity ? `${o.optionId}x${o.quantity}` : o.optionId).join(',')}`)
       .join('|')
     const cartItemId = `${product.id}-mod-${modifierKey}`
 
@@ -5239,10 +5239,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 <div className="mt-0.5">
                                   {item.modifiers.map((mod, idx) => (
                                     <p key={idx} className="text-xs text-purple-600">
-                                      {mod.options.map(o => o.optionName).join(', ')}
+                                      {mod.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')}
                                       {mod.options.some(o => o.priceAdjustment > 0) && (
                                         <span className="text-purple-400 ml-1">
-                                          (+{formatCurrency(mod.options.reduce((s, o) => s + (o.priceAdjustment || 0), 0))})
+                                          (+{formatCurrency(mod.options.reduce((s, o) => s + (o.priceAdjustment || 0) * (o.quantity || 1), 0))})
                                         </span>
                                       )}
                                     </p>

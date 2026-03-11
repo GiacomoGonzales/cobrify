@@ -1268,9 +1268,9 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
-            itemsText += `  > ${convertSpanishText(option.optionName)}`;
+            itemsText += `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
             if (option.priceAdjustment > 0) {
-              itemsText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+              itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
             }
             itemsText += '\n';
           }
@@ -1478,9 +1478,9 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
         for (const modifier of item.modifiers) {
           itemsText += `  * ${convertSpanishText(modifier.modifierName)}:\n`;
           for (const option of modifier.options) {
-            itemsText += `    -> ${convertSpanishText(option.optionName)}`;
+            itemsText += `    -> ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
             if (option.priceAdjustment > 0) {
-              itemsText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+              itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
             }
             itemsText += '\n';
           }
@@ -2419,9 +2419,9 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
-            let optionText = `  > ${option.optionName}`;
+            let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
             if (option.priceAdjustment > 0) {
-              optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+              optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
             }
             builder.text(optionText).newLine();
           }
@@ -2521,9 +2521,9 @@ export const printStationTicket = async (printerIp, order, station, items, paper
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
-            let optionText = `  > ${option.optionName}`;
+            let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
             if (option.priceAdjustment > 0) {
-              optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+              optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
             }
             builder.text(optionText).newLine();
           }
@@ -2688,7 +2688,7 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
         for (const modifier of item.modifiers) {
           for (const option of modifier.options) {
             if (option.priceAdjustment > 0) {
-              builder.text(`   + ${option.optionName}: S/${option.priceAdjustment.toFixed(2)}`)
+              builder.text(`   + ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}: S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)}`)
                 .newLine();
             }
           }

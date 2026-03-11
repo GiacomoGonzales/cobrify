@@ -158,6 +158,12 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                           <span className="text-xs text-gray-500">
                             Máx: {modifier.maxSelection} opción{modifier.maxSelection > 1 ? 'es' : ''}
                           </span>
+                          {modifier.allowRepeat && (
+                            <>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-primary-600 font-medium">Multi-opción</span>
+                            </>
+                          )}
                           <span className="text-xs text-gray-400">•</span>
                           <span className="text-xs text-gray-500">
                             {modifier.options.length} opción{modifier.options.length !== 1 ? 'es' : ''}
@@ -196,19 +202,35 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                   <div className="p-4 space-y-4">
                     {/* Configuración del modificador */}
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={modifier.required}
-                            onChange={(e) => handleUpdateModifier(modifier.id, 'required', e.target.checked)}
-                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-gray-700">¿Es obligatorio?</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1 ml-6">
-                          El cliente debe seleccionar al menos una opción
-                        </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={modifier.required}
+                              onChange={(e) => handleUpdateModifier(modifier.id, 'required', e.target.checked)}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-gray-700">¿Es obligatorio?</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1 ml-6">
+                            El cliente debe seleccionar al menos una opción
+                          </p>
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={modifier.allowRepeat || false}
+                              onChange={(e) => handleUpdateModifier(modifier.id, 'allowRepeat', e.target.checked)}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-gray-700">Multi-opción</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1 ml-6">
+                            Permite repetir la misma opción varias veces (ej: 3x huevo frito)
+                          </p>
+                        </div>
                       </div>
 
                       <div>
@@ -219,7 +241,11 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                           type="number"
                           min="1"
                           value={modifier.maxSelection}
-                          onChange={(e) => handleUpdateModifier(modifier.id, 'maxSelection', parseInt(e.target.value) || 1)}
+                          onChange={(e) => handleUpdateModifier(modifier.id, 'maxSelection', e.target.value === '' ? '' : parseInt(e.target.value) || '')}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value)
+                            if (!val || val < 1) handleUpdateModifier(modifier.id, 'maxSelection', 1)
+                          }}
                           className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                         <p className="text-xs text-gray-500 mt-1">
