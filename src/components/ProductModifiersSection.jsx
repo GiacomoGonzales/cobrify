@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, X, Edit2, Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, X, Edit2, Check, ChevronDown, ChevronRight, ChevronUp, GripVertical } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
@@ -66,6 +66,20 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
           }
         : mod
     )
+    onChange(updated)
+  }
+
+  // Mover opción arriba o abajo
+  const handleMoveOption = (modifierId, optionIndex, direction) => {
+    const newIndex = optionIndex + direction
+    const updated = modifiers.map(mod => {
+      if (mod.id !== modifierId) return mod
+      if (newIndex < 0 || newIndex >= mod.options.length) return mod
+      const newOptions = [...mod.options]
+      const [moved] = newOptions.splice(optionIndex, 1)
+      newOptions.splice(newIndex, 0, moved)
+      return { ...mod, options: newOptions }
+    })
     onChange(updated)
   }
 
@@ -279,11 +293,32 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {modifier.options.map((option) => (
+                          {modifier.options.map((option, optIndex) => (
                             <div
                               key={option.id}
-                              className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200"
+                              className="flex items-center gap-1.5 p-2 bg-gray-50 rounded border border-gray-200"
                             >
+                              {/* Botones de reordenar */}
+                              <div className="flex flex-col">
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveOption(modifier.id, optIndex, -1)}
+                                  disabled={optIndex === 0}
+                                  className={`p-0.5 ${optIndex === 0 ? 'text-gray-200' : 'text-gray-400 hover:text-primary-600'}`}
+                                  title="Mover arriba"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveOption(modifier.id, optIndex, 1)}
+                                  disabled={optIndex === modifier.options.length - 1}
+                                  className={`p-0.5 ${optIndex === modifier.options.length - 1 ? 'text-gray-200' : 'text-gray-400 hover:text-primary-600'}`}
+                                  title="Mover abajo"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                               <input
                                 type="text"
                                 value={option.name}
