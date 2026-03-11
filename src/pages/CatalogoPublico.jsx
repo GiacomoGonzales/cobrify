@@ -23,6 +23,7 @@ import {
   UtensilsCrossed,
   ShoppingCart,
   Bike,
+  Navigation,
   User,
   Hash,
   CheckCircle2,
@@ -934,6 +935,8 @@ function CartDrawer({
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [customerCoords, setCustomerCoords] = useState(null)
+  const [gettingLocation, setGettingLocation] = useState(false)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
@@ -968,6 +971,7 @@ function CartDrawer({
         setCustomerName('')
         setCustomerPhone('')
         setCustomerAddress('')
+        setCustomerCoords(null)
         setNotes('')
       }, 300)
     }
@@ -1089,6 +1093,7 @@ function CartDrawer({
         ...(customerName && { customerName: customerName.trim() }),
         ...(customerPhone && { customerPhone: customerPhone.trim() }),
         ...(customerAddress && { customerAddress: customerAddress.trim() }),
+        ...(customerCoords && { customerCoords }),
 
         // Items
         items,
@@ -1291,6 +1296,7 @@ function CartDrawer({
                   if (customerName) msg += `👤 *Nombre:* ${customerName}\n`
                   if (customerPhone) msg += `📱 *Teléfono:* ${customerPhone}\n`
                   if (customerAddress) msg += `📍 *Dirección:* ${customerAddress}\n`
+                  if (customerCoords) msg += `🗺️ *Ubicación:* https://www.google.com/maps?q=${customerCoords.lat},${customerCoords.lng}\n`
                   if (notes) msg += `📝 *Notas:* ${notes}\n`
                   return `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
                 })()}
@@ -1545,13 +1551,73 @@ function CartDrawer({
                         <MapPin className="w-4 h-4 inline mr-1" />
                         Dirección de entrega
                       </label>
-                      <input
-                        type="text"
-                        value={customerAddress}
-                        onChange={(e) => setCustomerAddress(e.target.value)}
-                        placeholder="Av. ejemplo 123, distrito"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customerAddress}
+                          onChange={(e) => { setCustomerAddress(e.target.value); setCustomerCoords(null) }}
+                          placeholder="Av. ejemplo 123, distrito"
+                          className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                        />
+                        <button
+                          type="button"
+                          disabled={gettingLocation}
+                          onClick={async () => {
+                            if (!navigator.geolocation) {
+                              setOrderError('Tu navegador no soporta geolocalización')
+                              return
+                            }
+                            setGettingLocation(true)
+                            setOrderError('')
+                            navigator.geolocation.getCurrentPosition(
+                              async (position) => {
+                                const { latitude, longitude } = position.coords
+                                setCustomerCoords({ lat: latitude, lng: longitude })
+                                try {
+                                  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=es`)
+                                  const data = await res.json()
+                                  if (data.display_name) {
+                                    // Limpiar dirección: quitar país y código postal largo
+                                    const parts = data.display_name.split(', ')
+                                    const clean = parts.slice(0, Math.min(parts.length - 1, 5)).join(', ')
+                                    setCustomerAddress(clean)
+                                  }
+                                } catch {
+                                  setCustomerAddress(`Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`)
+                                }
+                                setGettingLocation(false)
+                              },
+                              (error) => {
+                                setGettingLocation(false)
+                                if (error.code === 1) {
+                                  setOrderError('Permiso de ubicación denegado. Actívalo en la configuración de tu navegador.')
+                                } else {
+                                  setOrderError('No se pudo obtener tu ubicación. Ingresa la dirección manualmente.')
+                                }
+                              },
+                              { enableHighAccuracy: true, timeout: 10000 }
+                            )
+                          }}
+                          className="px-3 py-3 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center disabled:opacity-50"
+                          title="Usar mi ubicación"
+                        >
+                          {gettingLocation
+                            ? <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
+                            : <Navigation className="w-5 h-5 text-blue-600" />
+                          }
+                        </button>
+                      </div>
+                      {customerCoords && (
+                        <a
+                          href={`https://www.google.com/maps?q=${customerCoords.lat},${customerCoords.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 mt-1.5 hover:underline"
+                        >
+                          <MapPin className="w-3 h-3" />
+                          Ver en Google Maps
+                        </a>
+                      )}
                     </div>
                   )}
 
