@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input'
 export default function ProductModifiersSection({ modifiers, onChange }) {
   const [editingModifierId, setEditingModifierId] = useState(null)
   const [expandedModifierId, setExpandedModifierId] = useState(null)
+  const [dragOptionData, setDragOptionData] = useState(null) // { modifierId, optionIndex }
 
   // Agregar nuevo modificador
   const handleAddModifier = () => {
@@ -81,6 +82,32 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
       return { ...mod, options: newOptions }
     })
     onChange(updated)
+  }
+
+  // Drag and drop de opciones
+  const handleDragStart = (modifierId, optionIndex) => {
+    setDragOptionData({ modifierId, optionIndex })
+  }
+
+  const handleDragOver = (e, modifierId, optionIndex) => {
+    e.preventDefault()
+    if (!dragOptionData || dragOptionData.modifierId !== modifierId) return
+    if (dragOptionData.optionIndex === optionIndex) return
+
+    // Reordenar en tiempo real mientras se arrastra
+    const updated = modifiers.map(mod => {
+      if (mod.id !== modifierId) return mod
+      const newOptions = [...mod.options]
+      const [moved] = newOptions.splice(dragOptionData.optionIndex, 1)
+      newOptions.splice(optionIndex, 0, moved)
+      return { ...mod, options: newOptions }
+    })
+    onChange(updated)
+    setDragOptionData({ modifierId, optionIndex })
+  }
+
+  const handleDragEnd = () => {
+    setDragOptionData(null)
   }
 
   // Eliminar opción
@@ -296,10 +323,20 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                           {modifier.options.map((option, optIndex) => (
                             <div
                               key={option.id}
-                              className="flex items-center gap-1.5 p-2 bg-gray-50 rounded border border-gray-200"
+                              draggable
+                              onDragStart={() => handleDragStart(modifier.id, optIndex)}
+                              onDragOver={(e) => handleDragOver(e, modifier.id, optIndex)}
+                              onDragEnd={handleDragEnd}
+                              className={`flex items-center gap-1.5 p-2 bg-gray-50 rounded border transition-colors ${
+                                dragOptionData?.modifierId === modifier.id && dragOptionData?.optionIndex === optIndex
+                                  ? 'border-primary-400 bg-primary-50'
+                                  : 'border-gray-200'
+                              }`}
                             >
-                              {/* Botones de reordenar */}
-                              <div className="flex flex-col">
+                              {/* Grip + Botones de reordenar */}
+                              <div className="flex items-center gap-0.5">
+                                <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                                <div className="flex flex-col">
                                 <button
                                   type="button"
                                   onClick={() => handleMoveOption(modifier.id, optIndex, -1)}
@@ -318,6 +355,7 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                                 >
                                   <ChevronDown className="w-3.5 h-3.5" />
                                 </button>
+                                </div>
                               </div>
                               <input
                                 type="text"
