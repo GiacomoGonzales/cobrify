@@ -49,12 +49,19 @@ export const exportProductsForImport = async (products, categories, businessMode
   // Preparar datos según el modo de negocio
   let productData = [];
 
+  // Helper para sanitizar valores numéricos (evita NaN y undefined en Excel)
+  const safeNum = (val) => {
+    if (val === undefined || val === null || val === '') return '';
+    const n = Number(val);
+    return isNaN(n) ? '' : n;
+  };
+
   // Helper para obtener el precio efectivo (considera variantes)
   const getEffectivePrice = (product) => {
     if (product.hasVariants && product.variants?.length > 0) {
-      return product.variants[0].price || 0;
+      return safeNum(product.variants[0].price) || 0;
     }
-    return product.price || 0;
+    return safeNum(product.price) || 0;
   };
 
   if (businessMode === 'pharmacy') {
@@ -76,12 +83,12 @@ export const exportProductsForImport = async (products, categories, businessMode
         condicion_venta: product.saleCondition || '',
         registro_sanitario: product.sanitaryRegistry || '',
         ubicacion: product.location || '',
-        costo: product.cost || '',
+        costo: safeNum(product.cost),
         precio: getEffectivePrice(product),
-        precio2: product.price2 || '',
-        precio3: product.price3 || '',
-        precio4: product.price4 || '',
-        stock: product.stock ?? '',
+        precio2: safeNum(product.price2),
+        precio3: safeNum(product.price3),
+        precio4: safeNum(product.price4),
+        stock: safeNum(product.stock),
         trackStock: product.trackStock === false ? 'NO' : 'SI',
         unidad: product.unit || 'UNIDAD',
         categoria,
@@ -99,12 +106,12 @@ export const exportProductsForImport = async (products, categories, businessMode
         nombre: product.name || '',
         descripcion: product.description || '',
         ubicacion: product.location || '',
-        costo: product.cost || '',
+        costo: safeNum(product.cost),
         precio: getEffectivePrice(product),
-        precio2: product.price2 || '',
-        precio3: product.price3 || '',
-        precio4: product.price4 || '',
-        stock: product.stock ?? '',
+        precio2: safeNum(product.price2),
+        precio3: safeNum(product.price3),
+        precio4: safeNum(product.price4),
+        stock: safeNum(product.stock),
         trackStock: product.trackStock === false ? 'NO' : 'SI',
         unidad: product.unit || 'UNIDAD',
         categoria,
@@ -290,19 +297,19 @@ export const generateProductsExcel = async (products, categories, businessData, 
       getCategoryHierarchy(product.category),
       product.description || '',
       unitLabels[product.unit] || product.unit || 'Unidad',
-      product.hasVariants && product.variants?.length > 0 ? product.variants[0].price || 0 : product.price || 0,
-      product.stock || 0,
-      product.minStock || 0,
+      product.hasVariants && product.variants?.length > 0 ? (Number(product.variants[0].price) || 0) : (Number(product.price) || 0),
+      Number(product.stock) || 0,
+      Number(product.minStock) || 0,
       stockStatus,
-      product.createdAt ? format(product.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
+      product.createdAt?.toDate ? format(product.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
     ]);
   });
 
   // Agregar estadísticas al final
-  const totalStock = products.reduce((sum, product) => sum + (product.stock || 0), 0);
+  const totalStock = products.reduce((sum, product) => sum + (Number(product.stock) || 0), 0);
   const totalValue = products.reduce((sum, product) => {
-    const price = product.hasVariants && product.variants?.length > 0 ? product.variants[0].price || 0 : product.price || 0;
-    return sum + (price * (product.stock || 0));
+    const price = product.hasVariants && product.variants?.length > 0 ? (Number(product.variants[0].price) || 0) : (Number(product.price) || 0);
+    return sum + (price * (Number(product.stock) || 0));
   }, 0);
   const lowStockProducts = products.filter(p => p.minStock && p.stock <= p.minStock).length;
   const outOfStockProducts = products.filter(p => p.stock === 0).length;

@@ -94,18 +94,15 @@ const getRealStockValue = (item) => {
     return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
   }
 
-  // Si no tiene control de stock, retornar null
-  if (item.stock === null || item.stock === undefined) {
-    return null
-  }
-
-  // Si tiene warehouseStocks, usar la suma
+  // Si tiene warehouseStocks, siempre usar la suma (fuente de verdad)
   const warehouseStocks = item.warehouseStocks || []
   if (warehouseStocks.length > 0) {
-    const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-    // Retornar el mayor entre la suma de almacenes y el stock general
-    // para no perder datos en caso de inconsistencia
-    return Math.max(warehouseTotal, item.stock || 0)
+    return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+  }
+
+  // Si no tiene control de stock y no tiene warehouseStocks, retornar null
+  if (item.stock === null || item.stock === undefined) {
+    return null
   }
 
   // Si no tiene warehouseStocks, usar stock general
@@ -251,19 +248,16 @@ export default function Inventory() {
       return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
     }
 
-    // Si no tiene control de stock, retornar null
-    if (item.stock === null || item.stock === undefined) {
-      return null
-    }
-
+    // Si tiene warehouseStocks, siempre usarlos como fuente de verdad
     const warehouseStocks = item.warehouseStocks || []
-    if (warehouseStocks.length === 0) {
-      // Si no tiene warehouseStocks y estamos viendo todas las sucursales/almacenes, usar stock general
-      if (filterBranch === 'all' && filterWarehouses.length === 0) {
-        return item.stock || 0
-      }
-      // Si hay filtro pero no hay warehouseStocks, es 0
-      return 0
+    if (warehouseStocks.length > 0) {
+      // Continúa abajo con la lógica de filtros
+    } else if (item.stock === null || item.stock === undefined) {
+      // Sin warehouseStocks y sin control de stock
+      return null
+    } else {
+      // Sin warehouseStocks, usar stock general
+      return item.stock || 0
     }
 
     // Si hay almacenes específicos seleccionados

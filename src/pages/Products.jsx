@@ -1447,7 +1447,22 @@ export default function Products() {
           }
 
           if (existingProduct) {
-            // PRODUCTO EXISTE - Solo agregar/actualizar stock en el almacén de la sucursal
+            // PRODUCTO EXISTE - Actualizar datos y stock
+            const updates = {}
+
+            // Actualizar campos editables si vienen en el Excel
+            if (product.name) updates.name = product.name
+            if (product.description) updates.description = product.description
+            if (product.price != null && !isNaN(product.price) && product.price > 0) updates.price = product.price
+            if (product.cost != null) updates.cost = product.cost
+            if (product.price2 !== undefined) updates.price2 = product.price2
+            if (product.price3 !== undefined) updates.price3 = product.price3
+            if (product.price4 !== undefined) updates.price4 = product.price4
+            if (product.unit) updates.unit = product.unit
+            if (product.location) updates.location = product.location
+            if (product.afectacionIgv) updates.afectacionIgv = product.afectacionIgv
+
+            // Actualizar stock si corresponde
             if (product.trackStock && targetWarehouse) {
               const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
               const currentWarehouseStocks = existingProduct.warehouseStocks || []
@@ -1477,37 +1492,40 @@ export default function Products() {
 
               // Calcular stock total
               const totalStock = newWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+              updates.warehouseStocks = newWarehouseStocks
+              updates.stock = totalStock
+            }
 
-              const updateResult = await updateProduct(getBusinessId(), existingProduct.id, {
-                warehouseStocks: newWarehouseStocks,
-                stock: totalStock
-              })
+            // Solo actualizar si hay cambios
+            if (Object.keys(updates).length > 0) {
+              const updateResult = await updateProduct(getBusinessId(), existingProduct.id, updates)
 
               if (updateResult.success) {
                 updatedCount++
-                // Registrar movimiento de stock
-                if (stockValue > 0) {
-                  await createStockMovement(getBusinessId(), {
-                    productId: existingProduct.id,
-                    warehouseId: targetWarehouse.id,
-                    type: 'entry',
-                    quantity: stockValue,
-                    reason: 'Stock inicial',
-                    referenceType: 'initial_stock',
-                    referenceId: existingProduct.id,
-                    userId: user?.uid,
-                    notes: 'Ingreso de stock por importación masiva'
-                  })
+                // Registrar movimiento de stock si cambió
+                if (updates.stock !== undefined && product.trackStock && targetWarehouse) {
+                  const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
+                  if (stockValue > 0) {
+                    await createStockMovement(getBusinessId(), {
+                      productId: existingProduct.id,
+                      warehouseId: targetWarehouse.id,
+                      type: 'entry',
+                      quantity: stockValue,
+                      reason: 'Stock inicial',
+                      referenceType: 'initial_stock',
+                      referenceId: existingProduct.id,
+                      userId: user?.uid,
+                      notes: 'Ingreso de stock por importación masiva'
+                    })
+                  }
                 }
                 // Actualizar el producto en el mapa para siguientes iteraciones
-                existingProduct.warehouseStocks = newWarehouseStocks
-                existingProduct.stock = totalStock
+                Object.assign(existingProduct, updates)
               } else {
                 errors.push(`Producto "${product.name}": ${updateResult.error}`)
               }
             } else {
-              // Producto existe pero no tiene control de stock o no hay almacén destino
-              updatedCount++ // Contarlo como procesado
+              updatedCount++
             }
           } else {
             // PRODUCTO NO EXISTE - Crear nuevo

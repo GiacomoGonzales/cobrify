@@ -57,6 +57,9 @@ export default function Production() {
   const [modalNotes, setModalNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // Selección de variante
+  const [productForVariantSelection, setProductForVariantSelection] = useState(null)
+
   // Eliminar producción
   const [productionToDelete, setProductionToDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -179,24 +182,39 @@ export default function Production() {
   }
 
   // Agregar producto al carrito de producción
-  const addToProduction = async (product) => {
-    const existing = productionItems.find(item => item.productId === product.id)
+  const addToProduction = async (product, variant = null) => {
+    // Para productos con variantes, verificar duplicado por variante
+    const duplicateKey = variant ? `${product.id}_${variant.sku}` : product.id
+    const existing = productionItems.find(item =>
+      variant ? (item.productId === product.id && item.variantSku === variant.sku) : (item.productId === product.id && !item.variantSku)
+    )
     if (existing) {
       toast.info('Este producto ya está en la lista')
       return
     }
 
+    // Si tiene variantes y no se seleccionó una, mostrar las opciones
+    if (product.hasVariants && product.variants?.length > 0 && !variant) {
+      setProductForVariantSelection(product)
+      return
+    }
+
     const itemId = Date.now().toString()
+    const variantLabel = variant
+      ? Object.values(variant.attributes || {}).join(' / ')
+      : ''
     const newItem = {
       id: itemId,
       productId: product.id,
-      name: product.name,
-      code: product.code || '',
+      name: variant ? `${product.name} - ${variantLabel}` : product.name,
+      code: variant?.sku || product.code || '',
       quantity: 1,
       mode: 'manual', // default, se actualiza al detectar receta
       hasRecipe: false,
       recipeInfo: null,
       isCheckingRecipe: true,
+      variantSku: variant?.sku || null,
+      variantIndex: variant ? product.variants.findIndex(v => v.sku === variant.sku) : null,
     }
 
     setProductionItems(prev => [...prev, newItem])
@@ -327,7 +345,9 @@ export default function Production() {
           warehouseId: modalWarehouseId,
           notes: modalNotes,
           userId: user.uid,
-          product
+          product,
+          variantIndex: item.variantIndex,
+          variantSku: item.variantSku,
         }
 
         let result
@@ -948,6 +968,41 @@ export default function Production() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal de selección de variante */}
+      <Modal
+        isOpen={!!productForVariantSelection}
+        onClose={() => setProductForVariantSelection(null)}
+        title={`Seleccionar variante - ${productForVariantSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForVariantSelection?.variants?.length > 0 && (
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            <p className="text-sm text-gray-600 mb-3">Este producto tiene variantes. Selecciona cuál producir:</p>
+            {productForVariantSelection.variants.map((variant, idx) => {
+              const attrs = Object.entries(variant.attributes || {}).map(([k, v]) => `${k}: ${v}`).join(', ')
+              return (
+                <button
+                  key={variant.sku || idx}
+                  onClick={() => {
+                    addToProduction(productForVariantSelection, variant)
+                    setProductForVariantSelection(null)
+                  }}
+                  className="w-full p-3 border rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{attrs || variant.sku}</p>
+                      {variant.sku && <p className="text-xs text-gray-400">{variant.sku}</p>}
+                    </div>
+                    <span className="text-sm text-gray-600">Stock: {variant.stock ?? 0}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </Modal>
     </div>
   )

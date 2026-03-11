@@ -22,7 +22,7 @@ import { updateProduct } from './firestoreService'
  * Descuenta insumos y aumenta stock del producto
  */
 export const executeRecipeProduction = async (businessId, params) => {
-  const { productId, productName, quantity, warehouseId, notes, userId, product } = params
+  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku } = params
 
   try {
     // 1. Obtener receta
@@ -66,13 +66,24 @@ export const executeRecipeProduction = async (businessId, params) => {
       return { success: false, error: `Error al descontar insumos: ${deductResult.error}` }
     }
 
-    // 6. Aumentar stock del producto
-    const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
+    // 6. Aumentar stock del producto (o variante)
+    let updateData
+    if (variantIndex != null && product.variants?.length > 0) {
+      const variants = [...product.variants]
+      variants[variantIndex] = {
+        ...variants[variantIndex],
+        stock: (variants[variantIndex].stock || 0) + quantity
+      }
+      updateData = { variants }
+    } else {
+      const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
+      updateData = {
+        stock: updatedProduct.stock,
+        warehouseStocks: updatedProduct.warehouseStocks
+      }
+    }
 
-    const updateResult = await updateProduct(businessId, productId, {
-      stock: updatedProduct.stock,
-      warehouseStocks: updatedProduct.warehouseStocks
-    })
+    const updateResult = await updateProduct(businessId, productId, updateData)
     if (!updateResult.success) {
       return { success: false, error: 'Error al actualizar stock del producto' }
     }
@@ -97,6 +108,7 @@ export const executeRecipeProduction = async (businessId, params) => {
       mode: 'recipe',
       recipeId: recipe.id,
       warehouseId,
+      ...(variantIndex != null && { variantIndex, variantSku }),
       ingredientsDeducted: ingredientsToDeduct.map(ing => ({
         ingredientId: ing.ingredientId,
         ingredientName: ing.ingredientName,
@@ -123,16 +135,28 @@ export const executeRecipeProduction = async (businessId, params) => {
  * Ejecutar producción manual (solo aumenta stock)
  */
 export const executeManualProduction = async (businessId, params) => {
-  const { productId, productName, quantity, warehouseId, notes, userId, product } = params
+  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku } = params
 
   try {
-    // 1. Aumentar stock del producto
-    const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
+    // 1. Aumentar stock del producto (o variante)
+    let updateData
+    if (variantIndex != null && product.variants?.length > 0) {
+      // Producto con variantes: actualizar stock de la variante
+      const variants = [...product.variants]
+      variants[variantIndex] = {
+        ...variants[variantIndex],
+        stock: (variants[variantIndex].stock || 0) + quantity
+      }
+      updateData = { variants }
+    } else {
+      const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
+      updateData = {
+        stock: updatedProduct.stock,
+        warehouseStocks: updatedProduct.warehouseStocks
+      }
+    }
 
-    const updateResult = await updateProduct(businessId, productId, {
-      stock: updatedProduct.stock,
-      warehouseStocks: updatedProduct.warehouseStocks
-    })
+    const updateResult = await updateProduct(businessId, productId, updateData)
     if (!updateResult.success) {
       return { success: false, error: 'Error al actualizar stock del producto' }
     }
@@ -157,6 +181,7 @@ export const executeManualProduction = async (businessId, params) => {
       mode: 'manual',
       recipeId: null,
       warehouseId,
+      ...(variantIndex != null && { variantIndex, variantSku }),
       ingredientsDeducted: [],
       totalCost: 0,
       notes: notes || '',
