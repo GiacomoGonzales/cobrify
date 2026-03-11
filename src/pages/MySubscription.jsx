@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PLANS } from '@/services/subscriptionService';
+import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import {
   CreditCard,
   Calendar,
@@ -10,13 +12,38 @@ import {
   FileText,
   Users,
   Box,
-  Clock
+  Clock,
+  Loader2,
+  Store,
+  Phone
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function MySubscription() {
   const { subscription, user } = useAuth();
+  const [vendedorInfo, setVendedorInfo] = useState(null)
+  const [assignedClients, setAssignedClients] = useState([])
+  const [loadingClients, setLoadingClients] = useState(false)
+
+  // Verificar si el usuario es un vendedor vinculado
+  useEffect(() => {
+    if (!user?.uid) return
+    const checkVendedor = async () => {
+      const result = await getVendedorByLinkedUser(user.uid)
+      if (result.success) {
+        setVendedorInfo(result.data)
+        // Cargar clientes asignados
+        setLoadingClients(true)
+        const clientsResult = await getVendedorClients(result.data.id)
+        if (clientsResult.success) {
+          setAssignedClients(clientsResult.data)
+        }
+        setLoadingClients(false)
+      }
+    }
+    checkVendedor()
+  }, [user?.uid])
 
   if (!subscription) {
     return (
@@ -278,6 +305,88 @@ export default function MySubscription() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Clientes asignados (solo si es vendedor vinculado) */}
+      {vendedorInfo && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center gap-3 mb-4">
+            <Users className="w-6 h-6 text-orange-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Mis Clientes Asignados</h3>
+              <p className="text-sm text-gray-500">Cuentas vinculadas a tu perfil de vendedor ({vendedorInfo.name})</p>
+            </div>
+          </div>
+
+          {loadingClients ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+              <span className="ml-2 text-gray-500">Cargando clientes...</span>
+            </div>
+          ) : assignedClients.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Store className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <p>No tienes clientes asignados aún</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600 mb-3">
+                Total: <span className="font-semibold">{assignedClients.length}</span> cliente(s)
+              </p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Negocio</th>
+                      <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">RUC</th>
+                      <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Plan</th>
+                      <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Estado</th>
+                      <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Vencimiento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignedClients.map(client => {
+                      const endDate = client.currentPeriodEnd?.toDate?.() || client.currentPeriodEnd
+                      const daysLeft = endDate ? differenceInDays(new Date(endDate), new Date()) : 0
+                      const isClientActive = client.status === 'active'
+                      return (
+                        <tr key={client.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <p className="text-sm font-medium text-gray-900">{client.businessName || 'Sin nombre'}</p>
+                            {client.phone && (
+                              <a href={`https://wa.me/${client.phone}`} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3" />{client.phone}
+                              </a>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{client.ruc || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 capitalize">{client.planName || client.plan}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              isClientActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {isClientActive ? 'Activo' : client.status === 'trial' ? 'Prueba' : 'Suspendido'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {endDate ? (
+                              <div>
+                                <p className="text-sm text-gray-900">{format(new Date(endDate), "dd/MM/yyyy")}</p>
+                                <p className={`text-xs ${daysLeft <= 7 ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                  {daysLeft > 0 ? `${daysLeft} días` : daysLeft === 0 ? 'Hoy' : 'Vencido'}
+                                </p>
+                              </div>
+                            ) : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 

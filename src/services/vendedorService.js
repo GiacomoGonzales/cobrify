@@ -8,7 +8,8 @@ import {
   deleteDoc,
   serverTimestamp,
   orderBy,
-  query
+  query,
+  where
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
@@ -25,6 +26,7 @@ export const createVendedor = async (data) => {
       bcpAccount: data.bcpAccount || '',
       bcpCci: data.bcpCci || '',
       titular: data.titular || '',
+      linkedUserId: data.linkedUserId || null,
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -80,6 +82,55 @@ export const updateVendedor = async (vendedorId, data) => {
     return { success: true }
   } catch (error) {
     console.error('Error al actualizar vendedor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Obtener vendedor vinculado a un usuario
+export const getVendedorByLinkedUser = async (userId) => {
+  try {
+    const q = query(collection(db, COLLECTION), where('linkedUserId', '==', userId))
+    const snapshot = await getDocs(q)
+    if (snapshot.empty) return { success: false, error: 'No vinculado' }
+    const vendedorDoc = snapshot.docs[0]
+    return { success: true, data: { id: vendedorDoc.id, ...vendedorDoc.data() } }
+  } catch (error) {
+    console.error('Error al buscar vendedor vinculado:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Obtener clientes asignados a un vendedor
+export const getVendedorClients = async (vendedorId) => {
+  try {
+    const q = query(collection(db, 'subscriptions'), where('vendedorId', '==', vendedorId))
+    const snapshot = await getDocs(q)
+
+    const clients = []
+    for (const subDoc of snapshot.docs) {
+      const subData = subDoc.data()
+      // Obtener datos del negocio
+      let businessData = {}
+      try {
+        const businessDoc = await getDoc(doc(db, 'businesses', subDoc.id))
+        if (businessDoc.exists()) businessData = businessDoc.data()
+      } catch (e) { /* skip */ }
+
+      clients.push({
+        id: subDoc.id,
+        plan: subData.plan || '',
+        planName: subData.planName || subData.plan || '',
+        status: subData.status || '',
+        currentPeriodEnd: subData.currentPeriodEnd,
+        businessName: businessData.businessName || businessData.razonSocial || '',
+        ruc: businessData.ruc || '',
+        phone: businessData.phone || '',
+      })
+    }
+
+    return { success: true, data: clients }
+  } catch (error) {
+    console.error('Error al obtener clientes del vendedor:', error)
     return { success: false, error: error.message }
   }
 }

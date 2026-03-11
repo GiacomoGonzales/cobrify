@@ -709,11 +709,12 @@ export default function AdminUsers() {
         yapeName: vendedor.yapeName || '',
         bcpAccount: vendedor.bcpAccount || '',
         bcpCci: vendedor.bcpCci || '',
-        titular: vendedor.titular || ''
+        titular: vendedor.titular || '',
+        linkedUserId: vendedor.linkedUserId || ''
       })
     } else {
       setEditingVendedor(null)
-      setVendedorForm({ name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: '' })
+      setVendedorForm({ name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: '', linkedUserId: '' })
     }
     setShowVendedorModal(true)
   }
@@ -4121,6 +4122,24 @@ export default function AdminUsers() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vincular cuenta de usuario</label>
+                <select
+                  value={vendedorForm.linkedUserId}
+                  onChange={e => setVendedorForm({ ...vendedorForm, linkedUserId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm"
+                >
+                  <option value="">-- Sin vincular --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.businessName || u.razonSocial || u.email} {u.ruc ? `(${u.ruc})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Al vincular, el vendedor podrá ver sus clientes asignados en "Mi Suscripción"
+                </p>
+              </div>
 
               {/* Lista de vendedores existentes */}
               {vendedores.length > 0 && (
@@ -4131,7 +4150,7 @@ export default function AdminUsers() {
                       <div key={v.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{v.name}</p>
-                          <p className="text-xs text-gray-500">{v.phone} | Yape: {v.yapeNumber}</p>
+                          <p className="text-xs text-gray-500">{v.phone} | Yape: {v.yapeNumber}{v.linkedUserId ? ` | Vinculado` : ''}</p>
                         </div>
                         <div className="flex items-center gap-1">
                           <button

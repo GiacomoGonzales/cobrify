@@ -36,6 +36,7 @@ import {
   Copy,
   Check,
   Minus,
+  ClipboardList,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -49,7 +50,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
-import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
@@ -2471,6 +2472,25 @@ Gracias por tu preferencia.`
                     >
                       <Truck className="w-4 h-4 text-green-600" />
                       <span>Generar Guía de Remisión</span>
+                    </button>
+                  )}
+
+                  {/* Nota de Salida - Solo si está habilitado en preferencias */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') &&
+                   (businessSettings?.exitNoteEnabled || isDemoMode) && (
+                    <button
+                      onClick={async () => {
+                        setOpenMenuId(null)
+                        try {
+                          await generateExitNotePDF(invoice, companySettings)
+                        } catch (e) {
+                          toast.error('Error al generar nota de salida')
+                        }
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <ClipboardList className="w-4 h-4 text-amber-600" />
+                      <span>Nota de Salida</span>
                     </button>
                   )}
 

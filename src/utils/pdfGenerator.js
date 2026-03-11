@@ -2274,3 +2274,324 @@ export const previewInvoicePDF = async (invoice, companySettings, branding = nul
     return blobUrl
   }
 }
+
+/**
+ * Generar Nota de Salida (A4) - Sin precios, solo cantidades
+ * Para el encargado de almacén
+ */
+export const generateExitNotePDF = async (invoice, companySettings) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'a4'
+  })
+
+  const BLACK = [0, 0, 0]
+  const DARK_GRAY = [60, 60, 60]
+  const MEDIUM_GRAY = [120, 120, 120]
+  const LIGHT_GRAY = [240, 240, 240]
+
+  const MARGIN_LEFT = 30
+  const MARGIN_RIGHT = 30
+  const PAGE_WIDTH = doc.internal.pageSize.getWidth()
+  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
+
+  let currentY = 30
+
+  // ========== ENCABEZADO ==========
+
+  // Logo (si existe)
+  if (companySettings?.logoUrl) {
+    try {
+      const imgData = await loadImageWithRetry(companySettings.logoUrl)
+      if (imgData) {
+        let format = 'PNG'
+        if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
+            companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+          format = 'JPEG'
+        }
+        const img = new Image()
+        img.src = imgData
+        await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve })
+        const aspectRatio = img.width / img.height
+        const logoHeight = 50
+        const logoWidth = Math.min(logoHeight * aspectRatio, 150)
+        doc.addImage(imgData, format, MARGIN_LEFT, currentY, logoWidth, logoHeight)
+      }
+    } catch (e) { /* Continuar sin logo */ }
+  }
+
+  // Título "NOTA DE SALIDA" a la derecha
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  doc.text('NOTA DE SALIDA', PAGE_WIDTH - MARGIN_RIGHT, currentY + 20, { align: 'right' })
+
+  // Nombre de la empresa
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  const companyName = companySettings?.businessName || companySettings?.name || ''
+  if (companyName) {
+    doc.text(companyName.toUpperCase(), PAGE_WIDTH - MARGIN_RIGHT, currentY + 35, { align: 'right' })
+  }
+
+  currentY += 65
+
+  // Línea separadora
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(1)
+  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+  currentY += 15
+
+  // ========== DATOS DEL DOCUMENTO ==========
+
+  doc.setFontSize(9)
+  const labelX = MARGIN_LEFT
+  const valueX = MARGIN_LEFT + 120
+  const rightLabelX = PAGE_WIDTH / 2 + 20
+  const rightValueX = PAGE_WIDTH / 2 + 140
+
+  // Fila 1: Referencia + Fecha
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('Comprobante Ref.:', labelX, currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...BLACK)
+  const docTypeLabels = {
+    'factura': 'Factura',
+    'boleta': 'Boleta',
+    'nota_venta': 'Nota de Venta'
+  }
+  const docLabel = docTypeLabels[invoice.documentType] || invoice.documentType || ''
+  doc.text(`${docLabel} ${invoice.number || ''}`, valueX, currentY)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('Fecha:', rightLabelX, currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...BLACK)
+  const emissionDate = invoice.emissionDate?.toDate
+    ? formatDate(invoice.emissionDate.toDate())
+    : invoice.emissionDate
+      ? formatDate(new Date(invoice.emissionDate))
+      : formatDate(new Date())
+  doc.text(emissionDate, rightValueX, currentY)
+
+  currentY += 16
+
+  // Fila 2: Cliente
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('Cliente:', labelX, currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...BLACK)
+  const clientName = invoice.clientName || invoice.customer?.name || 'Cliente General'
+  const maxClientWidth = CONTENT_WIDTH - 120
+  const clientLines = doc.splitTextToSize(clientName, maxClientWidth)
+  doc.text(clientLines[0], valueX, currentY)
+
+  currentY += 16
+
+  // Fila 3: RUC/DNI del cliente
+  const clientDoc = invoice.clientDocument || invoice.customer?.document || ''
+  if (clientDoc) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('RUC/DNI:', labelX, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
+    doc.text(clientDoc, valueX, currentY)
+    currentY += 16
+  }
+
+  currentY += 10
+
+  // ========== TABLA DE PRODUCTOS (SIN PRECIOS) ==========
+
+  const items = invoice.items || []
+
+  // Columnas: #, CANTIDAD, U.M., DESCRIPCIÓN
+  const colWidths = {
+    num: CONTENT_WIDTH * 0.06,
+    cant: CONTENT_WIDTH * 0.12,
+    um: CONTENT_WIDTH * 0.12,
+    desc: CONTENT_WIDTH * 0.70
+  }
+
+  const cols = {
+    num: MARGIN_LEFT,
+    cant: MARGIN_LEFT + colWidths.num,
+    um: MARGIN_LEFT + colWidths.num + colWidths.cant,
+    desc: MARGIN_LEFT + colWidths.num + colWidths.cant + colWidths.um
+  }
+
+  // Header de la tabla
+  doc.setFillColor(...LIGHT_GRAY)
+  doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 20, 'F')
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(0.5)
+  doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 20, 'S')
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+
+  const headerY = currentY + 14
+  doc.text('#', cols.num + colWidths.num / 2, headerY, { align: 'center' })
+  doc.text('CANTIDAD', cols.cant + colWidths.cant / 2, headerY, { align: 'center' })
+  doc.text('U.M.', cols.um + colWidths.um / 2, headerY, { align: 'center' })
+  doc.text('DESCRIPCIÓN', cols.desc + 5, headerY)
+
+  currentY += 20
+
+  // Filas de productos
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+
+  items.forEach((item, index) => {
+    const itemName = item.name || item.description || ''
+    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
+    const unitLabels = {
+      'UNIDAD': 'UND',
+      'CAJA': 'CJA',
+      'KG': 'KG',
+      'LITRO': 'LT',
+      'METRO': 'MT',
+      'HORA': 'HR',
+      'SERVICIO': 'SRV'
+    }
+    const unitCode = unitLabels[item.unit] || item.unit || 'UND'
+
+    // Calcular alto de la fila según el texto de descripción
+    const descLines = doc.splitTextToSize(itemName, colWidths.desc - 10)
+    const rowHeight = Math.max(18, descLines.length * 10 + 8)
+
+    // Check page break
+    if (currentY + rowHeight > doc.internal.pageSize.getHeight() - 40) {
+      doc.addPage()
+      currentY = 30
+    }
+
+    // Fondo alternado
+    if (index % 2 === 0) {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, rowHeight, 'F')
+    }
+
+    // Borde de la fila
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.3)
+    doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, rowHeight, 'S')
+
+    const textY = currentY + rowHeight / 2 + 3
+
+    doc.setTextColor(...DARK_GRAY)
+    doc.text((index + 1).toString(), cols.num + colWidths.num / 2, textY, { align: 'center' })
+
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text(unitCode, cols.um + colWidths.um / 2, textY, { align: 'center' })
+
+    doc.setTextColor(...BLACK)
+    if (descLines.length === 1) {
+      doc.text(descLines[0], cols.desc + 5, textY)
+    } else {
+      const startTextY = currentY + 12
+      descLines.forEach((line, i) => {
+        doc.text(line, cols.desc + 5, startTextY + (i * 10))
+      })
+    }
+
+    currentY += rowHeight
+  })
+
+  // Línea final de la tabla
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+
+  // Total de items
+  currentY += 15
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  const totalItems = items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+  const totalText = Number.isInteger(totalItems) ? totalItems.toString() : totalItems.toFixed(2)
+  doc.text(`Total de artículos: ${totalText}`, MARGIN_LEFT, currentY)
+
+  // Notas / observaciones
+  if (invoice.notes || invoice.observations) {
+    currentY += 20
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('Observaciones:', MARGIN_LEFT, currentY)
+    currentY += 12
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...BLACK)
+    const notesText = invoice.notes || invoice.observations || ''
+    const notesLines = doc.splitTextToSize(notesText, CONTENT_WIDTH)
+    notesLines.slice(0, 4).forEach(line => {
+      doc.text(line, MARGIN_LEFT, currentY)
+      currentY += 10
+    })
+  }
+
+  // Espacio para firma
+  currentY += 40
+  const signWidth = 180
+  const sign1X = MARGIN_LEFT + 40
+  const sign2X = PAGE_WIDTH - MARGIN_RIGHT - signWidth - 40
+
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(0.5)
+  doc.line(sign1X, currentY, sign1X + signWidth, currentY)
+  doc.line(sign2X, currentY, sign2X + signWidth, currentY)
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text('Despachado por', sign1X + signWidth / 2, currentY + 12, { align: 'center' })
+  doc.text('Recibido por', sign2X + signWidth / 2, currentY + 12, { align: 'center' })
+
+  // Pie de página
+  const pageHeight = doc.internal.pageSize.getHeight()
+  doc.setFontSize(7)
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text('Documento interno - No tiene valor tributario', PAGE_WIDTH / 2, pageHeight - 15, { align: 'center' })
+
+  // Descargar o compartir
+  const fileName = `Nota_Salida_${invoice.number?.replace(/\//g, '-') || 'sin_numero'}.pdf`
+
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      const pdfBase64 = doc.output('datauristring').split(',')[1]
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+        recursive: true
+      })
+      await Share.share({
+        title: `Nota de Salida - ${invoice.number || ''}`,
+        url: result.uri,
+        dialogTitle: 'Compartir Nota de Salida'
+      })
+      return result.uri
+    } catch (error) {
+      console.error('Error al generar nota de salida en móvil:', error)
+      throw error
+    }
+  } else {
+    const blobUrl = doc.output('bloburl')
+    window.open(blobUrl, '_blank')
+    return blobUrl
+  }
+}

@@ -149,6 +149,7 @@ export default function Settings() {
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [enableProductLocation, setEnableProductLocation] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
+  const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
@@ -771,6 +772,7 @@ export default function Settings() {
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
+        setExitNoteEnabled(businessData.exitNoteEnabled || false)
 
         // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
@@ -4185,6 +4187,29 @@ export default function Settings() {
                 </label>
               </div>
 
+              {/* Nota de Salida */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Nota de Salida</h3>
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={exitNoteEnabled}
+                    onChange={(e) => setExitNoteEnabled(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Habilitar Nota de Salida (Almacén)
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {exitNoteEnabled
+                        ? '✓ Habilitado: Podrás generar notas de salida desde tus comprobantes. Muestra solo cantidades sin precios, ideal para el encargado de almacén.'
+                        : '✗ Deshabilitado: No se mostrará la opción de generar notas de salida en tus comprobantes.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -4484,6 +4509,7 @@ export default function Settings() {
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       pdfSpacious: pdfSpacious,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
+                      exitNoteEnabled: exitNoteEnabled,
                       termsTemplates: termsTemplates,
                       autoSendToSunat: autoSendToSunat,
                       allowDeleteInvoices: allowDeleteInvoices,
