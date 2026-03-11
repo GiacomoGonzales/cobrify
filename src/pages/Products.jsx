@@ -1401,12 +1401,14 @@ export default function Products() {
       const existingProductsResult = await getProducts(getBusinessId())
       const existingProducts = existingProductsResult.success ? existingProductsResult.data : []
 
-      // Crear mapas para búsqueda rápida por SKU y código de barras
+      // Crear mapas para búsqueda rápida por SKU, código de barras y nombre
       const productBySku = new Map()
       const productByCode = new Map()
+      const productByName = new Map()
       existingProducts.forEach(p => {
         if (p.sku) productBySku.set(p.sku.toLowerCase().trim(), p)
         if (p.code) productByCode.set(p.code.toLowerCase().trim(), p)
+        if (p.name) productByName.set(p.name.toLowerCase().trim(), p)
       })
 
       // Importar productos
@@ -1437,13 +1439,16 @@ export default function Products() {
 
           // El almacén destino ya está definido al inicio (targetWarehouse)
 
-          // Buscar si el producto ya existe (por SKU o código de barras)
+          // Buscar si el producto ya existe (por SKU, código de barras o nombre)
           let existingProduct = null
           if (product.sku) {
             existingProduct = productBySku.get(product.sku.toLowerCase().trim())
           }
           if (!existingProduct && product.code) {
             existingProduct = productByCode.get(product.code.toLowerCase().trim())
+          }
+          if (!existingProduct && product.name) {
+            existingProduct = productByName.get(product.name.toLowerCase().trim())
           }
 
           if (existingProduct) {
@@ -1566,8 +1571,10 @@ export default function Products() {
                 })
               }
               // Agregar al mapa para detectar duplicados en el mismo archivo
-              if (product.sku) productBySku.set(product.sku.toLowerCase().trim(), { ...product, id: result.id })
-              if (product.code) productByCode.set(product.code.toLowerCase().trim(), { ...product, id: result.id })
+              const createdProduct = { ...product, id: result.id }
+              if (product.sku) productBySku.set(product.sku.toLowerCase().trim(), createdProduct)
+              if (product.code) productByCode.set(product.code.toLowerCase().trim(), createdProduct)
+              if (product.name) productByName.set(product.name.toLowerCase().trim(), createdProduct)
             } else {
               errors.push(`Producto "${product.name}": ${result.error}`)
             }
