@@ -56,6 +56,7 @@ import {
   createInvoice,
   getCompanySettings,
   updateProduct,
+  updateProductStockTransaction,
   getNextDocumentNumber,
   getProductCategories,
   sendInvoiceToSunat,
@@ -3270,18 +3271,9 @@ export default function POS() {
                   if (productData.trackStock === false || productData.stock === null) return
 
                   const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
-                  const updatedProduct = updateWarehouseStock(
-                    productData,
-                    bgSelectedWarehouse?.id || '',
-                    -quantityToDeduct
-                  )
 
-                  const updates = {
-                    stock: updatedProduct.stock,
-                    warehouseStocks: updatedProduct.warehouseStocks
-                  }
-
-                  // FEFO: Si el producto tiene lotes, descontar del más próximo a vencer
+                  // Datos extra para FEFO (lotes con fecha de vencimiento)
+                  const extraUpdates = {}
                   if (productData.batches && productData.batches.length > 0) {
                     let remainingToDeduct = item.quantity
                     const updatedBatches = [...productData.batches]
@@ -3306,7 +3298,7 @@ export default function POS() {
                       }
                     }
 
-                    updates.batches = updatedBatches
+                    extraUpdates.batches = updatedBatches
 
                     const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
                     if (activeBatches.length > 0) {
@@ -3316,15 +3308,21 @@ export default function POS() {
                         return dateA - dateB
                       })
                       const nearestBatch = activeBatches[0]
-                      updates.expirationDate = nearestBatch.expirationDate
-                      updates.batchNumber = nearestBatch.batchNumber
+                      extraUpdates.expirationDate = nearestBatch.expirationDate
+                      extraUpdates.batchNumber = nearestBatch.batchNumber
                     } else {
-                      updates.expirationDate = null
-                      updates.batchNumber = null
+                      extraUpdates.expirationDate = null
+                      extraUpdates.batchNumber = null
                     }
                   }
 
-                  return updateProduct(businessId, item.id, updates)
+                  // Usar transacción para evitar race conditions entre ventas simultáneas
+                  return updateProductStockTransaction(
+                    businessId, item.id,
+                    bgSelectedWarehouse?.id || '',
+                    -quantityToDeduct,
+                    extraUpdates
+                  )
                 })
 
               await Promise.all(stockUpdates)
