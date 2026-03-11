@@ -3040,9 +3040,9 @@ export default function POS() {
             detractionType: detractionType,
             detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
             detractionRate: DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0,
-            detractionAmount: Number(((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
+            detractionAmount: Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100),
             detractionBankAccount: detractionBankAccount || null,
-            netPayable: Number((amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
+            netPayable: Number((amounts.total - Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)).toFixed(2)),
           }),
         }),
         // Si viene de nota(s) de venta, marcar para no descontar stock de nuevo
@@ -4789,7 +4789,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <div>
                                     <label className="text-[10px] text-gray-500 mb-0.5 block">Monto Detracción</label>
                                     <div className="px-2 py-1.5 text-xs bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-bold">
-                                      S/ {((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)}
+                                      S/ {Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)}
                                     </div>
                                   </div>
                                 </div>
@@ -4876,13 +4876,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <div className="flex justify-between text-amber-700">
                                     <span>(-) Detracción ({DETRACTION_TYPES.find(t => t.code === detractionType)?.rate}%):</span>
                                     <span className="font-medium">
-                                      {formatCurrency((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)}
+                                      {formatCurrency(Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100))}
                                     </span>
                                   </div>
                                   <div className="flex justify-between font-bold text-green-700 border-t pt-1 mt-1">
                                     <span>Neto a Pagar:</span>
                                     <span>
-                                      {formatCurrency(amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)}
+                                      {formatCurrency(amounts.total - Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100))}
                                     </span>
                                   </div>
                                 </div>
