@@ -1280,31 +1280,34 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Altura total de la tabla (dinámica según contenido)
   const tableHeight = headerRowHeight + totalItemsHeight
 
-  // Encabezado de tabla con fondo de color
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, headerRowHeight, 'F')
-
-  // Textos del encabezado
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-
-  const headerTextY = tableY + (spacious ? 15 : 12)
-  doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
-  doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
-  doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
-  if (isPharmacy) {
-    doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
-    doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
+  // Función para dibujar el encabezado de tabla (reutilizable en cada página)
+  const drawTableHeader = (startY) => {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(MARGIN_LEFT, startY, CONTENT_WIDTH, headerRowHeight, 'F')
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    const headerTextY = startY + (spacious ? 15 : 12)
+    doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
+    doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
+    doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
+    if (isPharmacy) {
+      doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+      doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
+    }
+    doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
+    if (hasAnyItemDiscount) {
+      doc.text('DCTO.', cols.dcto + colWidths.dcto / 2, headerTextY, { align: 'center' })
+    }
+    doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
+    return startY + headerRowHeight
   }
-  doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
-  if (hasAnyItemDiscount) {
-    doc.text('DCTO.', cols.dcto + colWidths.dcto / 2, headerTextY, { align: 'center' })
-  }
-  doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
 
-  // Dibujar filas de productos (solo las que tienen datos)
-  let dataRowY = tableY + headerRowHeight
+  // Límite inferior de página para ítems (dejar margen para continuar en siguiente página)
+  const PAGE_BOTTOM_LIMIT = PAGE_HEIGHT - MARGIN_BOTTOM - 15
+
+  // Dibujar encabezado de tabla inicial
+  let dataRowY = drawTableHeader(tableY)
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
@@ -1316,6 +1319,22 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   for (let i = 0; i < items.length; i++) {
     const { height: rowHeight, descLines, pharmaLines } = itemHeights[i]
+
+    // Verificar si la fila cabe en la página actual, si no → nueva página
+    if (dataRowY + rowHeight > PAGE_BOTTOM_LIMIT) {
+      // Línea de cierre de tabla en esta página
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.3)
+      doc.line(MARGIN_LEFT, dataRowY, MARGIN_LEFT + CONTENT_WIDTH, dataRowY)
+      // Indicador "continúa..."
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(150, 150, 150)
+      doc.text('continúa en la siguiente página...', MARGIN_LEFT + CONTENT_WIDTH / 2, dataRowY + 8, { align: 'center' })
+
+      doc.addPage()
+      dataRowY = drawTableHeader(MARGIN_TOP)
+    }
 
     // Fondo alternado: filas pares gris, filas impares blanco
     if (i % 2 === 0) {
@@ -1403,7 +1422,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ========== 4. PIE DE PÁGINA FIJO ==========
 
-  let footerY = tableY + tableHeight + (spacious ? 15 : 8)
+  let footerY = dataRowY + (spacious ? 15 : 8)
+
+  // Si el footer no cabe en la página actual, agregar nueva página
+  const footerTotalHeight = SON_SECTION_HEIGHT + TOTALS_SECTION_HEIGHT + Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) + FOOTER_TEXT_HEIGHT + 40
+  if (footerY + footerTotalHeight > PAGE_HEIGHT) {
+    doc.addPage()
+    footerY = MARGIN_TOP
+  }
 
   // ========== SON: (MONTO EN LETRAS) ==========
   const montoEnLetras = numeroALetras(invoice.total || 0) + ' SOLES'
