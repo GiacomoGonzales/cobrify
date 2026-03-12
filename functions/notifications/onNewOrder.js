@@ -1,22 +1,39 @@
-import { onDocumentCreated } from 'firebase-functions/v2/firestore'
+import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { getFirestore } from 'firebase-admin/firestore'
 import admin from 'firebase-admin'
 
 /**
- * Trigger cuando se crea una nueva orden en un restaurante.
- * Envía push notification a todos los usuarios del negocio (dueño + sub-usuarios).
+ * Trigger cuando se crea o actualiza una orden en un restaurante.
+ * Envía push notification cuando:
+ * - Se crea una orden CON ítems (ej: menú digital, orden rápida)
+ * - Se agregan ítems nuevos a una orden existente (ej: mozo agrega productos a mesa)
  */
-export const onNewOrder = onDocumentCreated(
+export const onNewOrder = onDocumentWritten(
   'businesses/{businessId}/orders/{orderId}',
   async (event) => {
-    const order = event.data.data()
-    const businessId = event.params.businessId
+    const before = event.data.before?.data()
+    const after = event.data.after?.data()
+
+    // Si se eliminó el documento, ignorar
+    if (!after) return
 
     // Solo notificar órdenes activas/pendientes
-    if (order.status === 'cancelled' || order.overallStatus === 'cancelled') return
+    if (after.status === 'cancelled' || after.overallStatus === 'cancelled') return
+
+    const beforeItems = (before?.items || []).length
+    const afterItems = (after.items || []).length
+
+    // Solo notificar si se agregaron ítems nuevos
+    // Caso 1: Orden nueva con ítems (beforeItems === 0 porque no existía, afterItems > 0)
+    // Caso 2: Orden existente a la que se le agregan ítems (afterItems > beforeItems)
+    if (afterItems === 0 || afterItems <= beforeItems) return
+
+    const newItemCount = afterItems - beforeItems
+    const isNewOrder = !before // Documento recién creado
 
     try {
       const db = getFirestore()
+      const businessId = event.params.businessId
 
       // Obtener info del negocio
       const businessDoc = await db.collection('businesses').doc(businessId).get()
@@ -24,35 +41,42 @@ export const onNewOrder = onDocumentCreated(
 
       const business = businessDoc.data()
       const ownerId = business.ownerId || businessId
-      const businessName = business.name || business.businessName || 'tu negocio'
 
-      // Construir mensaje según tipo de orden
+      // Construir mensaje
+      const order = after
       const orderNumber = order.orderNumber || ''
-      const itemCount = (order.items || []).length
       const source = order.source || ''
       const orderType = order.orderType || ''
+      const mesa = order.tableNumber ? ` Mesa ${order.tableNumber}` : ''
 
-      let title = 'Nuevo Pedido'
+      let title = ''
       let body = ''
 
-      if (source === 'menu_digital') {
-        title = '📱 Nuevo Pedido - Menú Digital'
-        if (orderType === 'delivery') {
-          body = `Pedido ${orderNumber} delivery - ${itemCount} item${itemCount > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
-        } else if (orderType === 'takeaway') {
-          body = `Pedido ${orderNumber} para llevar - ${itemCount} item${itemCount > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+      if (isNewOrder) {
+        // Orden nueva con ítems (menú digital, orden rápida)
+        if (source === 'menu_digital') {
+          title = '📱 Nuevo Pedido - Menú Digital'
+          if (orderType === 'delivery') {
+            body = `Pedido ${orderNumber} delivery - ${afterItems} item${afterItems > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+          } else if (orderType === 'takeaway') {
+            body = `Pedido ${orderNumber} para llevar - ${afterItems} item${afterItems > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+          } else {
+            body = `Pedido ${orderNumber}${mesa} - ${afterItems} item${afterItems > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+          }
         } else {
-          const mesa = order.tableNumber ? ` Mesa ${order.tableNumber}` : ''
-          body = `Pedido ${orderNumber}${mesa} - ${itemCount} item${itemCount > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+          title = '🍽️ Nuevo Pedido'
+          const waiter = order.waiterName ? ` (${order.waiterName})` : ''
+          body = `Pedido ${orderNumber}${mesa}${waiter} - ${afterItems} item${afterItems > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
         }
       } else {
-        const mesa = order.tableNumber ? ` Mesa ${order.tableNumber}` : ''
+        // Se agregaron ítems a orden existente
+        title = '➕ Items Agregados'
         const waiter = order.waiterName ? ` (${order.waiterName})` : ''
-        body = `Pedido ${orderNumber}${mesa}${waiter} - ${itemCount} item${itemCount > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
+        body = `${newItemCount} item${newItemCount > 1 ? 's' : ''} nuevo${newItemCount > 1 ? 's' : ''}${mesa}${waiter} - Total: S/ ${(order.total || 0).toFixed(2)}`
       }
 
       const data = {
-        type: 'new_order',
+        type: isNewOrder ? 'new_order' : 'items_added',
         orderId: event.params.orderId,
         businessId,
         orderNumber,
@@ -87,7 +111,7 @@ export const onNewOrder = onDocumentCreated(
       // Eliminar duplicados
       const uniqueTokens = [...new Set(allTokens)]
 
-      console.log(`📤 Sending order notification to ${uniqueTokens.length} devices for business ${businessName}`)
+      console.log(`📤 ${title}: ${body} → ${uniqueTokens.length} devices`)
 
       // Enviar push a todos los tokens
       const message = {
@@ -125,12 +149,9 @@ export const onNewOrder = onDocumentCreated(
           if (!resp.success &&
             (resp.error?.code === 'messaging/invalid-registration-token' ||
              resp.error?.code === 'messaging/registration-token-not-registered')) {
-            // Buscar y eliminar token inválido de cualquier usuario
             const invalidToken = uniqueTokens[idx]
             console.log('🗑️ Removing invalid token:', invalidToken.substring(0, 20) + '...')
-            // Eliminar del dueño
             db.collection('users').doc(ownerId).collection('fcmTokens').doc(invalidToken).delete().catch(() => {})
-            // Eliminar de sub-usuarios
             subUsersSnapshot.docs.forEach(userDoc => {
               db.collection('users').doc(userDoc.id).collection('fcmTokens').doc(invalidToken).delete().catch(() => {})
             })
