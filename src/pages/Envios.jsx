@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Truck, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
-  CircleDot, Coffee, WifiOff, X, FileText, ArrowRight, Bike, Printer,
+  CircleDot, Coffee, WifiOff, X, FileText, ArrowRight, Bike, Receipt,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -252,43 +252,44 @@ export default function Envios() {
     loadMotoristas() // refresh stats
   }
 
-  const handlePrintDelivery = async (delivery) => {
-    // Si es nativo, intentar imprimir en impresora térmica
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const { getPrinterConfig, connectPrinter, printDeliveryTicket } = await import('@/services/thermalPrinterService')
-        const printerConfigResult = await getPrinterConfig(getBusinessId())
-
-        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
-          const connectResult = await connectPrinter(printerConfigResult.config.address)
-
-          if (!connectResult.success) {
-            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
-            toast.info('Abriendo PDF...')
-          } else {
-            const result = await printDeliveryTicket(delivery, companySettings, printerConfigResult.config.paperWidth || 80)
-
-            if (result.success) {
-              toast.success('Guía de envío impresa en ticketera')
-              return
-            } else {
-              toast.error('Error al imprimir: ' + result.error)
-              toast.info('Abriendo PDF...')
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error al imprimir en ticketera:', error)
-        toast.info('Abriendo PDF...')
-      }
-    }
-
-    // Fallback: PDF A4
+  const handlePrintPDF = async (delivery) => {
     try {
       await previewDeliveryPDF(delivery, companySettings)
     } catch (error) {
-      console.error('Error al imprimir guía de envío:', error)
+      console.error('Error al generar PDF de envío:', error)
       toast.error('Error al generar la guía de envío')
+    }
+  }
+
+  const handlePrintTicket = async (delivery) => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.info('La impresión de ticket solo está disponible en la app móvil')
+      return
+    }
+    try {
+      const { getPrinterConfig, connectPrinter, printDeliveryTicket } = await import('@/services/thermalPrinterService')
+      const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+      if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) {
+        toast.error('No hay impresora configurada. Ve a Configuración > Impresora.')
+        return
+      }
+
+      const connectResult = await connectPrinter(printerConfigResult.config.address)
+      if (!connectResult.success) {
+        toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+        return
+      }
+
+      const result = await printDeliveryTicket(delivery, companySettings, printerConfigResult.config.paperWidth || 80)
+      if (result.success) {
+        toast.success('Guía de envío impresa en ticketera')
+      } else {
+        toast.error('Error al imprimir: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al imprimir en ticketera:', error)
+      toast.error('Error al imprimir en ticketera')
     }
   }
 
@@ -425,7 +426,8 @@ export default function Envios() {
           motoristas={motoristas}
           onSearch={loadDeliveries}
           onStatusChange={handleStatusChange}
-          onPrint={handlePrintDelivery}
+          onPrintPDF={handlePrintPDF}
+          onPrintTicket={handlePrintTicket}
           stats={stats}
         />
       )}
@@ -747,7 +749,7 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
 // ============================================================
 // Tab 1: Envíos (Principal)
 // ============================================================
-function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onPrint, stats }) {
+function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onPrintPDF, onPrintTicket, stats }) {
   const handleFilterChange = (e) => {
     const { name, value } = e.target
     setFilters(prev => ({ ...prev, [name]: value }))
@@ -882,14 +884,21 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                             {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">S/ {(d.amount || 0).toFixed(2)}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold mr-1">S/ {(d.amount || 0).toFixed(2)}</span>
                           <button
-                            onClick={() => onPrint(d)}
-                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                            title="Imprimir guía"
+                            onClick={() => onPrintPDF(d)}
+                            className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            title="Descargar PDF"
                           >
-                            <Printer className="w-4 h-4" />
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onPrintTicket(d)}
+                            className="p-1.5 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                            title="Imprimir ticket"
+                          >
+                            <Receipt className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1009,13 +1018,22 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <button
-                              onClick={() => onPrint(d)}
-                              className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                              title="Imprimir guía de envío"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => onPrintPDF(d)}
+                                className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                title="Descargar PDF"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => onPrintTicket(d)}
+                                className="p-1.5 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                title="Imprimir ticket"
+                              >
+                                <Receipt className="w-4 h-4" />
+                              </button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
