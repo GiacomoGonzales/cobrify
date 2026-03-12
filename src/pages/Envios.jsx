@@ -17,9 +17,10 @@ import {
   createDeliveryRecord, updateDeliveryStatus,
 } from '@/services/motoristaService'
 import { getInvoices, getCompanySettings } from '@/services/firestoreService'
-import { previewDeliveryPDF, buildDeliveryTicketEscPos } from '@/utils/deliveryPdfGenerator'
+import { previewDeliveryPDF } from '@/utils/deliveryPdfGenerator'
 import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
+import DeliveryTicket from '@/components/DeliveryTicket'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
 
@@ -89,6 +90,7 @@ export default function Envios() {
 
   // Company settings (for PDF generation)
   const [companySettings, setCompanySettings] = useState(null)
+  const [printingTicket, setPrintingTicket] = useState(null)
 
   // Tab Arqueo
   const [arqueoMotoristaId, setArqueoMotoristaId] = useState('')
@@ -262,35 +264,40 @@ export default function Envios() {
   }
 
   const handlePrintTicket = async (delivery) => {
-    if (!Capacitor.isNativePlatform()) {
-      toast.info('La impresión de ticket solo está disponible en la app móvil')
-      return
+    // En nativo, intentar impresora térmica primero
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { getPrinterConfig, connectPrinter, printDeliveryTicket } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+
+          if (connectResult.success) {
+            const result = await printDeliveryTicket(delivery, companySettings, printerConfigResult.config.paperWidth || 80)
+            if (result.success) {
+              toast.success('Guía de envío impresa en ticketera')
+              return
+            }
+            toast.error('Error al imprimir: ' + result.error)
+            toast.info('Usando impresión estándar...')
+          } else {
+            toast.error('No se pudo conectar a la impresora')
+            toast.info('Usando impresión estándar...')
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Usando impresión estándar...')
+      }
     }
-    try {
-      const { getPrinterConfig, connectPrinter, printDeliveryTicket } = await import('@/services/thermalPrinterService')
-      const printerConfigResult = await getPrinterConfig(getBusinessId())
 
-      if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) {
-        toast.error('No hay impresora configurada. Ve a Configuración > Impresora.')
-        return
-      }
-
-      const connectResult = await connectPrinter(printerConfigResult.config.address)
-      if (!connectResult.success) {
-        toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
-        return
-      }
-
-      const result = await printDeliveryTicket(delivery, companySettings, printerConfigResult.config.paperWidth || 80)
-      if (result.success) {
-        toast.success('Guía de envío impresa en ticketera')
-      } else {
-        toast.error('Error al imprimir: ' + result.error)
-      }
-    } catch (error) {
-      console.error('Error al imprimir en ticketera:', error)
-      toast.error('Error al imprimir en ticketera')
-    }
+    // Fallback web o si falla la térmica: window.print() con componente ticket
+    setPrintingTicket(delivery)
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => setPrintingTicket(null), 500)
+    }, 100)
   }
 
   // ========================
@@ -476,6 +483,15 @@ export default function Envios() {
         motoristas={motoristas.filter(m => m.status === 'active')}
         onSuccess={handleNewDeliveryCreated}
       />
+
+      {/* Componente de ticket para impresión web (hidden, visible solo en @media print) */}
+      {printingTicket && (
+        <DeliveryTicket
+          delivery={printingTicket}
+          companySettings={companySettings}
+          paperWidth={80}
+        />
+      )}
     </div>
   )
 }
