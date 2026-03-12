@@ -474,6 +474,7 @@ export const generateDeliveryPDF = async (delivery, companySettings) => {
   // Filas de datos
   const rows = [
     ['Monto total', `S/ ${(delivery.amount || 0).toFixed(2)}`],
+    ['Estado de pago', delivery.paymentStatus === 'pending' ? 'POR COBRAR' : 'PAGADO'],
     ['Método de pago', PAYMENT_METHOD_LABELS[delivery.paymentMethod] || delivery.paymentMethod || '-'],
   ]
 
@@ -641,6 +642,8 @@ export const buildDeliveryTicketEscPos = (delivery, business, paperWidth = 58) =
     return str.length > max ? str.substring(0, max) : str
   }
 
+  const isPending = delivery.paymentStatus === 'pending'
+
   // Build ticket
   init()
   alignCenter()
@@ -648,25 +651,16 @@ export const buildDeliveryTicketEscPos = (delivery, business, paperWidth = 58) =
   line(trunc((business?.tradeName || business?.name || 'MI EMPRESA').toUpperCase(), fmt.charsPerLine))
   bold(false)
 
-  if (business?.ruc) {
-    line(`RUC: ${business.ruc}`)
-  }
   newLine()
-
   bold(true)
-  line('GUIA DE ENVIO')
+  line('NOTA DE ENVIO')
   bold(false)
+  line(delivery.orderNumber || '-')
   line(fmt.separator)
 
   alignLeft()
 
-  // Invoice #
-  line(`Factura: ${delivery.orderNumber || '-'}`)
-
-  // Status
-  line(`Estado: ${DELIVERY_STATUS_LABELS[delivery.status] || delivery.status || '-'}`)
-
-  // Created
+  // Fecha
   let createdStr = '-'
   if (delivery.createdAt) {
     const d = delivery.createdAt.toDate ? delivery.createdAt.toDate() : new Date(delivery.createdAt)
@@ -676,37 +670,52 @@ export const buildDeliveryTicketEscPos = (delivery, business, paperWidth = 58) =
 
   line(fmt.separator)
 
+  // Cliente
   bold(true)
-  line('CLIENTE')
+  textBytes('Cliente: ')
   bold(false)
-  line(trunc(delivery.customerName || '-', fmt.charsPerLine))
+  line(trunc(delivery.customerName || '-', fmt.charsPerLine - 9))
   if (delivery.customerAddress) {
-    const addrLines = splitText(delivery.customerAddress, fmt.charsPerLine)
+    bold(true)
+    textBytes('Dir: ')
+    bold(false)
+    const addrLines = splitText(delivery.customerAddress, fmt.charsPerLine - 5)
     addrLines.forEach(l => line(l))
   }
 
   line(fmt.separator)
 
+  // Motorista
   bold(true)
-  line('MOTORISTA')
+  textBytes('Motorista: ')
   bold(false)
-  line(trunc(delivery.motoristaName || '-', fmt.charsPerLine))
-  if (delivery.motoristaCode) {
-    line(`Cod: ${delivery.motoristaCode}`)
-  }
+  line(trunc(delivery.motoristaName || '-', fmt.charsPerLine - 11))
 
   line(fmt.separator)
 
+  // Monto grande
+  alignCenter()
+  newLine()
   bold(true)
-  line('DETALLE')
-  bold(false)
-  line(`Monto: S/ ${(delivery.amount || 0).toFixed(2)}`)
-  line(`Pago: ${PAYMENT_METHOD_LABELS[delivery.paymentMethod] || delivery.paymentMethod || '-'}`)
+  // Double height for amount
+  raw(0x1D, 0x21, 0x01) // GS ! n — double height
+  line(`S/ ${(delivery.amount || 0).toFixed(2)}`)
+  raw(0x1D, 0x21, 0x00) // reset size
+  newLine()
 
-  const cash = delivery.cashCollected || 0
-  if (cash > 0) {
-    line(`Cobrar: S/ ${cash.toFixed(2)}`)
+  // Estado de pago prominente
+  raw(0x1D, 0x21, 0x01) // double height
+  if (isPending) {
+    line('** POR COBRAR **')
+  } else {
+    line('PAGADO')
   }
+  raw(0x1D, 0x21, 0x00) // reset size
+  bold(false)
+  newLine()
+
+  alignLeft()
+  line(`Metodo: ${PAYMENT_METHOD_LABELS[delivery.paymentMethod] || delivery.paymentMethod || '-'}`)
   if (delivery.deliveryFee) {
     line(`Envio: S/ ${(delivery.deliveryFee || 0).toFixed(2)}`)
   }

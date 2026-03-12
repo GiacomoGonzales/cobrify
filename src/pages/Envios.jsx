@@ -510,6 +510,8 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [selectedMotoristaId, setSelectedMotoristaId] = useState('')
   const [deliveryFee, setDeliveryFee] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [paymentStatus, setPaymentStatus] = useState('paid') // 'paid' | 'pending'
   const [creating, setCreating] = useState(false)
 
   // Load invoices when modal opens
@@ -520,6 +522,8 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
       setSelectedInvoice(null)
       setSelectedMotoristaId('')
       setDeliveryFee('')
+      setDeliveryAddress('')
+      setPaymentStatus('paid')
     }
   }, [isOpen])
 
@@ -562,6 +566,7 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
 
   const handleSelectInvoice = (inv) => {
     setSelectedInvoice(inv)
+    setDeliveryAddress(inv.customer?.address || inv.customerAddress || '')
   }
 
   const handleCreateDelivery = async () => {
@@ -581,16 +586,16 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
       const result = await createDeliveryRecord(getBusinessId(), {
         motoristaId: selectedMotoristaId,
         motoristaName: motorista?.name || '',
+        motoristaCode: motorista?.code || '',
         orderId: inv.id,
         orderNumber: inv.serie ? `${inv.serie}-${inv.number}` : (inv.number || ''),
         customerName: inv.customer?.name || inv.customerName || '',
-        customerAddress: inv.customer?.address || inv.customerAddress || '',
+        customerAddress: deliveryAddress,
         amount: inv.total || inv.amount || 0,
         deliveryFee: parseFloat(deliveryFee) || 0,
         paymentMethod: inv.paymentMethod || inv.metodoPago || 'cash',
-        cashCollected: (inv.paymentMethod === 'cash' || inv.paymentMethod === 'efectivo' || inv.metodoPago === 'efectivo')
-          ? (inv.total || inv.amount || 0)
-          : 0,
+        paymentStatus: paymentStatus,
+        cashCollected: paymentStatus === 'pending' ? (inv.total || inv.amount || 0) : 0,
         status: 'assigned',
       })
 
@@ -724,6 +729,45 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
                     <option key={m.id} value={m.id}>{m.name} ({m.code})</option>
                   ))}
                 </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dirección de entrega</label>
+                <textarea
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  placeholder="Dirección donde se entregará el pedido..."
+                  rows={2}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado de pago</label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('paid')}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      paymentStatus === 'paid'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    ✓ Pagado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('pending')}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      paymentStatus === 'pending'
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    $ Por cobrar
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -899,6 +943,12 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                           <Badge variant="default" className="text-xs">
                             {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
                           </Badge>
+                          <Badge
+                            variant={d.paymentStatus === 'pending' ? 'warning' : 'success'}
+                            className="text-xs"
+                          >
+                            {d.paymentStatus === 'pending' ? 'Por cobrar' : 'Pagado'}
+                          </Badge>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="font-semibold mr-1">S/ {(d.amount || 0).toFixed(2)}</span>
@@ -979,6 +1029,7 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                       <TableHead>Cliente</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead>Método Pago</TableHead>
+                      <TableHead>Pago</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
@@ -1002,6 +1053,14 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                           <TableCell>
                             <Badge variant="default" className="w-fit">
                               {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={d.paymentStatus === 'pending' ? 'warning' : 'success'}
+                              className="w-fit"
+                            >
+                              {d.paymentStatus === 'pending' ? 'Por cobrar' : 'Pagado'}
                             </Badge>
                           </TableCell>
                           <TableCell>
