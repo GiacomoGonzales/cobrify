@@ -3665,6 +3665,66 @@ export const printDispatchGuideTicket = async (guide, business, paperWidth = 58)
   }
 };
 
+// ============================================
+// IMPRESIÓN DE GUÍA DE ENVÍO (TICKET TÉRMICO)
+// ============================================
+
+/**
+ * Imprimir guía de envío en impresora térmica
+ * Usa buildDeliveryTicketEscPos de deliveryPdfGenerator para generar los datos ESC/POS
+ */
+export const printDeliveryTicket = async (delivery, business, paperWidth = 58) => {
+  const { buildDeliveryTicketEscPos } = await import('@/utils/deliveryPdfGenerator');
+  const isNative = Capacitor.isNativePlatform();
+
+  // Verificar impresora de documentos (prioridad)
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildDeliveryTicketEscPos(delivery, business, docPaperWidth);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Printer not connected' };
+  }
+
+  const base64Data = buildDeliveryTicketEscPos(delivery, business, paperWidth);
+
+  // WiFi o interna
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // BLE alternativo (iOS)
+  if (useAlternativeBLE) {
+    try {
+      return await BLEPrinter.printBLERawData(base64Data);
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Bluetooth Android — usar .raw() para enviar datos ESC/POS base64
+  try {
+    await CapacitorThermalPrinter.begin().raw(base64Data).write();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
 /**
  * Exportar el builder para uso externo si se necesita
  */

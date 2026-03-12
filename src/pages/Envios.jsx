@@ -17,7 +17,8 @@ import {
   createDeliveryRecord, updateDeliveryStatus,
 } from '@/services/motoristaService'
 import { getInvoices, getCompanySettings } from '@/services/firestoreService'
-import { previewDeliveryPDF } from '@/utils/deliveryPdfGenerator'
+import { previewDeliveryPDF, buildDeliveryTicketEscPos } from '@/utils/deliveryPdfGenerator'
+import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
@@ -252,6 +253,37 @@ export default function Envios() {
   }
 
   const handlePrintDelivery = async (delivery) => {
+    // Si es nativo, intentar imprimir en impresora térmica
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { getPrinterConfig, connectPrinter, printDeliveryTicket } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+            toast.info('Abriendo PDF...')
+          } else {
+            const result = await printDeliveryTicket(delivery, companySettings, printerConfigResult.config.paperWidth || 80)
+
+            if (result.success) {
+              toast.success('Guía de envío impresa en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir: ' + result.error)
+              toast.info('Abriendo PDF...')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Abriendo PDF...')
+      }
+    }
+
+    // Fallback: PDF A4
     try {
       await previewDeliveryPDF(delivery, companySettings)
     } catch (error) {
