@@ -3807,20 +3807,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     const warehouseStock = getCurrentWarehouseStock(product)
 
     if (product.stock === null) {
-      return <span className="text-xs text-gray-500">Sin control</span>
+      return <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Sin control</span>
     }
 
     if (warehouseStock === 0) {
-      return <span className="text-xs text-red-600 font-semibold">Sin stock</span>
+      return <span className="text-[10px] sm:text-xs text-red-600 font-semibold whitespace-nowrap">Sin stock</span>
     }
 
     const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
 
     if (warehouseStock < 4) {
-      return <span className="text-xs text-yellow-600">Stock: {displayStock}</span>
+      return <span className="text-[10px] sm:text-xs text-yellow-600 whitespace-nowrap">{displayStock}</span>
     }
 
-    return <span className="text-xs text-green-600">Stock: {displayStock}</span>
+    return <span className="text-[10px] sm:text-xs text-green-600 whitespace-nowrap">{displayStock}</span>
   }
 
   if (isLoading) {
@@ -4018,7 +4018,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className={`columns-2 sm:columns-3 md:columns-4 lg:grid lg:grid-cols-3 gap-3 lg:gap-4 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
+              <div className={`columns-2 sm:columns-3 md:columns-3 lg:columns-3 xl:grid xl:grid-cols-3 gap-3 xl:gap-4 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -4046,7 +4046,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
                   style={{ overflow: 'visible' }}
-                  className={`w-full p-3 lg:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 lg:mb-0 touch-no-hover mt-2 ml-2 ${
+                  className={`w-full p-2 sm:p-3 xl:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 xl:mb-0 touch-no-hover mt-2 ml-2 ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
@@ -4082,8 +4082,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
 
-                  {/* Mobile/Tablet: Vertical layout */}
-                  <div className="flex flex-col lg:hidden">
+                  {/* Mobile/Tablet/Landscape: Vertical layout */}
+                  <div className="flex flex-col xl:hidden overflow-hidden min-w-0">
                     {/* Image */}
                     {product.imageUrl && (
                       <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 mb-1.5 sm:mb-2">
@@ -4096,7 +4096,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
                     )}
                     {/* Name - más pequeño en móvil, truncado en tablet */}
-                    <p className={`font-semibold text-xs sm:text-sm leading-tight sm:line-clamp-2 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                    <p className={`font-semibold text-xs sm:text-sm leading-tight line-clamp-2 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
                       {product.name}
                     </p>
                     {/* Variants badge */}
@@ -4137,17 +4137,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         {!product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
                       </div>
-                      {/* Tablet: precio arriba, stock abajo */}
-                      <div className="hidden sm:block lg:hidden">
-                        <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                      {/* Tablet/Landscape: precio arriba, stock abajo */}
+                      <div className="hidden sm:block xl:hidden overflow-hidden">
+                        <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
-                            <span className="text-xs font-normal text-gray-400 ml-1">
-                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
-                            </span>
-                          )}
                         </p>
-                        <div className="mt-1">
+                        <div className="mt-0.5">
                           {!product.hasVariants && getStockBadge(product)}
                           {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
                         </div>
@@ -4156,7 +4151,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
 
                   {/* Desktop: Horizontal layout */}
-                  <div className="hidden lg:flex gap-3 h-full">
+                  <div className="hidden xl:flex gap-3 h-full">
                     {/* Product Image */}
                     {product.imageUrl && (
                       <div className="flex-shrink-0">
@@ -4195,8 +4190,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <p className="text-xs text-gray-500 mt-0.5">{product.genericName} {product.concentration}</p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-1 pt-1">
-                        <p className={`text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                      <div className="mt-1 pt-1 overflow-hidden">
+                        <p className={`text-base font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                           {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-sm font-normal text-gray-400 ml-1">
@@ -4204,8 +4199,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </span>
                           )}
                         </p>
-                        {!product.hasVariants && getStockBadge(product)}
-                        {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                        <div className="mt-0.5">
+                          {!product.hasVariants && getStockBadge(product)}
+                          {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4233,7 +4230,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         <div className={`${expandedCart ? 'lg:col-span-2' : 'lg:sticky lg:top-4 lg:self-start'}`}>
           <Card className="flex flex-col h-full">
             <div className={expandedCart ? 'lg:grid lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-gray-100' : ''}>
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
               {/* 1. Sucursal (para series de documentos) */}
               {(() => {
                 // Verificar si el usuario tiene acceso a la Sucursal Principal
@@ -4426,7 +4423,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
 
               {/* 6. Panel de Cliente - Siempre Visible */}
-              <div className="space-y-2">
+              <div className="space-y-2 overflow-hidden min-w-0">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <User className="w-3.5 h-3.5" />
                   Datos del Cliente
@@ -4517,7 +4514,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos de documento según tipo */}
                 {documentType === 'factura' ? (
                   <>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 min-w-0">
                       <input
                         type="text"
                         maxLength={11}
@@ -4527,7 +4524,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           documentNumber: e.target.value.replace(/\D/g, '')
                         })}
                         placeholder="RUC *"
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <Button
                         type="button"
@@ -4535,7 +4532,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         size="sm"
                         onClick={handleLookupDocument}
                         disabled={isLookingUp || !customerData.documentNumber || customerData.documentNumber.length !== 11}
-                        className="px-2"
+                        className="px-2 shrink-0"
                       >
                         {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                       </Button>
@@ -4554,20 +4551,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       placeholder="Dirección"
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 min-w-0">
                       <input
                         type="email"
                         value={customerData.email}
                         onChange={e => setCustomerData({ ...customerData, email: e.target.value })}
                         placeholder="Email"
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <input
                         type="tel"
                         value={customerData.phone}
                         onChange={e => setCustomerData({ ...customerData, phone: e.target.value })}
                         placeholder="Teléfono"
-                        className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-24 shrink-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
                     {companySettings?.posCustomFields?.showStudentField && (
@@ -4953,7 +4950,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </>
                 ) : documentType === 'boleta' ? (
                   <>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 min-w-0">
                       <select
                         value={customerData.documentType}
                         onChange={e => setCustomerData({
@@ -4963,7 +4960,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           name: '',
                           businessName: ''
                         })}
-                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-20 shrink-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       >
                         <option value={ID_TYPES.DNI}>DNI</option>
                         <option value={ID_TYPES.RUC}>RUC</option>
@@ -4980,7 +4977,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             : e.target.value.replace(/\D/g, '')
                         })}
                         placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : '12345678'}
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <Button
                         type="button"
@@ -4991,7 +4988,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
                            customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
                            customerData.documentNumber.length !== 8)}
-                        className="px-2"
+                        className="px-2 shrink-0"
                       >
                         {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                       </Button>
@@ -5062,27 +5059,27 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       placeholder="Dirección"
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 min-w-0">
                       <input
                         type="email"
                         value={customerData.email}
                         onChange={e => setCustomerData({ ...customerData, email: e.target.value })}
                         placeholder="Email"
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <input
                         type="tel"
                         value={customerData.phone}
                         onChange={e => setCustomerData({ ...customerData, phone: e.target.value })}
                         placeholder="Teléfono"
-                        className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-24 shrink-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
                   </>
                 ) : (
                   /* Nota de venta - con búsqueda de DNI/RUC */
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                  <div className="space-y-2 overflow-hidden min-w-0">
+                    <div className="flex gap-2 min-w-0">
                       <select
                         value={customerData.documentType || ID_TYPES.DNI}
                         onChange={e => setCustomerData({
@@ -5092,7 +5089,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           name: '',
                           businessName: ''
                         })}
-                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-20 shrink-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       >
                         <option value={ID_TYPES.DNI}>DNI</option>
                         <option value={ID_TYPES.RUC}>RUC</option>
@@ -5109,7 +5106,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             : e.target.value.replace(/\D/g, '')
                         })}
                         placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789 (opcional)' : '12345678 (opcional)'}
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <Button
                         type="button"
@@ -5120,7 +5117,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
                            customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
                            customerData.documentNumber.length !== 8)}
-                        className="px-2"
+                        className="px-2 shrink-0"
                       >
                         {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                       </Button>
@@ -5217,7 +5214,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
             </CardContent>
 
-            <CardContent className={`flex-1 flex flex-col p-4 pt-0 sm:p-6 sm:pt-0 ${expandedCart ? 'lg:!pt-4' : ''}`}>
+            <CardContent className={`flex-1 flex flex-col p-3 pt-0 xl:p-6 xl:pt-0 overflow-hidden min-w-0 ${expandedCart ? 'lg:!pt-4' : ''}`}>
               {/* Cart Items */}
               <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
                 <ShoppingCart className="w-3.5 h-3.5" />
@@ -5245,12 +5242,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   cart.map(item => {
                     const itemId = item.cartId || item.id
                     return (
-                      <div key={itemId} className="p-4 bg-gray-50 rounded-xl space-y-3">
+                      <div key={itemId} className="p-2 sm:p-3 xl:p-4 bg-gray-50 rounded-xl space-y-2 xl:space-y-3 overflow-hidden min-w-0">
                         {/* Fila 1: Imagen + Nombre + Eliminar */}
-                        <div className="flex gap-3">
+                        <div className="flex gap-2 xl:gap-3 min-w-0">
                           {/* Product thumbnail */}
                           {item.imageUrl && (
-                            <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
+                            <div className="w-12 h-12 xl:w-16 xl:h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
                               <img
                                 src={item.imageUrl}
                                 alt={item.name}
@@ -5266,10 +5263,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   type="text"
                                   value={item.name}
                                   onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
-                                  className="font-semibold text-base text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
+                                  className="font-semibold text-sm xl:text-base text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
                                 />
                               ) : (
-                                <p className="font-semibold text-base text-gray-900 line-clamp-2">
+                                <p className="font-semibold text-sm xl:text-base text-gray-900 line-clamp-2">
                                   {item.name}
                                 </p>
                               )}
@@ -5318,16 +5315,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </div>
 
                         {/* Fila 2: Observaciones + Descuento (ancho completo) */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5 xl:gap-2 min-w-0">
                           <input
                             type="text"
-                            placeholder="Nota al producto..."
+                            placeholder="Nota..."
                             value={item.observations || ''}
                             onChange={(e) => updateItemObservations(itemId, e.target.value)}
-                            className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="flex-1 min-w-0 text-xs xl:text-sm px-2 xl:px-3 py-1.5 xl:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                           />
-                          <div className="flex items-center gap-1">
-                            <Tag className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Tag className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-orange-500 flex-shrink-0" />
                             <input
                               type="number"
                               placeholder="Dcto"
@@ -5336,13 +5333,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               min="0"
                               max={item.price * item.quantity}
                               step="0.01"
-                              className="w-20 text-sm px-2 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-16 xl:w-20 text-xs xl:text-sm px-1.5 xl:px-2 py-1.5 xl:py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
                         </div>
 
                         {/* Fila 3: Cantidad + Precio (ancho completo) */}
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between min-w-0">
                               <div className="flex items-center space-x-2">
                                 {item.allowDecimalQuantity ? (
                                   /* Input editable para productos por peso/monto */
@@ -5421,9 +5418,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <>
                                     <button
                                       onClick={() => updateQuantity(itemId, -1)}
-                                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                      className="w-7 h-7 xl:w-9 xl:h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
                                     >
-                                      <Minus className="w-4 h-4" />
+                                      <Minus className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
                                     </button>
                                     <input
                                       type="number"
@@ -5437,11 +5434,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                       onBlur={() => handleQuantityBlur(itemId, item.quantity)}
                                       onFocus={(e) => e.target.select()}
                                       min="1"
-                                      className="w-14 text-center font-bold text-base border border-gray-300 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      className="w-10 xl:w-14 text-center font-bold text-sm xl:text-base border border-gray-300 rounded-lg py-1 xl:py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <button
                                       onClick={() => updateQuantity(itemId, 1)}
-                                      className="w-9 h-9 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                                      className="w-7 h-7 xl:w-9 xl:h-9 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
                                     >
                                       <Plus className="w-4 h-4" />
                                     </button>
@@ -5497,12 +5494,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                           <p className="text-sm text-gray-400 line-through">
                                             {formatCurrency(item.price * item.quantity)}
                                           </p>
-                                          <p className="font-bold text-orange-600 text-lg">
+                                          <p className="font-bold text-orange-600 text-base xl:text-lg">
                                             {formatCurrency((item.price * item.quantity) - item.itemDiscount)}
                                           </p>
                                         </>
                                       ) : (
-                                        <p className="font-bold text-gray-900 text-lg">
+                                        <p className="font-bold text-gray-900 text-base xl:text-lg">
                                           {formatCurrency(item.price * item.quantity)}
                                         </p>
                                       )}
@@ -5535,14 +5532,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
                 {/* Descuento General */}
                 {cart.length > 0 && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
                     <div className="flex items-center gap-2">
-                      <Tag className="w-5 h-5 text-green-600" />
-                      <p className="text-base text-green-800 font-semibold">Descuento General</p>
+                      <Tag className="w-4 h-4 xl:w-5 xl:h-5 text-green-600 shrink-0" />
+                      <p className="text-sm xl:text-base text-green-800 font-semibold">Descuento General</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="text-sm text-green-700 font-medium">S/</span>
+                    <div className="flex items-center gap-1.5 xl:gap-3 min-w-0">
+                      <div className="flex items-center gap-1 xl:gap-2 flex-1 min-w-0">
+                        <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">S/</span>
                         <input
                           type="number"
                           value={discountAmount}
@@ -5551,12 +5548,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           min="0"
                           max={amounts.subtotal}
                           step="0.01"
-                          className="flex-1 px-3 py-2 text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           disabled={lastInvoiceData !== null}
                         />
                       </div>
-                      <span className="text-sm text-green-600 font-medium">ó</span>
-                      <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs xl:text-sm text-green-600 font-medium shrink-0">ó</span>
+                      <div className="flex items-center gap-1 xl:gap-2 flex-1 min-w-0">
                         <input
                           type="number"
                           value={discountPercentage}
@@ -5565,19 +5562,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           min="0"
                           max="100"
                           step="0.01"
-                          className="flex-1 px-3 py-2 text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           disabled={lastInvoiceData !== null}
                         />
-                        <span className="text-sm text-green-700 font-medium">%</span>
+                        <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">%</span>
                       </div>
                       {(discountAmount || discountPercentage) && (
                         <button
                           onClick={handleClearDiscount}
-                          className="flex-shrink-0 p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
+                          className="flex-shrink-0 p-1.5 xl:p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
                           title="Limpiar descuento"
                           disabled={lastInvoiceData !== null}
                         >
-                          <Trash2 className="w-5 h-5" />
+                          <Trash2 className="w-4 h-4 xl:w-5 xl:h-5" />
                         </button>
                       )}
                     </div>
@@ -5868,8 +5865,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
                     return (
                     <div key={index} className="flex flex-col gap-2">
-                      {/* Tablet/Desktop: botones tocables */}
-                      <div className="hidden md:grid grid-cols-3 gap-1.5">
+                      {/* Botones de método de pago */}
+                      <div className="grid grid-cols-3 gap-1 xl:gap-1.5">
                         {methodDefs.map(([key, label]) => {
                           const selected = payment.method === key
                           const unavailable = !isAvailable(key) && !selected
@@ -5879,7 +5876,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               type="button"
                               onClick={() => handlePaymentMethodChange(index, key)}
                               disabled={unavailable || lastInvoiceData !== null}
-                              className={`py-2 px-3 text-sm rounded-lg border-2 transition-colors
+                              className={`py-1.5 xl:py-2 px-1 xl:px-3 text-xs xl:text-sm rounded-lg border-2 transition-colors truncate
                                 ${selected
                                   ? 'border-primary-500 bg-primary-50 text-primary-700 font-semibold'
                                   : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}
@@ -5892,21 +5889,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Celular: dropdown */}
-                        <Select
-                          value={payment.method}
-                          onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
-                          className="flex-1 text-sm md:hidden"
-                          disabled={lastInvoiceData !== null}
-                        >
-                          <option value="">Seleccionar</option>
-                          {methodDefs
-                            .filter(([key]) => payment.method === key || isAvailable(key))
-                            .map(([key, label]) => (
-                              <option key={key} value={key}>{label}</option>
-                            ))}
-                        </Select>
-
                         {/* Monto */}
                         <input
                           type="number"
@@ -6016,23 +5998,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {lastInvoiceData && (
                 <div className="border-t pt-4 mt-4">
                   <p className="text-sm font-medium text-gray-700 mb-3">Descargar comprobante:</p>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <Button
                       onClick={() => handlePrintTicket()}
                       variant="outline"
                       size="sm"
-                      className="flex-1"
+                      className="text-xs xl:text-sm px-1 xl:px-3"
                       disabled={isPrintingTicket}
                     >
                       {isPrintingTicket ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Imprimiendo...
-                        </>
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
-                          <Printer className="w-4 h-4 mr-2" />
-                          Imprimir Ticket
+                          <Printer className="w-4 h-4 mr-1" />
+                          <span className="truncate">Ticket</span>
                         </>
                       )}
                     </Button>
@@ -6051,18 +6030,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       }}
                       variant="outline"
                       size="sm"
-                      className="flex-1"
+                      className="text-xs xl:text-sm px-1 xl:px-3"
                       disabled={isLoadingPreview}
                     >
                       {isLoadingPreview ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Cargando...
-                        </>
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
-                          <Eye className="w-4 h-4 mr-2" />
-                          Vista Previa
+                          <Eye className="w-4 h-4 mr-1" />
+                          <span className="truncate">Preview</span>
                         </>
                       )}
                     </Button>
@@ -6078,10 +6054,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       }}
                       variant="outline"
                       size="sm"
-                      className="flex-1"
+                      className="text-xs xl:text-sm px-1 xl:px-3"
                     >
-                      <Printer className="w-4 h-4 mr-2" />
-                      Descargar PDF
+                      <Printer className="w-4 h-4 mr-1" />
+                      <span className="truncate">PDF</span>
                     </Button>
                   </div>
                   <Button

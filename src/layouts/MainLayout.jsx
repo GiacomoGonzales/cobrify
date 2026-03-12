@@ -526,9 +526,9 @@ export default function MainLayout() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
-      {/* iOS Status Bar - Gradiente moderno (solo iOS) */}
-      {Capacitor.getPlatform() === 'ios' && (
-        <div className="ios-status-bar bg-gradient-to-r from-primary-800 via-primary-700 to-blue-800 md:hidden flex-shrink-0" />
+      {/* Status Bar spacer - Fondo azul detrás del status bar nativo (iOS y Android) */}
+      {Capacitor.isNativePlatform() && (
+        <div className="bg-primary-800 flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} />
       )}
 
       {/* Banner de período de gracia */}

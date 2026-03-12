@@ -108,12 +108,12 @@ function App() {
     const configureStatusBar = async () => {
       if (Capacitor.isNativePlatform()) {
         try {
-          // El contenido NO se superpone con el status bar
-          await StatusBar.setOverlaysWebView({ overlay: false })
+          // El contenido se superpone con el status bar (para control total del fondo)
+          await StatusBar.setOverlaysWebView({ overlay: true })
           // Texto blanco sobre fondo oscuro
           await StatusBar.setStyle({ style: Style.Dark })
-          // Color de fondo azul primario
-          await StatusBar.setBackgroundColor({ color: '#1e40af' })
+          // Color de fondo transparente (el fondo lo maneja la app)
+          await StatusBar.setBackgroundColor({ color: '#00000000' })
         } catch (error) {
           console.warn('Error configurando StatusBar:', error)
         }

@@ -1770,109 +1770,67 @@ export default function Reports() {
           </div>
 
           {/* KPIs principales */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3">
             <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">
-                      {formatCurrency(stats.totalRevenue)}
-                    </p>
-                    {stats.revenueGrowth !== 0 && (
-                      <div className="flex items-center mt-2">
-                        {stats.revenueGrowth > 0 ? (
-                          <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
-                        ) : (
-                          <ArrowDownRight className="w-4 h-4 text-red-600 mr-1" />
-                        )}
-                        <span
-                          className={`text-sm font-medium ${
-                            stats.revenueGrowth > 0 ? 'text-green-600' : 'text-red-600'
-                          }`}
-                        >
-                          {Math.abs(stats.revenueGrowth).toFixed(1)}%
-                        </span>
-                      </div>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Ingresos Totales</p>
+                <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
+                  {formatCurrency(stats.totalRevenue)}
+                </p>
+                {stats.revenueGrowth !== 0 && (
+                  <div className="flex items-center mt-1">
+                    {stats.revenueGrowth > 0 ? (
+                      <ArrowUpRight className="w-3.5 h-3.5 text-green-600 mr-0.5" />
+                    ) : (
+                      <ArrowDownRight className="w-3.5 h-3.5 text-red-600 mr-0.5" />
                     )}
+                    <span className={`text-xs font-medium ${stats.revenueGrowth > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {Math.abs(stats.revenueGrowth).toFixed(1)}%
+                    </span>
                   </div>
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <DollarSign className="w-6 h-6 text-green-600" />
-                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Costo Total</p>
+                <p className="text-base lg:text-lg xl:text-2xl font-bold text-red-600 mt-1">
+                  {formatCurrency(stats.totalCost)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Utilidad Total</p>
+                <p className="text-base lg:text-lg xl:text-2xl font-bold text-green-600 mt-1">
+                  {formatCurrency(stats.totalProfit)}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Margen: {stats.profitMargin.toFixed(1)}%
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Comprobantes</p>
+                <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">{stats.totalInvoices}</p>
+                <div className="flex gap-1 mt-1 flex-wrap">
+                  <Badge variant="primary" className="text-[10px]">{stats.facturas} F</Badge>
+                  <Badge className="text-[10px]">{stats.boletas} B</Badge>
+                  {stats.notasVenta > 0 && <Badge variant="warning" className="text-[10px]">{stats.notasVenta} NV</Badge>}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Costo Total</p>
-                    <p className="text-2xl font-bold text-red-600 mt-2">
-                      {formatCurrency(stats.totalCost)}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Productos vendidos
-                    </p>
-                  </div>
-                  <div className="p-3 bg-red-100 rounded-lg">
-                    <Package className="w-6 h-6 text-red-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
-                    <p className="text-2xl font-bold text-green-600 mt-2">
-                      {formatCurrency(stats.totalProfit)}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Margen: {stats.profitMargin.toFixed(1)}%
-                    </p>
-                  </div>
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Comprobantes</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">{stats.totalInvoices}</p>
-                    <div className="flex gap-2 mt-2">
-                      <Badge variant="primary">{stats.facturas} F</Badge>
-                      <Badge>{stats.boletas} B</Badge>
-                      {stats.notasVenta > 0 && <Badge variant="warning">{stats.notasVenta} NV</Badge>}
-                    </div>
-                  </div>
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <FileText className="w-6 h-6 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Ticket Promedio</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">
-                      {formatCurrency(stats.avgTicket)}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-purple-100 rounded-lg">
-                    <ShoppingCart className="w-6 h-6 text-purple-600" />
-                  </div>
-                </div>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Ticket Promedio</p>
+                <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
+                  {formatCurrency(stats.avgTicket)}
+                </p>
               </CardContent>
             </Card>
           </div>

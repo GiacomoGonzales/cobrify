@@ -80,7 +80,7 @@ export function ToastProvider({ children }) {
 
       {/* Toast Container - con safe area para iOS */}
       <div
-        className="fixed right-4 z-50 flex flex-col gap-2 max-w-sm"
+        className="fixed right-4 z-[9999] flex flex-col gap-2 max-w-sm"
         style={{ top: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
       >
         {toasts.map((toastItem) => {
