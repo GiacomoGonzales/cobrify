@@ -40,6 +40,13 @@ export const onYapePayment = onDocumentCreated(
       const ownerId = business.ownerId || businessId
       const businessName = business.name || business.businessName || 'tu negocio'
 
+      // Verificar preferencias de notificación
+      const prefs = business.notificationPreferences || {}
+      if (prefs.yape_payment === false) {
+        console.log('🔕 yape_payment notification disabled by user preferences')
+        return
+      }
+
       console.log('👤 Owner ID:', ownerId)
       console.log('🏢 Business:', businessName)
 

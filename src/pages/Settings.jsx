@@ -193,6 +193,16 @@ export default function Settings() {
   // Estados para menú personalizado
   const [hiddenMenuItems, setHiddenMenuItems] = useState([])
 
+  // Preferencias de notificaciones push
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    new_sale: true,
+    yape_payment: true,
+    low_stock: true,
+    out_of_stock: true,
+    new_order: true,
+    items_added: true,
+  })
+
   // Estados para plantillas de términos y condiciones
   const [termsTemplates, setTermsTemplates] = useState([])
   const [showTermsTemplateModal, setShowTermsTemplateModal] = useState(false)
@@ -527,7 +537,7 @@ export default function Settings() {
   // Cargar configuración de Yape cuando se activa el tab
   useEffect(() => {
     const loadYapeSettings = async () => {
-      if (activeTab !== 'yape' || !user?.uid || isDemoMode) return
+      if (activeTab !== 'notificaciones' || !user?.uid || isDemoMode) return
 
       setIsLoadingYape(true)
       try {
@@ -866,6 +876,9 @@ export default function Settings() {
         }
         if (businessData.posCustomFields) {
           setPosCustomFields(businessData.posCustomFields)
+        }
+        if (businessData.notificationPreferences) {
+          setNotificationPreferences(prev => ({ ...prev, ...businessData.notificationPreferences }))
         }
 
         // Cargar categorías de productos (para estaciones de cocina)
@@ -1998,6 +2011,7 @@ export default function Settings() {
     { id: 'series', label: 'Series', icon: Hash },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
+    { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
   ]
 
   return (
@@ -7187,220 +7201,6 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-          {/* Detector de Pagos Yape */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Bell className="w-5 h-5 text-purple-600" />
-                  <CardTitle>Detector de Pagos Yape</CardTitle>
-                </div>
-                {/* Toggle de activación */}
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={yapeConfig.enabled}
-                    onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                  <span className="ml-2 text-sm font-medium text-gray-700">
-                    {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
-                  </span>
-                </label>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Descripción */}
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <p className="text-sm text-purple-800">
-                    Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
-                    push a los usuarios que selecciones.
-                  </p>
-                </div>
-
-                {yapeConfig.enabled && (
-                  <>
-                    {/* Auto-iniciar */}
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
-                        <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={yapeConfig.autoStartListening}
-                          onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Notificar a todos */}
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
-                        <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={yapeConfig.notifyAllUsers}
-                          onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Selección de usuarios específicos */}
-                    {!yapeConfig.notifyAllUsers && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
-                        {isLoadingYape ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
-                          </div>
-                        ) : businessUsers.length === 0 ? (
-                          <p className="text-sm text-gray-500 text-center py-4">
-                            No hay usuarios registrados en este negocio
-                          </p>
-                        ) : (
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {businessUsers.map(user => (
-                              <label
-                                key={user.id}
-                                className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={yapeConfig.notifyUsers.includes(user.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setYapeConfig(prev => ({
-                                        ...prev,
-                                        notifyUsers: [...prev.notifyUsers, user.id]
-                                      }))
-                                    } else {
-                                      setYapeConfig(prev => ({
-                                        ...prev,
-                                        notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
-                                      }))
-                                    }
-                                  }}
-                                  className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
-                                />
-                                <div className="ml-3">
-                                  <p className="text-sm font-medium text-gray-900">
-                                    {user.displayName || user.name || user.email}
-                                    {user.isOwner && (
-                                      <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
-                                        Dueño
-                                      </span>
-                                    )}
-                                  </p>
-                                  <p className="text-xs text-gray-500">{user.email}</p>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Botón guardar */}
-                    <div className="border-t border-gray-200 pt-4">
-                      <Button
-                        onClick={handleSaveYapeConfig}
-                        disabled={isSavingYape}
-                        className="w-full sm:w-auto"
-                      >
-                        {isSavingYape ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-2" />
-                            Guardar Configuración Yape
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Instrucciones Yape */}
-          {yapeConfig.enabled && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Instrucciones de uso - Yape</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">1</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
-                      <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">2</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
-                      <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                      <span className="text-purple-600 font-bold text-sm">3</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">¡Listo!</p>
-                      <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botón de prueba */}
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <Link
-                    to="/test-notifications"
-                    className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
-                  >
-                    <Bell className="w-4 h-4 mr-1" />
-                    Abrir página de pruebas
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Nota de privacidad Yape */}
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start">
-              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
-                <p className="text-sm text-blue-800 mt-1">
-                  Solo se detectan notificaciones de Yape. Las notificaciones se procesan
-                  localmente y solo se guarda el monto y nombre del pagador.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -7575,6 +7375,297 @@ export default function Settings() {
           </CardContent>
         </Card>
       )}
+
+      {/* TAB: Notificaciones */}
+      {activeTab === 'notificaciones' && (<>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Bell className="w-5 h-5 text-primary-600" />
+              <CardTitle>Preferencias de Notificaciones</CardTitle>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">Configura qué notificaciones push deseas recibir en tu dispositivo.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { key: 'new_sale', label: 'Nueva Venta', description: 'Recibir notificación cuando se registra una nueva venta.' },
+                { key: 'yape_payment', label: 'Pago Yape', description: 'Recibir notificación cuando se detecta un pago por Yape.' },
+                { key: 'low_stock', label: 'Stock Bajo', description: 'Recibir notificación cuando un producto tiene stock bajo (5 o menos unidades).' },
+                { key: 'out_of_stock', label: 'Producto Sin Stock', description: 'Recibir notificación cuando un producto se queda sin stock.' },
+                { key: 'new_order', label: 'Nuevo Pedido', description: 'Recibir notificación cuando se crea un nuevo pedido (restaurante/menú digital).' },
+                { key: 'items_added', label: 'Items Agregados a Pedido', description: 'Recibir notificación cuando se agregan items a un pedido existente.' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center justify-between cursor-pointer p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <div className="flex-1 mr-4">
+                    <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                    <span className="text-xs text-gray-500">{item.description}</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={notificationPreferences[item.key]}
+                    onChange={(e) => setNotificationPreferences(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                </label>
+              ))}
+
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  Las notificaciones de suscripción (vencimiento, renovación) no se pueden desactivar ya que son importantes para el funcionamiento de tu cuenta.
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (isDemoMode) {
+                      toast.error('No puedes modificar configuraciones en modo demo')
+                      return
+                    }
+                    setIsSaving(true)
+                    try {
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        notificationPreferences: notificationPreferences,
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+                      toast.success('Preferencias de notificaciones guardadas.')
+                    } catch (error) {
+                      console.error('Error al guardar notificaciones:', error)
+                      toast.error('Error al guardar las preferencias')
+                    } finally {
+                      setIsSaving(false)
+                    }
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Notificaciones
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Detector de Pagos Yape */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Bell className="w-5 h-5 text-purple-600" />
+                <CardTitle>Detector de Pagos Yape</CardTitle>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={yapeConfig.enabled}
+                  onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                <span className="ml-2 text-sm font-medium text-gray-700">
+                  {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
+                </span>
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-sm text-purple-800">
+                  Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
+                  push a los usuarios que selecciones.
+                </p>
+              </div>
+
+              {yapeConfig.enabled && (
+                <>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
+                      <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={yapeConfig.autoStartListening}
+                        onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
+                      <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={yapeConfig.notifyAllUsers}
+                        onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {!yapeConfig.notifyAllUsers && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
+                      {isLoadingYape ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        </div>
+                      ) : businessUsers.length === 0 ? (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          No hay usuarios registrados en este negocio
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {businessUsers.map(user => (
+                            <label
+                              key={user.id}
+                              className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={yapeConfig.notifyUsers.includes(user.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setYapeConfig(prev => ({
+                                      ...prev,
+                                      notifyUsers: [...prev.notifyUsers, user.id]
+                                    }))
+                                  } else {
+                                    setYapeConfig(prev => ({
+                                      ...prev,
+                                      notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
+                                    }))
+                                  }
+                                }}
+                                className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                              />
+                              <div className="ml-3">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {user.displayName || user.name || user.email}
+                                  {user.isOwner && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                      Dueño
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-gray-500">{user.email}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <Button
+                      onClick={handleSaveYapeConfig}
+                      disabled={isSavingYape}
+                      className="w-full sm:w-auto"
+                    >
+                      {isSavingYape ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Guardar Configuración Yape
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Instrucciones Yape */}
+        {yapeConfig.enabled && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Instrucciones de uso - Yape</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">1</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
+                    <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
+                  </div>
+                </div>
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">2</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
+                    <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
+                  </div>
+                </div>
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">3</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">¡Listo!</p>
+                    <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <Link
+                  to="/test-notifications"
+                  className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
+                >
+                  <Bell className="w-4 h-4 mr-1" />
+                  Abrir página de pruebas
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Nota de privacidad Yape */}
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
+              <p className="text-sm text-blue-800 mt-1">
+                Solo se detectan notificaciones de Yape. Las notificaciones se procesan
+                localmente y solo se guarda el monto y nombre del pagador.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>)}
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
       <Modal

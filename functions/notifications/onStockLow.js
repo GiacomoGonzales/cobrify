@@ -29,9 +29,16 @@ export const onProductStockChange = onDocumentUpdated(
 
       const business = businessDoc.data()
       const ownerId = business.ownerId
+      const prefs = business.notificationPreferences || {}
 
       // Sin stock (stock = 0)
       if (after.stock === 0 && before.stock > 0) {
+        // Verificar preferencias
+        if (prefs.out_of_stock === false) {
+          console.log('🔕 out_of_stock notification disabled by user preferences')
+          return
+        }
+
         const title = '⚠️ Producto Sin Stock'
         const message = `El producto "${after.name}" se ha quedado sin stock en ${business.name}`
         const metadata = {
@@ -58,6 +65,12 @@ export const onProductStockChange = onDocumentUpdated(
       }
       // Stock bajo (stock <= 5 y antes era > 5)
       else if (after.stock <= 5 && after.stock > 0 && before.stock > 5) {
+        // Verificar preferencias
+        if (prefs.low_stock === false) {
+          console.log('🔕 low_stock notification disabled by user preferences')
+          return
+        }
+
         const title = '📦 Stock Bajo'
         const message = `El producto "${after.name}" tiene solo ${after.stock} unidades en ${business.name}`
         const metadata = {

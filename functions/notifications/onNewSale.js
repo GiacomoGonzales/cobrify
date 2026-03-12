@@ -35,6 +35,13 @@ export const onNewSale = onDocumentCreated(
       // (en la mayoría de casos el businessId es el mismo que el ownerId/userId)
       const ownerId = business.ownerId || businessId
 
+      // Verificar preferencias de notificación
+      const prefs = business.notificationPreferences || {}
+      if (prefs.new_sale === false) {
+        console.log('🔕 new_sale notification disabled by user preferences')
+        return
+      }
+
       console.log('👤 Owner ID found:', ownerId)
       console.log('🏢 Business name:', business.name || business.businessName)
 

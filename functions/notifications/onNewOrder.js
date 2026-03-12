@@ -42,6 +42,14 @@ export const onNewOrder = onDocumentWritten(
       const business = businessDoc.data()
       const ownerId = business.ownerId || businessId
 
+      // Verificar preferencias de notificación
+      const prefs = business.notificationPreferences || {}
+      const notifType = isNewOrder ? 'new_order' : 'items_added'
+      if (prefs[notifType] === false) {
+        console.log(`🔕 ${notifType} notification disabled by user preferences`)
+        return
+      }
+
       // Construir mensaje
       const order = after
       const orderNumber = order.orderNumber || ''
