@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { updateDispatchGuide, getCompanySettings } from '@/services/firestoreService'
+import { updateDispatchGuide, getCompanySettings, getCustomers } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { consultarRUC } from '@/services/documentLookupService'
@@ -172,6 +172,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
   const [isSaving, setIsSaving] = useState(false)
 
+  // Clientes registrados (para autocompletado del destinatario)
+  const [customers, setCustomers] = useState([])
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+
   // Verificar si la guía ya fue enviada a SUNAT
   const isAlreadySent = guide?.sunatStatus === 'accepted' || guide?.sunatStatus === 'rejected'
 
@@ -192,6 +196,35 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     }
     loadBranches()
   }, [isOpen, user?.uid, getBusinessId, filterBranchesByAccess])
+
+  // Cargar clientes registrados
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (!user?.uid || !isOpen) return
+      try {
+        const businessId = getBusinessId()
+        const result = await getCustomers(businessId)
+        if (result.success) {
+          setCustomers(result.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar clientes:', error)
+      }
+    }
+    loadCustomers()
+  }, [isOpen, user?.uid, getBusinessId])
+
+  // Filtrar clientes según lo que escribe el usuario en Razón Social
+  const filteredCustomers = recipientName.length >= 2
+    ? customers.filter(c => {
+        const searchLower = recipientName.toLowerCase()
+        return (
+          c.name?.toLowerCase().includes(searchLower) ||
+          c.businessName?.toLowerCase().includes(searchLower) ||
+          c.documentNumber?.includes(recipientName)
+        )
+      }).slice(0, 5)
+    : []
 
   // Cargar datos de la guía cuando se abre el modal
   useEffect(() => {
@@ -685,13 +718,49 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 maxLength={recipientDocType === '6' ? 11 : 15}
               />
 
-              <Input
-                label="Razón Social"
-                placeholder="Nombre o razón social del destinatario"
-                required
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  label="Razón Social"
+                  placeholder="Nombre o razón social del destinatario"
+                  required
+                  value={recipientName}
+                  onChange={(e) => {
+                    setRecipientName(e.target.value)
+                    setShowCustomerDropdown(true)
+                  }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                />
+                {showCustomerDropdown && filteredCustomers.length > 0 && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                    {filteredCustomers.map(customer => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setRecipientName(customer.name || customer.businessName || '')
+                          setRecipientDocNumber(customer.documentNumber || '')
+                          if (customer.documentType === 'RUC' || customer.documentType === '6' || customer.documentNumber?.length === 11) {
+                            setRecipientDocType('6')
+                          } else if (customer.documentType === 'DNI' || customer.documentType === '1' || customer.documentNumber?.length === 8) {
+                            setRecipientDocType('1')
+                          } else if (customer.documentType === 'CE' || customer.documentType === '4') {
+                            setRecipientDocType('4')
+                          }
+                          if (customer.address) setRecipientAddress(customer.address)
+                          if (customer.email) setRecipientEmail(customer.email)
+                          setShowCustomerDropdown(false)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      >
+                        <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
+                        <p className="text-xs text-gray-500">{customer.documentNumber}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <Input
