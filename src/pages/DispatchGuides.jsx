@@ -356,20 +356,47 @@ export default function DispatchGuides() {
     }
   }
 
-  // Imprimir en formato ticket (impresora térmica)
-  const handlePrintTicket = (guide) => {
+  // Imprimir en formato ticket (impresora térmica o web)
+  const handlePrintTicket = async (guide) => {
     if (!companySettings) {
       toast.error('Cargando datos de empresa, intente de nuevo')
       return
     }
 
-    // Establecer la guía a imprimir
-    setPrintingTicket(guide)
+    // Si es nativo, intentar imprimir en impresora térmica
+    if (isNativePlatform) {
+      try {
+        const { getPrinterConfig, connectPrinter, printDispatchGuideTicket } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
 
-    // Esperar a que el componente se renderice y luego imprimir
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+            toast.info('Usando impresión estándar...')
+          } else {
+            const result = await printDispatchGuideTicket(guide, companySettings, printerConfigResult.config.paperWidth || 80)
+
+            if (result.success) {
+              toast.success('Guía impresa en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir: ' + result.error)
+              toast.info('Usando impresión estándar...')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    // Fallback: impresión web (window.print)
+    setPrintingTicket(guide)
     setTimeout(() => {
       window.print()
-      // Limpiar después de imprimir
       setTimeout(() => {
         setPrintingTicket(null)
       }, 500)

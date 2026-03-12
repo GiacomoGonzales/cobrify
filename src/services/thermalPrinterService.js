@@ -3297,6 +3297,374 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
   }
 };
 
+// ============================================
+// IMPRESIÓN DE GUÍA DE REMISIÓN (TICKET TÉRMICO)
+// ============================================
+
+const GUIDE_TRANSFER_REASONS = {
+  '01': 'Venta', '02': 'Compra', '04': 'Traslado entre establec.',
+  '08': 'Importacion', '09': 'Exportacion', '13': 'Otros',
+  '14': 'Venta suj. confirmacion', '17': 'Transformacion',
+  '18': 'Emisor itinerante', '19': 'Zona primaria',
+};
+
+const GUIDE_UNITS = {
+  'NIU': 'UND', 'KGM': 'KG', 'LTR': 'LT', 'MTR': 'MT',
+  'GLL': 'GAL', 'BOX': 'CJ', 'PK': 'PQ', 'DZN': 'DOC', 'TNE': 'TN',
+};
+
+const GUIDE_DOC_TYPES = { '1': 'DNI', '4': 'CE', '6': 'RUC', '7': 'PAS' };
+const GUIDE_RELATED_DOC_TYPES = { '01': 'FAC', '03': 'BOL', '09': 'GRE', '31': 'GRT', '49': 'OC' };
+
+/**
+ * Construir datos ESC/POS para ticket de guía de remisión
+ */
+const buildDispatchGuideEscPos = (guide, business, paperWidth = 58) => {
+  const format = getFormat(paperWidth);
+  const builder = new EscPosBuilder();
+  const sep = format.separator;
+  const lineWidth = format.charsPerLine;
+
+  const formatGuideDate = (dateValue) => {
+    if (!dateValue) return '-';
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      const [y, m, d] = dateValue.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    const d = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const addRow = (label, value) => {
+    const l = convertSpanishText(label);
+    const v = convertSpanishText(value || '-');
+    const space = lineWidth - l.length - v.length;
+    builder.alignLeft().text(l + (space > 0 ? ' '.repeat(space) : ' ') + v + '\n');
+  };
+
+  // Header
+  builder.init()
+    .alignCenter()
+    .bold().text(convertSpanishText(business.tradeName || business.name || 'MI EMPRESA') + '\n').clearFormatting()
+    .alignCenter().text('RUC: ' + (business.ruc || '00000000000') + '\n');
+
+  if (business.address) builder.alignCenter().text(convertSpanishText(business.address) + '\n');
+  if (business.phone) builder.alignCenter().text('Tel: ' + business.phone + '\n');
+  if (guide.branchName) builder.alignCenter().text(convertSpanishText('Sucursal: ' + guide.branchName) + '\n');
+
+  builder.newLine()
+    .alignCenter().bold()
+    .text(guide.documentType === '31' ? 'GUIA REMISION TRANSPORTISTA\n' : 'GUIA DE REMISION ELECTRONICA\n')
+    .clearFormatting()
+    .alignCenter().bold().text((guide.number || '-') + '\n').clearFormatting()
+    .alignLeft().text(sep + '\n');
+
+  // Fechas
+  addRow('F.Emision:', formatGuideDate(guide.issueDate || guide.createdAt));
+  addRow('F.Traslado:', formatGuideDate(guide.transferDate));
+  builder.text(sep + '\n');
+
+  // Destinatario
+  builder.bold().text('DESTINATARIO\n').clearFormatting();
+  const recipient = guide.recipient || {};
+  addRow('Doc:', recipient.documentNumber || recipient.ruc || '-');
+  addRow('Nombre:', recipient.name || recipient.businessName || '-');
+  builder.text(sep + '\n');
+
+  // Datos del traslado
+  builder.bold().text('DATOS DEL TRASLADO\n').clearFormatting();
+  addRow('Motivo:', GUIDE_TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-');
+  builder.alignCenter().bold()
+    .text('PESO: ' + (guide.totalWeight || guide.weight || '0') + ' ' + (guide.weightUnit || 'KGM') + '\n')
+    .clearFormatting();
+  if (guide.transferDescription) {
+    builder.alignLeft().text(convertSpanishText('Obs: ' + guide.transferDescription) + '\n');
+  }
+  builder.text(sep + '\n');
+
+  // Documentos relacionados
+  const relatedDocs = [];
+  if (guide.referenceInvoice?.fullNumber) {
+    relatedDocs.push({ type: GUIDE_RELATED_DOC_TYPES[guide.referenceInvoice.documentType] || 'DOC', number: guide.referenceInvoice.fullNumber });
+  }
+  if (guide.relatedDocuments?.length > 0) {
+    guide.relatedDocuments.forEach(doc => {
+      relatedDocs.push({ type: GUIDE_RELATED_DOC_TYPES[doc.type] || 'DOC', number: doc.fullNumber || `${doc.series}-${doc.number}` });
+    });
+  }
+  if (relatedDocs.length > 0) {
+    builder.bold().text('DOC. RELACIONADOS\n').clearFormatting();
+    relatedDocs.forEach(doc => addRow(doc.type + ':', doc.number));
+    builder.text(sep + '\n');
+  }
+
+  // Origen
+  builder.bold().text('PUNTO DE PARTIDA\n').clearFormatting();
+  builder.alignLeft().text(convertSpanishText(guide.origin?.address || guide.originAddress || '-') + '\n');
+  if (guide.origin?.ubigeo) addRow('Ubigeo:', guide.origin.ubigeo);
+  builder.text(sep + '\n');
+
+  // Destino
+  builder.bold().text('PUNTO DE LLEGADA\n').clearFormatting();
+  builder.alignLeft().text(convertSpanishText(guide.destination?.address || guide.destinationAddress || '-') + '\n');
+  if (guide.destination?.ubigeo) addRow('Ubigeo:', guide.destination.ubigeo);
+  builder.text(sep + '\n');
+
+  // Transporte
+  if (guide.transportMode === '02') {
+    const driver = guide.transport?.driver || guide.driver || {};
+    const vehicle = guide.transport?.vehicle || guide.vehicle || {};
+    builder.bold().text(guide.isM1LVehicle ? 'TRANSPORTE PRIVADO (M1/L)\n' : 'TRANSPORTE PRIVADO\n').clearFormatting();
+    if (vehicle.plate) addRow('Placa:', vehicle.plate);
+    if (vehicle.authorizationNumber) addRow('Autoriz:', (vehicle.authorizationEntity || '') + ' ' + vehicle.authorizationNumber);
+    const driverName = ((driver.name || '') + ' ' + (driver.lastName || '')).trim();
+    if (driverName) addRow('Conductor:', driverName);
+    if (driver.documentNumber) addRow((GUIDE_DOC_TYPES[driver.documentType] || 'Doc') + ':', driver.documentNumber);
+    if (driver.license) addRow('Licencia:', driver.license);
+  } else {
+    const carrier = guide.transport?.carrier || guide.carrier || {};
+    builder.bold().text('TRANSPORTE PUBLICO\n').clearFormatting();
+    addRow('Transportista:', carrier.businessName || '-');
+    addRow('RUC:', carrier.ruc || '-');
+  }
+  builder.text(sep + '\n');
+
+  // Items
+  const items = guide.items || [];
+  builder.bold().text('BIENES (' + items.length + ')\n').clearFormatting();
+  builder.bold().text(sep + '\n').clearFormatting();
+
+  for (const item of items) {
+    const qty = String(item.quantity || 0);
+    const unit = GUIDE_UNITS[item.unit] || item.unit || 'UND';
+    const desc = convertSpanishText(item.description || item.name || '-');
+    builder.alignLeft().text(qty + ' ' + unit + ' - ' + desc + '\n');
+  }
+  builder.text(sep + '\n');
+
+  // QR
+  const ruc = business.ruc || '00000000000';
+  const tipoDoc = guide.documentType === '31' ? '31' : '09';
+  const serie = guide.series || guide.number?.split('-')[0] || 'T001';
+  const numero = guide.number?.split('-')[1] || '1';
+  const qrData = `${ruc}|${tipoDoc}|${serie}|${numero}`;
+  builder.alignCenter().qr(qrData, paperWidth === 58 ? 4 : 6).newLine();
+
+  // Footer
+  builder.alignCenter()
+    .text('REPRESENTACION IMPRESA DE LA\n')
+    .text('GUIA DE REMISION ELECTRONICA\n')
+    .text('Consulte en: www.sunat.gob.pe\n')
+    .feed(4).cut();
+
+  return builder.toBase64();
+};
+
+/**
+ * Imprimir guía de remisión en impresora térmica
+ * Sigue el mismo patrón que printInvoiceTicket
+ */
+export const printDispatchGuideTicket = async (guide, business, paperWidth = 58) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  // Verificar si hay impresora de documentos configurada (prioridad)
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        console.log(`📄 Usando impresora de documentos (${docPrinter.ip}) para guía...`);
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildDispatchGuideEscPos(guide, business, docPaperWidth);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        console.error('Error printing dispatch guide to document printer:', error);
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Printer not connected' };
+  }
+
+  // WiFi o interna: usar ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      console.log(`📶 Usando impresión ${connectionType} para guía de remisión...`);
+      const base64Data = buildDispatchGuideEscPos(guide, business, paperWidth);
+      const result = await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      return { success: true };
+    } catch (error) {
+      console.error('Error WiFi printing dispatch guide:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // BLE alternativo (iOS)
+  if (useAlternativeBLE) {
+    try {
+      console.log('🔵 iOS: Usando impresión BLE para guía...');
+      const base64Data = buildDispatchGuideEscPos(guide, business, paperWidth);
+      return await BLEPrinter.printBLERawData(base64Data);
+    } catch (error) {
+      console.error('Error BLE printing dispatch guide:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Bluetooth Android
+  try {
+    console.log('🔵 Android: Usando impresión Bluetooth para guía...');
+    const format = getFormat(paperWidth);
+    const sep = format.separator;
+    const lineWidth = format.charsPerLine;
+
+    const formatGuideDate = (dateValue) => {
+      if (!dateValue) return '-';
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const [y, m, d] = dateValue.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      const d = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+      return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
+    const createLine = (left, right) => {
+      const l = convertSpanishText(left);
+      const r = convertSpanishText(right || '-');
+      const space = lineWidth - l.length - r.length;
+      return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+    };
+
+    let printer = CapacitorThermalPrinter.begin();
+
+    // Header
+    printer = printer
+      .align('center')
+      .bold()
+      .text(convertSpanishText(business.tradeName || business.name || 'MI EMPRESA') + '\n')
+      .clearFormatting()
+      .align('center').text('RUC: ' + (business.ruc || '00000000000') + '\n');
+
+    if (business.address) printer = printer.align('center').text(convertSpanishText(business.address) + '\n');
+    if (business.phone) printer = printer.align('center').text('Tel: ' + business.phone + '\n');
+    if (guide.branchName) printer = printer.align('center').text(convertSpanishText('Sucursal: ' + guide.branchName) + '\n');
+
+    printer = printer
+      .text('\n')
+      .align('center').bold()
+      .text(guide.documentType === '31' ? 'GUIA REMISION TRANSPORTISTA\n' : 'GUIA DE REMISION ELECTRONICA\n')
+      .clearFormatting()
+      .align('center').bold().text((guide.number || '-') + '\n')
+      .clearFormatting()
+      .align('left').text(sep + '\n');
+
+    // Fechas
+    printer = printer
+      .align('left')
+      .text(createLine('F.Emision:', formatGuideDate(guide.issueDate || guide.createdAt)) + '\n')
+      .text(createLine('F.Traslado:', formatGuideDate(guide.transferDate)) + '\n')
+      .text(sep + '\n');
+
+    // Destinatario
+    const recipient = guide.recipient || {};
+    printer = printer
+      .bold().text('DESTINATARIO\n').clearFormatting()
+      .text(createLine('Doc:', recipient.documentNumber || recipient.ruc || '-') + '\n')
+      .text(createLine('Nombre:', convertSpanishText(recipient.name || recipient.businessName || '-')) + '\n')
+      .text(sep + '\n');
+
+    // Traslado
+    printer = printer
+      .bold().text('DATOS DEL TRASLADO\n').clearFormatting()
+      .text(createLine('Motivo:', convertSpanishText(GUIDE_TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-')) + '\n')
+      .align('center').bold()
+      .text('PESO: ' + (guide.totalWeight || guide.weight || '0') + ' ' + (guide.weightUnit || 'KGM') + '\n')
+      .clearFormatting();
+    if (guide.transferDescription) {
+      printer = printer.align('left').text(convertSpanishText('Obs: ' + guide.transferDescription) + '\n');
+    }
+    printer = printer.align('left').text(sep + '\n');
+
+    // Docs relacionados
+    const relatedDocs = [];
+    if (guide.referenceInvoice?.fullNumber) {
+      relatedDocs.push({ type: GUIDE_RELATED_DOC_TYPES[guide.referenceInvoice.documentType] || 'DOC', number: guide.referenceInvoice.fullNumber });
+    }
+    if (guide.relatedDocuments?.length > 0) {
+      guide.relatedDocuments.forEach(doc => {
+        relatedDocs.push({ type: GUIDE_RELATED_DOC_TYPES[doc.type] || 'DOC', number: doc.fullNumber || `${doc.series}-${doc.number}` });
+      });
+    }
+    if (relatedDocs.length > 0) {
+      printer = printer.bold().text('DOC. RELACIONADOS\n').clearFormatting();
+      for (const doc of relatedDocs) {
+        printer = printer.text(createLine(doc.type + ':', doc.number) + '\n');
+      }
+      printer = printer.text(sep + '\n');
+    }
+
+    // Origen
+    printer = printer
+      .bold().text('PUNTO DE PARTIDA\n').clearFormatting()
+      .text(convertSpanishText(guide.origin?.address || guide.originAddress || '-') + '\n');
+    if (guide.origin?.ubigeo) printer = printer.text(createLine('Ubigeo:', guide.origin.ubigeo) + '\n');
+    printer = printer.text(sep + '\n');
+
+    // Destino
+    printer = printer
+      .bold().text('PUNTO DE LLEGADA\n').clearFormatting()
+      .text(convertSpanishText(guide.destination?.address || guide.destinationAddress || '-') + '\n');
+    if (guide.destination?.ubigeo) printer = printer.text(createLine('Ubigeo:', guide.destination.ubigeo) + '\n');
+    printer = printer.text(sep + '\n');
+
+    // Transporte
+    if (guide.transportMode === '02') {
+      const driver = guide.transport?.driver || guide.driver || {};
+      const vehicle = guide.transport?.vehicle || guide.vehicle || {};
+      printer = printer.bold().text(guide.isM1LVehicle ? 'TRANSPORTE PRIVADO (M1/L)\n' : 'TRANSPORTE PRIVADO\n').clearFormatting();
+      if (vehicle.plate) printer = printer.text(createLine('Placa:', vehicle.plate) + '\n');
+      if (vehicle.authorizationNumber) printer = printer.text(createLine('Autoriz:', (vehicle.authorizationEntity || '') + ' ' + vehicle.authorizationNumber) + '\n');
+      const driverName = ((driver.name || '') + ' ' + (driver.lastName || '')).trim();
+      if (driverName) printer = printer.text(createLine('Conductor:', convertSpanishText(driverName)) + '\n');
+      if (driver.documentNumber) printer = printer.text(createLine((GUIDE_DOC_TYPES[driver.documentType] || 'Doc') + ':', driver.documentNumber) + '\n');
+      if (driver.license) printer = printer.text(createLine('Licencia:', driver.license) + '\n');
+    } else {
+      const carrier = guide.transport?.carrier || guide.carrier || {};
+      printer = printer.bold().text('TRANSPORTE PUBLICO\n').clearFormatting();
+      printer = printer.text(createLine('Transportista:', convertSpanishText(carrier.businessName || '-')) + '\n');
+      printer = printer.text(createLine('RUC:', carrier.ruc || '-') + '\n');
+    }
+    printer = printer.text(sep + '\n');
+
+    // Items
+    const items = guide.items || [];
+    printer = printer.bold().text('BIENES (' + items.length + ')\n').clearFormatting().text(sep + '\n');
+    for (const item of items) {
+      const qty = String(item.quantity || 0);
+      const unit = GUIDE_UNITS[item.unit] || item.unit || 'UND';
+      const desc = convertSpanishText(item.description || item.name || '-');
+      printer = printer.text(qty + ' ' + unit + ' - ' + desc + '\n');
+    }
+    printer = printer.text(sep + '\n');
+
+    // Footer
+    printer = printer
+      .align('center')
+      .text('REPRESENTACION IMPRESA DE LA\n')
+      .text('GUIA DE REMISION ELECTRONICA\n')
+      .text('Consulte en: www.sunat.gob.pe\n')
+      .text('\n\n\n');
+
+    const result = await printer.write();
+    return { success: result?.printed !== false, ...result };
+
+  } catch (error) {
+    console.error('Error printing dispatch guide ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 /**
  * Exportar el builder para uso externo si se necesita
  */
