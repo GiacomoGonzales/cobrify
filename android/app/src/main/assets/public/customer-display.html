@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, height=800, initial-scale=1.0">
+<title>Pantalla de Cliente</title>
+<style>
+  :root {
+    --primary: #1e40af;
+    --accent: #f59e0b;
+    --bg: #f8fafc;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --border: #e2e8f0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .screen { position: absolute; inset: 0; transition: opacity 0.5s ease, transform 0.5s ease; opacity: 0; pointer-events: none; }
+  .screen.active { opacity: 1; pointer-events: auto; }
+
+  /* ===== IDLE SCREEN ===== */
+  .idle-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, #000) 100%);
+    color: white;
+    text-align: center;
+  }
+  .idle-logo {
+    width: 160px;
+    height: 160px;
+    border-radius: 32px;
+    object-fit: contain;
+    background: rgba(255,255,255,0.15);
+    padding: 16px;
+    margin-bottom: 32px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .idle-logo.hidden { display: none; }
+  .idle-icon {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 32px;
+    font-size: 56px;
+  }
+  .idle-icon.hidden { display: none; }
+  .idle-company { font-size: 48px; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.5px; }
+  .idle-welcome { font-size: 32px; font-weight: 300; opacity: 0.9; margin-bottom: 48px; }
+  .idle-datetime { font-size: 22px; opacity: 0.7; font-weight: 300; }
+
+  /* ===== CART SCREEN ===== */
+  .cart-screen {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+  .cart-header {
+    display: flex;
+    align-items: center;
+    padding: 20px 32px;
+    background: white;
+    border-bottom: 2px solid var(--border);
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .cart-header-logo {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    object-fit: contain;
+  }
+  .cart-header-logo.hidden { display: none; }
+  .cart-header-name { font-size: 26px; font-weight: 700; color: var(--primary); }
+  .cart-header-title { margin-left: auto; font-size: 20px; color: var(--text-light); font-weight: 500; }
+
+  .cart-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 32px;
+  }
+  .cart-items::-webkit-scrollbar { width: 6px; }
+  .cart-items::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+  .cart-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+  .cart-item-name { flex: 1; font-size: 20px; font-weight: 500; }
+  .cart-item-qty { font-size: 18px; color: var(--text-light); margin: 0 24px; min-width: 120px; text-align: center; }
+  .cart-item-price { font-size: 22px; font-weight: 700; color: var(--primary); min-width: 130px; text-align: right; }
+
+  .cart-empty { display: flex; align-items: center; justify-content: center; flex: 1; font-size: 24px; color: var(--text-light); }
+
+  .cart-footer {
+    background: white;
+    padding: 20px 32px;
+    border-top: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+  .cart-footer-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 20px;
+    color: var(--text-light);
+  }
+  .cart-footer-row.discount { color: #dc2626; }
+  .cart-footer-row.total {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--text);
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 2px solid var(--border);
+  }
+
+  /* ===== COMPLETED SCREEN ===== */
+  .completed-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    text-align: center;
+  }
+  .completed-check {
+    width: 120px; height: 120px;
+    border: 6px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 32px;
+    animation: scaleIn 0.5s ease;
+  }
+  @keyframes scaleIn { from { transform: scale(0); } to { transform: scale(1); } }
+  .completed-check svg { width: 64px; height: 64px; }
+  .completed-thanks { font-size: 42px; font-weight: 700; margin-bottom: 16px; }
+  .completed-total-label { font-size: 22px; opacity: 0.8; margin-bottom: 8px; }
+  .completed-total { font-size: 64px; font-weight: 800; margin-bottom: 24px; letter-spacing: -1px; }
+  .completed-invoice { font-size: 20px; opacity: 0.8; background: rgba(255,255,255,0.15); padding: 10px 24px; border-radius: 100px; }
+</style>
+</head>
+<body>
+
+<!-- IDLE SCREEN -->
+<div id="idle" class="screen idle-screen active">
+  <img id="idle-logo" class="idle-logo hidden" src="" alt="">
+  <div id="idle-icon" class="idle-icon">🛒</div>
+  <div id="idle-company" class="idle-company"></div>
+  <div class="idle-welcome">¡Bienvenido!</div>
+  <div id="idle-datetime" class="idle-datetime"></div>
+</div>
+
+<!-- CART SCREEN -->
+<div id="cart" class="screen cart-screen">
+  <div class="cart-header">
+    <img id="cart-logo" class="cart-header-logo hidden" src="" alt="">
+    <div id="cart-company" class="cart-header-name"></div>
+    <div class="cart-header-title">Detalle de compra</div>
+  </div>
+  <div id="cart-items" class="cart-items"></div>
+  <div id="cart-footer" class="cart-footer">
+    <div class="cart-footer-row">
+      <span>Subtotal</span>
+      <span id="cart-subtotal">S/ 0.00</span>
+    </div>
+    <div id="cart-discount-row" class="cart-footer-row discount" style="display:none">
+      <span>Descuento</span>
+      <span id="cart-discount">-S/ 0.00</span>
+    </div>
+    <div class="cart-footer-row">
+      <span>IGV</span>
+      <span id="cart-igv">S/ 0.00</span>
+    </div>
+    <div class="cart-footer-row total">
+      <span>TOTAL</span>
+      <span id="cart-total">S/ 0.00</span>
+    </div>
+  </div>
+</div>
+
+<!-- COMPLETED SCREEN -->
+<div id="completed" class="screen completed-screen">
+  <div class="completed-check">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  </div>
+  <div class="completed-thanks">¡Gracias por su compra!</div>
+  <div class="completed-total-label">Total pagado</div>
+  <div id="completed-total" class="completed-total">S/ 0.00</div>
+  <div id="completed-invoice" class="completed-invoice"></div>
+</div>
+
+<script>
+(function() {
+  var config = {};
+  var currentState = 'idle';
+  var idleTimer = null;
+  var clockTimer = null;
+
+  function fmt(n) {
+    return 'S/ ' + (n || 0).toFixed(2);
+  }
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(function(s) {
+      s.classList.remove('active');
+    });
+    var el = document.getElementById(id);
+    if (el) el.classList.add('active');
+    currentState = id;
+  }
+
+  function updateClock() {
+    var el = document.getElementById('idle-datetime');
+    if (!el) return;
+    var now = new Date();
+    var opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    var date = now.toLocaleDateString('es-PE', opts);
+    var time = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    el.textContent = date.charAt(0).toUpperCase() + date.slice(1) + '  •  ' + time;
+  }
+
+  function startClock() {
+    updateClock();
+    if (clockTimer) clearInterval(clockTimer);
+    clockTimer = setInterval(updateClock, 30000);
+  }
+
+  // Called once from Java when the Presentation is ready
+  window.initDisplay = function(jsonStr) {
+    try {
+      config = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    } catch(e) { config = {}; }
+
+    var root = document.documentElement;
+    if (config.primaryColor) root.style.setProperty('--primary', config.primaryColor);
+    if (config.accentColor) root.style.setProperty('--accent', config.accentColor);
+
+    // Logo
+    var idleLogo = document.getElementById('idle-logo');
+    var idleIcon = document.getElementById('idle-icon');
+    var cartLogo = document.getElementById('cart-logo');
+
+    if (config.logoUrl) {
+      idleLogo.src = config.logoUrl;
+      idleLogo.classList.remove('hidden');
+      idleIcon.classList.add('hidden');
+      cartLogo.src = config.logoUrl;
+      cartLogo.classList.remove('hidden');
+    } else {
+      idleLogo.classList.add('hidden');
+      idleIcon.classList.remove('hidden');
+      cartLogo.classList.add('hidden');
+    }
+
+    // Company name
+    var name = config.companyName || '';
+    document.getElementById('idle-company').textContent = name;
+    document.getElementById('cart-company').textContent = name;
+
+    startClock();
+    showScreen('idle');
+  };
+
+  // Called from Java on every update
+  window.updateDisplay = function(jsonStr) {
+    var data;
+    try {
+      data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    } catch(e) { return; }
+
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+
+    var state = data.state || 'idle';
+
+    if (state === 'idle') {
+      showScreen('idle');
+      startClock();
+      return;
+    }
+
+    if (state === 'cart') {
+      var items;
+      try {
+        items = typeof data.items === 'string' ? JSON.parse(data.items) : (data.items || []);
+      } catch(e) { items = []; }
+
+      var container = document.getElementById('cart-items');
+
+      if (items.length === 0) {
+        container.innerHTML = '<div class="cart-empty">El carrito está vacío</div>';
+      } else {
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var it = items[i];
+          html += '<div class="cart-item">' +
+            '<div class="cart-item-name">' + escHtml(it.name) + '</div>' +
+            '<div class="cart-item-qty">' + it.quantity + ' x ' + fmt(it.price) + '</div>' +
+            '<div class="cart-item-price">' + fmt(it.subtotal) + '</div>' +
+            '</div>';
+        }
+        container.innerHTML = html;
+        // Scroll to bottom to show latest item
+        container.scrollTop = container.scrollHeight;
+      }
+
+      document.getElementById('cart-subtotal').textContent = fmt(data.subtotal);
+      document.getElementById('cart-igv').textContent = fmt(data.igv);
+      document.getElementById('cart-total').textContent = fmt(data.total);
+
+      var discountRow = document.getElementById('cart-discount-row');
+      if (data.discount > 0) {
+        discountRow.style.display = 'flex';
+        document.getElementById('cart-discount').textContent = '-' + fmt(data.discount);
+      } else {
+        discountRow.style.display = 'none';
+      }
+
+      showScreen('cart');
+      return;
+    }
+
+    if (state === 'completed') {
+      document.getElementById('completed-total').textContent = fmt(data.total);
+
+      var docLabel = '';
+      if (data.documentType === 'factura') docLabel = 'Factura';
+      else if (data.documentType === 'nota_venta') docLabel = 'Nota de Venta';
+      else docLabel = 'Boleta';
+
+      var invoiceEl = document.getElementById('completed-invoice');
+      if (data.invoiceNumber) {
+        invoiceEl.textContent = docLabel + ' ' + data.invoiceNumber;
+        invoiceEl.style.display = '';
+      } else {
+        invoiceEl.style.display = 'none';
+      }
+
+      showScreen('completed');
+
+      // Return to idle after 8 seconds
+      idleTimer = setTimeout(function() {
+        showScreen('idle');
+        startClock();
+      }, 8000);
+      return;
+    }
+  };
+
+  function escHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  // Initialize clock on load
+  startClock();
+})();
+</script>
+</body>
+</html>

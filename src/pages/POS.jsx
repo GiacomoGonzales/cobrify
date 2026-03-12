@@ -77,6 +77,7 @@ import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
+import * as CustomerDisplay from '@/services/customerDisplayService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -506,6 +507,11 @@ export default function POS() {
       window.removeEventListener('focus', handleFocus)
     }
   }, [businessSettings?.allowCustomEmissionDate])
+
+  // Cleanup: cerrar pantalla de cliente al desmontar POS
+  useEffect(() => {
+    return () => { CustomerDisplay.hideDisplay() }
+  }, [])
 
   // Cargar borrador del localStorage al iniciar
   useEffect(() => {
@@ -1301,6 +1307,16 @@ export default function POS() {
         if (businessData.requireOpenCashRegister) {
           const cashResult = await getCashRegisterSession(businessId, selectedBranch?.id || null, user?.uid || null)
           setCashRegisterOpen(cashResult.success && cashResult.data !== null)
+        }
+
+        // Inicializar pantalla de cliente (segunda pantalla) si está habilitada
+        if (businessData.enableCustomerDisplay) {
+          CustomerDisplay.initializeDisplay({
+            primaryColor: businessData.brandingColor || '#1e40af',
+            accentColor: '#f59e0b',
+            companyName: businessData.companyName || businessData.businessName || '',
+            logoUrl: businessData.logoUrl || '',
+          })
         }
       }
 
@@ -2465,6 +2481,17 @@ export default function POS() {
     }
   }, [cart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode])
 
+  // Actualizar pantalla de cliente cuando cambia el carrito
+  useEffect(() => {
+    if (!companySettings?.enableCustomerDisplay) return
+    if (saleCompleted) return // No actualizar durante pantalla de "completado"
+    if (cart.length === 0) {
+      CustomerDisplay.showWelcome()
+    } else {
+      CustomerDisplay.updateCart(cart, amounts)
+    }
+  }, [cart, amounts, companySettings?.enableCustomerDisplay, saleCompleted])
+
   // Calcular totales de pago (optimizado con useMemo)
   const paymentTotals = React.useMemo(() => {
     const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
@@ -3145,6 +3172,9 @@ export default function POS() {
             isOffline: true,
           })
           setSaleCompleted(true)
+          if (companySettings?.enableCustomerDisplay) {
+            CustomerDisplay.showCompleted(amounts.total, `OFFLINE-${offlineId}`, documentType)
+          }
           setIsProcessing(false)
           return
         } catch (offlineError) {
@@ -3212,6 +3242,11 @@ export default function POS() {
         setLastInvoiceNumber(numberResult.number)
         setLastInvoiceData(invoiceData)
         setSaleCompleted(true)
+
+        // Mostrar "Gracias por su compra" en pantalla de cliente
+        if (companySettings?.enableCustomerDisplay) {
+          CustomerDisplay.showCompleted(amounts.total, numberResult.number, documentType)
+        }
 
         // INMEDIATO: Actualizar stock localmente (sin esperar Firestore)
         setProducts(prev => prev.map(product => {

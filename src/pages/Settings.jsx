@@ -154,6 +154,7 @@ export default function Settings() {
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
+  const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
@@ -783,6 +784,7 @@ export default function Settings() {
         setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
+        setEnableCustomerDisplay(businessData.enableCustomerDisplay || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
         setExitNoteEnabled(businessData.exitNoteEnabled || false)
 
@@ -2702,6 +2704,28 @@ export default function Settings() {
                 </div>
               </label>
 
+              {/* Pantalla de cliente (segunda pantalla) */}
+              <label className={`flex items-start space-x-3 cursor-pointer group p-3 border rounded-lg transition-colors ${
+                enableCustomerDisplay ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={enableCustomerDisplay}
+                  onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Pantalla de cliente (segunda pantalla)
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {enableCustomerDisplay
+                      ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
+                      : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
+                  </p>
+                </div>
+              </label>
+
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -3017,6 +3041,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
+                      enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
