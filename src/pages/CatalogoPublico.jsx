@@ -1904,7 +1904,7 @@ const DEMO_RESTAURANT_DATA = {
 }
 
 // Componente principal
-export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false }) {
+export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null }) {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
@@ -1944,14 +1944,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           return
         }
 
-        // Buscar negocio por catalogSlug (tanto para catálogo como para menú digital)
-        // El menú digital usa la misma configuración del catálogo, solo cambia la interfaz
-        const businessesQuery = query(
-          collection(db, 'businesses'),
-          where('catalogSlug', '==', slug),
-          where('catalogEnabled', '==', true)
-        )
-        const businessesSnap = await getDocs(businessesQuery)
+        // Buscar negocio por catalogSlug o por customDomain
+        let businessesSnap
+        if (customDomain) {
+          // Buscar por dominio personalizado
+          const domainQuery = query(
+            collection(db, 'businesses'),
+            where('customDomain', '==', customDomain),
+            where('catalogEnabled', '==', true)
+          )
+          businessesSnap = await getDocs(domainQuery)
+        } else {
+          // Buscar por slug (flujo normal)
+          const slugQuery = query(
+            collection(db, 'businesses'),
+            where('catalogSlug', '==', slug),
+            where('catalogEnabled', '==', true)
+          )
+          businessesSnap = await getDocs(slugQuery)
+        }
 
         if (businessesSnap.empty) {
           setError(isRestaurantMenu ? 'Menú no encontrado' : 'Catálogo no encontrado')
@@ -1986,10 +1997,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       }
     }
 
-    if (slug || isDemo) {
+    if (slug || isDemo || customDomain) {
       loadCatalog()
     }
-  }, [slug, isDemo, isRestaurantMenu])
+  }, [slug, isDemo, isRestaurantMenu, customDomain])
 
   // Detectar mesa ocupada y cargar orden existente
   useEffect(() => {

@@ -15,6 +15,20 @@
       ]
     },
     {
+      "collectionGroup": "businesses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customDomain",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "catalogEnabled",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "branches",
       "queryScope": "COLLECTION",
       "fields": [

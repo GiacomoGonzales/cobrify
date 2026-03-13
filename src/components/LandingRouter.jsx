@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Navigate } from 'react-router-dom'
 import { getResellerByHostname, getResellerBranding, DEFAULT_BRANDING } from '@/services/brandingService'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import LandingPage from '@/pages/LandingPage'
 import ResellerLandingPage from '@/pages/ResellerLandingPage'
+import CatalogoPublico from '@/pages/CatalogoPublico'
 import { Loader2 } from 'lucide-react'
 
 /**
@@ -57,6 +58,7 @@ function updatePageBranding(brandName, logoUrl, primaryColor) {
 export default function LandingRouter() {
   const [loading, setLoading] = useState(true)
   const [reseller, setReseller] = useState(null)
+  const [catalogDomain, setCatalogDomain] = useState(null) // hostname del dominio personalizado de catálogo
   const [searchParams] = useSearchParams()
   const [pwaRedirect, setPwaRedirect] = useState(null) // null, '/login', '/app/dashboard'
 
@@ -137,8 +139,24 @@ export default function LandingRouter() {
             resellerData.branding?.primaryColor
           )
           setReseller(resellerData)
-        } else {
-          console.log('ℹ️ LandingRouter: No reseller found, showing default landing')
+        } else if (!['localhost', '127.0.0.1', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com'].some(d => hostname.includes(d))) {
+          // No es reseller ni dominio conocido — verificar si es dominio personalizado de catálogo
+          let normalizedHost = hostname.toLowerCase()
+          if (normalizedHost.startsWith('www.')) {
+            normalizedHost = normalizedHost.substring(4)
+          }
+          const catalogQuery = query(
+            collection(db, 'businesses'),
+            where('customDomain', '==', normalizedHost),
+            where('catalogEnabled', '==', true)
+          )
+          const catalogSnap = await getDocs(catalogQuery)
+          if (!catalogSnap.empty) {
+            console.log('✅ LandingRouter: Found catalog domain:', normalizedHost)
+            setCatalogDomain(normalizedHost)
+          } else {
+            console.log('ℹ️ LandingRouter: No reseller or catalog found, showing default landing')
+          }
         }
       } catch (error) {
         console.error('Error detecting reseller:', error)
@@ -171,6 +189,11 @@ export default function LandingRouter() {
     return <ResellerLandingPage reseller={reseller} />
   }
 
-  // Si no hay reseller, mostrar landing de Cobrify
+  // Si es dominio personalizado de catálogo, mostrar catálogo directamente
+  if (catalogDomain) {
+    return <CatalogoPublico customDomain={catalogDomain} />
+  }
+
+  // Si no hay reseller ni catálogo, mostrar landing de Cobrify
   return <LandingPage />
 }
