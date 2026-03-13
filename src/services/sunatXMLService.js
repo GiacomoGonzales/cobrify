@@ -242,10 +242,45 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     </cac:InvoiceLine>`
   }).join('\n')
 
+  // === Descuento global (AllowanceCharge código 02 - afecta base imponible según SUNAT) ===
+  const globalDiscount = parseFloat(invoiceData.globalDiscount || invoiceData.discount || 0)
+  let allowanceChargeXml = ''
+
+  if (globalDiscount > 0) {
+    // Los precios del POS incluyen IGV. El descuento también es sobre el total con IGV.
+    // Para SUNAT, AllowanceCharge código 02 es sobre la BASE (sin IGV).
+    const totalGravado = Object.values(taxByRate).reduce((sum, d) => sum + d.taxable, 0)
+    const totalConIgv = totalGravado * (1 + igvMultiplier) + docTotalExonerado + docTotalInafecto
+
+    // Proporción del descuento que aplica a operaciones gravadas
+    const propGravado = totalConIgv > 0 ? (totalGravado * (1 + igvMultiplier)) / totalConIgv : 1
+    const discountOnBase = Number((globalDiscount * propGravado / (1 + igvMultiplier)).toFixed(2))
+    const multiplierFactor = totalGravado > 0 ? (discountOnBase / totalGravado) : 0
+
+    allowanceChargeXml = `
+  <cac:AllowanceCharge>
+    <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+    <cbc:AllowanceChargeReasonCode>02</cbc:AllowanceChargeReasonCode>
+    <cbc:MultiplierFactorNumeric>${multiplierFactor.toFixed(5)}</cbc:MultiplierFactorNumeric>
+    <cbc:Amount currencyID="${currency}">${discountOnBase.toFixed(2)}</cbc:Amount>
+    <cbc:BaseAmount currencyID="${currency}">${totalGravado.toFixed(2)}</cbc:BaseAmount>
+  </cac:AllowanceCharge>`
+
+    // Ajustar taxByRate: reducir base imponible y recalcular IGV por cada tasa
+    const rateKeysForDiscount = Object.keys(taxByRate)
+    for (const rate of rateKeysForDiscount) {
+      const data = taxByRate[rate]
+      const rateProportion = totalGravado > 0 ? data.taxable / totalGravado : 1
+      const rateDiscount = Number((discountOnBase * rateProportion).toFixed(2))
+      data.taxable = Number((data.taxable - rateDiscount).toFixed(2))
+      data.tax = Number((data.taxable * (Number(rate) / 100)).toFixed(2))
+    }
+  }
+
   // Generar TaxSubtotals del documento (uno por cada tasa de IGV + exonerado/inafecto)
   let taxSubtotalsXml = ''
 
-  // TaxSubtotals de gravados (uno por cada tasa: 18%, 10.5%, etc.)
+  // TaxSubtotals de gravados (taxByRate ya ajustado por descuento global si existe)
   const rateKeys = Object.keys(taxByRate).sort((a, b) => Number(b) - Number(a))
   for (const rate of rateKeys) {
     const data = taxByRate[rate]
@@ -339,11 +374,22 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   </cac:PaymentMeans>`
   }
 
+  // === Calcular totales del documento desde taxByRate (ya ajustado por descuento global) ===
+  // Regla 3278: LineExtensionAmount = Σ item LEA - descuento global código 02
+  // Regla 3279: TaxInclusiveAmount = LineExtensionAmount + IGV calculado
+  // Regla 3280: PayableAmount = TaxInclusiveAmount (+ cargos - descuentos no afectan base - anticipos)
+  const calcTotalGravadoBase = Object.values(taxByRate).reduce((sum, d) => sum + d.taxable, 0)
+  const calcTotalIgv = Object.values(taxByRate).reduce((sum, d) => sum + d.tax, 0)
+  const calcLineExtension = Number((calcTotalGravadoBase + docTotalExonerado + docTotalInafecto).toFixed(2))
+  const calcTaxInclusive = Number((calcLineExtension + calcTotalIgv).toFixed(2))
+  const calcPayable = calcTaxInclusive
+
   // === PaymentTerms (forma de pago) ===
   const paymentType = invoiceData.paymentType || 'contado'
   const paymentDueDate = invoiceData.paymentDueDate || null
   const paymentInstallments = invoiceData.paymentInstallments || []
-  const paymentTotalAmount = parseFloat(total) || 0
+  // Usar calcPayable (calculado desde items) en vez de total del POS para consistencia con XML
+  const paymentTotalAmount = calcPayable
 
   // Calcular monto neto (descontando detracción) para crédito/cuotas
   const detractionAmt = hasDetraction ? parseFloat(invoiceData.detractionAmount) : 0
@@ -476,14 +522,14 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
         <cbc:RegistrationName><![CDATA[${customer.businessName || customer.name}]]></cbc:RegistrationName>
       </cac:PartyLegalEntity>
     </cac:Party>
-  </cac:AccountingCustomerParty>${paymentMeansXml}${paymentTermsXml}
+  </cac:AccountingCustomerParty>${paymentMeansXml}${paymentTermsXml}${allowanceChargeXml}
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
+    <cbc:TaxAmount currencyID="${currency}">${calcTotalIgv.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxInclusiveAmount currencyID="${currency}">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="${currency}">${total.toFixed(2)}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="${currency}">${calcLineExtension.toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxInclusiveAmount currencyID="${currency}">${calcTaxInclusive.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${currency}">${calcPayable.toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
 ${invoiceLines}
 </Invoice>`
