@@ -64,6 +64,7 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
     implementation files('libs/iminPrinterSDK.jar')
+    implementation 'com.github.iminsoftware:IminPrinterLibrary:V2.0.0.18'
 }
 
 apply from: 'capacitor.build.gradle'

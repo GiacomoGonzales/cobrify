@@ -9,24 +9,37 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+// V1 SDK (Falcon 1, D1, etc. - Android 11 y menor)
 import com.imin.printerlib.IminPrintUtils;
 import com.imin.printerlib.IminPrintUtils.PrintConnectType;
+
+// V2 SDK (Swan 2, Falcon 2, etc. - Android 13+)
+import com.imin.printer.PrinterHelper;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Plugin Capacitor para impresión térmica via impresora interna de dispositivos iMin
- * Compatible con iMin Falcon 1 y otros dispositivos iMin con impresora integrada
+ * Plugin Capacitor para impresión térmica via impresora interna de dispositivos iMin.
+ * Soporta V1 SDK (Falcon 1, Android <=11) y V2 SDK (Swan 2, Android 13+).
  */
 @CapacitorPlugin(name = "IminPrinter")
 public class IminPrinterPlugin extends Plugin {
 
     private static final String TAG = "IminPrinterPlugin";
+    private static final int V2_MIN_API = 32; // Android 12L / 13+
 
-    private IminPrintUtils printUtils;
+    // V1
+    private IminPrintUtils printUtilsV1;
+    // V2 usa PrinterHelper.getInstance() (singleton)
+
     private boolean isConnected = false;
+    private boolean useV2 = false;
     private ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    private boolean shouldUseV2() {
+        return Build.VERSION.SDK_INT >= V2_MIN_API;
+    }
 
     /**
      * Detectar si el dispositivo actual es un dispositivo iMin
@@ -39,13 +52,14 @@ public class IminPrinterPlugin extends Plugin {
 
         boolean isImin = manufacturer.contains("imin") || brand.contains("imin") || model.contains("imin");
 
-        Log.d(TAG, "Device check - Manufacturer: " + manufacturer + ", Brand: " + brand + ", Model: " + model + ", isImin: " + isImin);
+        Log.d(TAG, "Device check - Manufacturer: " + manufacturer + ", Brand: " + brand + ", Model: " + model + ", isImin: " + isImin + ", SDK: " + Build.VERSION.SDK_INT + ", useV2: " + shouldUseV2());
 
         JSObject result = new JSObject();
         result.put("isImin", isImin);
         result.put("manufacturer", Build.MANUFACTURER);
         result.put("brand", Build.BRAND);
         result.put("model", Build.MODEL);
+        result.put("sdkVersion", shouldUseV2() ? "v2" : "v1");
         call.resolve(result);
     }
 
@@ -57,21 +71,44 @@ public class IminPrinterPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 Log.d(TAG, "Initializing iMin internal printer...");
-                Log.d(TAG, "Device: " + android.os.Build.MANUFACTURER + " / " + android.os.Build.MODEL);
+                Log.d(TAG, "Device: " + Build.MANUFACTURER + " / " + Build.MODEL + " / API " + Build.VERSION.SDK_INT);
 
-                printUtils = IminPrintUtils.getInstance(getContext());
-                Log.d(TAG, "getInstance OK, calling initPrinter(USB)...");
+                if (shouldUseV2()) {
+                    // V2 SDK: Swan 2, Falcon 2, etc.
+                    Log.d(TAG, "Using V2 SDK (PrinterHelper)...");
+                    useV2 = true;
 
-                printUtils.initPrinter(PrintConnectType.USB);
-                Log.d(TAG, "initPrinter OK");
+                    PrinterHelper.getInstance().initPrinterService(getContext());
+                    Log.d(TAG, "initPrinterService OK");
 
-                isConnected = true;
+                    // Esperar a que el servicio AIDL se vincule
+                    Thread.sleep(1500);
 
-                Log.d(TAG, "iMin printer initialized successfully");
+                    PrinterHelper.getInstance().initPrinter(getContext().getPackageName(), null);
+                    Log.d(TAG, "initPrinter OK");
+
+                    isConnected = true;
+                    Log.d(TAG, "V2 printer initialized successfully");
+
+                } else {
+                    // V1 SDK: Falcon 1, D1, etc.
+                    Log.d(TAG, "Using V1 SDK (IminPrintUtils)...");
+                    useV2 = false;
+
+                    printUtilsV1 = IminPrintUtils.getInstance(getContext());
+                    Log.d(TAG, "getInstance OK, calling initPrinter(USB)...");
+
+                    printUtilsV1.initPrinter(PrintConnectType.USB);
+                    Log.d(TAG, "initPrinter OK");
+
+                    isConnected = true;
+                    Log.d(TAG, "V1 printer initialized successfully");
+                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("type", "internal");
+                result.put("sdkVersion", useV2 ? "v2" : "v1");
                 call.resolve(result);
 
             } catch (NoClassDefFoundError e) {
@@ -105,8 +142,10 @@ public class IminPrinterPlugin extends Plugin {
     public void disconnect(PluginCall call) {
         executor.execute(() -> {
             try {
-                if (printUtils != null) {
-                    printUtils.resetDevice();
+                if (useV2) {
+                    PrinterHelper.getInstance().deInitPrinterService(getContext());
+                } else if (printUtilsV1 != null) {
+                    printUtilsV1.resetDevice();
                 }
                 isConnected = false;
 
@@ -133,12 +172,12 @@ public class IminPrinterPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("connected", isConnected);
         result.put("type", "internal");
+        result.put("sdkVersion", useV2 ? "v2" : "v1");
         call.resolve(result);
     }
 
     /**
-     * Enviar datos raw (bytes) a la impresora via sendRAWData
-     * @param call - Parámetros: data (String base64 encoded)
+     * Enviar datos raw (bytes) a la impresora
      */
     @PluginMethod
     public void sendRaw(PluginCall call) {
@@ -149,7 +188,7 @@ public class IminPrinterPlugin extends Plugin {
             return;
         }
 
-        if (!isConnected || printUtils == null) {
+        if (!isConnected) {
             call.reject("Not connected to printer");
             return;
         }
@@ -157,7 +196,15 @@ public class IminPrinterPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 byte[] data = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                printUtils.sendRAWData(data);
+
+                if (useV2) {
+                    PrinterHelper.getInstance().sendRAWData(data, null);
+                } else if (printUtilsV1 != null) {
+                    printUtilsV1.sendRAWData(data);
+                } else {
+                    call.reject("Printer not initialized");
+                    return;
+                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -173,7 +220,6 @@ public class IminPrinterPlugin extends Plugin {
 
     /**
      * Imprimir texto directamente
-     * @param call - Parámetros: text (String)
      */
     @PluginMethod
     public void printText(PluginCall call) {
@@ -184,15 +230,23 @@ public class IminPrinterPlugin extends Plugin {
             return;
         }
 
-        if (!isConnected || printUtils == null) {
+        if (!isConnected) {
             call.reject("Not connected to printer");
             return;
         }
 
         executor.execute(() -> {
             try {
-                printUtils.printText(text, 0);
-                printUtils.printAndFeedPaper(60);
+                if (useV2) {
+                    PrinterHelper.getInstance().sendRAWData(text.getBytes("UTF-8"), null);
+                    PrinterHelper.getInstance().printAndFeedPaper(60);
+                } else if (printUtilsV1 != null) {
+                    printUtilsV1.printText(text, 0);
+                    printUtilsV1.printAndFeedPaper(60);
+                } else {
+                    call.reject("Printer not initialized");
+                    return;
+                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -207,8 +261,7 @@ public class IminPrinterPlugin extends Plugin {
 
     /**
      * Imprimir con comandos ESC/POS completos (base64)
-     * Este es el método principal - recibe los mismos bytes ESC/POS que WiFi/BT
-     * @param call - Parámetros: data (String base64 encoded)
+     * Método principal - recibe los mismos bytes ESC/POS que WiFi/BT
      */
     @PluginMethod
     public void print(PluginCall call) {
@@ -219,7 +272,7 @@ public class IminPrinterPlugin extends Plugin {
             return;
         }
 
-        if (!isConnected || printUtils == null) {
+        if (!isConnected) {
             call.reject("Not connected to printer");
             return;
         }
@@ -227,7 +280,15 @@ public class IminPrinterPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 byte[] data = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                printUtils.sendRAWData(data);
+
+                if (useV2) {
+                    PrinterHelper.getInstance().sendRAWData(data, null);
+                } else if (printUtilsV1 != null) {
+                    printUtilsV1.sendRAWData(data);
+                } else {
+                    call.reject("Printer not initialized");
+                    return;
+                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -246,7 +307,7 @@ public class IminPrinterPlugin extends Plugin {
      */
     @PluginMethod
     public void printTest(PluginCall call) {
-        if (!isConnected || printUtils == null) {
+        if (!isConnected) {
             call.reject("Not connected to printer");
             return;
         }
@@ -255,7 +316,6 @@ public class IminPrinterPlugin extends Plugin {
 
         executor.execute(() -> {
             try {
-                // Construir ticket de prueba usando comandos ESC/POS raw
                 byte[] init = new byte[]{0x1B, 0x40}; // ESC @ - Reset
                 byte[] alignCenter = new byte[]{0x1B, 0x61, 0x01}; // ESC a 1
                 byte[] boldOn = new byte[]{0x1B, 0x45, 0x01}; // ESC E 1
@@ -266,19 +326,43 @@ public class IminPrinterPlugin extends Plugin {
                     "------------------------------------------\n" :
                     "------------------------\n";
 
-                printUtils.sendRAWData(init);
-                printUtils.sendRAWData(alignCenter);
-                printUtils.sendRAWData(boldOn);
-                printUtils.sendRAWData("PRUEBA IMP. INTERNA\n".getBytes("UTF-8"));
-                printUtils.sendRAWData(boldOff);
-                printUtils.sendRAWData(separator.getBytes("UTF-8"));
-                printUtils.sendRAWData(("\nDispositivo: " + Build.MODEL + "\n").getBytes("UTF-8"));
-                printUtils.sendRAWData(("Ancho papel: " + paperWidth + "mm\n").getBytes("UTF-8"));
-                printUtils.sendRAWData(("\nFecha: " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new java.util.Date()) + "\n").getBytes("UTF-8"));
-                printUtils.sendRAWData(separator.getBytes("UTF-8"));
-                printUtils.sendRAWData("\nImpresora interna configurada\n".getBytes("UTF-8"));
-                printUtils.sendRAWData("correctamente!\n\n\n".getBytes("UTF-8"));
-                printUtils.sendRAWData(cut);
+                String sdkLabel = useV2 ? "V2 (PrinterHelper)" : "V1 (IminPrintUtils)";
+
+                if (useV2) {
+                    PrinterHelper helper = PrinterHelper.getInstance();
+                    helper.sendRAWData(init, null);
+                    helper.sendRAWData(alignCenter, null);
+                    helper.sendRAWData(boldOn, null);
+                    helper.sendRAWData("PRUEBA IMP. INTERNA\n".getBytes("UTF-8"), null);
+                    helper.sendRAWData(boldOff, null);
+                    helper.sendRAWData(separator.getBytes("UTF-8"), null);
+                    helper.sendRAWData(("\nDispositivo: " + Build.MODEL + "\n").getBytes("UTF-8"), null);
+                    helper.sendRAWData(("SDK: " + sdkLabel + "\n").getBytes("UTF-8"), null);
+                    helper.sendRAWData(("Ancho papel: " + paperWidth + "mm\n").getBytes("UTF-8"), null);
+                    helper.sendRAWData(("\nFecha: " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new java.util.Date()) + "\n").getBytes("UTF-8"), null);
+                    helper.sendRAWData(separator.getBytes("UTF-8"), null);
+                    helper.sendRAWData("\nImpresora interna configurada\n".getBytes("UTF-8"), null);
+                    helper.sendRAWData("correctamente!\n\n\n".getBytes("UTF-8"), null);
+                    helper.sendRAWData(cut, null);
+                } else if (printUtilsV1 != null) {
+                    printUtilsV1.sendRAWData(init);
+                    printUtilsV1.sendRAWData(alignCenter);
+                    printUtilsV1.sendRAWData(boldOn);
+                    printUtilsV1.sendRAWData("PRUEBA IMP. INTERNA\n".getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(boldOff);
+                    printUtilsV1.sendRAWData(separator.getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(("\nDispositivo: " + Build.MODEL + "\n").getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(("SDK: " + sdkLabel + "\n").getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(("Ancho papel: " + paperWidth + "mm\n").getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(("\nFecha: " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new java.util.Date()) + "\n").getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(separator.getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData("\nImpresora interna configurada\n".getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData("correctamente!\n\n\n".getBytes("UTF-8"));
+                    printUtilsV1.sendRAWData(cut);
+                } else {
+                    call.reject("Printer not initialized");
+                    return;
+                }
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -293,12 +377,14 @@ public class IminPrinterPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        if (printUtils != null) {
-            try {
-                printUtils.resetDevice();
-            } catch (Exception e) {
-                Log.e(TAG, "Error on destroy: " + e.getMessage());
+        try {
+            if (useV2) {
+                PrinterHelper.getInstance().deInitPrinterService(getContext());
+            } else if (printUtilsV1 != null) {
+                printUtilsV1.resetDevice();
             }
+        } catch (Exception e) {
+            Log.e(TAG, "Error on destroy: " + e.getMessage());
         }
         isConnected = false;
         executor.shutdown();

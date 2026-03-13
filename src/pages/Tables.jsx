@@ -911,6 +911,9 @@ export default function Tables() {
                   continue
                 }
                 if (stationItems.length > 0) {
+                  if (anyPrinted) {
+                    await new Promise(resolve => setTimeout(resolve, 1500))
+                  }
                   const stationOrder = { ...selectedOrder, items: stationItems }
                   await printKitchenOrder(stationOrder, selectedTable, pw, station.name)
                   anyPrinted = true
