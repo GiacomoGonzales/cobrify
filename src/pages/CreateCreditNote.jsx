@@ -545,7 +545,7 @@ export default function CreateCreditNote() {
               if (item.productId) {
                 const productData = products.find(p => p.id === item.productId)
                 if (!productData) continue
-                if (productData.trackStock === false || productData.stock === null) continue
+                if (productData.trackStock === false) continue
 
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 

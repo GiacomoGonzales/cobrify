@@ -3369,7 +3369,7 @@ export default function POS() {
                 .map(async item => {
                   const productData = bgProducts.find(p => p.id === item.id)
                   if (!productData) return
-                  if (productData.trackStock === false || productData.stock === null) return
+                  if (productData.trackStock === false) return
 
                   const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
 
@@ -3434,7 +3434,6 @@ export default function POS() {
                 const productData = bgProducts.find(p => p.id === item.id)
                 if (!productData) return false
                 if (productData.trackStock === false) return false
-                if (productData.stock === null) return false
                 return true
               })
 
@@ -3451,10 +3450,11 @@ export default function POS() {
                     reason: 'Venta',
                     referenceType: 'invoice',
                     referenceId: bgInvoiceId || '',
+                    referenceNumber: bgNumberResult?.number || '',
                     userId: bgUserUid,
                     notes: item.presentationName
-                      ? `Venta ${item.name} - ${docTypeName} - ${item.quantity} ${item.presentationName}`
-                      : `Venta ${item.name} - ${docTypeName}`
+                      ? `Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''} - ${item.quantity} ${item.presentationName}`
+                      : `Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`
                   })
                 } catch (err) {
                   console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)

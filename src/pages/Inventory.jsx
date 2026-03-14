@@ -3146,10 +3146,13 @@ export default function Inventory() {
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <div className="max-w-xs">
-                            <p className="text-sm text-gray-600 truncate" title={movement.notes}>
+                          <div>
+                            <p className="text-sm text-gray-600 whitespace-normal break-words">
                               {movement.notes || movement.reason || '-'}
                             </p>
+                            {movement.referenceNumber && (
+                              <p className="text-xs text-gray-400 mt-0.5">{movement.referenceNumber}</p>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

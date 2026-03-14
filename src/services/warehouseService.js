@@ -379,8 +379,8 @@ export const calculateTotalStock = (warehouseStocks) => {
  * @returns {Object} - Producto actualizado con nuevo warehouseStocks
  */
 export const updateWarehouseStock = (product, warehouseId, quantity) => {
-  // Si el producto no controla stock (trackStock === false o stock === null), no modificar nada
-  if (product.trackStock === false || product.stock === null) {
+  // Si el producto no controla stock, no modificar nada
+  if (product.trackStock === false) {
     return product
   }
 

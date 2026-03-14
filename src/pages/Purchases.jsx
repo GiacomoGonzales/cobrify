@@ -292,7 +292,7 @@ export default function Purchases() {
             }
 
             // Si el producto no controla stock, omitir
-            if (productData.trackStock === false || productData.stock === null) {
+            if (productData.trackStock === false) {
               console.log(`Producto ${item.productName} no controla stock, omitiendo...`)
               continue
             }

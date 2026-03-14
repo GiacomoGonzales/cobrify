@@ -500,7 +500,7 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
       if (!productDoc.exists()) throw new Error('Producto no encontrado')
 
       const product = productDoc.data()
-      if (product.trackStock === false || product.stock === null) return
+      if (product.trackStock === false) return
 
       const warehouseStocks = [...(product.warehouseStocks || [])]
       const currentGeneralStock = product.stock || 0

@@ -37,6 +37,7 @@ import {
   Check,
   Minus,
   ClipboardList,
+  RefreshCw,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -162,6 +163,7 @@ export default function InvoiceList() {
   const [voidingSunatInvoice, setVoidingSunatInvoice] = useState(null)
   const [isVoidingSunat, setIsVoidingSunat] = useState(false)
   const [voidSunatReason, setVoidSunatReason] = useState('')
+  const [syncingMovements, setSyncingMovements] = useState(false)
 
   // Estados para registro de pagos
   const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -602,7 +604,7 @@ Gracias por tu preferencia.`
                 }
 
                 // Si el producto no controla stock, omitir
-                if (productData.trackStock === false || productData.stock === null) {
+                if (productData.trackStock === false) {
                   console.log(`Producto ${item.name} no controla stock, omitiendo...`)
                   continue
                 }
@@ -781,7 +783,7 @@ Gracias por tu preferencia.`
               try {
                 const productData = products.find(p => p.id === item.productId)
                 if (!productData) continue
-                if (productData.trackStock === false || productData.stock === null) continue
+                if (productData.trackStock === false) continue
 
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
@@ -961,6 +963,125 @@ Gracias por tu preferencia.`
         discountPercentage: invoice.discountPercentage || 0,
       }
     })
+  }
+
+  // Sincronizar movimientos de stock faltantes de una venta
+  const handleSyncStockMovements = async (invoice) => {
+    if (!invoice?.items || invoice.items.length === 0) {
+      toast.warning('Esta venta no tiene productos')
+      return
+    }
+
+    // Si es boleta/factura convertida desde nota de venta, no sincronizar (ya tiene movimientos de la nota original)
+    if (invoice.convertedFrom || invoice.skipStockDeduction) {
+      toast.info('Este comprobante fue convertido desde una nota de venta. Los movimientos de stock pertenecen a la nota original.')
+      return
+    }
+
+    const bId = getBusinessId()
+    setSyncingMovements(true)
+    try {
+      const { getStockMovements, createStockMovement } = await import('@/services/warehouseService')
+      const { getProducts } = await import('@/services/firestoreService')
+      const { doc: docRef, updateDoc } = await import('firebase/firestore')
+      const { db: fireDb } = await import('@/lib/firebase')
+
+      // Obtener movimientos existentes para esta venta
+      const movementsResult = await getStockMovements(bId)
+      const existingMovements = movementsResult.success ? movementsResult.data : []
+
+      // Filtrar movimientos de esta venta específica
+      const invoiceMovements = existingMovements.filter(m =>
+        m.referenceId === invoice.id && m.type === 'sale'
+      )
+
+      // Obtener productos para verificar trackStock
+      const productsResult = await getProducts(bId)
+      const products = productsResult.success ? productsResult.data : []
+
+      // Determinar la fecha de la venta
+      const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
+
+      const warehouseId = invoice.warehouseId || ''
+      const docTypeName = invoice.documentType === 'boleta' ? 'Boleta' : invoice.documentType === 'factura' ? 'Factura' : 'Nota de Venta'
+
+      let syncCount = 0
+      let updatedCount = 0
+
+      for (const item of invoice.items) {
+        const productId = item.productId || item.id
+        if (!productId) continue
+        if (item.isCustom) continue
+
+        // Verificar si el producto controla stock
+        const productData = products.find(p => p.id === productId)
+        if (!productData || productData.trackStock === false) continue
+
+        // Verificar si ya existe un movimiento para este producto en esta venta
+        const existingMovement = invoiceMovements.find(m => m.productId === productId)
+
+        if (existingMovement) {
+          // Ya existe: actualizar referenceNumber si le falta
+          if (!existingMovement.referenceNumber && invoice.number) {
+            const movRef = docRef(fireDb, 'businesses', bId, 'stockMovements', existingMovement.id)
+            await updateDoc(movRef, {
+              referenceNumber: invoice.number,
+              notes: existingMovement.notes
+                ? `${existingMovement.notes} - ${docTypeName} ${invoice.number}`
+                : `Venta - ${docTypeName} ${invoice.number}`
+            })
+            updatedCount++
+          }
+          continue
+        }
+
+        // Crear el movimiento faltante y descontar stock del producto
+        const quantityForMovement = (item.quantity || 0) * (item.presentationFactor || 1)
+
+        // Descontar stock del producto
+        const { updateWarehouseStock } = await import('@/services/warehouseService')
+        const { updateProduct } = await import('@/services/firestoreService')
+        const updatedProduct = updateWarehouseStock(productData, warehouseId, -quantityForMovement)
+        await updateProduct(bId, productId, {
+          stock: updatedProduct.stock,
+          warehouseStocks: updatedProduct.warehouseStocks
+        })
+
+        // Crear movimiento
+        await createStockMovement(bId, {
+          productId: productId,
+          productName: item.name || item.description || '',
+          warehouseId: warehouseId,
+          type: 'sale',
+          quantity: -quantityForMovement,
+          reason: 'Venta',
+          referenceType: 'invoice',
+          referenceId: invoice.id,
+          referenceNumber: invoice.number || '',
+          userId: user?.uid,
+          notes: item.presentationName
+            ? `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} - ${item.quantity} ${item.presentationName} (sincronizado)`
+            : `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} (sincronizado)`,
+          originalDate: invoiceDate,
+        })
+        syncCount++
+      }
+
+      const messages = []
+      if (syncCount > 0) messages.push(`${syncCount} movimiento(s) creado(s)`)
+      if (updatedCount > 0) messages.push(`${updatedCount} movimiento(s) actualizado(s) con número de referencia`)
+
+      if (messages.length > 0) {
+        toast.success(messages.join(', '))
+      } else {
+        toast.info('Todos los movimientos ya estaban registrados y actualizados')
+      }
+    } catch (error) {
+      console.error('Error al sincronizar movimientos:', error)
+      toast.error('Error al sincronizar movimientos de stock')
+    } finally {
+      setSyncingMovements(false)
+    }
   }
 
   // Convertir múltiples notas de venta en un solo comprobante
@@ -2758,6 +2879,19 @@ Gracias por tu preferencia.`
                 <div className="text-right space-y-2">
                   {getStatusBadge(viewingInvoice.status)}
                   <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
+                  {viewingInvoice.status !== 'voided' && (
+                    <button
+                      onClick={() => handleSyncStockMovements(viewingInvoice)}
+                      disabled={syncingMovements}
+                      className="mt-1 p-1.5 rounded-full text-primary-200 hover:text-white hover:bg-primary-400/30 transition-colors"
+                      title="Sincronizar movimientos de stock"
+                    >
+                      {syncingMovements
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RefreshCw className="w-4 h-4" />
+                      }
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
