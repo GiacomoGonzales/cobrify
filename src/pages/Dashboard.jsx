@@ -48,8 +48,9 @@ export default function Dashboard() {
   // Determinar el prefijo de ruta según el contexto
   const getRoutePrefix = () => {
     if (isDemoMode) {
-      const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
-      return isRestaurantDemo ? '/demorestaurant' : '/demo'
+      if (location.pathname.startsWith('/demorestaurant')) return '/demorestaurant'
+      if (location.pathname.startsWith('/demopharmacy')) return '/demopharmacy'
+      return '/demo'
     }
     return '/app'
   }
