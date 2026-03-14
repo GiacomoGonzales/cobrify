@@ -541,9 +541,11 @@ export default function Reports() {
         const key = itemName
 
         if (!productSales[key]) {
+          const productData = products.find(p => p.id === productId)
           productSales[key] = {
             name: itemName,
             productId: productId,
+            sku: item.sku || productData?.sku || '',
             quantity: 0,
             revenue: 0,
             cost: 0,
@@ -2392,7 +2394,10 @@ export default function Reports() {
                           <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
                             {index + 1}
                           </div>
-                          <span className="font-medium text-gray-900">{product.name}</span>
+                          <div>
+                            <span className="font-medium text-gray-900">{product.name}</span>
+                            {product.sku && <span className="block text-xs text-gray-400">SKU: {product.sku}</span>}
+                          </div>
                         </div>
                         <span className="font-bold text-gray-900">{formatCurrency(product.revenue)}</span>
                       </div>
@@ -2418,6 +2423,7 @@ export default function Reports() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Posición</TableHead>
+                      <TableHead>SKU</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead className="text-right">Cantidad</TableHead>
                       <TableHead className="text-right">Ingresos</TableHead>
@@ -2429,7 +2435,7 @@ export default function Reports() {
                   <TableBody>
                     {topProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                           No hay datos de productos en este período
                         </TableCell>
                       </TableRow>
@@ -2451,6 +2457,7 @@ export default function Reports() {
                               {index + 1}
                             </div>
                           </TableCell>
+                          <TableCell className="text-gray-500 text-sm">{product.sku || '-'}</TableCell>
                           <TableCell className="font-medium">{product.name}</TableCell>
                           <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-semibold">

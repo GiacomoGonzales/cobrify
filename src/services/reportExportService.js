@@ -481,7 +481,7 @@ export const exportProductsReport = async (data) => {
     ['DETALLE DE PRODUCTOS VENDIDOS'],
     ['Período:', periodo],
     [],
-    ['#', 'Producto', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', 'Precio Prom.'],
+    ['#', 'SKU', 'Producto', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', 'Precio Prom.'],
   ]
 
   topProducts.forEach((product, index) => {
@@ -489,6 +489,7 @@ export const exportProductsReport = async (data) => {
     const precioPromedio = product.quantity > 0 ? product.revenue / product.quantity : 0
     productsData.push([
       index + 1,
+      product.sku || '',
       product.name,
       Number((product.quantity || 0).toFixed(0)),
       Number((product.revenue || 0).toFixed(2)),
@@ -503,6 +504,7 @@ export const exportProductsReport = async (data) => {
   productsData.push([
     'TOTALES',
     '',
+    '',
     Number(totalUnidades.toFixed(0)),
     Number(totalIngresos.toFixed(2)),
     Number(totalCostos.toFixed(2)),
@@ -514,6 +516,7 @@ export const exportProductsReport = async (data) => {
   const wsProducts = XLSX.utils.aoa_to_sheet(productsData)
   wsProducts['!cols'] = [
     { wch: 6 },
+    { wch: 15 },
     { wch: 40 },
     { wch: 12 },
     { wch: 15 },
