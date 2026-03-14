@@ -1499,6 +1499,10 @@ export default function Products() {
               const totalStock = newWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
               updates.warehouseStocks = newWarehouseStocks
               updates.stock = totalStock
+              // Registrar initialStock si el producto no lo tenía
+              if (existingProduct.initialStock === undefined || existingProduct.initialStock === null) {
+                updates.initialStock = totalStock
+              }
             }
 
             // Solo actualizar si hay cambios
@@ -1547,9 +1551,11 @@ export default function Products() {
                 product.warehouseStocks = []
                 product.stock = stockValue
               }
+              product.initialStock = stockValue
             } else {
               product.warehouseStocks = []
               product.stock = null
+              product.initialStock = null
             }
 
             const result = await createProduct(getBusinessId(), product)
