@@ -1380,12 +1380,24 @@ Gracias por tu preferencia.`
 
     const businessId = getBusinessId()
     try {
-      const result = await updateInvoice(businessId, invoiceId, { paymentMethod: newMethod })
+      // Actualizar paymentMethod y también el array payments para que la caja lo lea correctamente
+      const updates = { paymentMethod: newMethod }
+
+      // Si la venta tiene un solo pago en el array payments, actualizar también el método ahí
+      const invoice = viewingInvoice || invoices.find(inv => inv.id === invoiceId)
+      if (invoice?.payments && Array.isArray(invoice.payments) && invoice.payments.length === 1) {
+        updates.payments = [{
+          ...invoice.payments[0],
+          method: newMethod
+        }]
+      }
+
+      const result = await updateInvoice(businessId, invoiceId, updates)
 
       if (result.success) {
         toast.success('Método de pago actualizado')
         // Actualizar el estado local del invoice que se está viendo
-        setViewingInvoice(prev => prev ? { ...prev, paymentMethod: newMethod } : prev)
+        setViewingInvoice(prev => prev ? { ...prev, paymentMethod: newMethod, ...(updates.payments ? { payments: updates.payments } : {}) } : prev)
         loadInvoices()
       } else {
         throw new Error(result.error)

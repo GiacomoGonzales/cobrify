@@ -4053,7 +4053,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className={`columns-2 sm:columns-3 md:columns-3 lg:columns-3 xl:grid xl:grid-cols-3 gap-3 xl:gap-4 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
+              <div key={selectedCategoryFilter} className={`columns-2 sm:columns-3 xl:columns-4 gap-3 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -4081,7 +4081,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
                   style={{ overflow: 'visible' }}
-                  className={`w-full p-2 sm:p-3 xl:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 xl:mb-0 touch-no-hover mt-2 ml-2 ${
+                  className={`w-full p-2 sm:p-3 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 touch-no-hover ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
@@ -4117,8 +4117,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
 
-                  {/* Mobile/Tablet/Landscape: Vertical layout */}
-                  <div className="flex flex-col xl:hidden overflow-hidden min-w-0">
+                  {/* Vertical layout for all screen sizes */}
+                  <div className="flex flex-col overflow-hidden min-w-0">
                     {/* Image */}
                     {product.imageUrl && (
                       <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 mb-1.5 sm:mb-2">
@@ -4149,7 +4149,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {product.barcode && <p className="font-mono">{product.barcode}</p>}
                       {product.location && <p className="font-mono text-blue-600">{product.location}</p>}
                     </div>
-                    {/* Tablet: código compacto en una línea */}
+                    {/* Tablet/Desktop: código compacto en una línea */}
                     <p className="hidden sm:block text-xs text-gray-500 mt-1 truncate">
                       {product.sku || product.code || product.barcode || ''}{product.location ? ` | ${product.location}` : ''}
                     </p>
@@ -4172,8 +4172,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         {!product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
                       </div>
-                      {/* Tablet/Landscape: precio arriba, stock abajo */}
-                      <div className="hidden sm:block xl:hidden overflow-hidden">
+                      {/* Tablet/Desktop: precio arriba, stock abajo */}
+                      <div className="hidden sm:block overflow-hidden">
                         <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                         </p>
@@ -4185,62 +4185,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   </div>
 
-                  {/* Desktop: Horizontal layout */}
-                  <div className="hidden xl:flex gap-3 h-full">
-                    {/* Product Image */}
-                    {product.imageUrl && (
-                      <div className="flex-shrink-0">
-                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-gray-100">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {/* Product Info - Right side */}
-                    <div className="flex flex-col flex-1 min-w-0">
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={`font-semibold line-clamp-2 text-base flex-1 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
-                            {product.name}
-                          </p>
-                          {product.hasVariants && (
-                            <Badge variant="secondary" className="text-xs flex-shrink-0">
-                              {product.variants?.length || 0} vars
-                            </Badge>
-                          )}
-                        </div>
-                        {/* Códigos y detalles */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                          {product.sku && <span>SKU: {product.sku}</span>}
-                          {product.code && <span>Cód: {product.code}</span>}
-                          {product.barcode && <span className="font-mono">{product.barcode}</span>}
-                          {product.location && <span className="font-mono text-blue-600">{product.location}</span>}
-                        </div>
-                        {/* Mostrar info de farmacia si existe */}
-                        {product.genericName && (
-                          <p className="text-xs text-gray-500 mt-0.5">{product.genericName} {product.concentration}</p>
-                        )}
-                      </div>
-                      <div className="mt-1 pt-1 overflow-hidden">
-                        <p className={`text-base font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
-                            <span className="text-sm font-normal text-gray-400 ml-1">
-                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
-                            </span>
-                          )}
-                        </p>
-                        <div className="mt-0.5">
-                          {!product.hasVariants && getStockBadge(product)}
-                          {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </button>
                   )
                 })}
