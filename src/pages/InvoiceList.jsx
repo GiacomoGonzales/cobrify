@@ -1143,6 +1143,10 @@ Gracias por tu preferencia.`
 
   const handleRegisterPayment = async () => {
     if (!paymentInvoice || !user?.uid) return
+    if (paymentInvoice.status === 'cancelled' || paymentInvoice.status === 'voided') {
+      toast.error('No se puede registrar pago en una venta anulada')
+      return
+    }
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
@@ -2776,7 +2780,7 @@ Gracias por tu preferencia.`
 
                   {/* Registrar Pago - Para notas de venta y facturas al crédito con saldo pendiente */}
                   {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') &&
-                   invoice.status !== 'cancelled' &&
+                   invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') &&
                    (invoice.balance > 0 || invoice.status === 'pending') && (
                     <>
