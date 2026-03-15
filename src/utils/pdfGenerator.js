@@ -449,7 +449,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Márgenes y dimensiones - A4: 595pt x 842pt, A5: 420pt x 595pt
   const MARGIN_LEFT = isA5 ? 15 : 20
   const MARGIN_RIGHT = isA5 ? 15 : 20
-  const MARGIN_TOP = isA5 ? 15 : 20
+  const MARGIN_TOP = isA5 ? 30 : 20
   const MARGIN_BOTTOM = isA5 ? 10 : 15
   const PAGE_WIDTH = doc.internal.pageSize.getWidth()
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
