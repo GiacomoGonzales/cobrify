@@ -2461,8 +2461,8 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
 export const printStationTicket = async (printerIp, order, station, items, paperWidth = 58) => {
-  if (!printerIp || items.length === 0) {
-    return { success: false, error: 'IP de impresora no configurada o sin items' };
+  if ((!printerIp && !station.useBuiltInPrinter) || items.length === 0) {
+    return { success: false, error: 'Impresora no configurada o sin items' };
   }
 
   try {
@@ -2542,7 +2542,19 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
     const base64Data = builder.toBase64();
 
-    // Conectar temporalmente a la impresora de la estación
+    // Si la estación usa impresora integrada (iMin), imprimir por IminPrinter
+    if (station.useBuiltInPrinter) {
+      console.log(`📤 Imprimiendo a estación ${station.name} (impresora integrada)...`);
+      const printResult = await IminPrinter.print({ data: base64Data });
+      if (printResult?.success) {
+        console.log(`✅ Ticket impreso en estación ${station.name} (integrada)`);
+        return { success: true };
+      } else {
+        return { success: false, error: 'Error al imprimir en impresora integrada' };
+      }
+    }
+
+    // Conectar temporalmente a la impresora de la estación por TCP/IP
     const port = 9100;
     console.log(`📤 Imprimiendo a estación ${station.name} (${printerIp}:${port})...`);
 
@@ -2571,8 +2583,8 @@ export const printToAllStations = async (order, kitchenStations, paperWidth = 58
   const results = [];
 
   for (const station of kitchenStations) {
-    // Saltear estaciones sin impresora configurada
-    if (!station.printerIp) {
+    // Saltear estaciones sin impresora configurada (salvo que usen la integrada)
+    if (!station.printerIp && !station.useBuiltInPrinter) {
       continue;
     }
 

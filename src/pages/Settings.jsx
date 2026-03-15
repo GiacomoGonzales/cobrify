@@ -3379,20 +3379,39 @@ export default function Settings() {
 
                                       {/* Impresora asignada a la estación */}
                                       <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                          Impresora WiFi (IP):
+                                        <label className="flex items-center gap-2 cursor-pointer mb-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={station.useBuiltInPrinter || false}
+                                            onChange={(e) => {
+                                              const updated = [...restaurantConfig.kitchenStations]
+                                              updated[index] = { ...station, useBuiltInPrinter: e.target.checked, ...(e.target.checked ? { printerIp: '' } : {}) }
+                                              setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                            }}
+                                            className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                                          />
+                                          <span className="text-xs text-gray-700">
+                                            Usar impresora integrada del dispositivo (iMin)
+                                          </span>
                                         </label>
-                                        <input
-                                          type="text"
-                                          value={station.printerIp || ''}
-                                          onChange={(e) => {
-                                            const updated = [...restaurantConfig.kitchenStations]
-                                            updated[index] = { ...station, printerIp: e.target.value }
-                                            setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
-                                          }}
-                                          placeholder="Ej: 192.168.1.100"
-                                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                        />
+                                        {!station.useBuiltInPrinter && (
+                                          <>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                              Impresora WiFi (IP):
+                                            </label>
+                                            <input
+                                              type="text"
+                                              value={station.printerIp || ''}
+                                              onChange={(e) => {
+                                                const updated = [...restaurantConfig.kitchenStations]
+                                                updated[index] = { ...station, printerIp: e.target.value }
+                                                setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                              }}
+                                              placeholder="Ej: 192.168.1.100"
+                                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            />
+                                          </>
+                                        )}
                                         <p className="text-xs text-gray-500 mt-0.5">
                                           Imprime automáticamente comandas al enviar a cocina
                                         </p>
