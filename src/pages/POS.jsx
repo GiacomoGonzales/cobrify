@@ -290,6 +290,7 @@ export default function POS() {
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
+  const searchInputRef = useRef(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState(() => {
     if (allowedDocumentTypes && allowedDocumentTypes.length > 0) {
@@ -489,6 +490,13 @@ export default function POS() {
       setDocumentType(allowedDocumentTypes[0])
     }
   }, [allowedDocumentTypes])
+
+  // Autofocus en barra de búsqueda solo en desktop
+  useEffect(() => {
+    if (!isLoading && window.innerWidth >= 1024 && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [isLoading])
 
   // Auto-actualizar fecha de emisión cuando la pestaña vuelve a estar activa
   // (cubre: PC apagada/encendida, pestaña en segundo plano, suspensión del sistema)
@@ -3884,7 +3892,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         {/* Products Panel */}
         <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}>
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className={`flex flex-col ${expandedCart ? 'gap-2' : 'sm:flex-row sm:items-center sm:justify-between'} gap-4`}>
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Punto de Venta</h1>
@@ -3955,6 +3963,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
                 value={searchTerm}
@@ -4053,7 +4062,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div key={selectedCategoryFilter} className={`columns-2 sm:columns-3 xl:columns-4 gap-3 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
+              <div key={selectedCategoryFilter} className={`columns-2 sm:columns-3 ${expandedCart ? 'xl:columns-2' : 'xl:columns-4'} gap-3 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
