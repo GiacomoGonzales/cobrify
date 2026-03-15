@@ -65,6 +65,7 @@ export const updateCart = async (cart, amounts) => {
       quantity: item.quantity,
       price: item.price,
       subtotal: item.price * item.quantity,
+      imageUrl: item.imageUrl || '',
     }))
 
     await CustomerDisplay.sendUpdate({

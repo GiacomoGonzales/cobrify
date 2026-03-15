@@ -40,8 +40,8 @@
     text-align: center;
   }
   .idle-logo {
-    width: 160px;
-    height: 160px;
+    width: 240px;
+    height: 240px;
     border-radius: 32px;
     object-fit: contain;
     background: rgba(255,255,255,0.15);
@@ -111,6 +111,7 @@
   }
   @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 
+  .cart-item-img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; margin-right: 14px; flex-shrink: 0; background: #f1f5f9; }
   .cart-item-name { flex: 1; font-size: 20px; font-weight: 500; }
   .cart-item-qty { font-size: 18px; color: var(--text-light); margin: 0 24px; min-width: 120px; text-align: center; }
   .cart-item-price { font-size: 22px; font-weight: 700; color: var(--primary); min-width: 130px; text-align: right; }
@@ -174,7 +175,7 @@
 <div id="idle" class="screen idle-screen active">
   <img id="idle-logo" class="idle-logo hidden" src="" alt="">
   <div id="idle-icon" class="idle-icon">🛒</div>
-  <div id="idle-company" class="idle-company"></div>
+  <div id="idle-company" class="idle-company" style="display:none;"></div>
   <div class="idle-welcome">¡Bienvenido!</div>
   <div id="idle-datetime" class="idle-datetime"></div>
 </div>
@@ -324,6 +325,7 @@
         for (var i = 0; i < items.length; i++) {
           var it = items[i];
           html += '<div class="cart-item">' +
+            (it.imageUrl ? '<img class="cart-item-img" src="' + escHtml(it.imageUrl) + '" alt="">' : '') +
             '<div class="cart-item-name">' + escHtml(it.name) + '</div>' +
             '<div class="cart-item-qty">' + it.quantity + ' x ' + fmt(it.price) + '</div>' +
             '<div class="cart-item-price">' + fmt(it.subtotal) + '</div>' +

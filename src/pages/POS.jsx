@@ -1320,8 +1320,8 @@ export default function POS() {
         // Inicializar pantalla de cliente (segunda pantalla) si está habilitada
         if (businessData.enableCustomerDisplay) {
           CustomerDisplay.initializeDisplay({
-            primaryColor: businessData.brandingColor || '#1e40af',
-            accentColor: '#f59e0b',
+            primaryColor: businessData.pdfAccentColor || businessData.brandingColor || '#1e40af',
+            accentColor: businessData.pdfAccentColor || businessData.brandingColor || '#f59e0b',
             companyName: businessData.companyName || businessData.businessName || '',
             logoUrl: businessData.logoUrl || '',
           })
