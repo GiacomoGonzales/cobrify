@@ -1050,7 +1050,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 required
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
-                min={getYesterdayDateString()}
+                min={getLocalDateString()}
                 max={getLocalDateString()}
               />
             </div>
@@ -1312,7 +1312,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 required
                 value={transferDate}
                 onChange={(e) => setTransferDate(e.target.value)}
-                min={issueDate || getLocalDateString()}
+                min={getLocalDateString()}
+                max={getTomorrowDateString()}
               />
 
               <Input

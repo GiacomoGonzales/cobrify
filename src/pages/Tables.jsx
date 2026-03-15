@@ -772,12 +772,50 @@ export default function Tables() {
 
   // Imprimir precuenta de una persona específica (división por items, igual o custom)
   const handlePrintPersonPreBill = async (personData, totalPersons) => {
+    const isNative = Capacitor.isNativePlatform()
+
+    // En móvil: usar impresora térmica
+    if (isNative && splitData) {
+      try {
+        const businessId = getBusinessId()
+        const businessResult = await getCompanySettings(businessId)
+        const businessInfo = businessResult.success ? {
+          tradeName: businessResult.data?.tradeName || businessResult.data?.name || 'RESTAURANTE',
+          address: businessResult.data?.address || '',
+          phone: businessResult.data?.phone || '',
+        } : { tradeName: 'RESTAURANTE' }
+        const taxConfig = {
+          igvRate: businessResult.data?.emissionConfig?.taxConfig?.igvRate ?? 18,
+          igvExempt: businessResult.data?.emissionConfig?.taxConfig?.igvExempt ?? false,
+        }
+        const recargoConsumoConfig = {
+          enabled: businessResult.data?.restaurantConfig?.recargoConsumoEnabled ?? false,
+          rate: businessResult.data?.restaurantConfig?.recargoConsumoRate ?? 10,
+        }
+        const printerConfigResult = await getPrinterConfig(businessId)
+        const paperWidth = printerConfigResult.config?.paperWidth || 58
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          await connectPrinter(printerConfigResult.config.address)
+          const personIndex = splitData.persons.findIndex(p => p.personNumber === personData.personNumber)
+          const { printSplitPreBillThermal } = await import('@/services/thermalPrinterService')
+          const result = await printSplitPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig, paperWidth, recargoConsumoConfig, splitData, personIndex)
+          if (result.success) {
+            toast.success(`Precuenta Persona ${personData.personNumber} impresa`)
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir precuenta dividida en térmica:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    // Fallback: impresión HTML
     const personLabel = `Persona ${personData.personNumber} de ${totalPersons}`
     if (splitData?.method === 'items') {
-      // División por items: filtrar solo los items de esta persona
       await handlePrintPreBill(personData.items, personLabel)
     } else {
-      // División igual/custom: mostrar todos los items pero con el monto de esta persona
       await handlePrintPreBill(null, personLabel, personData.total)
     }
   }
@@ -805,10 +843,29 @@ export default function Tables() {
         rate: businessResult.data?.restaurantConfig?.recargoConsumoRate ?? 10,
       }
       const printerConfigResult = await getPrinterConfig(businessId)
-      const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
       const paperWidth = printerConfigResult.config?.paperWidth || 80
-      const compactPrintValue = printerConfigResult.config?.compactPrint || false
 
+      const isNative = Capacitor.isNativePlatform()
+
+      // En móvil: usar impresora térmica
+      if (isNative && printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+        try {
+          await connectPrinter(printerConfigResult.config.address)
+          const { printSplitPreBillThermal } = await import('@/services/thermalPrinterService')
+          const result = await printSplitPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig, paperWidth, recargoConsumoConfig, splitData)
+          if (result.success) {
+            toast.success('Precuentas divididas impresas en ticketera')
+            return
+          }
+        } catch (error) {
+          console.error('Error al imprimir en térmica:', error)
+          toast.info('Usando impresión estándar...')
+        }
+      }
+
+      // Fallback: impresión HTML
+      const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
+      const compactPrintValue = printerConfigResult.config?.compactPrint || false
       printAllSplitPreBills(selectedTable, selectedOrder, splitData, businessInfo, taxConfig, paperWidth, webPrintLegible, recargoConsumoConfig, compactPrintValue)
       toast.success('Imprimiendo precuentas divididas...')
     } catch (error) {

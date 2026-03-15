@@ -1195,9 +1195,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   setTransferDate(e.target.value)
                 }
               }}
-              min={getYesterdayDateString()}
+              min={getLocalDateString()}
               max={getLocalDateString()}
-              helperText="Permite ayer"
             />
             <Input
               type="date"
@@ -1205,7 +1204,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               required
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              min={issueDate || getYesterdayDateString()}
+              min={getLocalDateString()}
+              max={getTomorrowDateString()}
             />
             <Input
               label="Descripción del traslado"

@@ -2776,6 +2776,130 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
 };
 
 /**
+ * Construir ESC/POS para precuenta dividida (una persona)
+ */
+const buildSplitPreBillEscPos = (order, table, business, taxConfig, paperWidth, recargoConsumoConfig, personData, totalPersons, splitMethod) => {
+  const format = getFormat(paperWidth);
+  const builder = new EscPosBuilder();
+  const isItemsSplit = splitMethod === 'items';
+  const itemsToShow = isItemsSplit ? personData.items : (order.items || []);
+  const personTotal = personData.total;
+
+  let subtotal, tax, total = personTotal, recargoConsumo = 0;
+  if (taxConfig.igvExempt) {
+    subtotal = total; tax = 0;
+  } else {
+    const igvMultiplier = 1 + ((taxConfig.igvRate || 18) / 100);
+    subtotal = total / igvMultiplier;
+    tax = total - subtotal;
+  }
+  if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+    recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100);
+    total = total + recargoConsumo;
+  }
+
+  builder.init()
+    .alignCenter()
+    .doubleHeight(true)
+    .text(business.tradeName || 'RESTAURANTE')
+    .newLine()
+    .doubleHeight(false)
+    .text(business.address || '').newLine()
+    .text(business.phone || '').newLine()
+    .bold(true).doubleHeight(true)
+    .text('PRECUENTA DIVIDIDA')
+    .newLine()
+    .doubleHeight(false).bold(false)
+    .text(format.separator).newLine();
+
+  builder.alignLeft()
+    .text(`Fecha: ${new Date().toLocaleString('es-PE')}`).newLine()
+    .text(`Mesa: ${table.number}`).newLine()
+    .text(`Mozo: ${table.waiter || 'N/A'}`).newLine()
+    .text(`Orden: #${order.orderNumber || order.id?.slice(-6)}`).newLine()
+    .bold(true)
+    .text(`PERSONA ${personData.personNumber} DE ${totalPersons}`)
+    .newLine().bold(false)
+    .text(format.halfSeparator).newLine();
+
+  for (const item of itemsToShow) {
+    const itemTotal = item.total || (item.price * item.quantity);
+    builder.text(`${item.quantity}x ${item.name}`).newLine()
+      .text(`   S/ ${itemTotal.toFixed(2)}`).newLine();
+    if (item.notes) builder.text(`   * ${item.notes}`).newLine();
+  }
+
+  builder.text(format.halfSeparator).newLine().alignRight();
+  if (!taxConfig.igvExempt) {
+    builder.text(`Subtotal: S/ ${subtotal.toFixed(2)}`).newLine()
+      .text(`IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}`).newLine();
+  }
+  if (recargoConsumo > 0) {
+    builder.text(`Rec. Consumo (${recargoConsumoConfig.rate}%): S/ ${recargoConsumo.toFixed(2)}`).newLine();
+  }
+  builder.bold(true).doubleHeight(true)
+    .text(`TOTAL P${personData.personNumber}: S/ ${total.toFixed(2)}`)
+    .newLine().doubleHeight(false).bold(false);
+
+  builder.alignCenter()
+    .text(format.separator).newLine()
+    .bold(true).text('*** PRECUENTA ***').newLine().bold(false)
+    .text('No valido como comprobante').newLine()
+    .text('Solicite su factura o boleta').newLine()
+    .newLine().text('Gracias por su preferencia').newLine()
+    .feed(2).cut();
+
+  return builder.toBase64();
+};
+
+/**
+ * Imprimir precuenta dividida (una o todas las personas) en impresora térmica
+ */
+export const printSplitPreBillThermal = async (order, table, business, taxConfig, paperWidth, recargoConsumoConfig, splitData, personIndex = null) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  // Determinar qué personas imprimir
+  const personsToprint = personIndex !== null
+    ? [splitData.persons[personIndex]]
+    : splitData.persons;
+
+  for (const person of personsToprint) {
+    const base64Data = buildSplitPreBillEscPos(
+      order, table, business, taxConfig, paperWidth, recargoConsumoConfig,
+      person, splitData.numberOfPeople, splitData.method
+    );
+
+    // Verificar si hay impresora de documentos configurada
+    if (isNative) {
+      const docPrinter = getDocumentPrinterConfig();
+      if (docPrinter?.enabled && docPrinter?.ip) {
+        await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+        continue;
+      }
+    }
+
+    // WiFi o interna
+    if (connectionType === 'wifi' || connectionType === 'internal') {
+      await sendEscPosData(base64Data);
+      continue;
+    }
+
+    // BLE iOS
+    if (useAlternativeBLE) {
+      await BLEPrinter.printBLERawData(base64Data);
+      continue;
+    }
+
+    // Bluetooth Android
+    await CapacitorThermalPrinter.begin()
+      .raw(base64Data)
+      .write();
+  }
+
+  return { success: true };
+};
+
+/**
  * Imprimir ticket de cierre de caja
  * @param {Object} sessionData - Datos de la sesión de caja
  * @param {Array} movements - Movimientos de la sesión
