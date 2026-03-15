@@ -595,7 +595,7 @@ export default function Quotations() {
                     <div className="flex items-center gap-3">
                       <span className="font-semibold text-sm">{formatCurrency(quotation.total)}</span>
                       <span className="text-xs text-gray-500">
-                        {quotation.createdAt ? formatDate(getDateFromTimestamp(quotation.createdAt)) : 'N/A'}
+                        {quotation.issueDate ? formatDate(getDateFromTimestamp(quotation.issueDate)) : quotation.createdAt ? formatDate(getDateFromTimestamp(quotation.createdAt)) : 'N/A'}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -731,9 +731,11 @@ export default function Quotations() {
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <span className="text-sm whitespace-nowrap">
-                        {quotation.createdAt
-                          ? formatDate(getDateFromTimestamp(quotation.createdAt))
-                          : 'N/A'}
+                        {quotation.issueDate
+                          ? formatDate(getDateFromTimestamp(quotation.issueDate))
+                          : quotation.createdAt
+                            ? formatDate(getDateFromTimestamp(quotation.createdAt))
+                            : 'N/A'}
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
@@ -953,9 +955,11 @@ export default function Quotations() {
               <div>
                 <p className="text-sm text-gray-600">Fecha</p>
                 <p className="font-semibold">
-                  {viewingQuotation.createdAt
-                    ? formatDate(getDateFromTimestamp(viewingQuotation.createdAt))
-                    : 'N/A'}
+                  {viewingQuotation.issueDate
+                    ? formatDate(getDateFromTimestamp(viewingQuotation.issueDate))
+                    : viewingQuotation.createdAt
+                      ? formatDate(getDateFromTimestamp(viewingQuotation.createdAt))
+                      : 'N/A'}
                 </p>
               </div>
               <div>

@@ -129,6 +129,7 @@ export default function CreateQuotation() {
   const [isLookingUpDocument, setIsLookingUpDocument] = useState(false)
 
   // Cotización
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0])
   const [validityDays, setValidityDays] = useState(30)
   const [discount, setDiscount] = useState(0)
   const [discountType, setDiscountType] = useState('fixed')
@@ -241,6 +242,13 @@ export default function CreateQuotation() {
           }
 
           // Cargar configuración
+          if (q.issueDate) {
+            const d = q.issueDate.toDate ? q.issueDate.toDate() : new Date(q.issueDate)
+            setIssueDate(d.toISOString().split('T')[0])
+          } else if (q.createdAt) {
+            const d = q.createdAt.toDate ? q.createdAt.toDate() : new Date(q.createdAt)
+            setIssueDate(d.toISOString().split('T')[0])
+          }
           setValidityDays(q.validityDays || 30)
           setDiscount(q.discount || 0)
           setDiscountType(q.discountType || 'fixed')
@@ -317,6 +325,13 @@ export default function CreateQuotation() {
           }
 
           // Cargar configuración
+          if (q.issueDate) {
+            const d = q.issueDate.toDate ? q.issueDate.toDate() : new Date(q.issueDate)
+            setIssueDate(d.toISOString().split('T')[0])
+          } else if (q.createdAt) {
+            const d = q.createdAt.toDate ? q.createdAt.toDate() : new Date(q.createdAt)
+            setIssueDate(d.toISOString().split('T')[0])
+          }
           setValidityDays(q.validityDays || 30)
           setDiscount(q.discount || 0)
           setDiscountType(q.discountType || 'fixed')
@@ -769,8 +784,8 @@ export default function CreateQuotation() {
         sanitaryRegistry: item.sanitaryRegistry || '',
       }))
 
-      // Calcular fecha de expiración
-      const expiryDate = new Date()
+      // Calcular fecha de expiración desde la fecha de emisión
+      const expiryDate = new Date(issueDate + 'T00:00:00')
       expiryDate.setDate(expiryDate.getDate() + parseInt(validityDays))
 
       // Obtener datos del cliente
@@ -788,6 +803,7 @@ export default function CreateQuotation() {
           igv: finalIgv,
           total: finalTotal,
           hideIgv: hideIgv,
+          issueDate: new Date(issueDate + 'T00:00:00'),
           validityDays: parseInt(validityDays),
           expiryDate: expiryDate,
           terms: terms,
@@ -835,6 +851,7 @@ export default function CreateQuotation() {
           igv: finalIgv,
           total: finalTotal,
           hideIgv: hideIgv,
+          issueDate: new Date(issueDate + 'T00:00:00'),
           validityDays: parseInt(validityDays),
           expiryDate: expiryDate,
           status: 'draft',
@@ -1629,7 +1646,13 @@ export default function CreateQuotation() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Input
+                    type="date"
+                    label="Fecha de Emisión"
+                    value={issueDate}
+                    onChange={e => setIssueDate(e.target.value)}
+                  />
                   <Input
                     type="number"
                     label="Validez (días) *"

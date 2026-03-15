@@ -583,7 +583,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // Formato dd/mm/yyyy para emisión
   let quotationDate = new Date().toLocaleDateString('es-PE')
-  const dateSource = quotation.createdAt || quotation.issueDate
+  const dateSource = quotation.issueDate || quotation.createdAt
   if (dateSource) {
     if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
       const [year, month, day] = dateSource.split('-')
