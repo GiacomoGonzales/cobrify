@@ -424,10 +424,11 @@ const hexToRgb = (hex) => {
  * Diseño con pie de página fijo y espacio flexible para productos
  */
 export const generateInvoicePDF = async (invoice, companySettings, download = true, branding = null, branches = []) => {
+  const isA5 = companySettings?.pdfA5 === true
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
-    format: 'a4'
+    format: isA5 ? 'a5' : 'a4'
   })
 
   // Paleta de colores
@@ -445,11 +446,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
   const spacious = companySettings?.pdfSpacious === true
 
-  // Márgenes y dimensiones - A4: 595pt x 842pt
-  const MARGIN_LEFT = 20
-  const MARGIN_RIGHT = 20
-  const MARGIN_TOP = 20
-  const MARGIN_BOTTOM = 15
+  // Márgenes y dimensiones - A4: 595pt x 842pt, A5: 420pt x 595pt
+  const MARGIN_LEFT = isA5 ? 15 : 20
+  const MARGIN_RIGHT = isA5 ? 15 : 20
+  const MARGIN_TOP = isA5 ? 15 : 20
+  const MARGIN_BOTTOM = isA5 ? 10 : 15
   const PAGE_WIDTH = doc.internal.pageSize.getWidth()
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT

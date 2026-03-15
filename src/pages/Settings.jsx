@@ -140,6 +140,7 @@ export default function Settings() {
 
   // Estado para espaciado amplio en PDF
   const [pdfSpacious, setPdfSpacious] = useState(false)
+  const [pdfA5, setPdfA5] = useState(false)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -771,6 +772,9 @@ export default function Settings() {
         if (businessData.pdfSpacious !== undefined) {
           setPdfSpacious(businessData.pdfSpacious)
         }
+        if (businessData.pdfA5 !== undefined) {
+          setPdfA5(businessData.pdfA5)
+        }
 
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
@@ -1267,6 +1271,7 @@ export default function Settings() {
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
         pdfSpacious: pdfSpacious,
+        pdfA5: pdfA5,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -4203,6 +4208,26 @@ export default function Settings() {
                     </p>
                   </div>
                 </label>
+
+                {/* PDF en formato A5 */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={pdfA5}
+                    onChange={(e) => setPdfA5(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      PDF en formato A5
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {pdfA5
+                        ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
+                        : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
+                    </p>
+                  </div>
+                </label>
               </div>
 
               {/* Divider */}
@@ -4552,6 +4577,7 @@ export default function Settings() {
                       pdfAccentColor: pdfAccentColor,
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       pdfSpacious: pdfSpacious,
+                      pdfA5: pdfA5,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       exitNoteEnabled: exitNoteEnabled,
                       termsTemplates: termsTemplates,
