@@ -77,12 +77,15 @@ export default function Envios() {
   // Tab Envíos
   const [deliveries, setDeliveries] = useState([])
   const [deliveriesLoading, setDeliveriesLoading] = useState(false)
-  const [deliveryFilters, setDeliveryFilters] = useState({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    motoristaId: '',
-    status: '',
-    paymentMethod: '',
+  const [deliveryFilters, setDeliveryFilters] = useState(() => {
+    const peruDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    return {
+      startDate: peruDate,
+      endDate: peruDate,
+      motoristaId: '',
+      status: '',
+      paymentMethod: '',
+    }
   })
 
   // Modal Nuevo Envío
@@ -94,7 +97,7 @@ export default function Envios() {
 
   // Tab Arqueo
   const [arqueoMotoristaId, setArqueoMotoristaId] = useState('')
-  const [arqueoDate, setArqueoDate] = useState(new Date().toISOString().split('T')[0])
+  const [arqueoDate, setArqueoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))
   const [unsettledDeliveries, setUnsettledDeliveries] = useState([])
   const [arqueoLoading, setArqueoLoading] = useState(false)
   const [actualAmount, setActualAmount] = useState('')

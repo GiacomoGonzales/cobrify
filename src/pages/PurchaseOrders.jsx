@@ -16,6 +16,7 @@ import {
   Truck,
   Package,
   ArrowRightCircle,
+  Edit,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -478,6 +479,23 @@ export default function PurchaseOrders() {
                     )}
                     <span>Descargar PDF</span>
                   </button>
+
+                  {order.status !== 'received' && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setEditingOrder(order)
+                          setShowCreateModal(true)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-primary-50 flex items-center gap-3 text-primary-600"
+                      >
+                        <Edit className="w-4 h-4" />
+                        <span>Editar</span>
+                      </button>
+                    </>
+                  )}
 
                   {order.status === 'draft' && (
                     <>

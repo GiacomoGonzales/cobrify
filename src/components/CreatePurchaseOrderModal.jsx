@@ -7,7 +7,7 @@ import Select from '@/components/ui/Select'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getSuppliers, getProducts, createSupplier } from '@/services/firestoreService'
-import { createPurchaseOrder, getNextPurchaseOrderNumber } from '@/services/purchaseOrderService'
+import { createPurchaseOrder, getNextPurchaseOrderNumber, updatePurchaseOrder } from '@/services/purchaseOrderService'
 import { formatCurrency } from '@/lib/utils'
 import { consultarRUC } from '@/services/documentLookupService'
 
@@ -42,7 +42,7 @@ const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`
 }
 
-export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess }) {
+export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, editingOrder = null }) {
   const { user } = useAuth()
   const toast = useToast()
 
@@ -82,15 +82,48 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
   // IGV
   const [pricesIncludeIgv, setPricesIncludeIgv] = useState(true) // Por defecto, los precios ya incluyen IGV
 
+  const isEditing = !!editingOrder
+
   useEffect(() => {
     if (isOpen) {
       loadData()
-      // Establecer fecha de entrega por defecto (7 días desde hoy)
-      const defaultDelivery = new Date()
-      defaultDelivery.setDate(defaultDelivery.getDate() + 7)
-      setDeliveryDate(getLocalDateString(defaultDelivery))
+      if (editingOrder) {
+        // Cargar datos de la orden para edición
+        if (editingOrder.supplier) {
+          setSupplierMode('manual')
+          setManualSupplier({
+            ruc: editingOrder.supplier.ruc || '',
+            businessName: editingOrder.supplier.businessName || editingOrder.supplier.name || '',
+            address: editingOrder.supplier.address || '',
+            phone: editingOrder.supplier.phone || '',
+            email: editingOrder.supplier.email || '',
+            contactName: editingOrder.supplier.contactName || '',
+          })
+        }
+        setDeliveryDate(editingOrder.deliveryDate || '')
+        setPaymentCondition(editingOrder.paymentCondition || 'contado')
+        setCurrency(editingOrder.currency || 'PEN')
+        setNotes(editingOrder.notes || '')
+        setPricesIncludeIgv(editingOrder.pricesIncludeIgv !== false)
+        if (editingOrder.items && editingOrder.items.length > 0) {
+          setItems(editingOrder.items.map(item => ({
+            id: Date.now() + Math.random(),
+            productId: item.productId || '',
+            name: item.name || '',
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            unit: item.unit || 'NIU',
+            searchTerm: item.name || '',
+          })))
+        }
+      } else {
+        // Establecer fecha de entrega por defecto (7 días desde hoy)
+        const defaultDelivery = new Date()
+        defaultDelivery.setDate(defaultDelivery.getDate() + 7)
+        setDeliveryDate(getLocalDateString(defaultDelivery))
+      }
     }
-  }, [isOpen, user])
+  }, [isOpen, user, editingOrder])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -360,46 +393,67 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
     setIsSaving(true)
 
     try {
-      // Obtener número de orden
-      const numberResult = await getNextPurchaseOrderNumber(user.uid)
-      if (!numberResult.success) {
-        throw new Error('Error al generar número de orden de compra')
-      }
-
       const supplierData = getSupplierData()
+      const orderItems = items.map((item, index) => ({
+        lineNumber: index + 1,
+        productId: item.productId || '',
+        code: products.find(p => p.id === item.productId)?.code || '',
+        name: item.name,
+        quantity: parseFloat(item.quantity),
+        unitPrice: parseFloat(item.unitPrice),
+        unit: item.unit,
+        subtotal: calculateItemTotal(item),
+      }))
 
-      const orderData = {
-        number: numberResult.number,
-        supplier: supplierData,
-        items: items.map((item, index) => ({
-          lineNumber: index + 1,
-          productId: item.productId || '',
-          code: products.find(p => p.id === item.productId)?.code || '',
-          name: item.name,
-          quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.unitPrice),
-          unit: item.unit,
-          subtotal: calculateItemTotal(item),
-        })),
-        subtotal: subtotal,
-        igv: igv,
-        total: total,
-        currency: currency,
-        pricesIncludeIgv: pricesIncludeIgv,
-        deliveryDate: deliveryDate,
-        paymentCondition: paymentCondition,
-        notes: notes,
-        status: 'draft',
-        sentVia: [],
+      if (isEditing) {
+        // Actualizar orden existente
+        const orderData = {
+          supplier: supplierData,
+          items: orderItems,
+          subtotal: subtotal,
+          igv: igv,
+          total: total,
+          currency: currency,
+          pricesIncludeIgv: pricesIncludeIgv,
+          deliveryDate: deliveryDate,
+          paymentCondition: paymentCondition,
+          notes: notes,
+        }
+
+        const result = await updatePurchaseOrder(user.uid, editingOrder.id, orderData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al actualizar la orden de compra')
+        }
+        toast.success(`Orden de compra ${editingOrder.number} actualizada`)
+      } else {
+        // Crear nueva orden
+        const numberResult = await getNextPurchaseOrderNumber(user.uid)
+        if (!numberResult.success) {
+          throw new Error('Error al generar número de orden de compra')
+        }
+
+        const orderData = {
+          number: numberResult.number,
+          supplier: supplierData,
+          items: orderItems,
+          subtotal: subtotal,
+          igv: igv,
+          total: total,
+          currency: currency,
+          pricesIncludeIgv: pricesIncludeIgv,
+          deliveryDate: deliveryDate,
+          paymentCondition: paymentCondition,
+          notes: notes,
+          status: 'draft',
+          sentVia: [],
+        }
+
+        const result = await createPurchaseOrder(user.uid, orderData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al crear la orden de compra')
+        }
+        toast.success(`Orden de compra ${numberResult.number} creada exitosamente`)
       }
-
-      const result = await createPurchaseOrder(user.uid, orderData)
-
-      if (!result.success) {
-        throw new Error(result.error || 'Error al crear la orden de compra')
-      }
-
-      toast.success(`Orden de compra ${numberResult.number} creada exitosamente`)
 
       // Limpiar formulario
       resetForm()
@@ -455,7 +509,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
               <ShoppingCart className="w-6 h-6 text-orange-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Nueva Orden de Compra</h2>
+              <h2 className="text-xl font-bold text-gray-900">{isEditing ? `Editar Orden ${editingOrder.number}` : 'Nueva Orden de Compra'}</h2>
               <p className="text-sm text-gray-600">Pedido a proveedor</p>
             </div>
           </div>
@@ -908,7 +962,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                 ) : (
                   <>
                     <ShoppingCart className="w-4 h-4 mr-2" />
-                    Crear Orden de Compra
+                    {isEditing ? 'Guardar Cambios' : 'Crear Orden de Compra'}
                   </>
                 )}
               </Button>
