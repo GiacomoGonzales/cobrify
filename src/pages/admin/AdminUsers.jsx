@@ -6,6 +6,7 @@ import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
+import PeruUsersMap from '@/components/admin/PeruUsersMap'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -207,6 +208,7 @@ export default function AdminUsers() {
   const [savingNumber, setSavingNumber] = useState(false)
 
   const [showRenewalDetails, setShowRenewalDetails] = useState(false)
+  const [showMap, setShowMap] = useState(false)
 
   // Estados para vendedores (agentes de venta)
   const [vendedores, setVendedores] = useState([])
@@ -1812,6 +1814,22 @@ export default function AdminUsers() {
           )}
         </div>
       )}
+
+      {/* Mapa de usuarios por departamento */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
+        <button
+          onClick={() => setShowMap(!showMap)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Distribución Geográfica</h3>
+          <span className="text-xs text-indigo-600">{showMap ? 'Ocultar' : 'Ver mapa'}</span>
+        </button>
+        {showMap && (
+          <div className="mt-3">
+            <PeruUsersMap users={users} />
+          </div>
+        )}
+      </div>
 
       {/* Toolbar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
