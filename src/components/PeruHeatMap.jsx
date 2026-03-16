@@ -39,8 +39,8 @@ export const extractDepartment = (address) => {
 
 // Proyección Mercator simple: lon/lat → x/y en el SVG
 const project = (lon, lat) => {
-  const x = (lon + 82) * 28          // offset y escala horizontal
-  const y = (lat + 0.5) * -28 + 14   // offset y escala vertical (invertir Y)
+  const x = (lon + 82) * 28
+  const y = (lat + 0.5) * -28 + 14
   return [x, y]
 }
 
@@ -70,7 +70,7 @@ const getColor = (value, max) => {
 }
 
 export default function PeruHeatMap({ salesByZone = [] }) {
-  const [hovered, setHovered] = useState(null)
+  const [selected, setSelected] = useState(null)
 
   const deptData = useMemo(() => {
     const data = {}
@@ -95,24 +95,27 @@ export default function PeruHeatMap({ salesByZone = [] }) {
     })),
   [])
 
+  const selectedData = selected ? deptData[normalizeDept(selected)] : null
+
   return (
     <div className="flex flex-col sm:flex-row gap-4 items-start">
       {/* Mapa SVG */}
-      <div className="w-full sm:w-56 flex-shrink-0">
+      <div className="w-48 sm:w-56 flex-shrink-0 mx-auto sm:mx-0">
         <svg viewBox="0 0 380 520" className="w-full h-auto">
           {paths.map((p, i) => {
             const data = p.dept ? deptData[p.dept] : null
-            const isHovered = hovered === p.name
+            const isActive = selected === p.name
             return (
               <path
                 key={i}
                 d={p.d}
-                fill={isHovered ? '#3b82f6' : getColor(data?.revenue, maxRev)}
-                stroke="#94a3b8"
-                strokeWidth={isHovered ? 1.5 : 0.5}
+                fill={isActive ? '#3b82f6' : getColor(data?.revenue, maxRev)}
+                stroke={isActive ? '#1d4ed8' : '#94a3b8'}
+                strokeWidth={isActive ? 1.5 : 0.5}
                 className="transition-colors duration-150 cursor-pointer"
-                onMouseEnter={() => setHovered(p.name)}
-                onMouseLeave={() => setHovered(null)}
+                onClick={() => setSelected(selected === p.name ? null : p.name)}
+                onMouseEnter={() => setSelected(p.name)}
+                onMouseLeave={() => setSelected(null)}
               />
             )
           })}
@@ -120,30 +123,31 @@ export default function PeruHeatMap({ salesByZone = [] }) {
       </div>
 
       {/* Panel lateral */}
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Tooltip */}
-        <div className="bg-gray-50 rounded-lg p-3 min-h-[80px]">
-          {hovered ? (() => {
-            const dept = normalizeDept(hovered)
-            const data = dept ? deptData[dept] : null
-            return (
-              <>
-                <p className="font-semibold text-sm">{hovered}</p>
-                {data ? (
-                  <div className="mt-1 text-sm text-gray-600 space-y-0.5">
-                    <p>Ventas: <span className="font-semibold text-gray-900">{formatCurrency(data.revenue)}</span></p>
-                    <p>Pedidos: <span className="font-semibold text-gray-900">{data.orders}</span></p>
-                    <p>Clientes: <span className="font-semibold text-gray-900">{data.customers}</span></p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 mt-1">Sin ventas en este período</p>
-                )}
-              </>
-            )
-          })() : (
-            <p className="text-xs text-gray-400 italic">Pasa el cursor sobre un departamento</p>
-          )}
-        </div>
+      <div className="flex-1 min-w-0 space-y-3 w-full">
+        {/* Detalle del departamento seleccionado */}
+        {selected && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="font-semibold text-sm text-blue-900">{selected}</p>
+            {selectedData ? (
+              <div className="mt-1 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-xs text-blue-600">Ventas</p>
+                  <p className="text-sm font-bold text-blue-900">{formatCurrency(selectedData.revenue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-600">Pedidos</p>
+                  <p className="text-sm font-bold text-blue-900">{selectedData.orders}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-600">Clientes</p>
+                  <p className="text-sm font-bold text-blue-900">{selectedData.customers}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-blue-400 mt-1">Sin ventas en este período</p>
+            )}
+          </div>
+        )}
 
         {/* Escala */}
         <div>

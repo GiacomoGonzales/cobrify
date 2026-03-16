@@ -2782,17 +2782,7 @@ export default function Reports() {
       {/* Reporte por Zonas */}
       {selectedReport === 'zones' && (
         <>
-          {/* Mapa de Calor de Perú */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Mapa de Ventas por Departamento</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PeruHeatMap salesByZone={salesByZone} />
-            </CardContent>
-          </Card>
-
-          {/* Gráfico de Top 10 Zonas */}
+          {/* Gráfico de Top 10 Zonas - horizontal */}
           <Card>
             <CardHeader>
               <CardTitle>Top 10 Zonas por Ingresos</CardTitle>
@@ -2899,6 +2889,18 @@ export default function Reports() {
                     </TableBody>
                   </Table>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Mapa de Calor de Perú */}
+          {salesByZone.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mapa de Ventas por Departamento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PeruHeatMap salesByZone={salesByZone} />
               </CardContent>
             </Card>
           )}
