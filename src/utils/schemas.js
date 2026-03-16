@@ -42,6 +42,10 @@ export const customerSchema = z.object({
   vehiclePlate: z.string().optional().or(z.literal('')),
   // Nivel de precio para sistema de múltiples precios
   priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
+  // Campos de suscripción
+  subscriptionPlan: z.string().optional().or(z.literal('')),
+  subscriptionPrice: z.union([z.string(), z.number()]).optional().or(z.literal('')),
+  subscriptionExpiry: z.string().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
   // Solo validar si hay número de documento
   if (data.documentNumber && data.documentNumber.trim() !== '') {

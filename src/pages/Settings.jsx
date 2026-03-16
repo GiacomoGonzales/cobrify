@@ -2800,6 +2800,21 @@ export default function Settings() {
                     />
                   </label>
 
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showSubscriptionFields ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Gestión de Suscripciones</span>
+                      <span className="text-xs text-gray-500">Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showSubscriptionFields}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+
                 </div>
               </div>
 

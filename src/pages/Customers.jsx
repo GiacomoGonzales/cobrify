@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -60,6 +60,9 @@ export default function Customers() {
       studentName: '',
       studentSchedule: '',
       priceLevel: null,
+      subscriptionPlan: '',
+      subscriptionPrice: '',
+      subscriptionExpiry: '',
     },
   })
 
@@ -131,6 +134,9 @@ export default function Customers() {
       studentSchedule: customer.studentSchedule || '',
       vehiclePlate: customer.vehiclePlate || '',
       priceLevel: customer.priceLevel || null,
+      subscriptionPlan: customer.subscriptionPlan || '',
+      subscriptionPrice: customer.subscriptionPrice || '',
+      subscriptionExpiry: customer.subscriptionExpiry || '',
     })
     setIsModalOpen(true)
   }
@@ -547,6 +553,27 @@ export default function Customers() {
                         <span className="text-gray-500 truncate max-w-[160px]">{customer.email}</span>
                       )}
                     </div>
+                    {businessSettings?.posCustomFields?.showSubscriptionFields && (customer.subscriptionPlan || customer.subscriptionExpiry) && (
+                      <div className="flex items-center gap-2 mt-1 text-xs">
+                        {customer.subscriptionPlan && (
+                          <span className="text-gray-700 font-medium">{customer.subscriptionPlan}</span>
+                        )}
+                        {customer.subscriptionPrice && (
+                          <span className="text-gray-600">{formatCurrency(Number(customer.subscriptionPrice))}</span>
+                        )}
+                        {customer.subscriptionExpiry && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full font-medium ${
+                            new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date()
+                              ? 'bg-red-100 text-red-700'
+                              : new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-green-100 text-green-700'
+                          }`}>
+                            {new Date(customer.subscriptionExpiry + 'T00:00:00').toLocaleDateString('es-PE')}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
                         {customer.ordersCount || 0}
@@ -576,6 +603,13 @@ export default function Customers() {
                   )}
                   {businessSettings?.posCustomFields?.showVehiclePlateField && (
                     <TableHead>Placa</TableHead>
+                  )}
+                  {businessSettings?.posCustomFields?.showSubscriptionFields && (
+                    <>
+                      <TableHead>Plan</TableHead>
+                      <TableHead className="text-right">Precio</TableHead>
+                      <TableHead>Vencimiento</TableHead>
+                    </>
                   )}
                   <TableHead className="text-center hidden md:table-cell">Pedidos</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Total Gastado</TableHead>
@@ -633,6 +667,31 @@ export default function Customers() {
                       <TableCell>
                         <p className="text-sm font-medium uppercase">{customer.vehiclePlate || '-'}</p>
                       </TableCell>
+                    )}
+                    {businessSettings?.posCustomFields?.showSubscriptionFields && (
+                      <>
+                        <TableCell>
+                          <p className="text-sm">{customer.subscriptionPlan || '-'}</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="text-sm font-medium">{customer.subscriptionPrice ? formatCurrency(Number(customer.subscriptionPrice)) : '-'}</p>
+                        </TableCell>
+                        <TableCell>
+                          {customer.subscriptionExpiry ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date()
+                                ? 'bg-red-100 text-red-700'
+                                : new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-green-100 text-green-700'
+                            }`}>
+                              {new Date(customer.subscriptionExpiry + 'T00:00:00').toLocaleDateString('es-PE')}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                      </>
                     )}
                     <TableCell className="text-center hidden md:table-cell">
                       <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
@@ -828,6 +887,40 @@ export default function Customers() {
                 Si asignas un nivel, el cliente verá automáticamente ese precio en el POS.
               </p>
             </div>
+          )}
+
+          {/* Campos de suscripción - solo si está habilitado */}
+          {businessSettings?.posCustomFields?.showSubscriptionFields && (
+            <>
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <CalendarClock className="w-4 h-4" />
+                  Suscripción
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input
+                    label="Plan"
+                    placeholder="Ej: Premium, Básico"
+                    error={errors.subscriptionPlan?.message}
+                    {...register('subscriptionPlan')}
+                  />
+                  <Input
+                    label="Precio"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    error={errors.subscriptionPrice?.message}
+                    {...register('subscriptionPrice')}
+                  />
+                  <Input
+                    label="Fecha de Vencimiento"
+                    type="date"
+                    error={errors.subscriptionExpiry?.message}
+                    {...register('subscriptionExpiry')}
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="flex justify-end space-x-3 pt-4">
