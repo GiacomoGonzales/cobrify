@@ -21,7 +21,7 @@ const IminPrinter = registerPlugin('IminPrinter');
 let isPrinterConnected = false;
 let connectedPrinterAddress = null;
 let connectionType = 'bluetooth'; // 'bluetooth', 'wifi' o 'internal'
-let useAlternativeBLE = false; // Usar servicio alternativo BLE en iOS
+let useAlternativeBLE = false; // Usar servicio alternativo BLE (iOS o Android con impresoras solo-BLE)
 
 /**
  * Constantes de formato según ancho de papel
@@ -109,7 +109,7 @@ export const scanPrinters = async () => {
     // Array para almacenar dispositivos encontrados
     const devices = [];
 
-    // Escuchar dispositivos descubiertos
+    // Escuchar dispositivos descubiertos (Bluetooth Clásico)
     await CapacitorThermalPrinter.addListener('discoverDevices', (data) => {
       console.log('Printer discovered:', data);
 
@@ -141,24 +141,54 @@ export const scanPrinters = async () => {
       }
     });
 
-    // Iniciar escaneo
-    console.log('🔍 Iniciando escaneo de impresoras Bluetooth...');
+    // Iniciar escaneo Bluetooth Clásico
+    console.log('🔍 Iniciando escaneo de impresoras Bluetooth Clásico...');
     await CapacitorThermalPrinter.startScan();
-    console.log('✅ Escaneo iniciado. Esperando dispositivos...');
+    console.log('✅ Escaneo clásico iniciado. Esperando dispositivos...');
 
-    // Esperar 15 segundos para el escaneo (aumentado de 10 a 15)
+    // En Android, también escanear BLE en paralelo para detectar impresoras como Tiny Print
+    let bleDevices = [];
+    if (platform === 'android') {
+      console.log('🔵 Android: Iniciando escaneo BLE en paralelo...');
+      try {
+        const bleResult = await BLEPrinter.scanBLEDevices(14000);
+        if (bleResult.success && bleResult.devices.length > 0) {
+          bleDevices = bleResult.devices;
+          console.log(`📊 Dispositivos BLE encontrados: ${bleDevices.length}`);
+        }
+      } catch (bleError) {
+        console.warn('⚠️ Error en escaneo BLE (no crítico):', bleError);
+      }
+    }
+
+    // Esperar 15 segundos para el escaneo clásico (aumentado de 10 a 15)
     await new Promise(resolve => setTimeout(resolve, 15000));
 
-    // Detener escaneo
+    // Detener escaneo clásico
     try {
       await CapacitorThermalPrinter.stopScan();
-      console.log('⏹️ Escaneo detenido');
+      console.log('⏹️ Escaneo clásico detenido');
     } catch (stopError) {
       console.warn('No se pudo detener el escaneo:', stopError);
     }
 
     // Limpiar listeners
     await CapacitorThermalPrinter.removeAllListeners();
+
+    // Agregar dispositivos BLE que no estén ya en la lista (evitar duplicados)
+    for (const bleDevice of bleDevices) {
+      const bleAddress = bleDevice.address || bleDevice.deviceId;
+      const bleName = bleDevice.name || 'Dispositivo BLE';
+      if (bleAddress && !devices.find(d => d.address === bleAddress)) {
+        devices.push({
+          address: bleAddress,
+          name: bleName,
+          isBLE: true, // Marcar como dispositivo BLE
+          ...bleDevice
+        });
+        console.log('✅ Dispositivo BLE agregado:', bleName, bleAddress);
+      }
+    }
 
     console.log(`📊 Total de dispositivos encontrados: ${devices.length}`);
     if (devices.length > 0) {
@@ -378,26 +408,51 @@ export const connectPrinter = async (address) => {
         }
       }
 
-      // En Android, usar el plugin original
-      console.log('🔵 Android: Conectando via Bluetooth...');
-      const result = await CapacitorThermalPrinter.connect({ address });
-      console.log('📋 Resultado de connect():', result);
+      // En Android, intentar primero Bluetooth Clásico, luego BLE como fallback
+      console.log('🔵 Android: Conectando via Bluetooth Clásico...');
+      let classicSuccess = false;
+      try {
+        const result = await CapacitorThermalPrinter.connect({ address });
+        console.log('📋 Resultado de connect():', result);
 
-      // Solo marcar como conectado si el resultado no es null
-      if (result !== null && result !== undefined) {
-        isPrinterConnected = true;
-        connectedPrinterAddress = address;
-        connectionType = 'bluetooth';
-        useAlternativeBLE = false;
-        console.log('✅ Printer connected:', address);
-        console.log('✅ isPrinterConnected:', isPrinterConnected);
-        console.log('✅ connectedPrinterAddress:', connectedPrinterAddress);
-        return { success: true, address, type: 'bluetooth' };
-      } else {
-        console.error('❌ Conexión falló - resultado null');
+        // Solo marcar como conectado si el resultado no es null
+        if (result !== null && result !== undefined) {
+          classicSuccess = true;
+          isPrinterConnected = true;
+          connectedPrinterAddress = address;
+          connectionType = 'bluetooth';
+          useAlternativeBLE = false;
+          console.log('✅ Printer connected (clásico):', address);
+          return { success: true, address, type: 'bluetooth' };
+        }
+      } catch (classicError) {
+        console.warn('⚠️ Bluetooth Clásico falló:', classicError.message);
+      }
+
+      // Fallback: intentar conexión BLE (para impresoras como Tiny Print que solo soportan BLE)
+      if (!classicSuccess) {
+        console.log('🔵 Android: Bluetooth Clásico falló, intentando BLE...');
+        try {
+          const bleResult = await BLEPrinter.connectBLEPrinter(address);
+          console.log('📋 Resultado de conexión BLE:', bleResult);
+
+          if (bleResult.success) {
+            isPrinterConnected = true;
+            connectedPrinterAddress = address;
+            connectionType = 'bluetooth';
+            useAlternativeBLE = true;
+            console.log('✅ Printer connected (BLE):', address);
+            return { success: true, address, type: 'bluetooth' };
+          } else {
+            console.error('❌ Conexión BLE también falló:', bleResult.error);
+          }
+        } catch (bleError) {
+          console.error('❌ Error en conexión BLE:', bleError.message);
+        }
+
         isPrinterConnected = false;
         connectedPrinterAddress = null;
-        return { success: false, error: 'No se pudo conectar a la impresora' };
+        return { success: false, error: 'No se pudo conectar a la impresora (ni clásico ni BLE)' };
       }
     }
   } catch (error) {
@@ -588,9 +643,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     return await printWifiTicket(invoice, business, paperWidth);
   }
 
-  // Si usa el servicio BLE alternativo (iOS), usar printBLEReceipt
+  // Si usa el servicio BLE alternativo (iOS o Android BLE), usar printBLEReceipt
   if (useAlternativeBLE) {
-    console.log('🔵 iOS: Usando impresión BLE alternativa para ticket...');
+    console.log('🔵 Usando impresión BLE alternativa para ticket...');
     return await printBLETicket(invoice, business, paperWidth);
   }
 

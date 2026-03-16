@@ -389,5 +389,45 @@
   startClock();
 })();
 </script>
+<!-- Demo mode: simula datos cuando se abre directamente en navegador -->
+<script>
+(function() {
+  // Solo activar en navegador (no en el WebView del plugin nativo)
+  if (window.AndroidBridge) return;
+
+  window.initDisplay(JSON.stringify({
+    primaryColor: '#464646',
+    accentColor: '#464646',
+    companyName: 'MI RESTAURANTE',
+    logoUrl: '',
+  }));
+
+  // Simular carrito después de 3 segundos
+  setTimeout(function() {
+    window.updateDisplay(JSON.stringify({
+      state: 'cart',
+      items: JSON.stringify([
+        { name: 'Lomo Saltado', quantity: 2, price: 28.00, subtotal: 56.00, imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Lomo_Saltado.jpg/250px-Lomo_Saltado.jpg' },
+        { name: 'Inca Kola 500ml', quantity: 2, price: 5.00, subtotal: 10.00, imageUrl: '' },
+        { name: 'Arroz Chaufa', quantity: 1, price: 22.00, subtotal: 22.00, imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Arroz_chaufa.JPG/250px-Arroz_chaufa.JPG' },
+      ]),
+      subtotal: 74.58,
+      igv: 13.42,
+      discount: 0,
+      total: 88.00,
+    }));
+  }, 3000);
+
+  // Simular venta completada después de 8 segundos
+  setTimeout(function() {
+    window.updateDisplay(JSON.stringify({
+      state: 'completed',
+      total: 88.00,
+      invoiceNumber: 'B001-00000042',
+      documentType: 'boleta',
+    }));
+  }, 8000);
+})();
+</script>
 </body>
 </html>
