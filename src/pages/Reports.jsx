@@ -39,6 +39,7 @@ import {
   exportCustomersReport,
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
+import PeruHeatMap from '@/components/PeruHeatMap'
 import * as XLSX from 'xlsx'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -2781,6 +2782,16 @@ export default function Reports() {
       {/* Reporte por Zonas */}
       {selectedReport === 'zones' && (
         <>
+          {/* Mapa de Calor de Perú */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapa de Ventas por Departamento</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PeruHeatMap salesByZone={salesByZone} />
+            </CardContent>
+          </Card>
+
           {/* Gráfico de Top 10 Zonas */}
           <Card>
             <CardHeader>
