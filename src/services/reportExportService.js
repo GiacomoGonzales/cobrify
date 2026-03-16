@@ -664,11 +664,11 @@ const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
     case 'week':
       return 'Última semana'
     case 'month':
-      return 'Último mes'
+      return 'Este mes'
     case 'quarter':
       return 'Último trimestre'
     case 'year':
-      return 'Último año'
+      return 'Este año'
     case 'all':
       return 'Todo el período'
     case 'custom':

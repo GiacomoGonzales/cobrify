@@ -20,6 +20,7 @@ import {
   Wrench,
   Building,
   Store,
+  MapPin,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import RealEstateReports from './RealEstateReports'
@@ -202,9 +203,9 @@ export default function Reports() {
         const sinceDate = new Date()
         switch (dateRange) {
           case 'week': sinceDate.setDate(sinceDate.getDate() - 21); break // 3 semanas para comparativa
-          case 'month': sinceDate.setMonth(sinceDate.getMonth() - 2); break // 2 meses para comparativa
+          case 'month': sinceDate.setTime(new Date(sinceDate.getFullYear(), sinceDate.getMonth() - 1, 1).getTime()); break // Mes anterior completo para comparativa
           case 'quarter': sinceDate.setMonth(sinceDate.getMonth() - 6); break
-          case 'year': sinceDate.setFullYear(sinceDate.getFullYear() - 2); break
+          case 'year': sinceDate.setTime(new Date(sinceDate.getFullYear() - 1, 0, 1).getTime()); break // Año anterior para comparativa
           case 'custom':
             if (customStartDate) {
               const cs = new Date(customStartDate + 'T00:00:00')
@@ -311,7 +312,7 @@ export default function Reports() {
   // Filtrar facturas por rango de fecha y calcular costos
   const filteredInvoices = useMemo(() => {
     const now = new Date()
-    const filterDate = new Date()
+    let filterDate = new Date()
 
     // Primero filtrar facturas para evitar duplicados:
     // - Excluir notas de venta que ya fueron convertidas a boleta/factura (para no duplicar ingresos)
@@ -376,13 +377,16 @@ export default function Reports() {
         filterDate.setDate(now.getDate() - 7)
         break
       case 'month':
-        filterDate.setMonth(now.getMonth() - 1)
+        // Del 1ero del mes actual hasta hoy
+        filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
         break
       case 'quarter':
-        filterDate.setMonth(now.getMonth() - 3)
+        // Últimos 3 meses completos desde el 1ero
+        filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
         break
       case 'year':
-        filterDate.setFullYear(now.getFullYear() - 1)
+        // Del 1 de enero del año actual hasta hoy
+        filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
         break
       case 'all':
         return validInvoices.map(addCostCalculations)
@@ -685,6 +689,46 @@ export default function Reports() {
     return Object.values(customerStats)
       .sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0))
       // Sin límite - mostrar todos los clientes
+  }, [filteredInvoices])
+
+  // Ventas por zona/dirección
+  const salesByZone = useMemo(() => {
+    const zoneStats = {}
+
+    filteredInvoices.forEach(invoice => {
+      const address = invoice.customer?.address || invoice.customerAddress || ''
+      if (!address || address.trim() === '') return
+
+      // Extraer distrito/zona de la dirección
+      // Intentamos obtener la parte más relevante (último segmento después de coma suele ser distrito)
+      const parts = address.split(',').map(p => p.trim()).filter(Boolean)
+      // Usar el último segmento significativo como zona (generalmente distrito o ciudad)
+      let zone = parts.length > 1 ? parts[parts.length - 1] : parts[0]
+      // Si el último segmento es muy corto (como "Lima"), usar los dos últimos
+      if (parts.length > 2 && zone.length < 5) {
+        zone = `${parts[parts.length - 2]}, ${zone}`
+      }
+      zone = zone.trim()
+      if (!zone) return
+
+      if (!zoneStats[zone]) {
+        zoneStats[zone] = {
+          zone,
+          ordersCount: 0,
+          totalRevenue: 0,
+          customers: new Set(),
+        }
+      }
+
+      zoneStats[zone].ordersCount += 1
+      zoneStats[zone].totalRevenue = Number((zoneStats[zone].totalRevenue + (invoice.total || 0)).toFixed(2))
+      const custId = invoice.customer?.documentNumber || invoice.customerDocumentNumber || invoice.customer?.name
+      if (custId) zoneStats[zone].customers.add(custId)
+    })
+
+    return Object.values(zoneStats)
+      .map(z => ({ ...z, uniqueCustomers: z.customers.size }))
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
   }, [filteredInvoices])
 
   // Estadísticas por vendedor
@@ -991,7 +1035,7 @@ export default function Reports() {
   // Filtrar gastos por rango de fecha
   const filteredExpenses = useMemo(() => {
     const now = new Date()
-    const filterDate = new Date()
+    let filterDate = new Date()
 
     // Para fechas personalizadas
     if (dateRange === 'custom') {
@@ -1015,13 +1059,16 @@ export default function Reports() {
         filterDate.setDate(now.getDate() - 7)
         break
       case 'month':
-        filterDate.setMonth(now.getMonth() - 1)
+        // Del 1ero del mes actual hasta hoy
+        filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
         break
       case 'quarter':
-        filterDate.setMonth(now.getMonth() - 3)
+        // Últimos 3 meses completos desde el 1ero
+        filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
         break
       case 'year':
-        filterDate.setFullYear(now.getFullYear() - 1)
+        // Del 1 de enero del año actual hasta hoy
+        filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
         break
       case 'all':
         return expenses
@@ -1039,7 +1086,7 @@ export default function Reports() {
   // Filtrar compras por rango de fecha (para rentabilidad)
   const filteredPurchases = useMemo(() => {
     const now = new Date()
-    const filterDate = new Date()
+    let filterDate = new Date()
 
     // Para fechas personalizadas
     if (dateRange === 'custom') {
@@ -1063,13 +1110,16 @@ export default function Reports() {
         filterDate.setDate(now.getDate() - 7)
         break
       case 'month':
-        filterDate.setMonth(now.getMonth() - 1)
+        // Del 1ero del mes actual hasta hoy
+        filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
         break
       case 'quarter':
-        filterDate.setMonth(now.getMonth() - 3)
+        // Últimos 3 meses completos desde el 1ero
+        filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
         break
       case 'year':
-        filterDate.setFullYear(now.getFullYear() - 1)
+        // Del 1 de enero del año actual hasta hoy
+        filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
         break
       case 'all':
         return purchases
@@ -1334,24 +1384,24 @@ export default function Reports() {
         return movementDate >= startDate && movementDate <= endDate
       }
 
-      const periodStart = new Date(filterDate)
+      let periodStart = new Date(filterDate)
       switch (dateRange) {
         case 'week':
           periodStart.setDate(now.getDate() - 7)
           break
         case 'month':
-          periodStart.setMonth(now.getMonth() - 1)
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
           break
         case 'quarter':
-          periodStart.setMonth(now.getMonth() - 3)
+          periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
           break
         case 'year':
-          periodStart.setFullYear(now.getFullYear() - 1)
+          periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
           break
         case 'all':
           return true
         default:
-          periodStart.setMonth(now.getMonth() - 1)
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
       }
       return movementDate >= periodStart
     }
@@ -1637,9 +1687,9 @@ export default function Reports() {
             className="w-full sm:w-48"
           >
             <option value="week">Última semana</option>
-            <option value="month">Último mes</option>
+            <option value="month">Este mes</option>
             <option value="quarter">Último trimestre</option>
-            <option value="year">Último año</option>
+            <option value="year">Este año</option>
             <option value="all">Todo el período</option>
             <option value="custom">Personalizado</option>
           </Select>
@@ -1715,6 +1765,17 @@ export default function Reports() {
         >
           <Users className="w-4 h-4 inline-block mr-2" />
           Clientes
+        </button>
+        <button
+          onClick={() => setSelectedReport('zones')}
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
+            selectedReport === 'zones'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+          }`}
+        >
+          <MapPin className="w-4 h-4 inline-block mr-2" />
+          Zonas
         </button>
         <button
           onClick={() => setSelectedReport('sellers')}
@@ -1845,9 +1906,9 @@ export default function Reports() {
                 <CardTitle>
                   Tendencia de Ventas
                   {dateRange === 'week' && ' (Última Semana)'}
-                  {dateRange === 'month' && ' (Último Mes)'}
+                  {dateRange === 'month' && ' (Este Mes)'}
                   {dateRange === 'quarter' && ' (Último Trimestre)'}
-                  {dateRange === 'year' && ' (Último Año)'}
+                  {dateRange === 'year' && ' (Este Año)'}
                   {dateRange === 'all' && ' (Todo el Período)'}
                   {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
                 </CardTitle>
@@ -2717,6 +2778,122 @@ export default function Reports() {
         </>
       )}
 
+      {/* Reporte por Zonas */}
+      {selectedReport === 'zones' && (
+        <>
+          {/* Gráfico de Top 10 Zonas */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 10 Zonas por Ingresos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {salesByZone.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">No hay datos de zonas</p>
+                  <p className="text-sm mt-1">Las zonas se obtienen de la dirección registrada en los comprobantes. Asegúrate de que tus clientes tengan dirección.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={salesByZone.slice(0, 10)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis dataKey="zone" type="category" tick={{ fontSize: 11 }} width={150} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="totalRevenue" fill={COLORS[2]} name="Total Vendido" radius={[0, 8, 8, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tabla de zonas */}
+          {salesByZone.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Detalles por Zona</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Mobile Cards */}
+                <div className="lg:hidden space-y-3">
+                  {salesByZone.map((zone, index) => (
+                    <div key={zone.zone} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {index + 1}
+                          </div>
+                          <span className="font-medium text-gray-900">{zone.zone}</span>
+                        </div>
+                        <span className="font-bold text-gray-900">{formatCurrency(zone.totalRevenue)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
+                        <span>{zone.uniqueCustomers} cliente{zone.uniqueCustomers !== 1 ? 's' : ''}</span>
+                        <span>{zone.ordersCount} pedido{zone.ordersCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Posición</TableHead>
+                        <TableHead>Zona / Distrito</TableHead>
+                        <TableHead className="text-right">Clientes</TableHead>
+                        <TableHead className="text-right">Pedidos</TableHead>
+                        <TableHead className="text-right">Total Vendido</TableHead>
+                        <TableHead className="text-right">Ticket Promedio</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {salesByZone.map((zone, index) => (
+                        <TableRow key={zone.zone}>
+                          <TableCell>
+                            <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                              index === 0 ? 'bg-yellow-100 text-yellow-700'
+                                : index === 1 ? 'bg-gray-200 text-gray-700'
+                                : index === 2 ? 'bg-orange-100 text-orange-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {index + 1}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-4 h-4 text-gray-400" />
+                              {zone.zone}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center justify-center px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full">
+                              <span className="text-sm font-semibold">{zone.uniqueCustomers}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
+                              <span className="text-sm font-semibold">{zone.ordersCount}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(zone.totalRevenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatCurrency(zone.ordersCount > 0 ? zone.totalRevenue / zone.ordersCount : 0)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
       {/* Reporte por Vendedores */}
       {selectedReport === 'sellers' && (
         <>
@@ -3016,9 +3193,9 @@ export default function Reports() {
                 <CardTitle>
                   Tendencia de Gastos
                   {dateRange === 'week' && ' (Última Semana)'}
-                  {dateRange === 'month' && ' (Último Mes)'}
+                  {dateRange === 'month' && ' (Este Mes)'}
                   {dateRange === 'quarter' && ' (Último Trimestre)'}
-                  {dateRange === 'year' && ' (Último Año)'}
+                  {dateRange === 'year' && ' (Este Año)'}
                   {dateRange === 'all' && ' (Todo el Período)'}
                   {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
                 </CardTitle>
@@ -3470,9 +3647,9 @@ export default function Reports() {
               <CardTitle>
                 Ingresos vs Gastos
                 {dateRange === 'week' && ' (Última Semana)'}
-                {dateRange === 'month' && ' (Último Mes)'}
+                {dateRange === 'month' && ' (Este Mes)'}
                 {dateRange === 'quarter' && ' (Último Trimestre)'}
-                {dateRange === 'year' && ' (Último Año)'}
+                {dateRange === 'year' && ' (Este Año)'}
                 {dateRange === 'all' && ' (Todo el Período)'}
                 {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
               </CardTitle>
