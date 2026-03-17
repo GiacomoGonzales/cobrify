@@ -1304,8 +1304,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     return startY + headerRowHeight
   }
 
-  // Límite inferior de página para ítems (dejar margen para continuar en siguiente página)
-  const PAGE_BOTTOM_LIMIT = PAGE_HEIGHT - MARGIN_BOTTOM - 15
+  // Límite inferior de página para ítems
+  // Primera página: respetar espacio del footer (totales, QR, monto en letras, etc.)
+  // Páginas siguientes: usar casi todo el espacio disponible
+  const PAGE_BOTTOM_LIMIT_NEXT = PAGE_HEIGHT - MARGIN_BOTTOM - 15
+  let currentPageBottomLimit = FOOTER_AREA_START
 
   // Dibujar encabezado de tabla inicial
   let dataRowY = drawTableHeader(tableY)
@@ -1322,7 +1325,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const { height: rowHeight, descLines, pharmaLines } = itemHeights[i]
 
     // Verificar si la fila cabe en la página actual, si no → nueva página
-    if (dataRowY + rowHeight > PAGE_BOTTOM_LIMIT) {
+    if (dataRowY + rowHeight > currentPageBottomLimit) {
       // Línea de cierre de tabla en esta página
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.3)
@@ -1335,6 +1338,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
       doc.addPage()
       dataRowY = drawTableHeader(MARGIN_TOP)
+      // En páginas siguientes, usar todo el espacio disponible
+      currentPageBottomLimit = PAGE_BOTTOM_LIMIT_NEXT
     }
 
     // Fondo alternado: filas pares gris, filas impares blanco
