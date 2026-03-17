@@ -22,7 +22,7 @@ const TABS = [
 ]
 
 export default function HotelHousekeeping() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [rooms, setRooms] = useState([])
@@ -39,6 +39,11 @@ export default function HotelHousekeeping() {
   const loadRooms = async () => {
     try {
       setIsLoading(true)
+      if (isDemoMode && demoData?.hotelRooms) {
+        setRooms(demoData.hotelRooms)
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const result = await getRooms(businessId)
       if (result.success) {

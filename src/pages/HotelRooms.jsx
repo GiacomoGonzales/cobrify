@@ -37,7 +37,7 @@ const INITIAL_FORM = {
 }
 
 export default function HotelRooms() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [rooms, setRooms] = useState([])
@@ -64,6 +64,11 @@ export default function HotelRooms() {
     if (!user?.uid && !isDemoMode) return
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData?.hotelRooms) {
+        setRooms(demoData.hotelRooms)
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const result = await getRooms(businessId)
       if (result.success) {

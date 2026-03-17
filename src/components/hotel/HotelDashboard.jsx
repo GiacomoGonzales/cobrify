@@ -50,7 +50,7 @@ const ROOM_STATUS_LABELS = {
 }
 
 export default function HotelDashboard({ getBusinessId, getRoutePrefix, isDemoMode }) {
-  const { user } = useAppContext()
+  const { user, demoData } = useAppContext()
   const toast = useToast()
 
   const [rooms, setRooms] = useState([])
@@ -68,6 +68,14 @@ export default function HotelDashboard({ getBusinessId, getRoutePrefix, isDemoMo
   const loadData = async () => {
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        setRooms(demoData.hotelRooms || [])
+        setReservations(demoData.hotelReservations || [])
+        setTodayInvoices(demoData.invoices || [])
+        setIsLoading(false)
+        return
+      }
+
       const businessId = getBusinessId()
       if (!businessId) return
 

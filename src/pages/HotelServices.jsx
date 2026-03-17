@@ -30,7 +30,7 @@ const initialFormData = {
 }
 
 function HotelServices() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -48,6 +48,11 @@ function HotelServices() {
   const loadServices = async () => {
     try {
       setLoading(true)
+      if (isDemoMode && demoData?.hotelServices) {
+        setServices(demoData.hotelServices)
+        setLoading(false)
+        return
+      }
       const result = await getServices(businessId)
       if (result.success) {
         setServices(result.data)

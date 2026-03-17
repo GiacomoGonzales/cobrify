@@ -92,7 +92,7 @@ function isToday(date) {
 }
 
 export default function HotelReservations() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   // Data
@@ -156,9 +156,15 @@ export default function HotelReservations() {
   }, [user])
 
   const loadData = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !isDemoMode) return
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        setReservations(demoData.hotelReservations || [])
+        setRooms(demoData.hotelRooms || [])
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [resResult, roomsResult] = await Promise.all([
         getReservations(businessId),
