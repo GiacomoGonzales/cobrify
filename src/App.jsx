@@ -82,6 +82,10 @@ import CashFlow from './pages/CashFlow'
 import Laboratories from './pages/Laboratories'
 import ExpiryAlerts from './pages/ExpiryAlerts'
 import BatchControl from './pages/BatchControl'
+// Hotel pages
+import HotelRooms from './pages/HotelRooms'
+import HotelReservations from './pages/HotelReservations'
+import HotelServices from './pages/HotelServices'
 // Real Estate pages
 import Properties from './pages/Properties'
 import Operations from './pages/Operations'
@@ -332,6 +336,11 @@ function App() {
               <Route path="laboratorios" element={<Laboratories />} />
               <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
               <Route path="control-lotes" element={<BatchControl />} />
+
+              {/* Rutas de modo hotel */}
+              <Route path="habitaciones" element={<HotelRooms />} />
+              <Route path="reservas" element={<HotelReservations />} />
+              <Route path="servicios-hotel" element={<HotelServices />} />
 
               {/* Rutas de modo inmobiliaria */}
               <Route path="propiedades" element={<Properties />} />

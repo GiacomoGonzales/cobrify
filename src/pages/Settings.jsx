@@ -2613,6 +2613,33 @@ export default function Settings() {
                   </label>
 
                   <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'hotel'
+                      ? 'border-cyan-500 bg-cyan-50'
+                      : 'border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="hotel"
+                      checked={businessMode === 'hotel'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-cyan-600 border-gray-300 focus:ring-cyan-500"
+                    />
+                    <Building2 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'hotel' ? 'text-cyan-600' : 'text-gray-400 group-hover:text-cyan-600'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-cyan-900">
+                        Modo Hotelería
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para hoteles, hostales y alojamientos.
+                        Incluye: habitaciones, reservas, check-in/check-out, folio de huésped, servicios (piscina, áreas recreativas), housekeeping.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
                     businessMode === 'transport'
                       ? 'border-amber-500 bg-amber-50'
                       : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/30'

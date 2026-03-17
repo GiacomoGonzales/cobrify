@@ -47,6 +47,12 @@ import {
   UserCheck,
   Award,
   BookOpen,
+  // Iconos para modo hotel
+  BedDouble,
+  CalendarCheck,
+  ConciergeBell,
+  Waves,
+  ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react'
@@ -714,6 +720,116 @@ function Sidebar() {
     },
   ]
 
+  // Menú para modo HOTEL
+  const hotelMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/habitaciones',
+      icon: BedDouble,
+      label: 'Habitaciones',
+      pageId: 'hotel-rooms',
+      menuId: 'hotel-rooms',
+    },
+    {
+      path: '/reservas',
+      icon: CalendarCheck,
+      label: 'Reservas',
+      pageId: 'hotel-reservations',
+      menuId: 'hotel-reservations',
+    },
+    {
+      path: '/servicios-hotel',
+      icon: ConciergeBell,
+      label: 'Servicios',
+      pageId: 'hotel-services',
+      menuId: 'hotel-services',
+    },
+    {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
+      path: '/comprobantes',
+      icon: FileText,
+      label: 'Comprobantes',
+      pageId: 'invoices',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Huéspedes',
+      pageId: 'customers',
+    },
+    {
+      path: '/productos',
+      icon: Package,
+      label: 'Productos',
+      pageId: 'products',
+      menuId: 'products',
+    },
+    {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'inventory',
+      menuId: 'inventory',
+    },
+    {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'warehouses',
+      menuId: 'warehouses',
+    },
+    ...(hasFeature && hasFeature('expenseManagement') ? [{
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      menuId: 'expenses',
+    }] : []),
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+    },
+    {
+      path: '/usuarios',
+      icon: UserCog,
+      label: 'Gestión de Usuarios',
+      pageId: 'users',
+    },
+    {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio
   // Si businessMode es null (cargando), no mostrar nada aún
   const menuItems = businessMode === 'restaurant'
@@ -722,9 +838,11 @@ function Sidebar() {
       ? pharmacyMenuItems
       : businessMode === 'real_estate'
         ? realEstateMenuItems
-        : (businessMode === 'retail' || businessMode === 'transport')
-          ? retailMenuItems
-          : [] // Si es null, array vacío mientras carga
+        : businessMode === 'hotel'
+          ? hotelMenuItems
+          : (businessMode === 'retail' || businessMode === 'transport')
+            ? retailMenuItems
+            : [] // Si es null, array vacío mientras carga
 
   // Agregar opciones adicionales según el rol
   const additionalItems = [

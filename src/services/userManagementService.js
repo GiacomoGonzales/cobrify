@@ -121,6 +121,21 @@ export const REAL_ESTATE_PAGES = [
   { id: 'commissions', name: 'Comisiones', path: '/comisiones', category: 'finanzas' },
 ]
 
+// ============ PÁGINAS MODO HOTEL ============
+export const HOTEL_PAGES = [
+  // Operaciones hoteleras
+  { id: 'hotel-rooms', name: 'Habitaciones', path: '/habitaciones', category: 'operaciones' },
+  { id: 'hotel-reservations', name: 'Reservas', path: '/reservas', category: 'operaciones' },
+  { id: 'hotel-services', name: 'Servicios Hotel', path: '/servicios-hotel', category: 'operaciones' },
+  // Inventario
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
+  // Compras
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+]
+
 // ============ PÁGINAS MODO TRANSPORTE ============
 // Hereda las mismas páginas que retail
 export const TRANSPORT_PAGES = [
@@ -170,6 +185,7 @@ export const AVAILABLE_PAGES = [
   ...PHARMACY_PAGES,
   ...REAL_ESTATE_PAGES,
   ...TRANSPORT_PAGES,
+  ...HOTEL_PAGES,
 ]
 
 /**
@@ -186,6 +202,8 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...REAL_ESTATE_PAGES]
   } else if (businessMode === 'transport') {
     return [...COMMON_PAGES, ...TRANSPORT_PAGES]
+  } else if (businessMode === 'hotel') {
+    return [...COMMON_PAGES, ...HOTEL_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]
