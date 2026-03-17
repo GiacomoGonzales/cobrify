@@ -49,7 +49,7 @@ const warehouseSchema = z.object({
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId, filterBranchesByAccess, isDemoMode } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -153,6 +153,12 @@ export default function Warehouses() {
 
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        setWarehouses(demoData.warehouses || [])
+        setIsLoading(false)
+        return
+      }
+
       const result = await getWarehouses(getBusinessId())
       if (result.success) {
         setWarehouses(result.data || [])
