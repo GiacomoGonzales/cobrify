@@ -77,6 +77,9 @@ function Sidebar() {
       if (location.pathname.startsWith('/demopharmacy')) {
         return `/demopharmacy${path}`
       }
+      if (location.pathname.startsWith('/demohotel')) {
+        return `/demohotel${path}`
+      }
       return `/demo${path}`
     }
     // Para rutas normales (no demo), agregar prefijo /app

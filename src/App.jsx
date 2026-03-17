@@ -59,6 +59,8 @@ import DemoRestaurant from './pages/DemoRestaurant'
 import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
 import DemoPharmacy from './pages/DemoPharmacy'
 import DemoPharmacyLayout from './layouts/DemoPharmacyLayout'
+import DemoHotel from './pages/DemoHotel'
+import DemoHotelLayout from './layouts/DemoHotelLayout'
 // Restaurant pages
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
@@ -275,6 +277,33 @@ function App() {
               <Route path="gastos" element={<Expenses />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="reclamos" element={<ComplaintsList />} />
+              <Route path="configuracion" element={<Settings />} />
+            </Route>
+
+            {/* Rutas de demo hotel (sin autenticación, con datos de ejemplo de hotel) */}
+            <Route path="/demohotel" element={<DemoHotel />} />
+            <Route path="/demohotel" element={<DemoHotelLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="habitaciones" element={<HotelRooms />} />
+              <Route path="reservas" element={<HotelReservations />} />
+              <Route path="servicios-hotel" element={<HotelServices />} />
+              <Route path="housekeeping" element={<HotelHousekeeping />} />
+              <Route path="auditoria-hotel" element={<HotelNightAudit />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
+              <Route path="usuarios" element={<UserManagement />} />
               <Route path="configuracion" element={<Settings />} />
             </Route>
 

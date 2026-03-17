@@ -2,6 +2,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useDemo } from '@/contexts/DemoContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import { useDemoPharmacy } from '@/contexts/DemoPharmacyContext'
+import { useDemoHotel } from '@/contexts/DemoHotelContext'
 
 /**
  * Hook unificado que retorna el contexto apropiado (demo o real)
@@ -12,6 +13,29 @@ export function useAppContext() {
   const demoContext = useDemo()
   const demoRestaurantContext = useDemoRestaurant()
   const demoPharmacyContext = useDemoPharmacy()
+  const demoHotelContext = useDemoHotel()
+
+  // Si estamos en modo demo de hotel, usar datos de demo de hotel
+  if (demoHotelContext?.isDemo) {
+    return {
+      user: demoHotelContext.user,
+      isAuthenticated: true,
+      isLoading: false,
+      isAdmin: false,
+      subscription: { status: 'active', accessBlocked: false },
+      hasAccess: true,
+      isDemoMode: true,
+      demoData: demoHotelContext,
+      businessMode: 'hotel',
+      businessSettings: { businessMode: 'hotel', enableProductImages: true, posCustomFields: {} },
+      userFeatures: { expenseManagement: true },
+      hasFeature: (feature) => ['expenseManagement'].includes(feature),
+      getBusinessId: demoHotelContext.getBusinessId,
+      login: async () => ({ success: false, error: 'Demo mode' }),
+      logout: async () => {},
+      refreshSubscription: async () => {},
+    }
+  }
 
   // Si estamos en modo demo de farmacia, usar datos de demo de farmacia
   if (demoPharmacyContext?.isDemoMode) {
