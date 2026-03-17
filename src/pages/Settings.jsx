@@ -2984,6 +2984,50 @@ export default function Settings() {
                       ))}
                     </>
                   )}
+                  {businessMode === 'hotel' && (
+                    <>
+                      {[
+                        { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
+                        { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
+                        { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
+                        { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'products', label: 'Productos', description: 'Catálogo de productos y servicios' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del hotel' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
                   {businessMode === 'transport' && (
                     <>
                       {[
