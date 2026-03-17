@@ -31,6 +31,7 @@ import {
   FileText,
   PanelLeftClose,
   PanelRightClose,
+  BedDouble,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -50,6 +51,7 @@ import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { getDoc, doc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
+import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge } from '@/services/hotelService'
 import {
   getProducts,
   getCustomers,
@@ -89,6 +91,7 @@ const PAYMENT_METHODS = {
   RAPPI: 'Rappi',
   PEDIDOSYA: 'PedidosYa',
   DIDIFOOD: 'DiDiFood',
+  ROOM: 'Cargo a Habitación',
 }
 
 // Mapeo de IDs de restricción (lowercase) a keys del POS (uppercase)
@@ -101,6 +104,7 @@ const PAYMENT_METHOD_ID_TO_KEY = {
   rappiPay: 'RAPPI',
   pedidosYa: 'PEDIDOSYA',
   didifood: 'DIDIFOOD',
+  chargeToRoom: 'ROOM',
 }
 
 const ORDER_TYPES = {
@@ -366,6 +370,37 @@ export default function POS() {
 
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: getDefaultPaymentMethod(), amount: '' }])
+
+  // Hotel: habitaciones ocupadas y selección de habitación para cargo
+  const [occupiedRooms, setOccupiedRooms] = useState([])
+  const [selectedRoom, setSelectedRoom] = useState(null)
+
+  // Cargar habitaciones ocupadas para modo hotel
+  useEffect(() => {
+    if (businessMode !== 'hotel' || !user?.uid) return
+    const loadOccupiedRooms = async () => {
+      try {
+        const [roomsRes, reservationsRes] = await Promise.all([
+          getHotelRooms(getBusinessId()),
+          getActiveReservations(getBusinessId())
+        ])
+        if (roomsRes.success && reservationsRes.success) {
+          const occupied = roomsRes.data
+            .filter(r => r.status === 'occupied')
+            .map(room => {
+              const reservation = reservationsRes.data.find(
+                res => res.roomId === room.id && res.status === 'checked_in'
+              )
+              return { ...room, reservation }
+            })
+          setOccupiedRooms(occupied)
+        }
+      } catch (e) {
+        console.warn('Error cargando habitaciones:', e)
+      }
+    }
+    loadOccupiedRooms()
+  }, [businessMode, user])
 
   // Tipo de pedido (para reportes)
   const [orderType, setOrderType] = useState('takeaway')
@@ -2219,6 +2254,7 @@ export default function POS() {
       goodsServiceCode: '',
     })
     setPayments([{ method: getDefaultPaymentMethod(), amount: '' }])
+    setSelectedRoom(null)
     setLastInvoiceData(null)
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
     setDiscountAmount('')
@@ -3327,6 +3363,27 @@ export default function POS() {
             }
             const bgInvoiceId = result.id
             console.log('✅ Factura guardada en Firestore:', bgInvoiceId)
+
+            // 3.0.1. Si es cargo a habitación (hotel), agregar al folio del huésped
+            if (selectedRoom?.reservation && invoiceData.payments?.some(p => p.methodKey === 'ROOM')) {
+              try {
+                const roomCharge = {
+                  reservationId: selectedRoom.reservation.id,
+                  roomId: selectedRoom.id,
+                  roomNumber: selectedRoom.number,
+                  guestName: selectedRoom.reservation.guestName,
+                  chargeType: 'restaurant',
+                  description: `Consumo POS - ${invoiceData.number || 'S/N'}`,
+                  amount: invoiceData.total || 0,
+                  date: new Date().toISOString().split('T')[0],
+                  createdBy: user?.email || '',
+                }
+                await addFolioCharge(businessId, roomCharge)
+                console.log('✅ Cargo agregado al folio de habitación', selectedRoom.number)
+              } catch (folioError) {
+                console.error('Error al cargar al folio:', folioError)
+              }
+            }
 
             // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget
             const shouldAutoSend = companySettings?.autoSendToSunat === true
@@ -5848,6 +5905,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         ['RAPPI', 'Rappi', 'rappiPay'],
                         ['PEDIDOSYA', 'PedidosYa', 'pedidosYa'],
                         ['DIDIFOOD', 'DiDiFood', 'didifood'],
+                      ] : []),
+                      ...(businessMode === 'hotel' ? [
+                        ['ROOM', 'Habitación', 'chargeToRoom'],
                       ] : [])
                     ].filter(([, , permKey]) =>
                       !allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes(permKey)
@@ -5877,6 +5937,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           )
                         })}
                       </div>
+
+                      {/* Selector de habitación (solo modo hotel + método ROOM) */}
+                      {payment.method === 'ROOM' && businessMode === 'hotel' && (
+                        <div className="mb-1">
+                          {occupiedRooms.length === 0 ? (
+                            <p className="text-xs text-red-500 py-1">No hay habitaciones ocupadas</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {occupiedRooms.map(room => (
+                                <button
+                                  key={room.id}
+                                  type="button"
+                                  onClick={() => setSelectedRoom(room)}
+                                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg border-2 transition-colors ${
+                                    selectedRoom?.id === room.id
+                                      ? 'border-cyan-500 bg-cyan-50 text-cyan-700 font-semibold'
+                                      : 'border-gray-200 bg-white text-gray-700 hover:border-cyan-300'
+                                  }`}
+                                >
+                                  <BedDouble className="w-3 h-3" />
+                                  {room.number}
+                                  {room.reservation && (
+                                    <span className="text-[10px] text-gray-500">({room.reservation.guestName?.split(' ')[0]})</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="flex items-center gap-2">
                         {/* Monto */}
