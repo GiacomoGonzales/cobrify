@@ -21,6 +21,7 @@ import {
   Building,
   Store,
   MapPin,
+  BedDouble,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import RealEstateReports from './RealEstateReports'
@@ -40,6 +41,7 @@ import {
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
 import PeruHeatMap from '@/components/PeruHeatMap'
+import { getRooms as getHotelRooms, getReservations as getHotelReservations } from '@/services/hotelService'
 import * as XLSX from 'xlsx'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -140,6 +142,8 @@ export default function Reports() {
   const [purchases, setPurchases] = useState([])
   const [financialMovements, setFinancialMovements] = useState([])
   const [cashMovements, setCashMovements] = useState([])
+  const [hotelRooms, setHotelRooms] = useState([])
+  const [hotelReservations, setHotelReservations] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
@@ -285,6 +289,20 @@ export default function Reports() {
         setFinancialMovements([])
         setCashMovements([])
       }
+      // Cargar datos de hotel si es modo hotel
+      if (businessMode === 'hotel') {
+        try {
+          const [roomsRes, reservationsRes] = await Promise.all([
+            getHotelRooms(getBusinessId()),
+            getHotelReservations(getBusinessId())
+          ])
+          if (roomsRes.success) setHotelRooms(roomsRes.data || [])
+          if (reservationsRes.success) setHotelReservations(reservationsRes.data || [])
+        } catch (error) {
+          console.error('Error al cargar datos de hotel:', error)
+        }
+      }
+
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
@@ -1815,6 +1833,20 @@ export default function Reports() {
           >
             <TrendingUp className="w-4 h-4 inline-block mr-2" />
             Rentabilidad
+          </button>
+        )}
+        {/* Tab Hotel - solo visible en modo hotel */}
+        {businessMode === 'hotel' && (
+          <button
+            onClick={() => setSelectedReport('hotel')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
+              selectedReport === 'hotel'
+                ? 'bg-cyan-600 text-white border border-cyan-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+            }`}
+          >
+            <BedDouble className="w-4 h-4 inline-block mr-2" />
+            Hotel
           </button>
         )}
       </div>
@@ -3950,6 +3982,214 @@ export default function Reports() {
           </div>
         </>
       )}
+
+      {/* Reporte Hotel */}
+      {selectedReport === 'hotel' && businessMode === 'hotel' && (() => {
+        const totalRooms = hotelRooms.length
+        const occupiedRooms = hotelRooms.filter(r => r.status === 'occupied').length
+        const occupancyRate = totalRooms > 0 ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : 0
+
+        // Filtrar reservas por rango de fecha
+        const filteredRes = hotelReservations.filter(res => {
+          if (!res.checkIn) return false
+          const checkInDate = new Date(res.checkIn + 'T00:00:00')
+          if (dateRange === 'all') return true
+          const now = new Date()
+          let startDate = new Date()
+          switch (dateRange) {
+            case 'week': startDate.setDate(now.getDate() - 7); break
+            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break
+            case 'quarter': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break
+            case 'year': startDate = new Date(now.getFullYear(), 0, 1); break
+            default: startDate.setMonth(now.getMonth() - 1)
+          }
+          return checkInDate >= startDate
+        })
+
+        const completedRes = filteredRes.filter(r => r.status === 'checked_out')
+        const totalNights = completedRes.reduce((s, r) => s + (r.nights || 0), 0)
+        const totalRoomRevenue = completedRes.reduce((s, r) => s + (r.totalAmount || 0), 0)
+        const adr = totalNights > 0 ? totalRoomRevenue / totalNights : 0
+        const revpar = totalRooms > 0 ? totalRoomRevenue / totalRooms : 0
+
+        const statusCounts = {
+          confirmed: filteredRes.filter(r => r.status === 'confirmed').length,
+          checked_in: filteredRes.filter(r => r.status === 'checked_in').length,
+          checked_out: completedRes.length,
+          cancelled: filteredRes.filter(r => r.status === 'cancelled').length,
+          no_show: filteredRes.filter(r => r.status === 'no_show').length,
+        }
+
+        return (
+          <>
+            {/* KPIs */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-xs text-gray-500">Ocupación Actual</p>
+                  <p className="text-2xl font-bold text-cyan-600">{occupancyRate}%</p>
+                  <p className="text-xs text-gray-400">{occupiedRooms}/{totalRooms} hab.</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-xs text-gray-500">Tarifa Promedio (ADR)</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(adr)}</p>
+                  <p className="text-xs text-gray-400">por noche</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-xs text-gray-500">RevPAR</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(revpar)}</p>
+                  <p className="text-xs text-gray-400">ingreso/hab.</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-xs text-gray-500">Ingresos Habitaciones</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRoomRevenue)}</p>
+                  <p className="text-xs text-gray-400">{totalNights} noches</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-xs text-gray-500">Reservas Período</p>
+                  <p className="text-2xl font-bold text-blue-600">{filteredRes.length}</p>
+                  <p className="text-xs text-gray-400">{completedRes.length} completadas</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Estado de reservas */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Estado de Reservas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {[
+                    { label: 'Confirmadas', count: statusCounts.confirmed, color: 'bg-blue-100 text-blue-700' },
+                    { label: 'Check-in', count: statusCounts.checked_in, color: 'bg-green-100 text-green-700' },
+                    { label: 'Check-out', count: statusCounts.checked_out, color: 'bg-gray-100 text-gray-700' },
+                    { label: 'Canceladas', count: statusCounts.cancelled, color: 'bg-red-100 text-red-700' },
+                    { label: 'No Show', count: statusCounts.no_show, color: 'bg-yellow-100 text-yellow-700' },
+                  ].map(item => (
+                    <div key={item.label} className={`rounded-lg p-3 text-center ${item.color}`}>
+                      <p className="text-2xl font-bold">{item.count}</p>
+                      <p className="text-xs font-medium">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Estado de habitaciones */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Estado de Habitaciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: 'Disponibles', count: hotelRooms.filter(r => r.status === 'available').length, color: 'bg-green-500' },
+                    { label: 'Ocupadas', count: occupiedRooms, color: 'bg-red-500' },
+                    { label: 'Limpieza', count: hotelRooms.filter(r => r.status === 'cleaning').length, color: 'bg-yellow-500' },
+                    { label: 'Mantenimiento', count: hotelRooms.filter(r => r.status === 'maintenance').length, color: 'bg-gray-500' },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className={`w-4 h-4 rounded-full ${item.color}`} />
+                      <div>
+                        <p className="text-lg font-bold text-gray-900">{item.count}</p>
+                        <p className="text-xs text-gray-500">{item.label}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Mini mapa de habitaciones */}
+                <div className="flex flex-wrap gap-1.5">
+                  {hotelRooms
+                    .sort((a, b) => (a.number || '').localeCompare(b.number || '', undefined, { numeric: true }))
+                    .map(room => (
+                      <div
+                        key={room.id}
+                        className={`w-12 h-10 rounded flex items-center justify-center text-xs font-bold text-white ${
+                          room.status === 'available' ? 'bg-green-500'
+                            : room.status === 'occupied' ? 'bg-red-500'
+                            : room.status === 'cleaning' ? 'bg-yellow-500'
+                            : 'bg-gray-500'
+                        }`}
+                        title={`${room.number} - ${room.status}`}
+                      >
+                        {room.number}
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tabla de reservas recientes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Reservas del Período</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Huésped</TableHead>
+                        <TableHead>Hab.</TableHead>
+                        <TableHead>Check-in</TableHead>
+                        <TableHead>Check-out</TableHead>
+                        <TableHead className="text-center">Noches</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead>Estado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">No hay reservas en este período</TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredRes
+                          .sort((a, b) => (b.checkIn || '').localeCompare(a.checkIn || ''))
+                          .slice(0, 30)
+                          .map(res => (
+                            <TableRow key={res.id}>
+                              <TableCell className="font-medium">{res.guestName}</TableCell>
+                              <TableCell>{res.roomNumber}</TableCell>
+                              <TableCell className="text-sm">{res.checkIn ? new Date(res.checkIn + 'T00:00:00').toLocaleDateString('es-PE') : '-'}</TableCell>
+                              <TableCell className="text-sm">{res.checkOut ? new Date(res.checkOut + 'T00:00:00').toLocaleDateString('es-PE') : '-'}</TableCell>
+                              <TableCell className="text-center">{res.nights || '-'}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatCurrency(res.totalAmount || 0)}</TableCell>
+                              <TableCell>
+                                <Badge variant={
+                                  res.status === 'checked_in' ? 'success'
+                                    : res.status === 'confirmed' ? 'primary'
+                                    : res.status === 'checked_out' ? 'default'
+                                    : res.status === 'cancelled' ? 'danger'
+                                    : 'warning'
+                                }>
+                                  {res.status === 'confirmed' ? 'Confirmada'
+                                    : res.status === 'checked_in' ? 'Check-in'
+                                    : res.status === 'checked_out' ? 'Check-out'
+                                    : res.status === 'cancelled' ? 'Cancelada'
+                                    : 'No Show'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )
+      })()}
     </div>
   )
 }
