@@ -35,7 +35,8 @@ export default function Customers() {
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
-  const [sortBy, setSortBy] = useState('name') // name, orders, spent
+  const [sortBy, setSortBy] = useState('name') // name, orders, spent, expiry
+  const [subscriptionFilter, setSubscriptionFilter] = useState('all') // all, expired, expiring, active
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
@@ -295,19 +296,41 @@ export default function Customers() {
     }
   }
 
+  // Helper: estado de suscripción de un cliente
+  const getSubscriptionStatus = (customer) => {
+    if (!customer.subscriptionExpiry) return 'none'
+    const expiry = new Date(customer.subscriptionExpiry + 'T23:59:59')
+    const now = new Date()
+    const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    if (expiry < now) return 'expired'
+    if (expiry < in7Days) return 'expiring'
+    return 'active'
+  }
+
   // Filtrar y ordenar clientes
   const filteredCustomers = customers
     .filter(customer => {
       const search = searchTerm.toLowerCase()
-      return (
+      const matchesSearch = (
         customer.name?.toLowerCase().includes(search) ||
         customer.documentNumber?.includes(search) ||
         customer.businessName?.toLowerCase().includes(search) ||
         customer.email?.toLowerCase().includes(search) ||
         customer.studentName?.toLowerCase().includes(search) ||
         customer.studentSchedule?.toLowerCase().includes(search) ||
-        customer.vehiclePlate?.toLowerCase().includes(search)
+        customer.vehiclePlate?.toLowerCase().includes(search) ||
+        customer.subscriptionPlan?.toLowerCase().includes(search)
       )
+      if (!matchesSearch) return false
+
+      // Filtro de suscripción
+      if (subscriptionFilter !== 'all') {
+        const status = getSubscriptionStatus(customer)
+        if (subscriptionFilter === 'expired') return status === 'expired'
+        if (subscriptionFilter === 'expiring') return status === 'expiring'
+        if (subscriptionFilter === 'active') return status === 'active'
+      }
+      return true
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -315,6 +338,13 @@ export default function Customers() {
           return (b.ordersCount || 0) - (a.ordersCount || 0)
         case 'spent':
           return (b.totalSpent || 0) - (a.totalSpent || 0)
+        case 'expiry': {
+          // Los que no tienen fecha van al final, luego por fecha más próxima primero
+          if (!a.subscriptionExpiry && !b.subscriptionExpiry) return 0
+          if (!a.subscriptionExpiry) return 1
+          if (!b.subscriptionExpiry) return -1
+          return a.subscriptionExpiry.localeCompare(b.subscriptionExpiry)
+        }
         case 'name':
         default:
           return (a.name || '').localeCompare(b.name || '')
@@ -327,7 +357,7 @@ export default function Customers() {
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
-  }, [searchTerm, sortBy])
+  }, [searchTerm, sortBy, subscriptionFilter])
 
   const getDocumentBadge = type => {
     const badges = {
@@ -401,8 +431,27 @@ export default function Customers() {
                 <option value="name">Ordenar por Nombre</option>
                 <option value="orders">Ordenar por Pedidos</option>
                 <option value="spent">Ordenar por Total Gastado</option>
+                {businessSettings?.posCustomFields?.showSubscriptionFields && (
+                  <option value="expiry">Ordenar por Vencimiento</option>
+                )}
               </select>
             </div>
+            {/* Filtro de suscripción */}
+            {businessSettings?.posCustomFields?.showSubscriptionFields && (
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                <CalendarClock className="w-4 h-4 text-gray-500" />
+                <select
+                  value={subscriptionFilter}
+                  onChange={e => setSubscriptionFilter(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todas las suscripciones</option>
+                  <option value="expired">Vencidas</option>
+                  <option value="expiring">Por vencer (7 días)</option>
+                  <option value="active">Vigentes</option>
+                </select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -472,6 +521,45 @@ export default function Customers() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Resumen de suscripciones */}
+      {businessSettings?.posCustomFields?.showSubscriptionFields && (() => {
+        const withSub = customers.filter(c => c.subscriptionExpiry)
+        const now = new Date()
+        const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        const expired = withSub.filter(c => new Date(c.subscriptionExpiry + 'T23:59:59') < now)
+        const expiring = withSub.filter(c => {
+          const d = new Date(c.subscriptionExpiry + 'T23:59:59')
+          return d >= now && d < in7Days
+        })
+        const active = withSub.filter(c => new Date(c.subscriptionExpiry + 'T23:59:59') >= in7Days)
+
+        return (expired.length > 0 || expiring.length > 0) ? (
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => { setSubscriptionFilter('expired'); setSortBy('expiry') }}
+              className={`p-3 rounded-lg border text-center transition-colors ${subscriptionFilter === 'expired' ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200 hover:border-red-200'}`}
+            >
+              <p className="text-2xl font-bold text-red-600">{expired.length}</p>
+              <p className="text-xs text-gray-600">Vencidas</p>
+            </button>
+            <button
+              onClick={() => { setSubscriptionFilter('expiring'); setSortBy('expiry') }}
+              className={`p-3 rounded-lg border text-center transition-colors ${subscriptionFilter === 'expiring' ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-200 hover:border-yellow-200'}`}
+            >
+              <p className="text-2xl font-bold text-yellow-600">{expiring.length}</p>
+              <p className="text-xs text-gray-600">Por vencer</p>
+            </button>
+            <button
+              onClick={() => { setSubscriptionFilter('active'); setSortBy('expiry') }}
+              className={`p-3 rounded-lg border text-center transition-colors ${subscriptionFilter === 'active' ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200 hover:border-green-200'}`}
+            >
+              <p className="text-2xl font-bold text-green-600">{active.length}</p>
+              <p className="text-xs text-gray-600">Vigentes</p>
+            </button>
+          </div>
+        ) : null
+      })()}
 
       {/* Customers Table */}
       <Card>
