@@ -53,7 +53,7 @@ import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
@@ -201,6 +201,27 @@ export default function Inventory() {
 
   // Estado para modal de recuento de inventario
   const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
+  const [showCountHistory, setShowCountHistory] = useState(false)
+  const [countHistory, setCountHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [selectedCount, setSelectedCount] = useState(null)
+
+  // Cargar historial de recuentos cuando se abre el modal
+  useEffect(() => {
+    if (!showCountHistory || !user?.uid) return
+    const loadHistory = async () => {
+      setLoadingHistory(true)
+      try {
+        const result = await getInventoryCounts(getBusinessId())
+        if (result.success) setCountHistory(result.data || [])
+      } catch (e) {
+        console.error('Error cargando historial:', e)
+      } finally {
+        setLoadingHistory(false)
+      }
+    }
+    loadHistory()
+  }, [showCountHistory, user])
   const [companySettings, setCompanySettings] = useState(null)
 
   useEffect(() => {
@@ -1413,6 +1434,14 @@ export default function Inventory() {
           >
             <ClipboardCheck className="w-4 h-4 mr-2" />
             Recuento
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCountHistory(true)}
+          >
+            <History className="w-4 h-4 mr-2" />
+            Historial
           </Button>
           <Button
             variant="outline"
@@ -3225,6 +3254,122 @@ export default function Inventory() {
           setShowInventoryCountModal(false)
         }}
       />
+
+      {/* Modal Historial de Recuentos */}
+      <Modal
+        isOpen={showCountHistory}
+        onClose={() => { setShowCountHistory(false); setSelectedCount(null) }}
+        title={selectedCount ? 'Detalle del Recuento' : 'Historial de Recuentos'}
+        size="lg"
+      >
+        {selectedCount ? (
+          <div className="space-y-4">
+            <button onClick={() => setSelectedCount(null)} className="text-sm text-primary-600 hover:underline flex items-center gap-1">
+              <ChevronLeft className="w-4 h-4" /> Volver al historial
+            </button>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-blue-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">Contados</p>
+                <p className="text-lg font-bold text-blue-600">{selectedCount.totalProductsCounted || 0}</p>
+              </div>
+              <div className="bg-yellow-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">Con diferencia</p>
+                <p className="text-lg font-bold text-yellow-600">{selectedCount.productsWithDifference || 0}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">Faltante</p>
+                <p className="text-lg font-bold text-red-600">{selectedCount.totalMissing || 0} uds</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">Sobrante</p>
+                <p className="text-lg font-bold text-green-600">{selectedCount.totalSurplus || 0} uds</p>
+              </div>
+            </div>
+            {selectedCount.itemsAdjusted && selectedCount.itemsAdjusted.length > 0 ? (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Producto</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Sistema</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Conteo</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedCount.itemsAdjusted.map((item, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <p className="font-medium">{item.productName}</p>
+                          {item.productCode && <p className="text-xs text-gray-400">{item.productCode}</p>}
+                        </td>
+                        <td className="text-right px-3 py-2">{item.previousStock}</td>
+                        <td className="text-right px-3 py-2">{item.newStock}</td>
+                        <td className={`text-right px-3 py-2 font-semibold ${
+                          item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : 'text-gray-400'
+                        }`}>
+                          {item.difference > 0 ? '+' : ''}{item.difference}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">No se registraron ajustes en este recuento</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {loadingHistory ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : countHistory.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <ClipboardCheck className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <p>No hay recuentos registrados</p>
+                <p className="text-xs mt-1">Realiza tu primer recuento de inventario</p>
+              </div>
+            ) : (
+              countHistory.map(count => (
+                <button
+                  key={count.id}
+                  onClick={() => setSelectedCount(count)}
+                  className="w-full text-left bg-white border rounded-lg p-4 hover:border-primary-300 hover:bg-primary-50/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {count.createdAt?.toDate ? count.createdAt.toDate().toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Sin fecha'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {count.totalProductsCounted || 0} productos contados
+                        {count.productsWithDifference > 0 && (
+                          <span className="text-yellow-600"> - {count.productsWithDifference} con diferencia</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {(count.totalMissingValue > 0 || count.totalSurplusValue > 0) && (
+                        <div className="text-right">
+                          {count.totalMissingValue > 0 && (
+                            <p className="text-xs text-red-600">-{formatCurrency(count.totalMissingValue)}</p>
+                          )}
+                          {count.totalSurplusValue > 0 && (
+                            <p className="text-xs text-green-600">+{formatCurrency(count.totalSurplusValue)}</p>
+                          )}
+                        </div>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
