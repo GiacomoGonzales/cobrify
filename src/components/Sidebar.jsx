@@ -757,6 +757,13 @@ function Sidebar() {
       menuId: 'hotel-housekeeping',
     },
     {
+      path: '/auditoria-hotel',
+      icon: CalendarCheck,
+      label: 'Auditoría y Tarifas',
+      pageId: 'hotel-audit',
+      menuId: 'hotel-audit',
+    },
+    {
       path: '/pos',
       icon: ShoppingCart,
       label: 'Punto de Venta',

@@ -549,6 +549,18 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Hotel Night Audits (Auditorías nocturnas)
+      match /hotelNightAudits/{auditId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Hotel Seasonal Rates (Tarifas por temporada)
+      match /hotelSeasonalRates/{rateId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos

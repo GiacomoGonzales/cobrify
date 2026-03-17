@@ -87,6 +87,7 @@ import HotelRooms from './pages/HotelRooms'
 import HotelReservations from './pages/HotelReservations'
 import HotelServices from './pages/HotelServices'
 import HotelHousekeeping from './pages/HotelHousekeeping'
+import HotelNightAudit from './pages/HotelNightAudit'
 // Real Estate pages
 import Properties from './pages/Properties'
 import Operations from './pages/Operations'
@@ -343,6 +344,7 @@ function App() {
               <Route path="reservas" element={<HotelReservations />} />
               <Route path="servicios-hotel" element={<HotelServices />} />
               <Route path="housekeeping" element={<HotelHousekeeping />} />
+              <Route path="auditoria-hotel" element={<HotelNightAudit />} />
 
               {/* Rutas de modo inmobiliaria */}
               <Route path="propiedades" element={<Properties />} />

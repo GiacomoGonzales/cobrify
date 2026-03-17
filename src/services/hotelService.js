@@ -3,9 +3,11 @@ import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -352,5 +354,156 @@ export const getReservationTotal = async (businessId, reservationId) => {
   } catch (error) {
     console.error('Error al calcular total de reservación:', error)
     return { success: false, error: error.message }
+  }
+}
+
+// =====================
+// NIGHT AUDIT
+// =====================
+
+export const runNightAudit = async (businessId, auditDate, performedBy) => {
+  try {
+    const today = auditDate || new Date().toISOString().split('T')[0]
+
+    // Verificar si ya se corrió la auditoría para esta fecha
+    const auditsRef = collection(db, 'businesses', businessId, 'hotelNightAudits')
+    const existingQuery = query(auditsRef, where('date', '==', today))
+    const existingSnap = await getDocs(existingQuery)
+    if (!existingSnap.empty) {
+      return { success: false, error: `La auditoría nocturna del ${today} ya fue ejecutada` }
+    }
+
+    // Obtener reservas con check-in activo
+    const reservationsRef = collection(db, 'businesses', businessId, 'hotelReservations')
+    const activeQuery = query(reservationsRef, where('status', '==', 'checked_in'))
+    const activeSnap = await getDocs(activeQuery)
+    const activeReservations = activeSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+    const charges = []
+    for (const res of activeReservations) {
+      // Calcular tarifa (aplicar temporada si existe)
+      const rate = await getEffectiveRate(businessId, res.roomId, today, res.ratePerNight || 0)
+
+      const charge = {
+        reservationId: res.id,
+        roomId: res.roomId,
+        roomNumber: res.roomNumber,
+        guestName: res.guestName,
+        chargeType: 'room_night',
+        description: `Noche ${today}`,
+        amount: rate,
+        date: today,
+        createdBy: performedBy || 'night_audit',
+        createdAt: serverTimestamp(),
+      }
+      const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
+      await addDoc(chargesRef, charge)
+      charges.push(charge)
+    }
+
+    // Registrar la auditoría
+    await addDoc(auditsRef, {
+      date: today,
+      performedBy: performedBy || 'system',
+      reservationsProcessed: activeReservations.length,
+      totalCharged: charges.reduce((s, c) => s + c.amount, 0),
+      details: charges.map(c => ({
+        roomNumber: c.roomNumber,
+        guestName: c.guestName,
+        amount: c.amount,
+      })),
+      createdAt: serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      data: {
+        date: today,
+        processed: activeReservations.length,
+        totalCharged: charges.reduce((s, c) => s + c.amount, 0),
+        charges,
+      }
+    }
+  } catch (error) {
+    console.error('Error en auditoría nocturna:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export const getNightAudits = async (businessId) => {
+  try {
+    const auditsRef = collection(db, 'businesses', businessId, 'hotelNightAudits')
+    const q = query(auditsRef, orderBy('date', 'desc'))
+    const snap = await getDocs(q)
+    return { success: true, data: snap.docs.map(d => ({ id: d.id, ...d.data() })) }
+  } catch (error) {
+    console.error('Error al obtener auditorías:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =====================
+// SEASONAL RATES
+// =====================
+
+export const getSeasonalRates = async (businessId) => {
+  try {
+    const ratesRef = collection(db, 'businesses', businessId, 'hotelSeasonalRates')
+    const snap = await getDocs(ratesRef)
+    return { success: true, data: snap.docs.map(d => ({ id: d.id, ...d.data() })) }
+  } catch (error) {
+    console.error('Error al obtener tarifas por temporada:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export const saveSeasonalRate = async (businessId, rateData) => {
+  try {
+    const ratesRef = collection(db, 'businesses', businessId, 'hotelSeasonalRates')
+    if (rateData.id) {
+      const rateDoc = doc(db, 'businesses', businessId, 'hotelSeasonalRates', rateData.id)
+      await updateDoc(rateDoc, { ...rateData, updatedAt: serverTimestamp() })
+      return { success: true, id: rateData.id }
+    }
+    const newDoc = await addDoc(ratesRef, { ...rateData, createdAt: serverTimestamp() })
+    return { success: true, id: newDoc.id }
+  } catch (error) {
+    console.error('Error al guardar tarifa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export const deleteSeasonalRate = async (businessId, rateId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', businessId, 'hotelSeasonalRates', rateId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar tarifa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Obtener tarifa efectiva considerando temporada
+export const getEffectiveRate = async (businessId, roomId, date, baseRate) => {
+  try {
+    const ratesResult = await getSeasonalRates(businessId)
+    if (!ratesResult.success || ratesResult.data.length === 0) return baseRate
+
+    const checkDate = new Date(date + 'T12:00:00')
+    for (const season of ratesResult.data) {
+      const start = new Date(season.startDate + 'T00:00:00')
+      const end = new Date(season.endDate + 'T23:59:59')
+      if (checkDate >= start && checkDate <= end) {
+        // Verificar si aplica a esta habitación (o a todas)
+        if (season.roomIds && season.roomIds.length > 0 && !season.roomIds.includes(roomId)) continue
+        if (season.rateType === 'fixed') return season.rate
+        if (season.rateType === 'multiplier') return baseRate * season.rate
+        if (season.rateType === 'surcharge') return baseRate + season.rate
+      }
+    }
+    return baseRate
+  } catch (error) {
+    console.warn('Error al calcular tarifa efectiva:', error)
+    return baseRate
   }
 }
