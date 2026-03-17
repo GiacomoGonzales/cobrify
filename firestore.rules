@@ -525,6 +525,30 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Hotel Rooms (Habitaciones - para modo hotel)
+      match /hotelRooms/{roomId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Hotel Reservations (Reservas - para modo hotel)
+      match /hotelReservations/{reservationId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Hotel Services (Servicios - piscina, juegos, etc.)
+      match /hotelServices/{serviceId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Hotel Folio Charges (Cargos al folio del huésped)
+      match /hotelFolioCharges/{chargeId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos
