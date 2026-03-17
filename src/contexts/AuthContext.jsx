@@ -290,7 +290,7 @@ export const AuthProvider = ({ children }) => {
               console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
 
               // Validar que el modo sea uno de los permitidos
-              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport']
+              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport', 'hotel']
               const mode = validModes.includes(businessData.businessMode)
                 ? businessData.businessMode
                 : 'retail'
@@ -599,7 +599,7 @@ export const AuthProvider = ({ children }) => {
       if (businessDoc.exists()) {
         const businessData = businessDoc.data()
         setBusinessSettings(businessData)
-        const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport']
+        const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport', 'hotel']
         const mode = validModes.includes(businessData.businessMode) ? businessData.businessMode : 'retail'
         setBusinessMode(mode)
       }
