@@ -764,7 +764,7 @@ function Sidebar() {
       menuId: 'cash-register',
     },
     {
-      path: '/comprobantes',
+      path: '/facturas',
       icon: FileText,
       label: 'Comprobantes',
       pageId: 'invoices',
