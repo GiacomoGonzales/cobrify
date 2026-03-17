@@ -271,6 +271,7 @@ export default function HotelReservations() {
 
   // Save reservation
   const onSubmit = async (data) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     if (!user?.uid) return
     setIsSaving(true)
     try {
@@ -310,6 +311,12 @@ export default function HotelReservations() {
 
   // Check-in
   const handleCheckIn = async (reservation) => {
+    if (isDemoMode) {
+      // Simular check-in en demo
+      setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, status: 'checked_in' } : r))
+      toast.success(`Check-in realizado: ${reservation.guestName} (DEMO)`)
+      return
+    }
     if (!user?.uid) return
     setProcessingId(reservation.id)
     try {
@@ -330,6 +337,11 @@ export default function HotelReservations() {
 
   // Check-out
   const handleCheckOut = async (reservation) => {
+    if (isDemoMode) {
+      setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, status: 'checked_out' } : r))
+      toast.success(`Check-out realizado: ${reservation.guestName} (DEMO)`)
+      return
+    }
     if (!user?.uid) return
     setProcessingId(reservation.id)
     try {
@@ -357,6 +369,13 @@ export default function HotelReservations() {
     setChargeAmount('')
     setIsFolioLoading(true)
     try {
+      if (isDemoMode && demoData?.hotelFolioCharges) {
+        const charges = demoData.hotelFolioCharges.filter(c => c.reservationId === reservation.id)
+        setFolioCharges(charges)
+        setFolioTotal(charges.reduce((s, c) => s + (c.amount || 0), 0))
+        setIsFolioLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [chargesResult, totalResult] = await Promise.all([
         getChargesByReservation(businessId, reservation.id),
@@ -378,6 +397,7 @@ export default function HotelReservations() {
       toast.error('Ingrese descripción y monto')
       return
     }
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setIsAddingCharge(true)
     try {
       const businessId = getBusinessId()
