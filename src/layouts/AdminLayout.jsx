@@ -187,7 +187,7 @@ export default function AdminLayout() {
             </div>
 
             {/* Mobile Nav Items */}
-            <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+            <nav className="p-4 space-y-2 flex-1 overflow-y-auto sidebar-scrollbar">
               {navItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.path)
                 return (
@@ -256,7 +256,7 @@ export default function AdminLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="relative z-10 flex-1 p-4 space-y-1.5 overflow-y-auto">
+          <nav className="relative z-10 flex-1 p-4 space-y-1.5 overflow-y-auto sidebar-scrollbar">
             {navItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path)
               return (
