@@ -750,6 +750,13 @@ function Sidebar() {
       menuId: 'hotel-services',
     },
     {
+      path: '/housekeeping',
+      icon: ClipboardCheck,
+      label: 'Housekeeping',
+      pageId: 'hotel-housekeeping',
+      menuId: 'hotel-housekeeping',
+    },
+    {
       path: '/pos',
       icon: ShoppingCart,
       label: 'Punto de Venta',

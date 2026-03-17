@@ -2990,6 +2990,7 @@ export default function Settings() {
                         { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
                         { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
                         { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
+                        { id: 'hotel-housekeeping', label: 'Housekeeping', description: 'Limpieza y mantenimiento de habitaciones' },
                         { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
                         { id: 'products', label: 'Productos', description: 'Catálogo de productos y servicios' },
                         { id: 'inventory', label: 'Inventario', description: 'Control de stock' },

@@ -127,6 +127,7 @@ export const HOTEL_PAGES = [
   { id: 'hotel-rooms', name: 'Habitaciones', path: '/habitaciones', category: 'operaciones' },
   { id: 'hotel-reservations', name: 'Reservas', path: '/reservas', category: 'operaciones' },
   { id: 'hotel-services', name: 'Servicios Hotel', path: '/servicios-hotel', category: 'operaciones' },
+  { id: 'hotel-housekeeping', name: 'Housekeeping', path: '/housekeeping', category: 'operaciones' },
   // Inventario
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },

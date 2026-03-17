@@ -25,9 +25,10 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
+import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
@@ -348,6 +349,11 @@ export default function Dashboard() {
         </div>
       </div>
     )
+  }
+
+  // Modo hotel: mostrar dashboard hotelero
+  if (businessMode === 'hotel') {
+    return <HotelDashboard getBusinessId={getBusinessId} getRoutePrefix={getRoutePrefix} isDemoMode={isDemoMode} />
   }
 
   return (

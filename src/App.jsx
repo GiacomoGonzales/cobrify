@@ -86,6 +86,7 @@ import BatchControl from './pages/BatchControl'
 import HotelRooms from './pages/HotelRooms'
 import HotelReservations from './pages/HotelReservations'
 import HotelServices from './pages/HotelServices'
+import HotelHousekeeping from './pages/HotelHousekeeping'
 // Real Estate pages
 import Properties from './pages/Properties'
 import Operations from './pages/Operations'
@@ -341,6 +342,7 @@ function App() {
               <Route path="habitaciones" element={<HotelRooms />} />
               <Route path="reservas" element={<HotelReservations />} />
               <Route path="servicios-hotel" element={<HotelServices />} />
+              <Route path="housekeeping" element={<HotelHousekeeping />} />
 
               {/* Rutas de modo inmobiliaria */}
               <Route path="propiedades" element={<Properties />} />
