@@ -188,6 +188,7 @@ export default function Settings() {
 
   // Estado para presentaciones de venta
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
+  const [showDescriptionInPOS, setShowDescriptionInPOS] = useState(false)
 
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
@@ -818,6 +819,7 @@ export default function Settings() {
         setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
         // Cargar configuración de presentaciones de venta
         setPresentationsEnabled(businessData.presentationsEnabled || false)
+        setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
         if (businessData.priceLabels) {
           setPriceLabels({
             price1: businessData.priceLabels.price1 || 'Público',
@@ -4007,6 +4009,39 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Visualización POS */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Visualización del Punto de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura qué información se muestra en las tarjetas de productos del POS
+                </p>
+                <div className="space-y-4">
+                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <label className="flex items-start space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={showDescriptionInPOS}
+                        onChange={(e) => setShowDescriptionInPOS(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                          Mostrar descripción del producto en el POS
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          {showDescriptionInPOS
+                            ? '✓ Habilitado: Se mostrará la descripción completa del producto en la tarjeta del punto de venta.'
+                            : '✗ Deshabilitado: Solo se muestra el nombre, precio y stock en la tarjeta del POS.'}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Notas de Venta */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Notas de Venta</h3>
@@ -4148,6 +4183,7 @@ export default function Settings() {
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,
                       presentationsEnabled: presentationsEnabled,
+                      showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     // Refrescar businessSettings en el contexto para que otros componentes vean los cambios

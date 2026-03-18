@@ -4288,6 +4288,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     {product.genericName && (
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
                     )}
+                    {/* Product description */}
+                    {businessSettings?.showDescriptionInPOS && product.description && (
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 whitespace-pre-line">{product.description}</p>
+                    )}
                     {/* Price and Stock */}
                     <div className="mt-1.5 sm:mt-2 pt-1.5 sm:pt-2 border-t border-gray-100">
                       {/* Móvil: precio y stock en línea */}
