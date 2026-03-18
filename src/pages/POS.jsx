@@ -802,6 +802,19 @@ export default function POS() {
         setGeneralNotes(quotationInfo.notes)
       }
 
+      // Cargar descuento de la cotización
+      if (quotationInfo.discount && quotationInfo.discount > 0) {
+        if (quotationInfo.discountType === 'percentage') {
+          setDiscountPercentage(quotationInfo.discount.toString())
+          // Calcular monto basado en el total de items
+          const totalItems = (quotationInfo.items || []).reduce((sum, item) => sum + (item.unitPrice || item.price || 0) * (item.quantity || 1), 0)
+          const amount = (totalItems * quotationInfo.discount / 100).toFixed(2)
+          setDiscountAmount(amount)
+        } else {
+          setDiscountAmount(quotationInfo.discount.toString())
+        }
+      }
+
       // Si el cliente tiene RUC (11 dígitos), seleccionar factura automáticamente
       if (quotationInfo.customer?.documentNumber?.length === 11) {
         setDocumentType('factura')

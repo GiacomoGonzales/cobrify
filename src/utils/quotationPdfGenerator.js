@@ -1034,11 +1034,14 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(11)
     doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   } else {
-    // Mostrar desglose completo: OP. GRAVADA, IGV, TOTAL
+    // Mostrar desglose completo: Subtotal, Descuento (si hay), IGV, TOTAL
     const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
-    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * 3 + 6)
+    const hasDiscount = (quotation.discount || 0) > 0
+    const discountRowCount = hasDiscount ? 1 : 0
+    const totalRows = 2 + discountRowCount // Subtotal + (descuento) + IGV + Total
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalRows + totalsRowHeight + 6)
 
-    // Fila 1: OP. GRAVADA
+    // Fila 1: Subtotal
     doc.setFillColor(250, 250, 250)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
@@ -1047,19 +1050,41 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
     doc.text(labelGravada, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text('S/ ' + (quotation.discountedSubtotal || quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
-    // Fila 2: IGV
+    // Fila de descuento (si hay)
+    if (hasDiscount) {
+      const discountLabel = quotation.discountType === 'percentage'
+        ? `DESCUENTO (${quotation.discount}%)`
+        : 'DESCUENTO'
+      // Calcular monto del descuento sobre el total con IGV
+      const directTotal = (quotation.items || []).reduce((sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 1), 0)
+      const discountAmount = quotation.discountType === 'percentage'
+        ? directTotal * (quotation.discount / 100)
+        : quotation.discount
+
+      doc.setFillColor(255, 245, 245)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setTextColor(220, 38, 38)
+      doc.text(discountLabel, totalsX + 5, footerY + 10)
+      doc.text('- S/ ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
+
+    // Fila: IGV
     doc.setFillColor(255, 255, 255)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
     doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setTextColor(...BLACK)
     doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
     doc.text('S/ ' + (quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
-    // Fila 3: TOTAL
+    // Fila: TOTAL
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
     doc.setTextColor(255, 255, 255)

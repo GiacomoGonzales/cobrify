@@ -238,6 +238,8 @@ export default function Quotations() {
             quotationNumber: convertingQuotation.number,
             customer: convertingQuotation.customer,
             items: convertingQuotation.items,
+            discount: convertingQuotation.discount || 0,
+            discountType: convertingQuotation.discountType || 'fixed',
           }
         })
 
@@ -264,6 +266,8 @@ export default function Quotations() {
           customer: quotationData.customer,
           items: quotationData.items,
           notes: quotationData.notes || '',
+          discount: quotationData.discount || 0,
+          discountType: quotationData.discountType || 'fixed',
         }
       })
 

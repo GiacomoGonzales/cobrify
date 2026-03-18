@@ -558,19 +558,23 @@ export default function CreateQuotation() {
     }))
   )
 
-  // Calcular descuento
+  // Calcular descuento (aplicado al total con IGV, igual que el POS)
+  const discountValue = parseFloat(discount) || 0
   const discountAmount =
     discountType === 'percentage'
-      ? (hideIgv ? directTotal : baseAmounts.subtotal) * (parseFloat(discount) || 0) / 100
-      : parseFloat(discount) || 0
+      ? directTotal * discountValue / 100
+      : discountValue
 
-  const discountedSubtotal = baseAmounts.subtotal - discountAmount
+  // Aplicar descuento al total (con IGV) y recalcular proporcionalmente
+  const totalAfterDiscount = Math.max(0, directTotal - discountAmount)
+  const discountRatio = directTotal > 0 ? totalAfterDiscount / directTotal : 1
+
+  const discountedSubtotal = Number((baseAmounts.subtotal * discountRatio).toFixed(2))
 
   // Calcular IGV y total con descuento aplicado
-  // Si hideIgv está activo, usar el total directo sin desglose de IGV
-  const finalIgv = hideIgv ? 0 : discountedSubtotal * 0.18
+  const finalIgv = hideIgv ? 0 : Number((discountedSubtotal * 0.18).toFixed(2))
   const finalTotal = hideIgv
-    ? Number((directTotal - discountAmount).toFixed(2))
+    ? Number(totalAfterDiscount.toFixed(2))
     : Number((discountedSubtotal + finalIgv).toFixed(2))
 
   const handleCustomerChange = customerId => {
@@ -1754,35 +1758,25 @@ export default function CreateQuotation() {
             <CardContent>
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
+                  {!hideIgv && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
+                    </div>
+                  )}
                   {discount > 0 && (
-                    <>
-                      {!hideIgv && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Subtotal:</span>
-                          <span className="font-medium">{formatCurrency(baseAmounts.subtotal)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-red-600">
-                        <span>
-                          Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
-                        </span>
-                        <span className="font-medium">- {formatCurrency(discountAmount)}</span>
-                      </div>
-                    </>
+                    <div className="flex justify-between text-red-600">
+                      <span>
+                        Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
+                      </span>
+                      <span className="font-medium">- {formatCurrency(discountAmount)}</span>
+                    </div>
                   )}
                   {!hideIgv && (
-                    <>
-                      {discount > 0 && (
-                        <div className="flex justify-between pt-2 border-t">
-                          <span className="text-gray-600">Subtotal con descuento:</span>
-                          <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">{isIgvExempt ? 'OP. EXONERADA:' : 'IGV (18%):'}</span>
-                        <span className="font-medium">{formatCurrency(finalIgv)}</span>
-                      </div>
-                    </>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{isIgvExempt ? 'OP. EXONERADA:' : 'IGV (18%):'}</span>
+                      <span className="font-medium">{formatCurrency(finalIgv)}</span>
+                    </div>
                   )}
                 </div>
 
