@@ -14,7 +14,7 @@ import {
   getMotoristas, getMotoristasStats, deleteMotorista, toggleMotoristaStatus,
   updateOperationalStatus, getDeliveries, getActiveMotoristas,
   getUnsettledDeliveriesForMotorista, settleDeliveries,
-  createDeliveryRecord, updateDeliveryStatus,
+  createDeliveryRecord, updateDeliveryStatus, updateDeliveryPaymentStatus,
 } from '@/services/motoristaService'
 import { getInvoices, getCompanySettings } from '@/services/firestoreService'
 import { previewDeliveryPDF } from '@/utils/deliveryPdfGenerator'
@@ -241,13 +241,34 @@ export default function Envios() {
     try {
       const result = await updateDeliveryStatus(getBusinessId(), delivery.id, newStatus)
       if (result.success) {
-        toast.success(`Estado actualizado a ${DELIVERY_STATUS_LABELS[newStatus]}`)
+        // Si se marca como entregado y estaba por cobrar, marcar como pagado automáticamente
+        if (newStatus === 'delivered' && delivery.paymentStatus === 'pending') {
+          await updateDeliveryPaymentStatus(getBusinessId(), delivery.id, 'paid')
+          toast.success('Entregado y marcado como cobrado')
+        } else {
+          toast.success(`Estado actualizado a ${DELIVERY_STATUS_LABELS[newStatus]}`)
+        }
         loadDeliveries()
       } else {
         toast.error('Error: ' + result.error)
       }
     } catch (error) {
       toast.error('Error al actualizar estado')
+    }
+  }
+
+  const handleMarkAsPaid = async (delivery) => {
+    if (isDemoMode) { toast.info('No disponible en demo'); return }
+    try {
+      const result = await updateDeliveryPaymentStatus(getBusinessId(), delivery.id, 'paid')
+      if (result.success) {
+        toast.success('Envío marcado como cobrado')
+        loadDeliveries()
+      } else {
+        toast.error('Error: ' + result.error)
+      }
+    } catch (error) {
+      toast.error('Error al actualizar estado de pago')
     }
   }
 
@@ -436,6 +457,7 @@ export default function Envios() {
           motoristas={motoristas}
           onSearch={loadDeliveries}
           onStatusChange={handleStatusChange}
+          onMarkAsPaid={handleMarkAsPaid}
           onPrintPDF={handlePrintPDF}
           onPrintTicket={handlePrintTicket}
           stats={stats}
@@ -812,7 +834,7 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
 // ============================================================
 // Tab 1: Envíos (Principal)
 // ============================================================
-function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onPrintPDF, onPrintTicket, stats }) {
+function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onMarkAsPaid, onPrintPDF, onPrintTicket, stats }) {
   const handleFilterChange = (e) => {
     const { name, value } = e.target
     setFilters(prev => ({ ...prev, [name]: value }))
@@ -946,12 +968,20 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                           <Badge variant="default" className="text-xs">
                             {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
                           </Badge>
-                          <Badge
-                            variant={d.paymentStatus === 'pending' ? 'warning' : 'success'}
-                            className="text-xs"
-                          >
-                            {d.paymentStatus === 'pending' ? 'Por cobrar' : 'Pagado'}
-                          </Badge>
+                          {d.paymentStatus === 'pending' ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onMarkAsPaid(d) }}
+                              title="Marcar como cobrado"
+                            >
+                              <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
+                                $ Por cobrar
+                              </Badge>
+                            </button>
+                          ) : (
+                            <Badge variant="success" className="text-xs">
+                              Pagado
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="font-semibold mr-1">S/ {(d.amount || 0).toFixed(2)}</span>
@@ -1059,12 +1089,20 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={d.paymentStatus === 'pending' ? 'warning' : 'success'}
-                              className="w-fit"
-                            >
-                              {d.paymentStatus === 'pending' ? 'Por cobrar' : 'Pagado'}
-                            </Badge>
+                            {d.paymentStatus === 'pending' ? (
+                              <button
+                                onClick={() => onMarkAsPaid(d)}
+                                title="Marcar como cobrado"
+                              >
+                                <Badge variant="warning" className="w-fit cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
+                                  $ Por cobrar
+                                </Badge>
+                              </button>
+                            ) : (
+                              <Badge variant="success" className="w-fit">
+                                Pagado
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                             {nextStatuses.length > 0 ? (

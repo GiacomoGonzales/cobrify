@@ -1250,7 +1250,22 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       if (item.concentration) parts.push(`Conc: ${item.concentration}`)
       if (item.genericName) parts.push(`DCI: ${item.genericName}`)
       if (item.activeIngredient) parts.push(`P.A: ${item.activeIngredient}`)
-      if (item.batchNumber) {
+      if (item.batchBreakdown && item.batchBreakdown.length > 0) {
+        // Desglose de múltiples lotes
+        const lotParts = item.batchBreakdown.map(b => {
+          let s = `Lote: ${b.lotNumber} (${b.quantity} und.)`
+          if (b.expirationDate) {
+            const d = b.expirationDate.toDate ? b.expirationDate.toDate()
+              : b.expirationDate.seconds ? new Date(b.expirationDate.seconds * 1000)
+              : new Date(b.expirationDate)
+            if (!isNaN(d.getTime())) {
+              s = `Lote: ${b.lotNumber} (${b.quantity} und. - Venc: ${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })})`
+            }
+          }
+          return s
+        })
+        parts.push(lotParts.join('  |  '))
+      } else if (item.batchNumber) {
         let batchStr = `Lote: ${item.batchNumber}`
         if (item.batchExpiryDate) {
           const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)

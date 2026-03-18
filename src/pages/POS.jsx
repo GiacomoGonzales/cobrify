@@ -2840,7 +2840,7 @@ export default function POS() {
           code: item.sku || item.code || '',
           name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
           quantity: item.quantity,
-          unit: item.unit || 'UNIDAD',
+          unit: item.presentationName || item.unit || 'UNIDAD',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
@@ -3023,7 +3023,7 @@ export default function POS() {
         code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
         name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
         quantity: item.quantity,
-        unit: item.unit || 'UNIDAD',
+        unit: item.presentationName || item.unit || 'UNIDAD',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
@@ -3474,6 +3474,9 @@ export default function POS() {
 
             // 4. Actualizar stock en Firestore
             if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0)) {
+              // Map para almacenar desglose de lotes por item (para actualizar factura)
+              const batchBreakdownByItemId = {}
+
               const stockUpdates = bgCart
                 .filter(item => !item.isCustom)
                 .map(async item => {
@@ -3485,6 +3488,8 @@ export default function POS() {
 
                   // Datos extra para lotes (descontar del lote seleccionado o FEFO)
                   const extraUpdates = {}
+                  const batchBreakdown = [] // Registrar de qué lotes se descontó
+
                   if (productData.batches && productData.batches.length > 0) {
                     let remainingToDeduct = quantityToDeduct
                     const updatedBatches = [...productData.batches]
@@ -3501,6 +3506,11 @@ export default function POS() {
                           quantity: updatedBatches[batchIdx].quantity - deductFromBatch
                         }
                         remainingToDeduct -= deductFromBatch
+                        batchBreakdown.push({
+                          lotNumber: item.batchNumber,
+                          quantity: deductFromBatch,
+                          expirationDate: updatedBatches[batchIdx].expirationDate || null
+                        })
                       }
                     }
 
@@ -3523,6 +3533,18 @@ export default function POS() {
                             quantity: batch.quantity - deductFromBatch
                           }
                           remainingToDeduct -= deductFromBatch
+                          const lotNum = batch.lotNumber || batch.batchNumber || ''
+                          // No duplicar si ya se registró este lote
+                          const existing = batchBreakdown.find(b => b.lotNumber === lotNum)
+                          if (existing) {
+                            existing.quantity += deductFromBatch
+                          } else {
+                            batchBreakdown.push({
+                              lotNumber: lotNum,
+                              quantity: deductFromBatch,
+                              expirationDate: batch.expirationDate || null
+                            })
+                          }
                         }
                       }
                     }
@@ -3545,6 +3567,11 @@ export default function POS() {
                     }
                   }
 
+                  // Guardar desglose de lotes para actualizar la factura
+                  if (batchBreakdown.length > 0) {
+                    batchBreakdownByItemId[item.cartId || item.id] = batchBreakdown
+                  }
+
                   // Usar transacción para evitar race conditions entre ventas simultáneas
                   return updateProductStockTransaction(
                     businessId, item.id,
@@ -3555,6 +3582,31 @@ export default function POS() {
                 })
 
               await Promise.all(stockUpdates)
+
+              // 4.0.1. Actualizar factura con desglose de lotes (si hubo lotes usados)
+              if (Object.keys(batchBreakdownByItemId).length > 0 && bgInvoiceId) {
+                try {
+                  const { doc: docRef, getDoc: getDocFn, updateDoc: updateDocFn } = await import('firebase/firestore')
+                  const { db: fireDb } = await import('@/lib/firebase')
+                  const invoiceRef = docRef(fireDb, 'businesses', businessId, 'invoices', bgInvoiceId)
+                  const invoiceSnap = await getDocFn(invoiceRef)
+                  if (invoiceSnap.exists()) {
+                    const invoiceData = invoiceSnap.data()
+                    const updatedItems = (invoiceData.items || []).map(invItem => {
+                      const cartItem = bgCart.find(c => c.id === invItem.productId)
+                      const cartKey = cartItem?.cartId || cartItem?.id
+                      const breakdown = batchBreakdownByItemId[cartKey]
+                      if (breakdown) {
+                        return { ...invItem, batchBreakdown: breakdown }
+                      }
+                      return invItem
+                    })
+                    await updateDocFn(invoiceRef, { items: updatedItems })
+                  }
+                } catch (err) {
+                  console.error('⚠️ Error al guardar desglose de lotes en factura:', err)
+                }
+              }
 
               // 4.1. Registrar movimientos de stock
               const itemsForMovement = bgCart.filter(item => {

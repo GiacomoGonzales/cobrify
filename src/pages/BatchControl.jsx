@@ -87,7 +87,16 @@ function BatchControl() {
   const getExpirationStatus = (expirationDate) => {
     if (!expirationDate) return null
 
-    const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate)
+    let expDate
+    if (expirationDate.toDate) {
+      expDate = expirationDate.toDate()
+    } else if (expirationDate.seconds) {
+      // Firestore Timestamp guardado como plain object (corrupto)
+      expDate = new Date(expirationDate.seconds * 1000)
+    } else {
+      expDate = new Date(expirationDate)
+    }
+    if (isNaN(expDate.getTime())) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     expDate.setHours(0, 0, 0, 0)
@@ -109,9 +118,17 @@ function BatchControl() {
   }
 
   // Formatear fecha
+  const parseDate = (date) => {
+    if (!date) return null
+    if (date.toDate) return date.toDate()
+    if (date.seconds) return new Date(date.seconds * 1000)
+    const d = new Date(date)
+    return isNaN(d.getTime()) ? null : d
+  }
+
   const formatDate = (date) => {
-    if (!date) return '-'
-    const d = date.toDate ? date.toDate() : new Date(date)
+    const d = parseDate(date)
+    if (!d) return '-'
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
@@ -162,11 +179,11 @@ function BatchControl() {
   const openEditModal = (product, batch) => {
     setEditingProductId(product.id)
     setEditingBatch(batch)
+    const parsedExpDate = parseDate(batch.expirationDate)
     setBatchData({
       batchNumber: batch.batchNumber || '',
-      expirationDate: batch.expirationDate
-        ? (typeof batch.expirationDate === 'string' ? batch.expirationDate.split('T')[0]
-          : (() => { const d = batch.expirationDate.toDate ? batch.expirationDate.toDate() : new Date(batch.expirationDate); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
+      expirationDate: parsedExpDate
+        ? `${parsedExpDate.getFullYear()}-${String(parsedExpDate.getMonth() + 1).padStart(2, '0')}-${String(parsedExpDate.getDate()).padStart(2, '0')}`
         : '',
       quantity: batch.quantity || 0
     })
@@ -212,8 +229,8 @@ function BatchControl() {
 
       if (activeBatches.length > 0) {
         activeBatches.sort((a, b) => {
-          const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-          const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+          const dateA = parseDate(a.expirationDate) || new Date('2099-12-31')
+          const dateB = parseDate(b.expirationDate) || new Date('2099-12-31')
           return dateA - dateB
         })
         nearestExpiration = activeBatches[0].expirationDate
@@ -270,8 +287,8 @@ function BatchControl() {
 
       if (activeBatches.length > 0) {
         activeBatches.sort((a, b) => {
-          const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-          const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+          const dateA = parseDate(a.expirationDate) || new Date('2099-12-31')
+          const dateB = parseDate(b.expirationDate) || new Date('2099-12-31')
           return dateA - dateB
         })
         nearestExpiration = activeBatches[0].expirationDate

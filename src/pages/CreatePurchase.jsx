@@ -25,7 +25,7 @@ import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/serv
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
 import Modal from '@/components/ui/Modal'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 // Helper function for legacy categories (used in ingredient logic)
@@ -49,6 +49,8 @@ const cleanUndefined = (obj) => {
   if (obj === null || obj === undefined) return obj
   if (Array.isArray(obj)) return obj.map(cleanUndefined)
   if (obj instanceof Date) return obj
+  if (obj instanceof Timestamp) return obj
+  if (obj?.toDate && typeof obj.toDate === 'function') return obj // Firestore Timestamp
   if (typeof obj === 'object') {
     const cleaned = {}
     for (const [key, value] of Object.entries(obj)) {
@@ -1190,11 +1192,11 @@ export default function CreatePurchase() {
               id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               batchNumber: item.batchNumber || '',
               quantity: parseFloat(item.quantity) || 0,
-              expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
+              expirationDate: item.expirationDate ? Timestamp.fromDate(new Date(item.expirationDate)) : null,
               purchaseId: resultId || null,
-              purchaseDate: new Date(invoiceDate),
+              purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
               costPrice: parseFloat(item.cost) || 0,
-              createdAt: new Date()
+              createdAt: Timestamp.fromDate(new Date())
             }))
 
             const updatedBatches = [...currentBatches, ...newBatches]

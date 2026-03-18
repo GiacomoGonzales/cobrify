@@ -362,6 +362,23 @@ export const updateDeliveryStatus = async (businessId, deliveryId, status) => {
 }
 
 /**
+ * Actualizar estado de pago de un envío
+ */
+export const updateDeliveryPaymentStatus = async (businessId, deliveryId, paymentStatus) => {
+  try {
+    const ref = doc(db, 'businesses', businessId, 'deliveries', deliveryId)
+    await updateDoc(ref, {
+      paymentStatus,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar estado de pago:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Liquidar (cerrar arqueo) entregas
  */
 export const settleDeliveries = async (businessId, deliveryIds, actualAmount) => {
