@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { UNITS } from '@/components/product/ProductFormModal'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
@@ -1331,10 +1332,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
 
-  const unitLabels = {
+  // Mapeo de códigos SUNAT a labels legibles (desde UNITS + legacy)
+  const unitLabels = Object.fromEntries(UNITS.map(u => [u.value, u.label]))
+  // Agregar labels legacy para compatibilidad
+  Object.assign(unitLabels, {
     'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT',
     'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
-  }
+  })
 
   for (let i = 0; i < items.length; i++) {
     const { height: rowHeight, descLines, pharmaLines } = itemHeights[i]
