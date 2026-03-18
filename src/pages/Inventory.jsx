@@ -34,6 +34,8 @@ import {
   Wrench,
   CheckCircle,
   MoreVertical,
+  FlaskConical,
+  CalendarClock,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -162,7 +164,8 @@ export default function Inventory() {
     fromWarehouse: '',
     toWarehouse: '',
     quantity: '',
-    notes: ''
+    notes: '',
+    selectedBatch: '' // Lote seleccionado para transferencia (farmacia)
   })
   const [isTransferring, setIsTransferring] = useState(false)
 
@@ -550,7 +553,8 @@ export default function Inventory() {
       fromWarehouse: '',
       toWarehouse: '',
       quantity: '',
-      notes: ''
+      notes: '',
+      selectedBatch: ''
     })
     setShowTransferModal(true)
   }
@@ -562,7 +566,8 @@ export default function Inventory() {
       fromWarehouse: '',
       toWarehouse: '',
       quantity: '',
-      notes: ''
+      notes: '',
+      selectedBatch: ''
     })
   }
 
@@ -996,14 +1001,25 @@ export default function Inventory() {
       return
     }
 
-    // Verificar stock disponible en almacén origen
+    // Verificar stock disponible en almacén origen (o en el lote seleccionado)
+    const hasBatches = transferProduct.batches && transferProduct.batches.length > 0
+    const selectedBatchData = hasBatches && transferData.selectedBatch
+      ? transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
+      : null
+
+    if (hasBatches && !transferData.selectedBatch) {
+      toast.error('Debes seleccionar un lote para transferir')
+      return
+    }
+
     const warehouseStock = transferProduct.warehouseStocks?.find(
       ws => ws.warehouseId === transferData.fromWarehouse
     )
-    const availableStock = warehouseStock?.stock || 0
+    const availableStock = selectedBatchData ? selectedBatchData.quantity : (warehouseStock?.stock || 0)
 
     if (quantity > availableStock) {
-      toast.error(`Stock insuficiente en almacén origen. Disponible: ${availableStock}`)
+      const stockSource = selectedBatchData ? `lote ${transferData.selectedBatch}` : 'almacén origen'
+      toast.error(`Stock insuficiente en ${stockSource}. Disponible: ${availableStock}`)
       return
     }
 
@@ -1026,15 +1042,45 @@ export default function Inventory() {
         quantity
       )
 
-      // 3. Guardar en Firestore
-      const updateResult = await updateProduct(businessId, transferProduct.id, {
+      // 2.1. Actualizar lotes si aplica
+      const productUpdates = {
         stock: updatedProduct.stock,
         warehouseStocks: updatedProduct.warehouseStocks
-      })
+      }
+
+      if (selectedBatchData) {
+        const updatedBatches = (transferProduct.batches || []).map(b => {
+          if ((b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch) {
+            return { ...b, quantity: b.quantity - quantity }
+          }
+          return b
+        })
+        productUpdates.batches = updatedBatches
+
+        // Actualizar fecha de vencimiento más próxima
+        const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
+        if (activeBatches.length > 0) {
+          activeBatches.sort((a, b) => {
+            const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+            const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+            return dateA - dateB
+          })
+          productUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+          productUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+        } else {
+          productUpdates.expirationDate = null
+          productUpdates.batchNumber = null
+        }
+      }
+
+      // 3. Guardar en Firestore
+      const updateResult = await updateProduct(businessId, transferProduct.id, productUpdates)
 
       if (!updateResult.success) {
         throw new Error('Error al actualizar el stock')
       }
+
+      const batchNote = selectedBatchData ? ` (Lote: ${transferData.selectedBatch})` : ''
 
       // 4. Registrar movimiento de salida
       await createStockMovement(businessId, {
@@ -1046,7 +1092,8 @@ export default function Inventory() {
         referenceType: 'transfer',
         toWarehouse: transferData.toWarehouse,
         userId: user.uid,
-        notes: transferData.notes || `Transferencia a ${warehouses.find(w => w.id === transferData.toWarehouse)?.name}`
+        ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
+        notes: transferData.notes || `Transferencia a ${allWarehouses.find(w => w.id === transferData.toWarehouse)?.name}${batchNote}`
       })
 
       // 5. Registrar movimiento de entrada
@@ -1059,7 +1106,8 @@ export default function Inventory() {
         referenceType: 'transfer',
         fromWarehouse: transferData.fromWarehouse,
         userId: user.uid,
-        notes: transferData.notes || `Transferencia desde ${warehouses.find(w => w.id === transferData.fromWarehouse)?.name}`
+        ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
+        notes: transferData.notes || `Transferencia desde ${allWarehouses.find(w => w.id === transferData.fromWarehouse)?.name}${batchNote}`
       })
 
       toast.success('Transferencia realizada exitosamente')
@@ -1887,7 +1935,8 @@ export default function Inventory() {
                   const isProduct = item.itemType === 'product'
                   const isExpanded = expandedProduct === item.id
                   const hasWarehouseStocks = item.warehouseStocks && item.warehouseStocks.length > 0
-                  const canExpand = warehouses.length > 0 && realStock !== null && isProduct
+                  const hasBatches = item.batches && item.batches.filter(b => b.quantity > 0).length > 0
+                  const canExpand = (warehouses.length > 0 || hasBatches) && realStock !== null && isProduct
 
                   return (
                     <div key={`card-${item.itemType}-${item.id}`}>
@@ -1975,7 +2024,7 @@ export default function Inventory() {
                       </div>
 
                       {/* Expandible: Stock por almacén/sucursal */}
-                      {isExpanded && canExpand && filteredWarehouses.length > 0 && (
+                      {isExpanded && canExpand && (filteredWarehouses.length > 0 || hasBatches) && (
                         <div className="px-4 pb-3 bg-gray-50">
                           <div className="space-y-2">
                             {(() => {
@@ -2067,6 +2116,57 @@ export default function Inventory() {
                                 </div>
                               )
                             })()}
+
+                            {/* Desglose de Lotes */}
+                            {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                              <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
+                                <div className="bg-amber-50 px-3 py-1.5 flex items-center gap-2 border-b border-amber-200">
+                                  <FlaskConical className="w-3 h-3 text-amber-600" />
+                                  <span className="text-xs font-medium text-amber-700">Lotes</span>
+                                  <span className="text-xs text-amber-600 ml-auto">
+                                    {item.batches.filter(b => b.quantity > 0).length} activos
+                                  </span>
+                                </div>
+                                <div className="p-2 space-y-1">
+                                  {item.batches
+                                    .filter(b => b.quantity > 0)
+                                    .sort((a, b) => {
+                                      const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                                      const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                                      return dA - dB
+                                    })
+                                    .map((batch, bIdx) => {
+                                      const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                      const expiryDate = batch.expirationDate || batch.expiryDate
+                                      const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                      const now = new Date()
+                                      const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
+                                      const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                      const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                      const expiryStr = expiryD
+                                        ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                        : 'Sin fecha'
+                                      return (
+                                        <div key={batchId + bIdx} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
+                                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                            <FlaskConical className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                            <span className="text-xs text-gray-700 font-medium truncate">{batchId}</span>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                              <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                              <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                                {expiryStr}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <span className={`font-semibold text-xs flex-shrink-0 ml-2 ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                            {batch.quantity}
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2189,8 +2289,8 @@ export default function Inventory() {
                             const realStock = getRealStock(item)
                             return (
                               <div className="flex items-center justify-end space-x-1">
-                                {/* Botón de expandir/contraer solo si hay almacenes y es producto */}
-                                {warehouses.length > 0 && realStock !== null && isProduct && (
+                                {/* Botón de expandir/contraer si hay almacenes o lotes */}
+                                {(warehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0)) && realStock !== null && isProduct && (
                                   <button
                                     onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
                                     className="p-0.5 hover:bg-gray-100 rounded transition-colors"
@@ -2277,7 +2377,7 @@ export default function Inventory() {
                       </TableRow>
 
                       {/* Fila expandible con detalle por sucursal y almacén - solo para productos */}
-                      {isExpanded && filteredWarehouses.length > 0 && getRealStock(item) !== null && isProduct && (
+                      {isExpanded && (filteredWarehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0)) && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
                             <div className="pl-8 space-y-4">
@@ -2423,6 +2523,67 @@ export default function Inventory() {
                                   </div>
                                 )
                               })()}
+
+                              {/* Desglose de Lotes */}
+                              {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                                <div className="mt-4 border border-amber-200 rounded-lg overflow-hidden">
+                                  <div className="bg-amber-50 px-4 py-2 flex items-center gap-2 border-b border-amber-200">
+                                    <FlaskConical className="w-4 h-4 text-amber-600" />
+                                    <span className="font-medium text-amber-700">Lotes</span>
+                                    <Badge variant="warning" className="text-xs ml-2">
+                                      {item.batches.filter(b => b.quantity > 0).length} activos
+                                    </Badge>
+                                  </div>
+                                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    {item.batches
+                                      .filter(b => b.quantity > 0)
+                                      .sort((a, b) => {
+                                        const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                                        const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                                        return dA - dB
+                                      })
+                                      .map((batch, bIdx) => {
+                                        const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                        const expiryDate = batch.expirationDate || batch.expiryDate
+                                        const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                        const now = new Date()
+                                        const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
+                                        const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                        const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                        const expiryStr = expiryD
+                                          ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                          : 'Sin fecha'
+                                        return (
+                                          <div
+                                            key={batchId + bIdx}
+                                            className={`flex items-center justify-between p-2.5 border rounded-lg ${
+                                              isExpired ? 'bg-red-50 border-red-200' : isNearExpiry ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'
+                                            }`}
+                                          >
+                                            <div className="flex flex-col gap-0.5">
+                                              <div className="flex items-center gap-1.5">
+                                                <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
+                                                <span className="text-sm font-medium text-gray-800">{batchId}</span>
+                                              </div>
+                                              <div className="flex items-center gap-1 ml-5">
+                                                <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                                <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                                  {isExpired ? 'Vencido' : isNearExpiry ? `Vence: ${expiryStr} (${daysUntilExpiry}d)` : expiryStr}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            <div className="text-right">
+                                              <span className={`font-bold text-lg ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {batch.quantity}
+                                              </span>
+                                              <p className="text-xs text-gray-400">unidades</p>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                  </div>
+                                </div>
+                              )}
 
                               {!hasWarehouseStocks && (
                                 <p className="text-xs text-gray-500 mt-2">
@@ -2760,11 +2921,67 @@ export default function Inventory() {
             </select>
           </div>
 
+          {/* Selección de Lote (si el producto tiene lotes) */}
+          {transferProduct?.batches?.filter(b => b.quantity > 0).length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Lote <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {transferProduct.batches
+                  .filter(b => b.quantity > 0)
+                  .sort((a, b) => {
+                    const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                    const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                    return dA - dB
+                  })
+                  .map((batch, idx) => {
+                    const batchId = batch.lotNumber || batch.batchNumber || batch.id
+                    const expiryDate = batch.expirationDate || batch.expiryDate
+                    const expiryStr = expiryDate
+                      ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                      : 'Sin fecha'
+                    const isSelected = transferData.selectedBatch === batchId
+                    return (
+                      <button
+                        key={batchId + idx}
+                        type="button"
+                        onClick={() => setTransferData({ ...transferData, selectedBatch: batchId, quantity: '' })}
+                        className={`w-full p-3 border-2 rounded-lg text-left transition-all ${
+                          isSelected
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{batchId}</p>
+                            <p className="text-xs text-gray-500">Vence: {expiryStr}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-primary-600">{batch.quantity}</p>
+                            <p className="text-xs text-gray-400">disponibles</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+
           <Input
             label="Cantidad a Transferir"
             type="number"
             required
             min="1"
+            max={(() => {
+              if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
+                const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
+                return batch?.quantity || 0
+              }
+              return transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+            })()}
             value={transferData.quantity}
             onChange={(e) => setTransferData({ ...transferData, quantity: e.target.value })}
             placeholder="Cantidad"
@@ -2772,11 +2989,17 @@ export default function Inventory() {
 
           {transferData.fromWarehouse && (
             <div className="text-sm text-gray-600">
-              Stock disponible: {' '}
+              Stock disponible{transferData.selectedBatch ? ` (Lote ${transferData.selectedBatch})` : ''}: {' '}
               <span className="font-semibold">
-                {transferProduct?.warehouseStocks?.find(
-                  ws => ws.warehouseId === transferData.fromWarehouse
-                )?.stock || 0}
+                {(() => {
+                  if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
+                    const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
+                    return batch?.quantity || 0
+                  }
+                  return transferProduct?.warehouseStocks?.find(
+                    ws => ws.warehouseId === transferData.fromWarehouse
+                  )?.stock || 0
+                })()}
               </span>
             </div>
           )}

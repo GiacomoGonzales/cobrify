@@ -671,7 +671,12 @@ export default function StockMovements() {
                   <div key={movement.id} className="px-4 py-3 hover:bg-gray-50 transition-colors overflow-hidden">
                     {/* Fila 1: Producto + cantidad + saldo */}
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate min-w-0 flex-1">{movement.productName}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{movement.productName}</p>
+                        {movement.batchNumber && (
+                          <p className="text-xs text-amber-600 truncate">Lote: {movement.batchNumber}</p>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className={`font-bold text-sm ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {movement.quantity > 0 ? '+' : ''}{movement.quantity}
@@ -750,6 +755,9 @@ export default function StockMovements() {
                           <div>
                             <p className="font-medium text-sm">{movement.productName}</p>
                             <p className="text-xs text-gray-500">{movement.productCode}</p>
+                            {movement.batchNumber && (
+                              <p className="text-xs text-amber-600 mt-0.5">Lote: {movement.batchNumber}</p>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>

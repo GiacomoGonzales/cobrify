@@ -417,6 +417,7 @@ export default function POS() {
   const [showBatchModal, setShowBatchModal] = useState(false)
   const [productForBatchSelection, setProductForBatchSelection] = useState(null)
   const [pendingPriceForBatch, setPendingPriceForBatch] = useState(null) // Precio seleccionado antes de elegir lote
+  const [pendingBatchForPresentation, setPendingBatchForPresentation] = useState(null) // Lote seleccionado antes de elegir presentación
 
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
@@ -1655,10 +1656,20 @@ export default function POS() {
       return
     }
 
+    // FARMACIA: Verificar lotes PRIMERO (antes de presentaciones)
+    const availableBatches = getAvailableBatches(product)
+    if (availableBatches.length >= 1 && selectedBatch === null) {
+      setProductForBatchSelection(product)
+      setPendingPriceForBatch(selectedPrice)
+      setShowBatchModal(true)
+      return
+    }
+
     // Verificar si tiene presentaciones y no viene con presentación ya seleccionada
     const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
     if (hasPresentations && selectedPresentation === null) {
       setProductForPresentationSelection(product)
+      setPendingBatchForPresentation(selectedBatch)
       setShowPresentationModal(true)
       return
     }
@@ -1675,15 +1686,6 @@ export default function POS() {
       }
       setProductForPriceSelection(product)
       setShowPriceModal(true)
-      return
-    }
-
-    // FARMACIA: Verificar si tiene lotes y no viene con lote seleccionado
-    const availableBatches = getAvailableBatches(product)
-    if (availableBatches.length >= 1 && selectedBatch === null) {
-      setProductForBatchSelection(product)
-      setPendingPriceForBatch(selectedPrice) // Guardar precio seleccionado para usarlo después
-      setShowBatchModal(true)
       return
     }
 
@@ -1724,8 +1726,9 @@ export default function POS() {
       }
     }
 
-    // ID único para el item en carrito (diferente por lote)
-    const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}` : product.id
+    // ID único para el item en carrito (diferente por lote + presentación)
+    const presKey = product.presentationName ? `-pres-${product.presentationName}` : ''
+    const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}${presKey}` : (product.presentationName ? `${product.id}${presKey}` : product.id)
     const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
 
     if (existingItem) {
@@ -1758,11 +1761,23 @@ export default function POS() {
   // Manejar selección de lote desde el modal
   const handleBatchSelection = (batch) => {
     if (!productForBatchSelection) return
-    // Usar el precio que se había seleccionado antes de mostrar el modal de lotes
-    addToCart(productForBatchSelection, pendingPriceForBatch, null, batch)
+    const product = productForBatchSelection
+    const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
+
     setShowBatchModal(false)
     setProductForBatchSelection(null)
-    setPendingPriceForBatch(null)
+
+    if (hasPresentations) {
+      // Tiene presentaciones: mostrar modal de presentación con el lote ya seleccionado
+      setProductForPresentationSelection(product)
+      setPendingBatchForPresentation(batch)
+      setShowPresentationModal(true)
+      setPendingPriceForBatch(null)
+    } else {
+      // Sin presentaciones: agregar directo al carrito
+      addToCart(product, pendingPriceForBatch, null, batch)
+      setPendingPriceForBatch(null)
+    }
   }
 
   // Manejar selección de modificadores desde el modal
@@ -1861,42 +1876,54 @@ export default function POS() {
     if (!productForPresentationSelection) return
 
     const product = productForPresentationSelection
+    const batchToUse = pendingBatchForPresentation
 
-    // Crear un item del carrito con la información de la presentación
+    // ID único por lote + presentación (nunca se mezclan lotes diferentes)
+    const batchKey = batchToUse ? `-batch-${batchToUse.lotNumber}` : ''
+    const cartId = `${product.id}${batchKey}-pres-${presentation.name}`
+
+    // Crear un item del carrito con la información de la presentación y lote
     const cartItem = {
       ...product,
-      cartId: `${product.id}-pres-${presentation.name}`, // ID único para esta presentación
+      cartId,
       price: presentation.price,
       presentationName: presentation.name,
       presentationFactor: presentation.factor,
-      // La cantidad es 1 presentación, pero descuenta factor unidades del stock
-      quantity: 1
+      quantity: 1,
+      ...(batchToUse && {
+        batchNumber: batchToUse.lotNumber,
+        batchExpiryDate: batchToUse.expiryDate,
+        batchQuantity: batchToUse.quantity
+      })
     }
 
-    // Verificar stock considerando el factor
-    const warehouseStock = getCurrentWarehouseStock(product)
-    if (product.stock !== null && warehouseStock < presentation.factor && !companySettings?.allowNegativeStock) {
-      toast.error(`Stock insuficiente. Se requieren ${presentation.factor} unidades, disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
+    // Verificar stock considerando el factor (del lote si aplica)
+    const availableStock = batchToUse ? batchToUse.quantity : getCurrentWarehouseStock(product)
+    if (product.stock !== null && availableStock < presentation.factor && !companySettings?.allowNegativeStock) {
+      const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
+      toast.error(`Stock insuficiente en ${stockSource}. Se requieren ${presentation.factor} unidades, disponible: ${parseFloat(availableStock.toFixed(2))}`)
       setShowPresentationModal(false)
       setProductForPresentationSelection(null)
+      setPendingBatchForPresentation(null)
       return
     }
 
-    // Buscar si ya existe esta presentación en el carrito
-    const existingItem = cart.find(item => item.cartId === cartItem.cartId)
+    // Buscar si ya existe esta presentación+lote en el carrito
+    const existingItem = cart.find(item => item.cartId === cartId)
 
     if (existingItem) {
-      // Verificar si hay suficiente stock para otra unidad
       const newTotalUnits = (existingItem.quantity + 1) * presentation.factor
-      if (product.stock !== null && newTotalUnits > warehouseStock && !companySettings?.allowNegativeStock) {
-        toast.error(`Stock insuficiente. Se requieren ${newTotalUnits} unidades, disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
+      if (product.stock !== null && newTotalUnits > availableStock && !companySettings?.allowNegativeStock) {
+        const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
+        toast.error(`Stock insuficiente en ${stockSource}. Se requieren ${newTotalUnits} unidades, disponible: ${parseFloat(availableStock.toFixed(2))}`)
         setShowPresentationModal(false)
         setProductForPresentationSelection(null)
+        setPendingBatchForPresentation(null)
         return
       }
       setCart(
         cart.map(item =>
-          item.cartId === cartItem.cartId ? { ...item, quantity: item.quantity + 1 } : item
+          item.cartId === cartId ? { ...item, quantity: item.quantity + 1 } : item
         )
       )
     } else {
@@ -1906,6 +1933,7 @@ export default function POS() {
     // Cerrar modal
     setShowPresentationModal(false)
     setProductForPresentationSelection(null)
+    setPendingBatchForPresentation(null)
   }
 
   // Manejar venta directa por unidad base (sin presentación específica)
@@ -1913,13 +1941,15 @@ export default function POS() {
     if (!productForPresentationSelection) return
 
     const product = productForPresentationSelection
+    const batchToUse = pendingBatchForPresentation
 
-    // Agregar al carrito con precio y factor base (1)
-    addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price })
+    // Agregar al carrito con precio y factor base (1), pasando el lote si existe
+    addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price }, batchToUse)
 
     // Cerrar modal
     setShowPresentationModal(false)
     setProductForPresentationSelection(null)
+    setPendingBatchForPresentation(null)
   }
 
   const addVariantToCart = (product, variant, selectedPrice = null) => {
@@ -3453,29 +3483,47 @@ export default function POS() {
 
                   const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
 
-                  // Datos extra para FEFO (lotes con fecha de vencimiento)
+                  // Datos extra para lotes (descontar del lote seleccionado o FEFO)
                   const extraUpdates = {}
                   if (productData.batches && productData.batches.length > 0) {
-                    let remainingToDeduct = item.quantity
+                    let remainingToDeduct = quantityToDeduct
                     const updatedBatches = [...productData.batches]
 
-                    updatedBatches.sort((a, b) => {
-                      if (!a.expirationDate) return 1
-                      if (!b.expirationDate) return -1
-                      const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-                      const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
-                      return dateA - dateB
-                    })
-
-                    for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
-                      const batch = updatedBatches[i]
-                      if (batch.quantity > 0) {
-                        const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
-                        updatedBatches[i] = {
-                          ...batch,
-                          quantity: batch.quantity - deductFromBatch
+                    if (item.batchNumber) {
+                      // Descontar del lote específico seleccionado por el usuario
+                      const batchIdx = updatedBatches.findIndex(b =>
+                        (b.lotNumber || b.batchNumber) === item.batchNumber
+                      )
+                      if (batchIdx !== -1) {
+                        const deductFromBatch = Math.min(updatedBatches[batchIdx].quantity, remainingToDeduct)
+                        updatedBatches[batchIdx] = {
+                          ...updatedBatches[batchIdx],
+                          quantity: updatedBatches[batchIdx].quantity - deductFromBatch
                         }
                         remainingToDeduct -= deductFromBatch
+                      }
+                    }
+
+                    // Si queda remanente (o no se seleccionó lote), usar FEFO
+                    if (remainingToDeduct > 0) {
+                      updatedBatches.sort((a, b) => {
+                        if (!a.expirationDate) return 1
+                        if (!b.expirationDate) return -1
+                        const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                        const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                        return dateA - dateB
+                      })
+
+                      for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
+                        const batch = updatedBatches[i]
+                        if (batch.quantity > 0) {
+                          const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
+                          updatedBatches[i] = {
+                            ...batch,
+                            quantity: batch.quantity - deductFromBatch
+                          }
+                          remainingToDeduct -= deductFromBatch
+                        }
                       }
                     }
 
@@ -3521,6 +3569,9 @@ export default function POS() {
                 try {
                   const quantityForMovement = item.quantity * (item.presentationFactor || 1)
                   const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
+                  const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
+                  if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
+                  if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
                   await createStockMovement(businessId, {
                     productId: item.id,
                     productName: item.name || '',
@@ -3532,9 +3583,8 @@ export default function POS() {
                     referenceId: bgInvoiceId || '',
                     referenceNumber: bgNumberResult?.number || '',
                     userId: bgUserUid,
-                    notes: item.presentationName
-                      ? `Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''} - ${item.quantity} ${item.presentationName}`
-                      : `Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`
+                    ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                    notes: noteParts.join(' - ')
                   })
                 } catch (err) {
                   console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
@@ -6623,8 +6673,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         onClose={() => {
           setShowPresentationModal(false)
           setProductForPresentationSelection(null)
+          setPendingBatchForPresentation(null)
         }}
-        title={`Seleccionar presentación - ${productForPresentationSelection?.name || ''}`}
+        title={`Seleccionar presentación - ${productForPresentationSelection?.name || ''}${pendingBatchForPresentation ? ` (Lote: ${pendingBatchForPresentation.lotNumber})` : ''}`}
         size="sm"
       >
         {productForPresentationSelection && (
@@ -6678,19 +6729,29 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             {/* Info de stock por presentación */}
             {productForPresentationSelection.stock !== null && (
               <div className="mt-4 p-3 bg-gray-50 rounded-lg space-y-1">
-                <p className="text-xs font-medium text-gray-700">Stock disponible:</p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-semibold">{getCurrentWarehouseStock(productForPresentationSelection)}</span> unidades
+                <p className="text-xs font-medium text-gray-700">
+                  Stock disponible{pendingBatchForPresentation ? ` (Lote ${pendingBatchForPresentation.lotNumber})` : ''}:
                 </p>
-                {productForPresentationSelection.presentations?.map((pres, idx) => {
-                  const warehouseStock = getCurrentWarehouseStock(productForPresentationSelection)
-                  const equivalentQty = Math.floor(warehouseStock / pres.factor)
+                {(() => {
+                  const stockDisponible = pendingBatchForPresentation
+                    ? pendingBatchForPresentation.quantity
+                    : getCurrentWarehouseStock(productForPresentationSelection)
                   return (
-                    <p key={idx} className="text-sm text-gray-600">
-                      <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
-                    </p>
+                    <>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold">{stockDisponible}</span> unidades
+                      </p>
+                      {productForPresentationSelection.presentations?.map((pres, idx) => {
+                        const equivalentQty = Math.floor(stockDisponible / pres.factor)
+                        return (
+                          <p key={idx} className="text-sm text-gray-600">
+                            <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
+                          </p>
+                        )
+                      })}
+                    </>
                   )
-                })}
+                })()}
               </div>
             )}
           </div>
