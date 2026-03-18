@@ -1182,18 +1182,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const colWidths = hasAnyItemDiscount ? {
     cant: CONTENT_WIDTH * 0.07,
     um: CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.22 : CONTENT_WIDTH * 0.40,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.25 : CONTENT_WIDTH * 0.40,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.11 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.15,
     dcto: CONTENT_WIDTH * 0.12,
     total: CONTENT_WIDTH * 0.19
   } : {
     cant: CONTENT_WIDTH * 0.07,
     um: CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.27 : CONTENT_WIDTH * 0.49,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.14 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.11 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.30 : CONTENT_WIDTH * 0.49,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.16 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: CONTENT_WIDTH * 0.19
