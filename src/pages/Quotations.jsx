@@ -664,7 +664,7 @@ export default function Quotations() {
                           <Copy className="w-4 h-4 text-cyan-600" />
                           <span>Duplicar</span>
                         </button>
-                        {quotation.status !== 'converted' && quotation.status !== 'expired' && quotation.status !== 'rejected' && (
+                        {quotation.status !== 'converted' && quotation.status !== 'rejected' && (
                           <>
                             <div className="border-t border-gray-100 my-1" />
                             <button
@@ -863,7 +863,6 @@ export default function Quotations() {
 
                                 {/* Convertir a factura */}
                                 {quotation.status !== 'converted' &&
-                                  quotation.status !== 'expired' &&
                                   quotation.status !== 'rejected' && (
                                     <>
                                       <div className="border-t border-gray-100 my-1" />
@@ -1085,7 +1084,6 @@ export default function Quotations() {
                 Descargar PDF
               </Button>
               {viewingQuotation.status !== 'converted' &&
-                viewingQuotation.status !== 'expired' &&
                 viewingQuotation.status !== 'rejected' && (
                   <Button
                     onClick={() => {
