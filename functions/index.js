@@ -3856,6 +3856,11 @@ export const retryPendingInvoices = onSchedule(
           continue // Saltar negocios sin configuración SUNAT
         }
 
+        // Respetar configuración de envío automático: si está desactivado, no reenviar
+        if (businessData.autoSendToSunat === false) {
+          continue
+        }
+
         // Determinar si este negocio con IGV reducido tiene pausa activa (solo aplica a facturas)
         let skipFacturas = false
         if (pauseSunatRestaurants && !pauseSunatExceptions.includes(businessId)) {
@@ -4141,6 +4146,11 @@ export const resendPendingBoletas = onRequest(
           continue
         }
 
+        // Respetar configuración de envío automático: si está desactivado, no reenviar
+        if (businessData.autoSendToSunat === false) {
+          continue
+        }
+
         const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
 
         // Buscar boletas pendientes (pending o sending atascadas)
@@ -4343,6 +4353,11 @@ export const testRetryPendingInvoices = onRequest(
         const businessData = businessDoc.data()
 
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+          continue
+        }
+
+        // Respetar configuración de envío automático: si está desactivado, no reenviar
+        if (businessData.autoSendToSunat === false) {
           continue
         }
 
