@@ -2840,7 +2840,7 @@ export default function POS() {
           code: item.sku || item.code || '',
           name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
           quantity: item.quantity,
-          unit: item.presentationName || item.unit || 'UNIDAD',
+          unit: item.unit || 'NIU',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
@@ -3023,7 +3023,7 @@ export default function POS() {
         code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
         name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
         quantity: item.quantity,
-        unit: item.presentationName || item.unit || 'UNIDAD',
+        unit: item.unit || 'NIU',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
