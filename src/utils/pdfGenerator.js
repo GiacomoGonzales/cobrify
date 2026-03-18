@@ -1191,10 +1191,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   } : {
     cant: CONTENT_WIDTH * 0.07,
     um: CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.30 : CONTENT_WIDTH * 0.49,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.33 : CONTENT_WIDTH * 0.49,
     lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.16 : CONTENT_WIDTH * 0.17,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.13 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: CONTENT_WIDTH * 0.19
   }
@@ -1312,11 +1312,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
       doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
     }
-    doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
+    doc.text('P. UNIT.', cols.pu + colWidths.pu - 5, headerTextY, { align: 'right' })
     if (hasAnyItemDiscount) {
-      doc.text('DCTO.', cols.dcto + colWidths.dcto / 2, headerTextY, { align: 'center' })
+      doc.text('DCTO.', cols.dcto + colWidths.dcto - 5, headerTextY, { align: 'right' })
     }
-    doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
+    doc.text('IMPORTE', cols.total + colWidths.total - 5, headerTextY, { align: 'right' })
     return startY + headerRowHeight
   }
 
