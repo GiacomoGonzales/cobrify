@@ -241,6 +241,7 @@ export const createDeliveryRecord = async (businessId, data) => {
       amount: parseFloat(data.amount) || 0,
       deliveryFee: parseFloat(data.deliveryFee) || 0,
       paymentMethod: data.paymentMethod || 'cash',
+      paymentStatus: data.paymentStatus || 'paid', // 'paid' | 'pending' (por cobrar)
       cashCollected: parseFloat(data.cashCollected) || 0,
       status: data.status || 'assigned', // assigned, in_transit, delivered, cancelled
       settled: false, // Para arqueo de caja
