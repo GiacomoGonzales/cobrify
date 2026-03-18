@@ -77,6 +77,8 @@ export default function ResellerSettings() {
     priceMonthly: resellerData?.branding?.priceMonthly ?? 29.90,
     priceSemester: resellerData?.branding?.priceSemester ?? 149.90,
     priceAnnual: resellerData?.branding?.priceAnnual ?? 199.90,
+    showDemoRetail: resellerData?.branding?.showDemoRetail ?? true,
+    showDemoRestaurant: resellerData?.branding?.showDemoRestaurant ?? true,
   })
 
   // Sincronizar formData y brandingData cuando resellerData se cargue
@@ -103,6 +105,8 @@ export default function ResellerSettings() {
         priceMonthly: resellerData.branding?.priceMonthly ?? 29.90,
         priceSemester: resellerData.branding?.priceSemester ?? 149.90,
         priceAnnual: resellerData.branding?.priceAnnual ?? 199.90,
+        showDemoRetail: resellerData.branding?.showDemoRetail ?? true,
+        showDemoRestaurant: resellerData.branding?.showDemoRestaurant ?? true,
       })
       setDataLoaded(true)
     }
@@ -964,6 +968,33 @@ export default function ResellerSettings() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Demos visibles en landing */}
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Demos visibles en tu landing
+                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={brandingData.showDemoRetail}
+                          onChange={(e) => setBrandingData(prev => ({ ...prev, showDemoRetail: e.target.checked }))}
+                          className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                        />
+                        <span className="text-sm text-gray-700">Demo Tienda (Retail)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={brandingData.showDemoRestaurant}
+                          onChange={(e) => setBrandingData(prev => ({ ...prev, showDemoRestaurant: e.target.checked }))}
+                          className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                        />
+                        <span className="text-sm text-gray-700">Demo Restaurante</span>
+                      </label>
                     </div>
                   </div>
 

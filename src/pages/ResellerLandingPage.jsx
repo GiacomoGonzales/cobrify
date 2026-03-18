@@ -15,6 +15,11 @@ export default function ResellerLandingPage({ reseller }) {
   const secondaryColor = reseller?.branding?.secondaryColor || '#1d4ed8'
   const whatsapp = reseller?.branding?.whatsapp || reseller?.phone || ''
 
+  // Demos visibles
+  const showDemoRetail = reseller?.branding?.showDemoRetail ?? true
+  const showDemoRestaurant = reseller?.branding?.showDemoRestaurant ?? true
+  const showDemoSection = showDemoRetail || showDemoRestaurant
+
   // Precios dinámicos
   const priceMonthly = reseller?.branding?.priceMonthly ?? 29.90
   const priceSemester = reseller?.branding?.priceSemester ?? 149.90
@@ -367,6 +372,7 @@ export default function ResellerLandingPage({ reseller }) {
       </section>
 
       {/* Demo Section */}
+      {showDemoSection && (
       <section id="demo" className="py-20 px-4 relative overflow-hidden" style={heroStyle}>
         <div className="container mx-auto max-w-6xl relative z-10">
           <div className="text-center mb-12">
@@ -378,8 +384,9 @@ export default function ResellerLandingPage({ reseller }) {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className={`grid gap-8 max-w-4xl mx-auto ${showDemoRetail && showDemoRestaurant ? 'md:grid-cols-2' : 'md:grid-cols-1 max-w-xl'}`}>
             {/* Demo Tienda */}
+            {showDemoRetail && (
             <Link to="/demo" className="group">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all duration-300 transform hover:-translate-y-1">
                 <div className="flex items-center gap-4 mb-4">
@@ -400,8 +407,10 @@ export default function ResellerLandingPage({ reseller }) {
                 </div>
               </div>
             </Link>
+            )}
 
             {/* Demo Restaurante */}
+            {showDemoRestaurant && (
             <Link to="/demorestaurant" className="group">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all duration-300 transform hover:-translate-y-1">
                 <div className="flex items-center gap-4 mb-4">
@@ -422,9 +431,11 @@ export default function ResellerLandingPage({ reseller }) {
                 </div>
               </div>
             </Link>
+            )}
           </div>
         </div>
       </section>
+      )}
 
       {/* Benefits Section */}
       <section id="benefits" className="py-20 px-4 relative overflow-hidden">
