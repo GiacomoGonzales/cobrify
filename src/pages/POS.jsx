@@ -418,6 +418,8 @@ export default function POS() {
   const [productForBatchSelection, setProductForBatchSelection] = useState(null)
   const [pendingPriceForBatch, setPendingPriceForBatch] = useState(null) // Precio seleccionado antes de elegir lote
   const [pendingBatchForPresentation, setPendingBatchForPresentation] = useState(null) // Lote seleccionado antes de elegir presentación
+  const [pendingBatchForPrice, setPendingBatchForPrice] = useState(null) // Lote seleccionado antes de elegir precio (desde presentación base)
+  const [priceFromBaseUnit, setPriceFromBaseUnit] = useState(false) // Viene del flujo presentación → unidad base → precios
 
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
@@ -1863,12 +1865,20 @@ export default function POS() {
     const product = productForPriceSelection
     const selectedPrice = resolvePrice(product, priceLevel) || product.price
 
-    // Agregar al carrito con el precio seleccionado
-    addToCart({ ...product, price: selectedPrice }, selectedPrice)
+    if (priceFromBaseUnit) {
+      // Viene del flujo: presentación → unidad base → precios
+      const batchToUse = pendingBatchForPrice
+      addToCart({ ...product, price: selectedPrice, presentationName: null, presentationFactor: 1 }, selectedPrice, { name: 'base', factor: 1, price: selectedPrice }, batchToUse)
+    } else {
+      // Flujo normal: producto sin presentaciones → precios
+      addToCart({ ...product, price: selectedPrice }, selectedPrice)
+    }
 
-    // Cerrar modal
+    // Cerrar modal y limpiar estado
     setShowPriceModal(false)
     setProductForPriceSelection(null)
+    setPendingBatchForPrice(null)
+    setPriceFromBaseUnit(false)
   }
 
   // Manejar selección de presentación desde el modal
@@ -1943,13 +1953,33 @@ export default function POS() {
     const product = productForPresentationSelection
     const batchToUse = pendingBatchForPresentation
 
-    // Agregar al carrito con precio y factor base (1), pasando el lote si existe
-    addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price }, batchToUse)
-
-    // Cerrar modal
+    // Cerrar modal de presentación
     setShowPresentationModal(false)
     setProductForPresentationSelection(null)
     setPendingBatchForPresentation(null)
+
+    // Verificar si tiene múltiples precios → mostrar modal de precios
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (
+      hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')
+    )
+    if (hasMultiplePrices) {
+      // Si el cliente tiene precio asignado, usar directo
+      if (selectedCustomer?.priceLevel) {
+        const priceKey = selectedCustomer.priceLevel
+        const autoPrice = resolvePrice(product, priceKey) || product.price
+        addToCart({ ...product, presentationName: null, presentationFactor: 1, price: autoPrice }, autoPrice, { name: 'base', factor: 1, price: autoPrice }, batchToUse)
+        return
+      }
+      // Mostrar modal de precios, guardando el batch pendiente
+      setPendingBatchForPrice(batchToUse)
+      setPriceFromBaseUnit(true)
+      setProductForPriceSelection(product)
+      setShowPriceModal(true)
+      return
+    }
+
+    // Sin múltiples precios: agregar directo al carrito
+    addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price }, batchToUse)
   }
 
   const addVariantToCart = (product, variant, selectedPrice = null) => {

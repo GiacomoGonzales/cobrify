@@ -1555,7 +1555,8 @@ Gracias por tu preferencia.`
       const matchesSearch =
         invoice.number?.toLowerCase().includes(search) ||
         invoice.customer?.name?.toLowerCase().includes(search) ||
-        invoice.customer?.documentNumber?.includes(search)
+        invoice.customer?.documentNumber?.includes(search) ||
+        invoice.items?.some(item => item.name?.toLowerCase().includes(search) || item.code?.toLowerCase().includes(search))
 
       const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
       const matchesType = filterType === 'all' || invoice.documentType === filterType
@@ -1856,7 +1857,7 @@ Gracias por tu preferencia.`
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por número, cliente, RUC/DNI..."
+              placeholder="Buscar por número, cliente, RUC/DNI, producto..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
