@@ -9,13 +9,15 @@ import {
   query,
   orderBy,
   Timestamp,
-  where
+  where,
+  runTransaction,
+  serverTimestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getRecipeByProductId, checkRecipeStock, calculateRecipeCost } from './recipeService'
 import { deductIngredients } from './ingredientService'
 import { updateWarehouseStock, createStockMovement } from './warehouseService'
-import { updateProduct } from './firestoreService'
+// updateProduct ya no se usa - producción usa transacciones para evitar datos stale
 
 /**
  * Ejecutar producción con receta (modo automático)
@@ -66,27 +68,35 @@ export const executeRecipeProduction = async (businessId, params) => {
       return { success: false, error: `Error al descontar insumos: ${deductResult.error}` }
     }
 
-    // 6. Aumentar stock del producto (o variante)
-    let updateData
-    if (variantIndex != null && product.variants?.length > 0) {
-      const variants = [...product.variants]
-      variants[variantIndex] = {
-        ...variants[variantIndex],
-        stock: (variants[variantIndex].stock || 0) + quantity
-      }
-      updateData = { variants }
-    } else {
-      const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
-      updateData = {
-        stock: updatedProduct.stock,
-        warehouseStocks: updatedProduct.warehouseStocks
-      }
-    }
+    // 6. Aumentar stock del producto usando transacción (leer datos frescos)
+    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    await runTransaction(db, async (transaction) => {
+      const productDoc = await transaction.get(productRef)
+      if (!productDoc.exists()) throw new Error('Producto no encontrado')
 
-    const updateResult = await updateProduct(businessId, productId, updateData)
-    if (!updateResult.success) {
-      return { success: false, error: 'Error al actualizar stock del producto' }
-    }
+      const freshProduct = { id: productDoc.id, ...productDoc.data() }
+      let updateData
+
+      if (variantIndex != null && freshProduct.variants?.length > 0) {
+        const variants = [...freshProduct.variants]
+        variants[variantIndex] = {
+          ...variants[variantIndex],
+          stock: (variants[variantIndex].stock || 0) + quantity
+        }
+        updateData = { variants }
+      } else {
+        const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
+        updateData = {
+          stock: updatedProduct.stock,
+          warehouseStocks: updatedProduct.warehouseStocks
+        }
+      }
+
+      transaction.update(productRef, {
+        ...updateData,
+        updatedAt: serverTimestamp()
+      })
+    })
 
     // 7. Crear movimiento de stock
     await createStockMovement(businessId, {
@@ -138,28 +148,36 @@ export const executeManualProduction = async (businessId, params) => {
   const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku } = params
 
   try {
-    // 1. Aumentar stock del producto (o variante)
-    let updateData
-    if (variantIndex != null && product.variants?.length > 0) {
-      // Producto con variantes: actualizar stock de la variante
-      const variants = [...product.variants]
-      variants[variantIndex] = {
-        ...variants[variantIndex],
-        stock: (variants[variantIndex].stock || 0) + quantity
-      }
-      updateData = { variants }
-    } else {
-      const updatedProduct = updateWarehouseStock(product, warehouseId, quantity)
-      updateData = {
-        stock: updatedProduct.stock,
-        warehouseStocks: updatedProduct.warehouseStocks
-      }
-    }
+    // 1. Aumentar stock del producto usando transacción (leer datos frescos de Firestore)
+    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    await runTransaction(db, async (transaction) => {
+      const productDoc = await transaction.get(productRef)
+      if (!productDoc.exists()) throw new Error('Producto no encontrado')
 
-    const updateResult = await updateProduct(businessId, productId, updateData)
-    if (!updateResult.success) {
-      return { success: false, error: 'Error al actualizar stock del producto' }
-    }
+      const freshProduct = { id: productDoc.id, ...productDoc.data() }
+      let updateData
+
+      if (variantIndex != null && freshProduct.variants?.length > 0) {
+        // Producto con variantes: actualizar stock de la variante
+        const variants = [...freshProduct.variants]
+        variants[variantIndex] = {
+          ...variants[variantIndex],
+          stock: (variants[variantIndex].stock || 0) + quantity
+        }
+        updateData = { variants }
+      } else {
+        const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
+        updateData = {
+          stock: updatedProduct.stock,
+          warehouseStocks: updatedProduct.warehouseStocks
+        }
+      }
+
+      transaction.update(productRef, {
+        ...updateData,
+        updatedAt: serverTimestamp()
+      })
+    })
 
     // 2. Crear movimiento de stock
     await createStockMovement(businessId, {
