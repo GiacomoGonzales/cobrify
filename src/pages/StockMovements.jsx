@@ -44,6 +44,9 @@ export default function StockMovements() {
   const [isScanning, setIsScanning] = useState(false)
   const [visibleCount, setVisibleCount] = useState(50)
   const ITEMS_PER_PAGE = 50
+  const [lastDoc, setLastDoc] = useState(null)
+  const [hasMoreFromServer, setHasMoreFromServer] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -95,7 +98,11 @@ export default function StockMovements() {
       const businessId = getBusinessId()
 
       const [movementsResult, warehousesResult, productsResult, branchesResult] = await Promise.all([
-        getStockMovements(businessId),
+        getStockMovements(businessId, {
+          startDate: filterDateFrom || undefined,
+          endDate: filterDateTo || undefined,
+          pageSize: 200,
+        }),
         getWarehouses(businessId),
         getProducts(businessId),
         getActiveBranches(businessId),
@@ -144,6 +151,9 @@ export default function StockMovements() {
         })
 
         setMovements(enrichedMovements)
+        setLastDoc(movementsResult.lastDoc || null)
+        setHasMoreFromServer(movementsResult.hasMore || false)
+        setVisibleCount(50)
       }
 
       if (warehousesResult.success) {
@@ -158,6 +168,63 @@ export default function StockMovements() {
       toast.error('Error al cargar los datos')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Cargar más movimientos (paginación cursor)
+  const loadMoreMovements = async () => {
+    if (!lastDoc || isLoadingMore || !hasMoreFromServer) return
+    setIsLoadingMore(true)
+    try {
+      const businessId = getBusinessId()
+      const result = await getStockMovements(businessId, {
+        startDate: filterDateFrom || undefined,
+        endDate: filterDateTo || undefined,
+        pageSize: 200,
+        startAfterDoc: lastDoc,
+      })
+      if (result.success && result.data.length > 0) {
+        // Enriquecer nuevos movimientos
+        const enriched = result.data.map(mov => {
+          const product = products.find(p => p.id === mov.productId)
+          const defaultWarehouse = warehouses.find(w => w.isDefault) || warehouses[0]
+          const warehouse = mov.warehouseId
+            ? warehouses.find(w => w.id === mov.warehouseId) || defaultWarehouse
+            : defaultWarehouse
+          const fromWarehouse = warehouses.find(w => w.id === mov.fromWarehouse)
+          const toWarehouse = warehouses.find(w => w.id === mov.toWarehouse)
+          const getBranchName = (branchId) => {
+            if (!branchId) return 'Sucursal Principal'
+            return branches.find(b => b.id === branchId)?.name || 'Sucursal desconocida'
+          }
+          const isCrossBranchTransfer = fromWarehouse && toWarehouse &&
+            (fromWarehouse.branchId || null) !== (toWarehouse.branchId || null)
+          return {
+            ...mov,
+            productName: product?.name || mov.productName || 'Producto desconocido',
+            productCode: product?.code || '-',
+            warehouseName: warehouse?.name || 'Almacén desconocido',
+            warehouseBranchId: warehouse?.branchId || null,
+            warehouseBranchName: getBranchName(warehouse?.branchId),
+            fromWarehouseName: fromWarehouse?.name,
+            fromWarehouseBranchId: fromWarehouse?.branchId || null,
+            fromWarehouseBranchName: fromWarehouse ? getBranchName(fromWarehouse.branchId) : null,
+            toWarehouseName: toWarehouse?.name,
+            toWarehouseBranchId: toWarehouse?.branchId || null,
+            toWarehouseBranchName: toWarehouse ? getBranchName(toWarehouse.branchId) : null,
+            isCrossBranchTransfer,
+          }
+        })
+        setMovements(prev => [...prev, ...enriched])
+        setLastDoc(result.lastDoc || null)
+        setHasMoreFromServer(result.hasMore || false)
+      } else {
+        setHasMoreFromServer(false)
+      }
+    } catch (error) {
+      console.error('Error al cargar más movimientos:', error)
+    } finally {
+      setIsLoadingMore(false)
     }
   }
 
@@ -402,6 +469,13 @@ export default function StockMovements() {
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
   }, [searchTerm, filterBranch, filterWarehouse, filterType, filterDateFrom, filterDateTo])
+
+  // Recargar desde servidor cuando cambian filtros de fecha
+  useEffect(() => {
+    if (user?.uid && !isDemoMode) {
+      loadData()
+    }
+  }, [filterDateFrom, filterDateTo])
 
   // Escanear código de barras
   const handleScanBarcode = async () => {
@@ -846,7 +920,7 @@ export default function StockMovements() {
           )}
       </Card>
 
-      {/* Load More Button */}
+      {/* Load More Button (visual pagination) */}
       {hasMore && (
         <div className="flex justify-center">
           <button
@@ -854,6 +928,26 @@ export default function StockMovements() {
             className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
           >
             Ver más movimientos ({movementsWithBalance.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
+
+      {/* Load More from Server Button */}
+      {!hasMore && hasMoreFromServer && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMoreMovements}
+            disabled={isLoadingMore}
+            className="text-sm text-primary-600 hover:text-primary-700 transition-colors py-2 px-4 hover:bg-primary-50 rounded-lg flex items-center gap-2"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando...
+              </>
+            ) : (
+              'Cargar más movimientos antiguos'
+            )}
           </button>
         </div>
       )}

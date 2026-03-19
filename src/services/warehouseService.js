@@ -8,7 +8,11 @@ import {
   deleteDoc,
   query,
   orderBy,
+  where,
+  limit as firestoreLimit,
+  startAfter,
   serverTimestamp,
+  Timestamp,
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -294,8 +298,30 @@ export const createStockMovement = async (businessId, movementData) => {
 export const getStockMovements = async (businessId, filters = {}) => {
   try {
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
-    let q = query(movementsRef, orderBy('createdAt', 'desc'))
+    const constraints = []
 
+    // Filtros en Firestore (server-side) para reducir lectura
+    if (filters.startDate) {
+      const [y, m, d] = filters.startDate.split('-').map(Number)
+      constraints.push(where('createdAt', '>=', Timestamp.fromDate(new Date(y, m - 1, d, 0, 0, 0))))
+    }
+    if (filters.endDate) {
+      const [y, m, d] = filters.endDate.split('-').map(Number)
+      constraints.push(where('createdAt', '<=', Timestamp.fromDate(new Date(y, m - 1, d, 23, 59, 59))))
+    }
+
+    constraints.push(orderBy('createdAt', 'desc'))
+
+    // Paginación con límite
+    const pageSize = filters.pageSize || 200
+    constraints.push(firestoreLimit(pageSize))
+
+    // Cursor para cargar más
+    if (filters.startAfterDoc) {
+      constraints.push(startAfter(filters.startAfterDoc))
+    }
+
+    const q = query(movementsRef, ...constraints)
     const snapshot = await getDocs(q)
     let movements = []
 
@@ -303,7 +329,7 @@ export const getStockMovements = async (businessId, filters = {}) => {
       movements.push({ id: doc.id, ...doc.data() })
     })
 
-    // Filtrar en cliente si es necesario
+    // Filtrar en cliente (campos que no pueden ser compound index con createdAt)
     if (filters.warehouseId) {
       movements = movements.filter(
         (m) => m.warehouseId === filters.warehouseId || m.toWarehouse === filters.warehouseId
@@ -316,7 +342,11 @@ export const getStockMovements = async (businessId, filters = {}) => {
       movements = movements.filter((m) => m.type === filters.type)
     }
 
-    return { success: true, data: movements }
+    // Último documento para paginación cursor
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null
+    const hasMore = snapshot.docs.length === pageSize
+
+    return { success: true, data: movements, lastDoc, hasMore }
   } catch (error) {
     console.error('Error al obtener movimientos:', error)
     return { success: false, error: error.message }
