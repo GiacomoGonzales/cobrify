@@ -1899,9 +1899,10 @@ export default function POS() {
 
     // Verificar stock considerando el factor (del lote si aplica)
     const availableStock = batchToUse ? batchToUse.quantity : getCurrentWarehouseStock(product)
-    if (product.stock !== null && availableStock < presentation.factor && !companySettings?.allowNegativeStock) {
+    const maxPresentations = Math.floor(availableStock / presentation.factor)
+    if (product.stock !== null && maxPresentations < 1 && !companySettings?.allowNegativeStock) {
       const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
-      toast.error(`Stock insuficiente en ${stockSource}. Se requieren ${presentation.factor} unidades, disponible: ${parseFloat(availableStock.toFixed(2))}`)
+      toast.error(`Stock insuficiente en ${stockSource}. Se necesita mínimo ${presentation.factor} unidades para 1 ${presentation.name}, disponible: ${parseFloat(availableStock.toFixed(2))}`)
       setShowPresentationModal(false)
       setProductForPresentationSelection(null)
       setPendingBatchForPresentation(null)
@@ -1912,10 +1913,9 @@ export default function POS() {
     const existingItem = cart.find(item => item.cartId === cartId)
 
     if (existingItem) {
-      const newTotalUnits = (existingItem.quantity + 1) * presentation.factor
-      if (product.stock !== null && newTotalUnits > availableStock && !companySettings?.allowNegativeStock) {
+      if (product.stock !== null && (existingItem.quantity + 1) > maxPresentations && !companySettings?.allowNegativeStock) {
         const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
-        toast.error(`Stock insuficiente en ${stockSource}. Se requieren ${newTotalUnits} unidades, disponible: ${parseFloat(availableStock.toFixed(2))}`)
+        toast.error(`Stock máximo en ${stockSource}: ${maxPresentations} ${presentation.name}. Para más, selecciona otro lote.`)
         setShowPresentationModal(false)
         setProductForPresentationSelection(null)
         setPendingBatchForPresentation(null)
@@ -2115,10 +2115,27 @@ export default function POS() {
             if (item.stock !== null && !item.isCustom && !companySettings?.allowNegativeStock) {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
-                const warehouseStock = getCurrentWarehouseStock(productData)
-                if (newQuantity > warehouseStock) {
-                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
-                  return item
+                const factor = item.presentationFactor || 1
+                // Stock disponible: del lote si tiene, sino del almacén
+                const availableStock = item.batchNumber
+                  ? (productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0)
+                  : getCurrentWarehouseStock(productData)
+
+                if (factor > 1) {
+                  // Validar en presentaciones
+                  const maxPresentations = Math.floor(availableStock / factor)
+                  if (newQuantity > maxPresentations) {
+                    const presName = item.presentationName || 'presentaciones'
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
+                    return item
+                  }
+                } else {
+                  if (newQuantity > availableStock) {
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
+                    return item
+                  }
                 }
               }
             }
@@ -2152,10 +2169,25 @@ export default function POS() {
             if (item.stock !== null && !item.isCustom && quantity > 0 && !companySettings?.allowNegativeStock) {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
-                const warehouseStock = getCurrentWarehouseStock(productData)
-                if (quantity > warehouseStock) {
-                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${parseFloat(warehouseStock.toFixed(2))}`)
-                  return item
+                const factor = item.presentationFactor || 1
+                const availableStock = item.batchNumber
+                  ? (productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0)
+                  : getCurrentWarehouseStock(productData)
+
+                if (factor > 1) {
+                  const maxPresentations = Math.floor(availableStock / factor)
+                  if (quantity > maxPresentations) {
+                    const presName = item.presentationName || 'presentaciones'
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
+                    return item
+                  }
+                } else {
+                  if (quantity > availableStock) {
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
+                    return item
+                  }
                 }
               }
             }

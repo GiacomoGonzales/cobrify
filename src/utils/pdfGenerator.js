@@ -447,11 +447,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
   const spacious = companySettings?.pdfSpacious === true
 
+  // Factor de escala para A5 (reduce todo el contenido proporcionalmente)
+  const S = isA5 ? 0.78 : 1
+
+  // Interceptar setFontSize para aplicar escala automáticamente en A5
+  if (isA5) {
+    const originalSetFontSize = doc.setFontSize.bind(doc)
+    doc.setFontSize = (size) => originalSetFontSize(Math.round(size * S * 10) / 10)
+  }
+
   // Márgenes y dimensiones - A4: 595pt x 842pt, A5: 420pt x 595pt
   const MARGIN_LEFT = isA5 ? 15 : 20
   const MARGIN_RIGHT = isA5 ? 15 : 20
-  const MARGIN_TOP = isA5 ? 30 : 20
-  const MARGIN_BOTTOM = isA5 ? 10 : 15
+  const MARGIN_TOP = isA5 ? 20 : 20
+  const MARGIN_BOTTOM = isA5 ? 8 : 15
   const PAGE_WIDTH = doc.internal.pageSize.getWidth()
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
@@ -460,9 +469,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ========== 1. ENCABEZADO - 3 COLUMNAS CON LOGO DINÁMICO ==========
 
-  const headerHeight = 100
-  const defaultLogoWidth = 100  // Ancho por defecto para logo
-  const docColumnWidth = 145   // Columna derecha para recuadro factura
+  const headerHeight = 100 * S
+  const defaultLogoWidth = 100 * S  // Ancho por defecto para logo
+  const docColumnWidth = 145 * S   // Columna derecha para recuadro factura
 
   // Posiciones X
   const logoX = MARGIN_LEFT
@@ -500,26 +509,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
         if (aspectRatio >= 3) {
           // Logo EXTREMADAMENTE horizontal (3:1 o más): permitir más ancho
-          logoHeight = 50
+          logoHeight = 50 * S
           logoWidth = logoHeight * aspectRatio
           if (logoWidth > maxAllowedWidth) {
             logoWidth = maxAllowedWidth
             logoHeight = logoWidth / aspectRatio
           }
-          if (logoHeight < 40) {
-            logoHeight = 40
+          if (logoHeight < 40 * S) {
+            logoHeight = 40 * S
             logoWidth = logoHeight * aspectRatio
           }
         } else if (aspectRatio >= 2.5) {
           // Logo MUY horizontal (2.5:1 a 3:1)
-          logoHeight = 55
+          logoHeight = 55 * S
           logoWidth = logoHeight * aspectRatio
           if (logoWidth > maxAllowedWidth) {
             logoWidth = maxAllowedWidth
             logoHeight = logoWidth / aspectRatio
           }
-          if (logoHeight < 45) {
-            logoHeight = 45
+          if (logoHeight < 45 * S) {
+            logoHeight = 45 * S
             logoWidth = logoHeight * aspectRatio
           }
         } else if (aspectRatio >= 2) {
@@ -824,7 +833,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const colLeftX = MARGIN_LEFT
   const colRightX = MARGIN_LEFT + CONTENT_WIDTH * 0.5 + 10
   const colWidth = CONTENT_WIDTH * 0.5 - 10
-  const dataLineHeight = spacious ? 15 : 12
+  const dataLineHeight = (spacious ? 15 : 12) * S
 
   // Calcular anchos de etiquetas para cada columna
   const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'VENDEDOR:']
@@ -1142,8 +1151,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ========== CALCULAR POSICIONES FIJAS ==========
 
   // Alturas de elementos del pie (fijo en la parte inferior)
-  const FOOTER_TEXT_HEIGHT = 25
-  const QR_BOX_HEIGHT = 75
+  const FOOTER_TEXT_HEIGHT = 25 * S
+  const QR_BOX_HEIGHT = 75 * S
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
   const HAS_RECARGO_CONSUMO = (invoice.recargoConsumo || 0) > 0
@@ -1152,8 +1161,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
   const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
-  const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
-  const SON_SECTION_HEIGHT = spacious ? 28 : 22
+  const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
+  const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
 
   // Posición Y donde termina el área de productos (empieza el pie fijo)
   const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_TEXT_HEIGHT - Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) - 10 - TOTALS_SECTION_HEIGHT - SON_SECTION_HEIGHT - (spacious ? 22 : 15)
@@ -1161,9 +1170,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
-  const headerRowHeight = spacious ? 22 : 18
-  const minProductRowHeight = spacious ? 22 : 15
-  const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
+  const headerRowHeight = (spacious ? 22 : 18) * S
+  const minProductRowHeight = (spacious ? 22 : 15) * S
+  const lineHeight = (spacious ? 10 : 9) * S // Altura por línea de texto
 
   // Solo mostrar las filas que tienen productos (sin filas vacías)
   const items = invoice.items || []
@@ -1285,7 +1294,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
 
     const totalLines = descLines.length + pharmaLines.length
-    const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6)
+    const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6) * S
     const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
     return { height: calculatedHeight, descLines, pharmaLines }
   }
@@ -1451,7 +1460,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   let footerY = dataRowY + (spacious ? 15 : 8)
 
   // Si el footer no cabe en la página actual, agregar nueva página
-  const footerTotalHeight = SON_SECTION_HEIGHT + TOTALS_SECTION_HEIGHT + Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) + FOOTER_TEXT_HEIGHT + 40
+  const footerTotalHeight = SON_SECTION_HEIGHT + TOTALS_SECTION_HEIGHT + Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) + FOOTER_TEXT_HEIGHT + (isA5 ? 20 : 40)
   if (footerY + footerTotalHeight > PAGE_HEIGHT) {
     doc.addPage()
     footerY = MARGIN_TOP
