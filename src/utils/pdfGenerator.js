@@ -1190,13 +1190,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     total: CONTENT_WIDTH * 0.19
   } : {
     cant: CONTENT_WIDTH * 0.07,
-    um: CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.33 : CONTENT_WIDTH * 0.49,
+    um: isPharmacy ? CONTENT_WIDTH * 0.10 : CONTENT_WIDTH * 0.06,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.31 : CONTENT_WIDTH * 0.49,
     lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.13 : CONTENT_WIDTH * 0.17,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.11 : CONTENT_WIDTH * 0.17,
     dcto: 0,
-    total: CONTENT_WIDTH * 0.19
+    total: isPharmacy ? CONTENT_WIDTH * 0.19 : CONTENT_WIDTH * 0.19
   }
 
   let colX = MARGIN_LEFT
@@ -1321,10 +1321,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   // Límite inferior de página para ítems
-  // Primera página: respetar espacio del footer (totales, QR, monto en letras, etc.)
+  // A4 primera página: respetar espacio del footer (totales, QR, monto en letras, etc.)
+  // A5 primera página: no reservar footer (se mueve a siguiente página si no cabe)
   // Páginas siguientes: usar casi todo el espacio disponible
   const PAGE_BOTTOM_LIMIT_NEXT = PAGE_HEIGHT - MARGIN_BOTTOM - 15
-  let currentPageBottomLimit = FOOTER_AREA_START
+  let currentPageBottomLimit = isA5 ? PAGE_BOTTOM_LIMIT_NEXT : FOOTER_AREA_START
 
   // Dibujar encabezado de tabla inicial
   let dataRowY = drawTableHeader(tableY)
