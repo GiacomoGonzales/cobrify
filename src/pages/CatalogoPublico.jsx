@@ -2149,6 +2149,37 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const showPrices = business?.catalogShowPrices !== false
   const ignoreStock = business?.catalogIgnoreStock === true
   const isDark = business?.catalogTheme === 'dark'
+  const isCafe = business?.catalogTheme === 'cafe'
+
+  // Theme-aware class helpers
+  const thBg = isDark ? 'bg-gray-950' : isCafe ? 'bg-[#FDF6EE]' : 'bg-gray-50'
+  const thCard = isDark ? 'bg-gray-900' : isCafe ? 'bg-[#FAF0E4]' : 'bg-white'
+  const thCardShadow = isDark ? 'bg-gray-900 shadow-gray-800/30' : isCafe ? 'bg-[#FAF0E4] shadow-amber-900/5' : 'bg-white'
+  const thText = isDark ? 'text-white' : isCafe ? 'text-[#3C2415]' : 'text-gray-900'
+  const thTextMuted = isDark ? 'text-gray-400' : isCafe ? 'text-[#7C6350]' : 'text-gray-500'
+  const thTextFaint = isDark ? 'text-gray-400' : isCafe ? 'text-[#A08B78]' : 'text-gray-600'
+  const thHeaderBg = isDark ? 'bg-gray-900 shadow-gray-800/50' : isCafe ? 'bg-[#FAF0E4] shadow-amber-900/5' : 'bg-white'
+  const thCatInactive = isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : isCafe ? 'bg-[#F0E4D4] text-[#6F4E37] hover:bg-[#E8D5C0]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+  const thViewActive = isDark ? 'bg-gray-700' : isCafe ? 'bg-[#E8D5C0]' : 'bg-gray-200'
+  const thViewHover = isDark ? 'hover:bg-gray-700' : isCafe ? 'hover:bg-[#F0E4D4]' : 'hover:bg-gray-100'
+  const thCatBadge = isDark ? 'bg-gray-800/90 text-gray-300' : isCafe ? 'bg-[#FAF0E4]/90 text-[#6F4E37]' : 'bg-white/90 text-gray-600'
+  const thListBadge = isDark ? 'bg-gray-800 text-gray-400' : isCafe ? 'bg-[#F0E4D4] text-[#6F4E37]' : 'bg-gray-100 text-gray-500'
+  const thSearchBanner = isDark
+    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700 focus:ring-gray-600'
+    : isCafe
+      ? 'bg-[#FAF0E4] text-[#3C2415] placeholder-[#A08B78] border border-[#E8D5C0] focus:ring-[#D4B896]'
+      : 'bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:ring-gray-300'
+  const thSearchClassic = isDark
+    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
+    : isCafe
+      ? 'bg-[#FAF0E4] text-[#3C2415] placeholder-[#A08B78] border border-[#E8D5C0]'
+      : 'bg-white text-gray-900 placeholder-gray-400'
+  const thObsText = isDark ? 'text-gray-300' : isCafe ? 'text-[#5C4633]' : 'text-gray-700'
+  const thBorderColor = isDark ? 'border-gray-800' : isCafe ? 'border-[#E8D5C0]' : ''
+  const thFooterPowered = isDark ? 'text-gray-500 border-gray-800' : isCafe ? 'text-[#A08B78] border-[#E8D5C0]' : 'text-gray-400'
+  const thFooterLink = isDark ? 'text-gray-400' : isCafe ? 'text-[#7C6350]' : 'text-gray-600'
+  const thCartBadgeBg = isDark ? '#fff' : isCafe ? '#3C2415' : '#000'
+  const thCartBadgeColor = isDark ? '#000' : isCafe ? '#FAF0E4' : '#fff'
 
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
@@ -2304,8 +2335,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Loading state
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
-        <div className={`shadow-sm ${isDark ? "bg-gray-900" : "bg-white"}`}>
+      <div className={`min-h-screen ${thBg}`}>
+        <div className={`shadow-sm ${thCard}`}>
           <div className="max-w-7xl mx-auto px-4 py-6">
             <div className="animate-pulse">
               <div className="h-8 bg-gray-200 rounded w-48 mb-2" />
@@ -2327,15 +2358,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Error state
   if (error) {
     return (
-      <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
+      <div className={`min-h-screen flex items-center justify-center p-4 ${thBg}`}>
         <div className="text-center">
           {isRestaurantMenu ? (
             <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           ) : (
             <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           )}
-          <h1 className={`text-2xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>{error}</h1>
-          <p className={isDark ? "text-gray-400" : "text-gray-600"}>
+          <h1 className={`text-2xl font-bold mb-2 ${thText}`}>{error}</h1>
+          <p className={thTextFaint}>
             {isRestaurantMenu
               ? 'El menú que buscas no existe o no está disponible'
               : 'El catálogo que buscas no existe o no está disponible'}
@@ -2346,7 +2377,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${thBg}`}>
       <style>{fadeInStyle}</style>
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
@@ -2377,7 +2408,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       )}
 
       {/* Header */}
-      <header className={`${isDark ? 'bg-gray-900 shadow-gray-800/50' : 'bg-white'} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
+      <header className={`${thHeaderBg} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre */}
@@ -2401,11 +2432,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               )}
               <div className="min-w-0">
-                <h1 className={`font-bold text-base md:text-xl truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                <h1 className={`font-bold text-base md:text-xl truncate ${thText}`}>
                   {business?.name || business?.businessName}
                 </h1>
                 {business?.catalogTagline && (
-                  <p className={`text-sm hidden md:block ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{business.catalogTagline}</p>
+                  <p className={`text-sm hidden md:block ${thTextMuted}`}>{business.catalogTagline}</p>
                 )}
               </div>
             </div>
@@ -2420,7 +2451,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               <span className="hidden md:inline font-medium">{isRestaurantMenu ? 'Pedido' : 'Carrito'}</span>
               {cartItemsCount > 0 && (
                 <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                  style={{ backgroundColor: isDark ? '#fff' : '#000', color: isDark ? '#000' : '#fff' }}
+                  style={{ backgroundColor: thCartBadgeBg, color: thCartBadgeColor }}
                 >
                   {cartItemsCount}
                 </span>
@@ -2468,7 +2499,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
           {/* Barra de búsqueda debajo del banner */}
-          <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} px-4 py-3`}>
+          <div className={`${isDark ? 'bg-gray-900' : isCafe ? 'bg-[#FDF6EE]' : 'bg-gray-50'} px-4 py-3`}>
             <div className="relative max-w-7xl mx-auto">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -2476,11 +2507,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 placeholder="Buscar productos..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${
-                  isDark
-                    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700 focus:ring-gray-600'
-                    : 'bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:ring-gray-300'
-                }`}
+                className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${thSearchBanner}`}
               />
             </div>
           </div>
@@ -2525,11 +2552,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 placeholder="Buscar productos..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 ${
-                  isDark
-                    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
-                    : 'bg-white text-gray-900 placeholder-gray-400'
-                }`}
+                className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 ${thSearchClassic}`}
               />
             </div>
           </div>
@@ -2542,19 +2565,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div
             className="rounded-xl p-4 flex items-start gap-3"
             style={{
-              backgroundColor: isDark ? `${business.catalogColor || '#10B981'}20` : `${business.catalogColor || '#10B981'}10`,
-              borderLeft: `4px solid ${business.catalogColor || '#10B981'}`
+              backgroundColor: isDark ? `${business.catalogColor || '#10B981'}20` : isCafe ? `${business.catalogColor || '#6F4E37'}15` : `${business.catalogColor || '#10B981'}10`,
+              borderLeft: `4px solid ${business.catalogColor || (isCafe ? '#6F4E37' : '#10B981')}`
             }}
           >
-            <Info className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: business.catalogColor || '#10B981' }} />
-            <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{business.catalogObservations}</p>
+            <Info className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: business.catalogColor || (isCafe ? '#6F4E37' : '#10B981') }} />
+            <p className={`text-sm whitespace-pre-wrap ${thObsText}`}>{business.catalogObservations}</p>
           </div>
         </div>
       )}
 
       {/* Categorías */}
       {rootCategories.length > 0 && (
-        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white'} border-b sticky top-16 md:top-20 z-30`}>
+        <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30`}>
           <div className="max-w-7xl mx-auto px-4">
             {/* Categorías raíz */}
             <div className="flex overflow-x-auto gap-2 py-3 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
@@ -2563,7 +2586,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                   !selectedCategory
                     ? 'text-white'
-                    : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : thCatInactive
                 }`}
                 style={!selectedCategory ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
               >
@@ -2576,7 +2599,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                     selectedCategory === category.id
                       ? 'text-white'
-                      : isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : thCatInactive
                   }`}
                   style={selectedCategory === category.id ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
                 >
@@ -2620,7 +2643,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       <main className="max-w-7xl mx-auto px-4 py-6 md:py-8">
         {/* Header de resultados */}
         <div className="flex items-center justify-between mb-6">
-          <p className={isDark ? "text-gray-400" : "text-gray-600"}>
+          <p className={thTextFaint}>
             {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
             {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
               <span> en <strong>
@@ -2634,13 +2657,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg ${viewMode === 'grid' ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : (isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100')}`}
+              className={`p-2 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
             >
               <Grid3X3 className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg ${viewMode === 'list' ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : (isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100')}`}
+              className={`p-2 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
             >
               <List className="w-5 h-5" />
             </button>
@@ -2650,8 +2673,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         {filteredProducts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className={`text-lg font-medium mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>No se encontraron productos</h3>
-            <p className={isDark ? "text-gray-400" : "text-gray-600"}>Intenta con otra búsqueda o categoría</p>
+            <h3 className={`text-lg font-medium mb-2 ${thText}`}>No se encontraron productos</h3>
+            <p className={thTextFaint}>Intenta con otra búsqueda o categoría</p>
           </div>
         ) : viewMode === 'grid' ? (
           // Vista Grid
@@ -2663,7 +2686,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
@@ -2697,16 +2720,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       const parentCat = cat.parentId ? categories.find(c => c.id === cat.parentId) : null
                       const displayCat = parentCat || cat
                       return (
-                        <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium shadow-sm ${isDark ? 'bg-gray-800/90 text-gray-300' : 'bg-white/90 text-gray-600'}`}>
+                        <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium shadow-sm ${thCatBadge}`}>
                           {displayCat.name}
                         </div>
                       )
                     })()}
                   </div>
                   <div className="p-4">
-                    <h3 className={`font-semibold mb-1 line-clamp-2 ${isDark ? "text-white" : "text-gray-900"}`}>{product.name}</h3>
+                    <h3 className={`font-semibold mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
                     {product.description && (
-                      <p className={`text-sm mb-2 line-clamp-2 whitespace-pre-line ${isDark ? "text-gray-400" : "text-gray-500"}`}>{product.description}</p>
+                      <p className={`text-sm mb-2 line-clamp-2 whitespace-pre-line ${thTextMuted}`}>{product.description}</p>
                     )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
@@ -2719,15 +2742,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>S/ {p.value.toFixed(2)}</span>
-                                      <span className={`text-xs ml-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{p.label}</span>
+                                      <span className={`font-bold ${thText}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`text-xs ml-1 ${thTextMuted}`}>{p.label}</span>
                                     </span>
                                   ))}
                                 </div>
                               )
                             }
                             return (
-                              <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                              <span className={`text-lg font-bold ${thText}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -2773,7 +2796,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer flex ${isDark ? 'bg-gray-900 shadow-gray-800/30' : 'bg-white'} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer flex ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -2804,20 +2827,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   </div>
                   <div className="flex-1 p-4 flex flex-col justify-between">
                     <div>
-                      <h3 className={`font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>{product.name}</h3>
+                      <h3 className={`font-semibold mb-1 ${thText}`}>{product.name}</h3>
                       {!selectedCategory && product.category && (() => {
                         const cat = categories.find(c => c.id === product.category)
                         if (!cat) return null
                         const parentCat = cat.parentId ? categories.find(c => c.id === cat.parentId) : null
                         const displayCat = parentCat || cat
                         return (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mb-1 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mb-1 ${thListBadge}`}>
                             {displayCat.name}
                           </span>
                         )
                       })()}
                       {product.description && (
-                        <p className={`text-sm line-clamp-2 whitespace-pre-line ${isDark ? "text-gray-400" : "text-gray-500"}`}>{product.description}</p>
+                        <p className={`text-sm line-clamp-2 whitespace-pre-line ${thTextMuted}`}>{product.description}</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
@@ -2831,15 +2854,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>S/ {p.value.toFixed(2)}</span>
-                                      <span className={`text-xs ml-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{p.label}</span>
+                                      <span className={`font-bold ${thText}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`text-xs ml-1 ${thTextMuted}`}>{p.label}</span>
                                     </span>
                                   ))}
                                 </div>
                               )
                             }
                             return (
-                              <span className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                              <span className={`text-xl font-bold ${thText}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -2882,7 +2905,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       </main>
 
       {/* Footer con info del negocio */}
-      <footer className={`${isDark ? "bg-gray-900 border-gray-800" : "bg-white"} border-t mt-12`}>
+      <footer className={`${thCard} ${thBorderColor} border-t mt-12`}>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -2901,11 +2924,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               )}
               <div>
-                <h2 className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                <h2 className={`font-bold ${thText}`}>
                   {business?.name || business?.businessName}
                 </h2>
                 {business?.address && (
-                  <p className={`text-sm flex items-center gap-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                  <p className={`text-sm flex items-center gap-1 ${thTextMuted}`}>
                     <MapPin className="w-4 h-4" />
                     {business.address}
                   </p>
@@ -2915,7 +2938,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
             {/* Horario de atención */}
             {business?.businessHours?.enabled && (
-              <div className={`w-full md:w-auto ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              <div className={`w-full md:w-auto ${thTextFaint}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-4 h-4" />
                   <span className="text-sm font-semibold">Horario de atención</span>
@@ -2970,8 +2993,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
 
-          <div className={`mt-8 pt-6 border-t text-center text-sm ${isDark ? "text-gray-500 border-gray-800" : "text-gray-400"}`}>
-            Catálogo powered by <a href="https://cobrifyperu.com" className={`hover:underline ${isDark ? "text-gray-400" : "text-gray-600"}`}>Cobrify</a>
+          <div className={`mt-8 pt-6 border-t text-center text-sm ${thFooterPowered}`}>
+            Catálogo powered by <a href="https://cobrifyperu.com" className={`hover:underline ${thFooterLink}`}>Cobrify</a>
           </div>
         </div>
       </footer>

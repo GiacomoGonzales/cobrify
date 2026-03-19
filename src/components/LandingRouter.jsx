@@ -59,6 +59,7 @@ export default function LandingRouter() {
   const [loading, setLoading] = useState(true)
   const [reseller, setReseller] = useState(null)
   const [catalogDomain, setCatalogDomain] = useState(null) // hostname del dominio personalizado de catálogo
+  const [catalogIsRestaurant, setCatalogIsRestaurant] = useState(false)
   const [searchParams] = useSearchParams()
   const [pwaRedirect, setPwaRedirect] = useState(null) // null, '/login', '/app/dashboard'
 
@@ -152,8 +153,12 @@ export default function LandingRouter() {
           )
           const catalogSnap = await getDocs(catalogQuery)
           if (!catalogSnap.empty) {
-            console.log('✅ LandingRouter: Found catalog domain:', normalizedHost)
+            const bizData = catalogSnap.docs[0].data()
+            console.log('✅ LandingRouter: Found catalog domain:', normalizedHost, '| mode:', bizData.businessMode)
             setCatalogDomain(normalizedHost)
+            if (bizData.businessMode === 'restaurant') {
+              setCatalogIsRestaurant(true)
+            }
           } else {
             console.log('ℹ️ LandingRouter: No reseller or catalog found, showing default landing')
           }
@@ -191,7 +196,7 @@ export default function LandingRouter() {
 
   // Si es dominio personalizado de catálogo, mostrar catálogo directamente
   if (catalogDomain) {
-    return <CatalogoPublico customDomain={catalogDomain} />
+    return <CatalogoPublico customDomain={catalogDomain} isRestaurantMenu={catalogIsRestaurant} />
   }
 
   // Si no hay reseller ni catálogo, mostrar landing de Cobrify
