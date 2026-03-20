@@ -403,8 +403,16 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         const productData = productDoc.data()
         const currentStock = productData.stock ?? productData.currentStock ?? 0
         const quantityToDeduct = ingredient.quantity
-        const effectiveWarehouseId = warehouseId || ingredient.warehouseId
+        let effectiveWarehouseId = warehouseId || ingredient.warehouseId
         const warehouseStocks = productData.warehouseStocks || []
+
+        // Si no hay warehouseId pero el producto tiene warehouseStocks, usar el primer almacén con stock
+        if (!effectiveWarehouseId && warehouseStocks.length > 0) {
+          const warehouseWithStock = warehouseStocks.find(ws => (ws.stock || 0) >= quantityToDeduct)
+            || warehouseStocks.find(ws => (ws.stock || 0) > 0)
+            || warehouseStocks[0]
+          effectiveWarehouseId = warehouseWithStock.warehouseId
+        }
 
         let newStock
         let updatedWarehouseStocks = [...warehouseStocks]
@@ -431,7 +439,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           stock: newStock,
           updatedAt: Timestamp.now()
         }
-        if (effectiveWarehouseId && warehouseStocks.length > 0) {
+        if (warehouseStocks.length > 0) {
           updateData.warehouseStocks = updatedWarehouseStocks
         }
 

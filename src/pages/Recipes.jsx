@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package, MoreVertical } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -88,6 +88,22 @@ export default function Recipes() {
     quantity: '',
     unit: 'g'
   })
+
+  // Search states for autocomplete
+  const [productSearch, setProductSearch] = useState('')
+  const [productSearchOpen, setProductSearchOpen] = useState(false)
+  const [ingredientSearch, setIngredientSearch] = useState('')
+  const [ingredientSearchOpen, setIngredientSearchOpen] = useState(false)
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.recipe-product-search')) setProductSearchOpen(false)
+      if (!e.target.closest('.recipe-ingredient-search')) setIngredientSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -255,6 +271,7 @@ export default function Recipes() {
       quantity: '',
       unit: 'g'
     })
+    setIngredientSearch('')
   }
 
   const handleRemoveIngredient = (ingredientId) => {
@@ -389,6 +406,7 @@ export default function Recipes() {
       ingredients: recipe.ingredients
     })
     setShowEditModal(true)
+    setProductSearch(recipe.productName || '')
   }
 
   const resetForm = () => {
@@ -406,6 +424,10 @@ export default function Recipes() {
       unit: 'g'
     })
     setSelectedRecipe(null)
+    setProductSearch('')
+    setProductSearchOpen(false)
+    setIngredientSearch('')
+    setIngredientSearchOpen(false)
   }
 
   // Filtrar productos que no tienen receta
@@ -707,28 +729,53 @@ export default function Recipes() {
         size="lg"
       >
         <div className="space-y-4">
-          {/* Product Selection */}
-          <Select
-            label={texts.productLabel}
-            value={formData.productId}
-            onChange={e => {
-              const product = products.find(p => p.id === e.target.value)
-              setFormData({
-                ...formData,
-                productId: e.target.value,
-                productName: product?.name || ''
-              })
-            }}
-            required
-            disabled={showEditModal}
-          >
-            <option value="">{texts.productPlaceholder}</option>
-            {availableProducts.map(product => (
-              <option key={product.id} value={product.id}>
-                {product.name} - {formatCurrency(product.price)}
-              </option>
-            ))}
-          </Select>
+          {/* Product Selection - Autocomplete */}
+          <div className="relative recipe-product-search">
+            <label className="block text-sm font-medium text-gray-700 mb-1">{texts.productLabel} <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder={texts.productPlaceholder}
+                value={productSearch}
+                onChange={e => {
+                  setProductSearch(e.target.value)
+                  setProductSearchOpen(true)
+                  if (!e.target.value) {
+                    setFormData({ ...formData, productId: '', productName: '' })
+                  }
+                }}
+                onFocus={() => setProductSearchOpen(true)}
+                disabled={showEditModal}
+                className={`w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm ${showEditModal ? 'bg-gray-100 text-gray-500' : ''}`}
+              />
+            </div>
+            {productSearchOpen && !showEditModal && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {availableProducts
+                  .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code?.toLowerCase().includes(productSearch.toLowerCase()))
+                  .map(product => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, productId: product.id, productName: product.name })
+                        setProductSearch(product.name)
+                        setProductSearchOpen(false)
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 transition-colors ${formData.productId === product.id ? 'bg-primary-50 font-medium' : ''}`}
+                    >
+                      <span className="font-medium">{product.name}</span>
+                      <span className="text-gray-400 ml-2">{formatCurrency(product.price)}</span>
+                    </button>
+                  ))
+                }
+                {availableProducts.filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code?.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                  <div className="px-4 py-3 text-sm text-gray-500 text-center">No se encontraron productos</div>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -754,57 +801,89 @@ export default function Recipes() {
 
             {/* Add Ingredient Form */}
             <div className="bg-gray-50 p-4 rounded-lg mb-3 space-y-3">
-              <Select
-                value={ingredientForm.ingredientId}
-                onChange={e => {
-                  const selectedId = e.target.value
-                  // Detectar si es ingrediente o producto
-                  const ingredient = ingredients.find(i => i.id === selectedId)
-                  const product = !ingredient ? products.find(p => p.id === selectedId) : null
-                  const isProduct = !!product
+              {/* Ingredient/Product Search - Autocomplete */}
+              <div className="relative recipe-ingredient-search">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder={texts.ingredientSelect}
+                    value={ingredientSearch}
+                    onChange={e => {
+                      setIngredientSearch(e.target.value)
+                      setIngredientSearchOpen(true)
+                      if (!e.target.value) {
+                        setIngredientForm({ ...ingredientForm, ingredientId: '', ingredientType: 'ingredient' })
+                      }
+                    }}
+                    onFocus={() => setIngredientSearchOpen(true)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  />
+                </div>
+                {ingredientSearchOpen && (() => {
+                  const term = ingredientSearch.toLowerCase()
+                  const filteredIngredients = ingredients.filter(i => !term || i.name.toLowerCase().includes(term))
+                  const filteredProducts = products.filter(p => !term || p.name.toLowerCase().includes(term) || p.code?.toLowerCase().includes(term))
+                  const hasResults = filteredIngredients.length > 0 || filteredProducts.length > 0
 
-                  let defaultUnit = 'g'
-                  if (isProduct) {
-                    defaultUnit = product.unit || 'unidades'
-                  } else if (ingredient) {
-                    const purchaseUnit = ingredient.purchaseUnit?.toLowerCase()
-                    if (purchaseUnit === 'kg' || purchaseUnit === 'g') {
-                      defaultUnit = 'g'
-                    } else if (purchaseUnit === 'l' || purchaseUnit === 'ml') {
-                      defaultUnit = 'ml'
-                    } else {
-                      defaultUnit = ingredient.purchaseUnit
-                    }
-                  }
+                  return (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredIngredients.length > 0 && (
+                        <>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase bg-gray-50 sticky top-0">
+                            {isRestaurantMode ? 'Ingredientes' : 'Insumos'}
+                          </div>
+                          {filteredIngredients.map(ing => (
+                            <button
+                              key={ing.id}
+                              type="button"
+                              onClick={() => {
+                                const purchaseUnit = ing.purchaseUnit?.toLowerCase()
+                                let defaultUnit = 'g'
+                                if (purchaseUnit === 'kg' || purchaseUnit === 'g') defaultUnit = 'g'
+                                else if (purchaseUnit === 'l' || purchaseUnit === 'ml') defaultUnit = 'ml'
+                                else defaultUnit = ing.purchaseUnit
 
-                  setIngredientForm({
-                    ...ingredientForm,
-                    ingredientId: selectedId,
-                    ingredientType: isProduct ? 'product' : 'ingredient',
-                    unit: defaultUnit
-                  })
-                }}
-              >
-                <option value="">{texts.ingredientSelect}</option>
-                {ingredients.length > 0 && (
-                  <optgroup label={isRestaurantMode ? 'Ingredientes' : 'Insumos'}>
-                    {ingredients.map(ing => (
-                      <option key={ing.id} value={ing.id}>
-                        {ing.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {products.length > 0 && (
-                  <optgroup label="Productos terminados">
-                    {products.map(prod => (
-                      <option key={prod.id} value={prod.id}>
-                        {prod.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
+                                setIngredientForm({ ...ingredientForm, ingredientId: ing.id, ingredientType: 'ingredient', unit: defaultUnit })
+                                setIngredientSearch(ing.name)
+                                setIngredientSearchOpen(false)
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-primary-50 transition-colors ${ingredientForm.ingredientId === ing.id ? 'bg-primary-50 font-medium' : ''}`}
+                            >
+                              {ing.name}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {filteredProducts.length > 0 && (
+                        <>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase bg-gray-50 sticky top-0">
+                            Productos terminados
+                          </div>
+                          {filteredProducts.map(prod => (
+                            <button
+                              key={prod.id}
+                              type="button"
+                              onClick={() => {
+                                setIngredientForm({ ...ingredientForm, ingredientId: prod.id, ingredientType: 'product', unit: prod.unit || 'unidades' })
+                                setIngredientSearch(prod.name)
+                                setIngredientSearchOpen(false)
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-primary-50 transition-colors ${ingredientForm.ingredientId === prod.id ? 'bg-primary-50 font-medium' : ''}`}
+                            >
+                              <span>{prod.name}</span>
+                              <span className="text-xs text-blue-600 ml-2 bg-blue-50 px-1.5 py-0.5 rounded">Producto</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {!hasResults && (
+                        <div className="px-4 py-3 text-sm text-gray-500 text-center">No se encontraron resultados</div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Input
