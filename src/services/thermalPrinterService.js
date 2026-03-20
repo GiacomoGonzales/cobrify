@@ -2939,10 +2939,9 @@ export const printSplitPreBillThermal = async (order, table, business, taxConfig
       continue;
     }
 
-    // BLE iOS
+    // BLE iOS/Android — usar función dedicada que maneja todas las personas
     if (useAlternativeBLE) {
-      await BLEPrinter.printBLERawData(base64Data);
-      continue;
+      return await BLEPrinter.printBLESplitPreBill(order, table, business, taxConfig, paperWidth, recargoConsumoConfig, splitData, personIndex);
     }
 
     // Bluetooth Android

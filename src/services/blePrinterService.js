@@ -1326,6 +1326,129 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
   }
 };
 
+/**
+ * Imprimir precuenta dividida en impresora BLE (una o todas las personas)
+ */
+export const printBLESplitPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }, splitData, personIndex = null) => {
+  if (!isBLEPrinterConnected()) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  try {
+    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
+    const halfSeparator = paperWidth === 58 ? '------------' : '---------------------';
+
+    const personsToprint = personIndex !== null
+      ? [splitData.persons[personIndex]]
+      : splitData.persons;
+
+    for (let pi = 0; pi < personsToprint.length; pi++) {
+      const person = personsToprint[pi];
+      const isItemsSplit = splitData.method === 'items';
+      const itemsToShow = isItemsSplit ? person.items : (order.items || []);
+      const personTotal = person.total;
+
+      let subtotal, tax, recargoConsumo = 0;
+      let total = personTotal;
+
+      if (taxConfig.igvExempt) {
+        subtotal = total;
+        tax = 0;
+      } else {
+        const igvRate = taxConfig.igvRate || 18;
+        const igvMultiplier = 1 + (igvRate / 100);
+        subtotal = total / igvMultiplier;
+        tax = total - subtotal;
+      }
+
+      if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+        recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100);
+        total = total + recargoConsumo;
+      }
+
+      const commands = [
+        ESCPOSCommands.init(),
+        ESCPOSCommands.align(1),
+        ESCPOSCommands.bold(true),
+        ESCPOSCommands.doubleHeight(true),
+        ESCPOSCommands.text(convertSpanishText(business.tradeName || 'RESTAURANTE') + '\n'),
+        ESCPOSCommands.doubleHeight(false),
+        ESCPOSCommands.bold(false),
+        ESCPOSCommands.text(convertSpanishText(business.address || '') + '\n'),
+        ESCPOSCommands.text((business.phone || '') + '\n'),
+        ESCPOSCommands.bold(true),
+        ESCPOSCommands.doubleHeight(true),
+        ESCPOSCommands.text('PRECUENTA DIVIDIDA\n'),
+        ESCPOSCommands.doubleHeight(false),
+        ESCPOSCommands.bold(false),
+        ESCPOSCommands.text(separator + '\n'),
+        ESCPOSCommands.align(0),
+        ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
+        ESCPOSCommands.text('Mesa: ' + table.number + '\n'),
+        ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'),
+        ESCPOSCommands.text('Orden: #' + (order.orderNumber || order.id?.slice(-6) || 'N/A') + '\n'),
+        ESCPOSCommands.bold(true),
+        ESCPOSCommands.text('Persona ' + person.personNumber + ' de ' + splitData.numberOfPeople + '\n'),
+        ESCPOSCommands.bold(false),
+        ESCPOSCommands.text(halfSeparator + '\n'),
+      ];
+
+      // Items
+      for (const item of itemsToShow) {
+        const itemName = convertSpanishText(item.name || '');
+        const itemTotal = (item.total || 0).toFixed(2);
+        commands.push(ESCPOSCommands.text(item.quantity + 'x ' + itemName + '\n'));
+        commands.push(ESCPOSCommands.text('   S/ ' + itemTotal + '\n'));
+        if (item.notes) {
+          commands.push(ESCPOSCommands.text('  * ' + convertSpanishText(item.notes) + '\n'));
+        }
+      }
+
+      commands.push(ESCPOSCommands.text(halfSeparator + '\n'));
+      commands.push(ESCPOSCommands.align(2));
+
+      if (!taxConfig.igvExempt) {
+        commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotal.toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.text('IGV (' + taxConfig.igvRate + '%): S/ ' + tax.toFixed(2) + '\n'));
+      }
+
+      if (recargoConsumo > 0) {
+        commands.push(ESCPOSCommands.text('Rec. Consumo (' + recargoConsumoConfig.rate + '%): S/ ' + recargoConsumo.toFixed(2) + '\n'));
+      }
+
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.doubleHeight(true));
+      commands.push(ESCPOSCommands.text('TOTAL: S/ ' + total.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.doubleHeight(false));
+      commands.push(ESCPOSCommands.bold(false));
+
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(1));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('*** PRECUENTA ***\n'));
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text('No valido como comprobante\n'));
+      commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
+      commands.push(ESCPOSCommands.lineFeed());
+      commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
+      commands.push(ESCPOSCommands.feed(6));
+      commands.push(ESCPOSCommands.cut());
+
+      const data = concatUint8Arrays(...commands);
+      const result = await writeBLEData(data);
+      if (!result.success) {
+        return result;
+      }
+    }
+
+    console.log('✅ Precuenta dividida BLE impresa correctamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error imprimiendo precuenta dividida BLE:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   initializeBLE,
   scanBLEDevices,
@@ -1338,5 +1461,6 @@ export default {
   printBLEReceipt,
   printBLEKitchenOrder,
   printBLEPreBill,
+  printBLESplitPreBill,
   ESCPOSCommands,
 };
