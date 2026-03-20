@@ -812,7 +812,7 @@ export default function Products() {
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled && presentations.length > 0 ? { presentations } : {}),
+        ...(businessSettings?.presentationsEnabled ? { presentations } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
