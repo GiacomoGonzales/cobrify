@@ -185,6 +185,19 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           const parsed = parseFloat(rawValue)
           if (!isNaN(parsed) && (parsed === 18 || parsed === 10 || parsed === 10.5)) return parsed
           return null
+        })(),
+        // Presentaciones (hasta 3)
+        presentations: (() => {
+          const pres = []
+          for (let pi = 1; pi <= 3; pi++) {
+            const nombre = String(row[`presentacion${pi}_nombre`] || row[`Presentacion${pi}_Nombre`] || row[`PRESENTACION${pi}_NOMBRE`] || '').trim()
+            const cantidad = parseFloat(row[`presentacion${pi}_cantidad`] || row[`Presentacion${pi}_Cantidad`] || row[`PRESENTACION${pi}_CANTIDAD`] || 0)
+            const precio = parseFloat(row[`presentacion${pi}_precio`] || row[`Presentacion${pi}_Precio`] || row[`PRESENTACION${pi}_PRECIO`] || 0)
+            if (nombre && cantidad > 0 && precio > 0) {
+              pres.push({ name: nombre, factor: cantidad, price: precio })
+            }
+          }
+          return pres.length > 0 ? pres : null
         })()
       }
 
@@ -401,7 +414,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'UNIDAD',
           categoria: 'Categoría Ejemplo',
           subcategoria: 'Subcategoría Ejemplo',
-          afectacion_igv: 'GRAVADO'
+          afectacion_igv: 'GRAVADO',
+          presentacion1_nombre: 'Pack x3',
+          presentacion1_cantidad: 3,
+          presentacion1_precio: 28.00,
+          presentacion2_nombre: 'Caja x6',
+          presentacion2_cantidad: 6,
+          presentacion2_precio: 52.00,
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         },
         {
           sku: 'SKU-002',
@@ -419,7 +441,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'SERVICIO',
           categoria: 'Servicios',
           subcategoria: '',
-          afectacion_igv: 'EXONERADO'
+          afectacion_igv: 'EXONERADO',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         },
         {
           sku: '',
@@ -437,7 +468,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'UNIDAD',
           categoria: '',
           subcategoria: '',
-          afectacion_igv: 'INAFECTO'
+          afectacion_igv: 'INAFECTO',
+          presentacion1_nombre: 'Display x12',
+          presentacion1_cantidad: 12,
+          presentacion1_precio: 150.00,
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         }
       ]
     }
@@ -492,7 +532,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 12 }, // unidad
         { wch: 20 }, // categoria
         { wch: 20 }, // subcategoria
-        { wch: 15 }  // afectacion_igv
+        { wch: 15 }, // afectacion_igv
+        { wch: 18 }, // presentacion1_nombre
+        { wch: 18 }, // presentacion1_cantidad
+        { wch: 18 }, // presentacion1_precio
+        { wch: 18 }, // presentacion2_nombre
+        { wch: 18 }, // presentacion2_cantidad
+        { wch: 18 }, // presentacion2_precio
+        { wch: 18 }, // presentacion3_nombre
+        { wch: 18 }, // presentacion3_cantidad
+        { wch: 18 }, // presentacion3_precio
       ]
     }
 

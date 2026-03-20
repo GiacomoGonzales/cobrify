@@ -1084,12 +1084,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       rightY += dataLineHeight
     }
 
-    // Tipo de operación
-    doc.setFont('helvetica', 'bold')
-    doc.text('OPERACIÓN:', colRightX, rightY)
-    doc.setFont('helvetica', 'normal')
-    doc.text('VENTA INTERNA', rightValueX, rightY)
-    rightY += dataLineHeight
   }
 
   // N° de Guía (si existe)

@@ -1470,6 +1470,7 @@ export default function Products() {
             if (product.unit) updates.unit = product.unit
             if (product.location) updates.location = product.location
             if (product.afectacionIgv) updates.afectacionIgv = product.afectacionIgv
+            if (product.presentations) updates.presentations = product.presentations
 
             // Actualizar stock si corresponde
             if (product.trackStock && targetWarehouse) {
