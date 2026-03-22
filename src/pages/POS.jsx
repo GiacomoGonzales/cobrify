@@ -857,7 +857,7 @@ export default function POS() {
           unit: item.unit || 'NIU',
           code: item.code || '',
           observations: item.observations || '',
-          taxAffectation: item.taxAffectation || '10',
+          taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'),
           itemDiscount: item.itemDiscount || 0,
           notes: item.notes || '',
           presentationName: item.presentationName || '',
@@ -2566,8 +2566,8 @@ export default function POS() {
         return {
           price: effectivePrice,
           quantity: item.quantity,
-          taxAffectation: item.taxAffectation || '10', // Default: Gravado
-          igvRate: item.igvRate, // Per-product IGV rate (undefined = use global)
+          taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
+          igvRate: taxConfig.igvExempt ? 0 : item.igvRate, // Per-product IGV rate (undefined = use global)
         }
       }),
       taxConfig.igvRate
@@ -2908,9 +2908,9 @@ export default function POS() {
           unit: item.unit || 'NIU',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
-          taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
-          ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
-          ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem
+          taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
+          ...(item.observations && { observations: item.observations }),
+          ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }),
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
@@ -3091,8 +3091,8 @@ export default function POS() {
         unit: item.unit || 'NIU',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
-        taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
-        ...(item.igvRate && { igvRate: item.igvRate }), // Per-product IGV rate for mixed-rate invoices
+        taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
+        ...(!taxConfig.igvExempt && item.igvRate && { igvRate: item.igvRate }), // Per-product IGV rate (no aplica si exonerado)
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
