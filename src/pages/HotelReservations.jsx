@@ -16,6 +16,7 @@ import {
   Percent,
   DollarSign,
   Trash2,
+  Receipt,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -27,6 +28,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
+import InvoiceFromFolioModal from '@/components/hotel/InvoiceFromFolioModal'
 import {
   createReservation,
   getReservations,
@@ -117,6 +119,7 @@ export default function HotelReservations() {
   const [chargeDescription, setChargeDescription] = useState('')
   const [chargeAmount, setChargeAmount] = useState('')
   const [isAddingCharge, setIsAddingCharge] = useState(false)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
 
   // Processing actions
   const [processingId, setProcessingId] = useState(null)
@@ -950,8 +953,13 @@ export default function HotelReservations() {
               <span className="text-xl font-bold text-gray-900">{formatCurrency(folioTotal)}</span>
             </div>
 
-            {/* Close */}
-            <div className="flex justify-end pt-2">
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-2">
+              {folioCharges.length > 0 && (
+                <Button onClick={() => setShowInvoiceModal(true)}>
+                  <Receipt className="w-4 h-4 mr-1" /> Generar Comprobante
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setFolioReservation(null)}>
                 Cerrar
               </Button>
@@ -959,6 +967,18 @@ export default function HotelReservations() {
           </div>
         )}
       </Modal>
+
+      {/* Invoice from Folio Modal */}
+      <InvoiceFromFolioModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        reservation={folioReservation}
+        charges={folioCharges}
+        total={folioTotal}
+        onInvoiceCreated={() => {
+          setShowInvoiceModal(false)
+        }}
+      />
     </div>
   )
 }
