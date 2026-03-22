@@ -1349,8 +1349,9 @@ function CartDrawer({
       setOrderConfirmItems([...cart])
       setOrderSuccess(true)
 
-      // Limpiar carrito
+      // Limpiar carrito y recargar orden activa
       cart.forEach(item => onRemove(item.cartItemId || item.id))
+      if (onOrderAdded) onOrderAdded()
 
     } catch (error) {
       console.error('Error creating order:', error)
