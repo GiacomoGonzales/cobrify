@@ -301,6 +301,20 @@ const GS = 0x1D;
 const LF = 0x0A;
 
 /**
+ * Obtener la cantidad de líneas de avance antes del corte desde localStorage
+ */
+const getCutFeedLines = () => {
+  try {
+    const saved = localStorage.getItem('factuya_printerConfig');
+    if (saved) {
+      const config = JSON.parse(saved);
+      return config.cutFeedLines ?? 5;
+    }
+  } catch { /* ignore */ }
+  return 5;
+};
+
+/**
  * Crear comandos ESC/POS
  */
 export const ESCPOSCommands = {
@@ -1091,7 +1105,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));
     }
 
-    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
+    commands.push(ESCPOSCommands.feed(getCutFeedLines()));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1202,7 +1216,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
     // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
-    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
+    commands.push(ESCPOSCommands.feed(getCutFeedLines()));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1334,7 +1348,7 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
     commands.push(ESCPOSCommands.lineFeed());
     commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
-    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
+    commands.push(ESCPOSCommands.feed(getCutFeedLines()));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1456,7 +1470,7 @@ export const printBLESplitPreBill = async (order, table, business, taxConfig = {
       commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
       commands.push(ESCPOSCommands.lineFeed());
       commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
-      commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
+      commands.push(ESCPOSCommands.feed(getCutFeedLines()));
       commands.push(ESCPOSCommands.cut());
 
       const data = concatUint8Arrays(...commands);

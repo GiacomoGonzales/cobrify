@@ -497,6 +497,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
       printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
       simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
+      cutFeedLines: printerConfig.cutFeedLines ?? 5, // Líneas de avance antes del corte
       updatedAt: new Date().toISOString()
     };
 
@@ -531,6 +532,21 @@ export const getPrinterConfig = async (userId) => {
     console.error('Error getting printer config:', error);
     return { success: false, error: error.message, config: null };
   }
+};
+
+/**
+ * Obtener la cantidad de líneas de avance antes del corte desde localStorage
+ * @returns {number} Líneas de feed (default 5)
+ */
+const getCutFeedLines = () => {
+  try {
+    const saved = localStorage.getItem('factuya_printerConfig');
+    if (saved) {
+      const config = JSON.parse(saved);
+      return config.cutFeedLines ?? 5;
+    }
+  } catch { /* ignore */ }
+  return 5;
 };
 
 /**
@@ -1254,10 +1270,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text(convertSpanishText(business.website + '\n'));
     }
 
-    // Finalizar y enviar - avanzar suficiente papel para que la cuchilla no corte el texto
-    // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
-    const feedLines = paperWidth >= 80 ? 3 : 5;
-    for (let i = 0; i < feedLines; i++) {
+    // Finalizar y enviar - avanzar según configuración del usuario
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) {
       printer = printer.text('\n');
     }
     await printer
@@ -1419,10 +1434,9 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
 
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
-    // Avanzar suficiente papel para que la cuchilla no corte el texto
-    // En 80mm la distancia cabezal-cuchilla es mayor, necesita más feed
-    const feedLines = paperWidth >= 80 ? 3 : 5;
-    for (let i = 0; i < feedLines; i++) {
+    // Avanzar según configuración del usuario
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) {
       printer = printer.text('\n');
     }
     await printer
@@ -1607,8 +1621,8 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .text('\n')
       .text('Gracias por su preferencia\n');
 
-    const feedLines = paperWidth >= 80 ? 3 : 5;
-    for (let i = 0; i < feedLines; i++) {
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) {
       printer = printer.text('\n');
     }
     await printer

@@ -7137,6 +7137,59 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Avance de papel antes del corte */}
+              {isPrinterConnected && (
+              <div className="border border-gray-200 rounded-lg p-4 bg-green-50">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Avance de papel antes del corte
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Cantidad de líneas en blanco antes de cortar el ticket. Si el ticket tiene mucho espacio arriba, reduce el valor. Si el contenido se corta abajo, auméntalo. Depende de cada modelo de impresora.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="1"
+                      value={printerConfig.cutFeedLines ?? 5}
+                      onChange={(e) => {
+                        const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0))
+                        setPrinterConfig({ ...printerConfig, cutFeedLines: val })
+                      }}
+                      onBlur={async (e) => {
+                        const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0))
+                        const newConfig = { ...printerConfig, cutFeedLines: val }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success(`Avance antes del corte: ${val} líneas`)
+                      }}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                    <span className="text-sm text-gray-600">líneas</span>
+                    <div className="flex gap-1 ml-2">
+                      {[0, 1, 2, 3, 4, 5, 6].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={async () => {
+                            const newConfig = { ...printerConfig, cutFeedLines: val }
+                            setPrinterConfig(newConfig)
+                            await savePrinterConfig(getBusinessId(), newConfig)
+                            toast.success(`Avance antes del corte: ${val} líneas`)
+                          }}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.cutFeedLines ?? 5) === val ? 'bg-green-200 border-green-400 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
+
               {/* Divider */}
               <div className="border-t border-gray-200 my-6"></div>
 
