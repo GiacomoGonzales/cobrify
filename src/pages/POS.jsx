@@ -270,7 +270,7 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, userPermissions } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -1364,7 +1364,10 @@ export default function POS() {
 
         // Verificar si la caja diaria está abierta (si el setting lo requiere)
         if (businessData.requireOpenCashRegister) {
-          const cashResult = await getCashRegisterSession(businessId, selectedBranch?.id || null, user?.uid || null)
+          // Sub-usuario con caja compartida: buscar sesión sin filtrar por usuario (sesión del owner)
+          const isSharedCashUser = userPermissions?.ownerId && !independentCashRegister
+          const cashUserUid = isSharedCashUser ? null : (user?.uid || null)
+          const cashResult = await getCashRegisterSession(businessId, selectedBranch?.id || null, cashUserUid)
           setCashRegisterOpen(cashResult.success && cashResult.data !== null)
         }
 
