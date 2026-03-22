@@ -1255,12 +1255,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     }
 
     // Finalizar y enviar - avanzar suficiente papel para que la cuchilla no corte el texto
+    // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
+    const feedLines = paperWidth >= 80 ? 3 : 5;
+    for (let i = 0; i < feedLines; i++) {
+      printer = printer.text('\n');
+    }
     await printer
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
       .cutPaper()
       .write();
 
@@ -1420,12 +1420,12 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
     // Avanzar suficiente papel para que la cuchilla no corte el texto
+    // En 80mm la distancia cabezal-cuchilla es mayor, necesita más feed
+    const feedLines = paperWidth >= 80 ? 3 : 5;
+    for (let i = 0; i < feedLines; i++) {
+      printer = printer.text('\n');
+    }
     await printer
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
       .cutPaper()
       .write();
 
@@ -1605,12 +1605,13 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .text('No valido como comprobante\n')
       .text('Solicite su factura o boleta\n')
       .text('\n')
-      .text('Gracias por su preferencia\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
-      .text('\n')
+      .text('Gracias por su preferencia\n');
+
+    const feedLines = paperWidth >= 80 ? 3 : 5;
+    for (let i = 0; i < feedLines; i++) {
+      printer = printer.text('\n');
+    }
+    await printer
       .cutPaper()
       .write();
 

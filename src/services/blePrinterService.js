@@ -1091,7 +1091,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));
     }
 
-    commands.push(ESCPOSCommands.feed(6));
+    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1140,6 +1140,30 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
     }
 
+    // Datos del cliente para delivery/takeaway
+    if (order.customerName) {
+      commands.push(ESCPOSCommands.text('Cliente: ' + convertSpanishText(order.customerName) + '\n'));
+    }
+    if (order.customerPhone) {
+      commands.push(ESCPOSCommands.text('Tel: ' + order.customerPhone + '\n'));
+    }
+    if (order.customerAddress) {
+      commands.push(ESCPOSCommands.text('Dir: ' + convertSpanishText(order.customerAddress) + '\n'));
+    }
+    if (order.orderType && !table) {
+      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+      if (typeLabels[order.orderType]) {
+        commands.push(ESCPOSCommands.bold(false));
+        commands.push(ESCPOSCommands.align(1));
+        commands.push(ESCPOSCommands.doubleHeight(true));
+        commands.push(ESCPOSCommands.bold(true));
+        commands.push(ESCPOSCommands.text('*** ' + typeLabels[order.orderType] + ' ***\n'));
+        commands.push(ESCPOSCommands.doubleHeight(false));
+        commands.push(ESCPOSCommands.bold(false));
+        commands.push(ESCPOSCommands.align(0));
+      }
+    }
+
     if (order.priority === 'urgent') {
       commands.push(ESCPOSCommands.doubleHeight(true));
       commands.push(ESCPOSCommands.align(1));
@@ -1177,7 +1201,8 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
-    commands.push(ESCPOSCommands.feed(6));
+    // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
+    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1309,7 +1334,7 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
     commands.push(ESCPOSCommands.lineFeed());
     commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
-    commands.push(ESCPOSCommands.feed(6));
+    commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
     commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
@@ -1431,7 +1456,7 @@ export const printBLESplitPreBill = async (order, table, business, taxConfig = {
       commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
       commands.push(ESCPOSCommands.lineFeed());
       commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
-      commands.push(ESCPOSCommands.feed(6));
+      commands.push(ESCPOSCommands.feed(paperWidth >= 80 ? 3 : 6));
       commands.push(ESCPOSCommands.cut());
 
       const data = concatUint8Arrays(...commands);
