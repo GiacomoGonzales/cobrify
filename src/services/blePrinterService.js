@@ -336,11 +336,13 @@ export const ESCPOSCommands = {
   // Doble alto
   doubleHeight: (on) => new Uint8Array([GS, 0x21, on ? 0x01 : 0x00]),
 
-  // Cortar papel
-  cut: () => new Uint8Array([GS, 0x56, 0x00]),
+  // Cortar papel (con avance automático para evitar contenido cortado)
+  // GS V 66 n = corte parcial con avance de n líneas antes de cortar
+  // Esto asegura que el contenido pase la cuchilla antes del corte
+  cut: () => new Uint8Array([GS, 0x56, 0x42, 0x00]),
 
-  // Cortar papel parcial
-  cutPartial: () => new Uint8Array([GS, 0x56, 0x01]),
+  // Cortar papel parcial (con avance)
+  cutPartial: () => new Uint8Array([GS, 0x56, 0x42, 0x00]),
 
   // Texto a bytes
   text: (str) => {

@@ -7138,7 +7138,7 @@ export default function Settings() {
               </div>
 
               {/* Avance de papel antes del corte */}
-              {isPrinterConnected && (
+              {(
               <div className="border border-gray-200 rounded-lg p-4 bg-green-50">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-900 mb-1">
