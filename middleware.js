@@ -59,7 +59,18 @@ export default function middleware(request) {
     }
   }
 
-  // Caso 2: Dominio de reseller (ruta raíz)
+  // Caso 2: Menú digital de restaurante (/menu/:slug)
+  if (pathname.startsWith('/menu/')) {
+    const slug = pathname.replace('/menu/', '').split('/')[0].split('?')[0]
+    if (slug) {
+      // Reescribir a la API de menú
+      url.pathname = '/api/menu-meta'
+      url.searchParams.set('slug', slug)
+      return Response.redirect(url.toString(), 307)
+    }
+  }
+
+  // Caso 3: Dominio de reseller (ruta raíz)
   if (pathname === '/' && isResellerDomain(hostname)) {
     // Reescribir a la API de reseller
     url.pathname = '/api/reseller-meta'
@@ -71,5 +82,5 @@ export default function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/catalogo/:path*']
+  matcher: ['/', '/catalogo/:path*', '/menu/:path*']
 }
