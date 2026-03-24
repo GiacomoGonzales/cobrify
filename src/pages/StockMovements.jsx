@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import * as XLSX from 'xlsx'
 import {
   History,
   Search,
   ArrowUpCircle,
+  FileSpreadsheet,
   ArrowDownCircle,
   ArrowRightLeft,
   Package,
@@ -404,6 +406,44 @@ export default function StockMovements() {
 
   const hasActiveFilters = searchTerm || filterBranch !== 'all' || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
 
+  const handleExportExcel = () => {
+    if (filteredMovements.length === 0) {
+      toast.error('No hay movimientos para exportar')
+      return
+    }
+
+    const data = filteredMovements.map(m => ({
+      'Fecha': formatDate(m.createdAt),
+      'Producto': m.productName || '',
+      'Tipo': getMovementTypeInfo(m.type)?.label || m.type,
+      'Cantidad': m.quantity || 0,
+      'Stock después': m.stockAfter ?? '-',
+      'Almacén': m.warehouseName || '',
+      'Origen/Destino': m.type === 'transfer_in' ? m.fromWarehouseName || '' : m.type === 'transfer_out' ? m.toWarehouseName || '' : '',
+      'Notas': m.notes || m.reason || '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Movimientos')
+
+    // Ajustar ancho de columnas
+    ws['!cols'] = [
+      { wch: 12 }, // Fecha
+      { wch: 30 }, // Producto
+      { wch: 20 }, // Tipo
+      { wch: 10 }, // Cantidad
+      { wch: 12 }, // Stock después
+      { wch: 20 }, // Almacén
+      { wch: 20 }, // Origen/Destino
+      { wch: 30 }, // Notas
+    ]
+
+    const fileName = `movimientos_${filterDateFrom || 'inicio'}_${filterDateTo || 'hoy'}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    toast.success(`${filteredMovements.length} movimientos exportados`)
+  }
+
   // Calcular saldo después de cada movimiento
   // Usa el stock actual del producto y recalcula hacia atrás desde el más reciente
   const movementsWithBalance = (() => {
@@ -667,9 +707,9 @@ export default function StockMovements() {
               </div>
             </div>
 
-            {/* Botón limpiar filtros */}
-            {hasActiveFilters && (
-              <div className="flex justify-end">
+            {/* Botones de acción */}
+            <div className="flex justify-end gap-2">
+              {hasActiveFilters && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -677,8 +717,17 @@ export default function StockMovements() {
                 >
                   Limpiar filtros
                 </Button>
-              </div>
-            )}
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={filteredMovements.length === 0}
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
