@@ -2420,7 +2420,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={business.catalogLogoUrl || business.logoUrl}
                   alt={business.name}
-                  className={`${isLogoHorizontal ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0`}
+                  className={`${isLogoHorizontal ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0 bg-white rounded-lg p-1`}
                   onLoad={(e) => {
                     const { naturalWidth, naturalHeight } = e.target
                     setIsLogoHorizontal(naturalWidth / naturalHeight > 1.8)
@@ -2923,7 +2923,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={business.catalogLogoUrl || business.logoUrl}
                   alt={business.name}
-                  className="h-12 max-w-[200px] object-contain"
+                  className="h-12 max-w-[200px] object-contain bg-white rounded-lg p-1"
                 />
               ) : (
                 <div
