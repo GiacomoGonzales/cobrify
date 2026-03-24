@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, Pill, Layers } from 'lucide-react'
+import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, Pill, Layers, Warehouse, Store } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
+import Select from '@/components/ui/Select'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { formatCurrency } from '@/lib/utils'
+import { getWarehouses } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 
 function BatchControl() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -18,6 +21,10 @@ function BatchControl() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('all') // all, with-batches, expiring
   const [expandedProducts, setExpandedProducts] = useState({})
+  const [warehouses, setWarehouses] = useState([])
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
+  const [filterWarehouse, setFilterWarehouse] = useState('all')
 
   // Modal para editar lote
   const [showEditModal, setShowEditModal] = useState(false)
@@ -66,15 +73,22 @@ function BatchControl() {
 
     try {
       setLoading(true)
-      const productsRef = collection(db, 'businesses', businessId, 'products')
-      const snapshot = await getDocs(productsRef)
 
-      const allProducts = snapshot.docs.map(doc => ({
+      // Cargar productos, almacenes y sucursales en paralelo
+      const [productsSnapshot, warehousesResult, branchesResult] = await Promise.all([
+        getDocs(collection(db, 'businesses', businessId, 'products')),
+        getWarehouses(businessId),
+        getActiveBranches(businessId)
+      ])
+
+      const allProducts = productsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }))
 
       setProducts(allProducts)
+      if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
+      if (branchesResult.success) setBranches(branchesResult.data || [])
     } catch (error) {
       console.error('Error al cargar productos:', error)
       toast.error('Error al cargar productos')
@@ -118,6 +132,33 @@ function BatchControl() {
   }
 
   // Formatear fecha
+  // Almacenes filtrados por sucursal
+  const filteredWarehouses = filterBranch === 'all'
+    ? warehouses
+    : filterBranch === 'main'
+      ? warehouses.filter(w => !w.branchId)
+      : warehouses.filter(w => w.branchId === filterBranch)
+
+  // Obtener stock de un producto según filtros de almacén/sucursal
+  const getFilteredStock = (product) => {
+    const warehouseStocks = product.warehouseStocks || []
+    if (warehouseStocks.length === 0) return product.stock || 0
+
+    if (filterWarehouse !== 'all') {
+      const ws = warehouseStocks.find(ws => ws.warehouseId === filterWarehouse)
+      return ws?.stock || 0
+    }
+
+    if (filterBranch === 'all') {
+      return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    }
+
+    const warehouseIds = filteredWarehouses.map(w => w.id)
+    return warehouseStocks
+      .filter(ws => warehouseIds.includes(ws.warehouseId))
+      .reduce((sum, ws) => sum + (ws.stock || 0), 0)
+  }
+
   const parseDate = (date) => {
     if (!date) return null
     if (date.toDate) return date.toDate()
@@ -425,6 +466,43 @@ function BatchControl() {
               </select>
             </div>
           </div>
+
+          {/* Filtros de sucursal y almacén */}
+          {(warehouses.length > 0 || branches.length > 0) && (
+            <div className="flex flex-col sm:flex-row gap-3 mt-3 pt-3 border-t border-gray-100">
+              {branches.length > 0 && (
+                <div className="flex items-center gap-2 flex-1">
+                  <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <select
+                    value={filterBranch}
+                    onChange={(e) => { setFilterBranch(e.target.value); setFilterWarehouse('all') }}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sede principal</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {warehouses.length > 0 && (
+                <div className="flex items-center gap-2 flex-1">
+                  <Warehouse className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <select
+                    value={filterWarehouse}
+                    onChange={(e) => setFilterWarehouse(e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="all">Todos los almacenes</option>
+                    {filteredWarehouses.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -462,7 +540,7 @@ function BatchControl() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">Stock: {product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : (product.stock || 0)}</p>
+                        <p className="text-sm font-medium text-gray-900">Stock: {product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : getFilteredStock(product)}</p>
                         <p className="text-xs text-gray-500">{product.batches?.length || 0} lotes</p>
                       </div>
                       {product.batches && product.batches.length > 0 && (
