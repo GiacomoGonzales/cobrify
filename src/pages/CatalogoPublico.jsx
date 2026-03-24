@@ -1922,6 +1922,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [cart, setCart] = useState([])
   const [cartOpen, setCartOpen] = useState(false)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+  const [isLogoHorizontal, setIsLogoHorizontal] = useState(false)
 
   // Estado para mesa activa (orden existente del mozo)
   const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
@@ -2067,9 +2068,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ? `${businessName} - Menú Digital`
         : `${businessName} - Catálogo`
     }
-    if (business.logoUrl) {
+    const displayLogo = business.catalogLogoUrl || business.logoUrl
+    if (displayLogo) {
       const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
-      favicons.forEach(el => el.setAttribute('href', business.logoUrl))
+      favicons.forEach(el => el.setAttribute('href', displayLogo))
     }
     // Restaurar al desmontar
     return () => {
@@ -2414,11 +2416,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre */}
             <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-              {business?.logoUrl ? (
+              {(business?.catalogLogoUrl || business?.logoUrl) ? (
                 <img
-                  src={business.logoUrl}
+                  src={business.catalogLogoUrl || business.logoUrl}
                   alt={business.name}
-                  className="h-9 md:h-12 w-auto max-w-[100px] md:max-w-[200px] object-contain flex-shrink-0"
+                  className={`${isLogoHorizontal ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0`}
+                  onLoad={(e) => {
+                    const { naturalWidth, naturalHeight } = e.target
+                    setIsLogoHorizontal(naturalWidth / naturalHeight > 1.8)
+                  }}
                 />
               ) : (
                 <div
@@ -2432,6 +2438,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   )}
                 </div>
               )}
+              {/* Si el logo es horizontal (ej: nombre incluido en logo), ocultar texto */}
+              {!isLogoHorizontal && (
               <div className="min-w-0">
                 <h1 className={`font-bold text-base md:text-xl truncate ${thText}`}>
                   {business?.name || business?.businessName}
@@ -2440,6 +2448,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <p className={`text-sm hidden md:block ${thTextMuted}`}>{business.catalogTagline}</p>
                 )}
               </div>
+              )}
             </div>
 
             {/* Carrito */}
@@ -2478,9 +2487,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             {/* Info sobre el banner */}
             <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 max-w-7xl mx-auto">
               <div className="flex items-end gap-4">
-                {business?.logoUrl && (
+                {(business?.catalogLogoUrl || business?.logoUrl) && (
                   <img
-                    src={business.logoUrl}
+                    src={business.catalogLogoUrl || business.logoUrl}
                     alt={business.name}
                     className="h-14 md:h-20 w-auto max-w-[120px] md:max-w-[180px] object-contain bg-white/90 rounded-xl p-1.5 shadow-lg flex-shrink-0"
                   />
@@ -2910,9 +2919,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
-              {business?.logoUrl ? (
+              {(business?.catalogLogoUrl || business?.logoUrl) ? (
                 <img
-                  src={business.logoUrl}
+                  src={business.catalogLogoUrl || business.logoUrl}
                   alt={business.name}
                   className="h-12 max-w-[200px] object-contain"
                 />

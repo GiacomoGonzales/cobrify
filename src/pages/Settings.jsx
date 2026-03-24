@@ -235,6 +235,8 @@ export default function Settings() {
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
+  const [catalogLogoUrl, setCatalogLogoUrl] = useState('')
+  const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
   const [businessHours, setBusinessHours] = useState({
     enabled: false,
     days: {
@@ -864,6 +866,7 @@ export default function Settings() {
         setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
+        setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
@@ -5074,6 +5077,84 @@ export default function Settings() {
                     <div className="space-y-5">
                       <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Personalización</h3>
 
+                      {/* Logo para catálogo/menú digital */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Logo para {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'} (opcional)
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Sube un logo optimizado para tu {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'}. Recomendado: fondo transparente (PNG). Si no subes uno, se usará el logo principal de tu empresa.
+                        </p>
+                        <div className="flex items-start gap-4">
+                          {/* Preview */}
+                          <div className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
+                            {catalogLogoUrl ? (
+                              <img src={catalogLogoUrl} alt="Logo catálogo" className="w-full h-full object-contain p-1" />
+                            ) : logoUrl ? (
+                              <img src={logoUrl} alt="Logo principal" className="w-full h-full object-contain p-1 opacity-40" />
+                            ) : (
+                              <span className="text-xs text-gray-400 text-center px-1">Sin logo</span>
+                            )}
+                          </div>
+                          <div className="flex-1 space-y-2">
+                            <label className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                              {uploadingCatalogLogo ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Subiendo...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4" />
+                                  Subir logo
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="hidden"
+                                disabled={uploadingCatalogLogo}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingCatalogLogo(true)
+                                  try {
+                                    const compressed = await compressImage(file, { maxWidth: 512, maxHeight: 512, quality: 0.9 })
+                                    const logoRef = ref(storage, `businesses/${getBusinessId()}/catalog-logo`)
+                                    await uploadBytes(logoRef, compressed, { contentType: file.type })
+                                    const url = await getDownloadURL(logoRef)
+                                    setCatalogLogoUrl(url)
+                                    toast.success('Logo del catálogo subido')
+                                  } catch (err) {
+                                    console.error('Error subiendo logo catálogo:', err)
+                                    toast.error('Error al subir el logo')
+                                  } finally {
+                                    setUploadingCatalogLogo(false)
+                                    e.target.value = ''
+                                  }
+                                }}
+                              />
+                            </label>
+                            {catalogLogoUrl && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const logoRef = ref(storage, `businesses/${getBusinessId()}/catalog-logo`)
+                                    await deleteObject(logoRef)
+                                  } catch (e) { /* ignore if not found */ }
+                                  setCatalogLogoUrl('')
+                                  toast.success('Logo del catálogo eliminado, se usará el logo principal')
+                                }}
+                                className="text-xs text-red-600 hover:underline"
+                              >
+                                Quitar logo (usar el principal)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Tagline */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5607,6 +5688,7 @@ export default function Settings() {
                         catalogIgnoreStock,
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
+                        catalogLogoUrl: catalogLogoUrl || null,
                         catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
                         catalogShowAllPrices,
                         catalogAllowTakeaway,

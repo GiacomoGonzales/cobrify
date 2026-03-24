@@ -82,6 +82,7 @@ async function findBusinessByCatalogSlug(slug) {
       companySlogan: fields.companySlogan?.stringValue || null,
       catalogColor: fields.catalogColor?.stringValue || null,
       catalogSocialImage: fields.catalogSocialImage?.stringValue || null,
+      catalogLogoUrl: fields.catalogLogoUrl?.stringValue || null,
       logoUrl: fields.logoUrl?.stringValue || null
     }
   } catch (error) {
@@ -95,7 +96,7 @@ function generateHTML(business, slug) {
   const slogan = business.companySlogan || ''
   const tagline = slogan || `¡Haz tu pedido en ${businessName}!`
   const description = `${tagline} — Menú digital de ${businessName}. Mira nuestra carta y pide desde tu mesa.`
-  const logoUrl = business.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const logoUrl = business.catalogLogoUrl || business.logoUrl || 'https://cobrifyperu.com/logo.png'
   const themeColor = business.catalogColor || '#10B981'
   const url = `https://cobrifyperu.com/menu/${slug}`
   const socialImageUrl = business.catalogSocialImage || business.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'

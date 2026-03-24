@@ -83,6 +83,7 @@ async function findBusinessByCatalogSlug(slug) {
       catalogWelcome: fields.catalogWelcome?.stringValue || null,
       catalogColor: fields.catalogColor?.stringValue || null,
       catalogSocialImage: fields.catalogSocialImage?.stringValue || null,
+      catalogLogoUrl: fields.catalogLogoUrl?.stringValue || null,
       logoUrl: fields.logoUrl?.stringValue || null
     }
   } catch (error) {
@@ -95,7 +96,7 @@ function generateHTML(business, slug) {
   const businessName = business.name || business.businessName || 'Catálogo'
   const tagline = business.catalogTagline || `Catálogo de productos de ${businessName}`
   const description = business.catalogWelcome || tagline
-  const logoUrl = business.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const logoUrl = business.catalogLogoUrl || business.logoUrl || 'https://cobrifyperu.com/logo.png'
   const themeColor = business.catalogColor || '#10B981'
   const url = `https://cobrifyperu.com/catalogo/${slug}`
   const socialImageUrl = business.catalogSocialImage || business.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'
