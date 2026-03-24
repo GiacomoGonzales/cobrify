@@ -1901,7 +1901,6 @@ export default function Products() {
     for (const product of selectedProds) {
       const qty = labelQuantities[product.id] || 1
       const code = product.code || product.sku || product.id.slice(-8)
-      const price = product.price ? `S/ ${Number(product.price).toFixed(2)}` : ''
       const name = product.name || ''
       const shortName = name.length > 28 ? name.substring(0, 28) + '..' : name
       const barcodeSVG = generateBarcodeSVG(code)
@@ -1911,7 +1910,6 @@ export default function Products() {
           <div class="label">
             <div class="name">${shortName}</div>
             <div class="barcode">${barcodeSVG}</div>
-            <div class="price">${price}</div>
           </div>`
       }
     }
@@ -1938,8 +1936,7 @@ export default function Products() {
   .label:last-child { page-break-after: avoid; }
   .name { font-size: 5.5pt; font-weight: bold; text-align: center; line-height: 1.15; max-height: 4.5mm; overflow: hidden; width: 100%; }
   .barcode { display: flex; justify-content: center; width: 100%; }
-  .barcode svg { width: 26mm; height: 8mm; }
-  .price { font-size: 7pt; font-weight: bold; text-align: center; }
+  .barcode svg { width: 26mm; height: 10mm; }
 </style>
 </head>
 <body>${labelsHTML}</body>
@@ -5849,7 +5846,7 @@ export default function Products() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                   <p className="text-xs text-gray-500">
-                    {product.code || product.sku || 'Sin código'} — S/ {Number(product.price || 0).toFixed(2)}
+                    {product.code || product.sku || 'Sin código'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-3">
