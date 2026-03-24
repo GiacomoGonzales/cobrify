@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer } from 'lucide-react'
+import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -266,6 +267,11 @@ export default function Products() {
   const [bulkAction, setBulkAction] = useState(null) // 'delete', 'changeCategory', 'toggleActive'
   const [bulkCategoryChange, setBulkCategoryChange] = useState('')
   const [isProcessingBulk, setIsProcessingBulk] = useState(false)
+
+  // Estado para impresión de etiquetas
+  const [labelModalOpen, setLabelModalOpen] = useState(false)
+  const [labelQuantities, setLabelQuantities] = useState({}) // { productId: cantidad }
+  const [labelSize, setLabelSize] = useState('30x20') // tamaño de etiqueta en mm
 
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
@@ -1855,6 +1861,96 @@ export default function Products() {
     )
   }
 
+  // Funciones para etiquetas de código de barras
+  const openLabelModal = () => {
+    if (selectedProducts.size === 0) {
+      toast.error('Selecciona al menos un producto')
+      return
+    }
+    // Inicializar cantidades en 1 para cada producto seleccionado
+    const quantities = {}
+    selectedProducts.forEach(id => { quantities[id] = 1 })
+    setLabelQuantities(quantities)
+    setLabelModalOpen(true)
+  }
+
+  const handlePrintLabels = () => {
+    const selectedProds = products.filter(p => selectedProducts.has(p.id))
+
+    // Generar códigos de barras como SVG strings usando JsBarcode
+    const generateBarcodeSVG = (code) => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      try {
+        JsBarcode(svg, code, {
+          format: 'CODE128',
+          width: 1.5,
+          height: 30,
+          displayValue: true,
+          fontSize: 8,
+          margin: 0,
+          textMargin: 1
+        })
+        return svg.outerHTML
+      } catch (e) {
+        console.error('Error generando barcode:', e)
+        return `<span style="font-size:7pt">${code}</span>`
+      }
+    }
+
+    let labelsHTML = ''
+    for (const product of selectedProds) {
+      const qty = labelQuantities[product.id] || 1
+      const code = product.code || product.sku || product.id.slice(-8)
+      const price = product.price ? `S/ ${Number(product.price).toFixed(2)}` : ''
+      const name = product.name || ''
+      const shortName = name.length > 28 ? name.substring(0, 28) + '..' : name
+      const barcodeSVG = generateBarcodeSVG(code)
+
+      for (let i = 0; i < qty; i++) {
+        labelsHTML += `
+          <div class="label">
+            <div class="name">${shortName}</div>
+            <div class="barcode">${barcodeSVG}</div>
+            <div class="price">${price}</div>
+          </div>`
+      }
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Permite ventanas emergentes para imprimir')
+      return
+    }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<title>Etiquetas de productos</title>
+<style>
+  @page { size: 30mm 20mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; }
+  .label {
+    width: 30mm; height: 20mm; padding: 0.5mm 1mm;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    page-break-after: always; overflow: hidden;
+  }
+  .label:last-child { page-break-after: avoid; }
+  .name { font-size: 5.5pt; font-weight: bold; text-align: center; line-height: 1.15; max-height: 4.5mm; overflow: hidden; width: 100%; }
+  .barcode { display: flex; justify-content: center; width: 100%; }
+  .barcode svg { width: 26mm; height: 8mm; }
+  .price { font-size: 7pt; font-weight: bold; text-align: center; }
+</style>
+</head>
+<body>${labelsHTML}</body>
+</html>`)
+    printWindow.document.close()
+    printWindow.onload = () => { setTimeout(() => printWindow.print(), 200) }
+
+    setLabelModalOpen(false)
+    toast.success('Preparando etiquetas para imprimir...')
+  }
+
   const openBulkActionModal = (action) => {
     if (selectedProducts.size === 0) {
       toast.error('Debes seleccionar al menos un producto')
@@ -2627,6 +2723,15 @@ export default function Products() {
                 >
                   <Package className="w-4 h-4 mr-2" />
                   Activar/Desactivar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openLabelModal}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Etiquetas
                 </Button>
                 <Button
                   variant="danger"
@@ -5724,6 +5829,72 @@ export default function Products() {
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportProducts}
       />
+
+      {/* Modal de impresión de etiquetas */}
+      <Modal
+        isOpen={labelModalOpen}
+        onClose={() => setLabelModalOpen(false)}
+        title="Imprimir etiquetas de código de barras"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Configura la cantidad de etiquetas por producto. Se imprimirán con nombre, código de barras y precio.
+          </p>
+
+          {/* Lista de productos seleccionados */}
+          <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+            {products.filter(p => selectedProducts.has(p.id)).map(product => (
+              <div key={product.id} className="flex items-center justify-between px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {product.code || product.sku || 'Sin código'} — S/ {Number(product.price || 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 ml-3">
+                  <label className="text-xs text-gray-500">Cant:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={labelQuantities[product.id] || 1}
+                    onChange={(e) => setLabelQuantities(prev => ({
+                      ...prev,
+                      [product.id]: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
+                    }))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Info */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-700">
+              <strong>Tamaño:</strong> 30 x 20 mm — Asegúrate de tener la impresora de etiquetas configurada en Windows con ese tamaño de papel.
+              Los productos sin código de barras usarán su SKU o un código generado automáticamente.
+            </p>
+          </div>
+
+          {/* Total */}
+          <p className="text-sm text-gray-700">
+            Total: <strong>{Object.values(labelQuantities).reduce((a, b) => a + b, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
+          </p>
+
+          {/* Botones */}
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setLabelModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handlePrintLabels}>
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir etiquetas
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

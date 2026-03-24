@@ -43,6 +43,7 @@
     "dayjs": "^1.11.18",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "jszip": "^3.10.1",
