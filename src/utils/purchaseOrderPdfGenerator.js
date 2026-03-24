@@ -417,7 +417,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   // ========== TABLA DE PRODUCTOS ==========
   const tableY = currentY
   const headerRowHeight = 18
-  const productRowHeight = 15
+  const baseRowHeight = 15
 
   // Detectar modo farmacia para mostrar columna LABORATORIO
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
@@ -470,6 +470,16 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
 
+    // Calcular líneas de descripción para determinar altura de fila
+    const itemName = item.name || ''
+    const rawCode = item.code || item.productCode || ''
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    doc.setFontSize(8)
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    const extraLines = Math.max(0, descLines.length - 1)
+    const productRowHeight = baseRowHeight + (extraLines * 3.5)
+
     if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248)
       doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, productRowHeight, 'F')
@@ -486,14 +496,11 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const unitCode = item.unit || 'UNIDAD'
     doc.text(unitLabels[unitCode] || unitCode, cols.um + colWidths.um / 2, textY, { align: 'center' })
 
-    const itemName = item.name || ''
-    const rawCode = item.code || item.productCode || ''
-    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    doc.text(descLines[0], cols.desc + 4, textY)
+    descLines.forEach((line, lineIdx) => {
+      doc.text(line, cols.desc + 4, textY + (lineIdx * 3.5))
+    })
 
     // Laboratorio (solo modo farmacia)
     if (isPharmacy) {
