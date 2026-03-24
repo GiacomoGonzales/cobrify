@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
+import { getAuth, indexedDBLocalPersistence, initializeAuth, inMemoryPersistence } from 'firebase/auth'
 import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
@@ -116,11 +116,21 @@ let secondaryAuth
 
 try {
   secondaryApp = initializeApp(firebaseConfig, 'secondary')
-  secondaryAuth = getAuth(secondaryApp)
+  // Usar inMemoryPersistence para el auth secundario — no necesitamos persistir sesión
+  // ya que solo se usa para crear usuarios y se hace signOut inmediatamente.
+  // En iOS, getAuth() usa Keychain por defecto y puede trabarse con una segunda instancia.
+  secondaryAuth = initializeAuth(secondaryApp, {
+    persistence: inMemoryPersistence
+  })
   console.log('🔐 Secondary Auth inicializado para crear usuarios')
 } catch (error) {
   // Si ya existe, obtenerla
   console.log('⚠️ Secondary app ya existe o error:', error.message)
+  try {
+    secondaryAuth = getAuth(secondaryApp)
+  } catch (e) {
+    console.error('❌ No se pudo obtener secondaryAuth:', e.message)
+  }
 }
 
 export { app, auth, db, storage, functions, secondaryAuth }
