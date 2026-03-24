@@ -285,14 +285,15 @@ export default function StockMovements() {
       const movementDate = movement.createdAt?.toDate ? movement.createdAt.toDate() : new Date(movement.createdAt)
 
       if (filterDateFrom) {
-        const fromDate = new Date(filterDateFrom)
-        fromDate.setHours(0, 0, 0, 0)
+        // Parsear como fecha local (YYYY-MM-DD → año, mes-1, día en hora local)
+        const [y, m, d] = filterDateFrom.split('-').map(Number)
+        const fromDate = new Date(y, m - 1, d, 0, 0, 0, 0)
         if (movementDate < fromDate) matchesDate = false
       }
 
       if (filterDateTo) {
-        const toDate = new Date(filterDateTo)
-        toDate.setHours(23, 59, 59, 999)
+        const [y, m, d] = filterDateTo.split('-').map(Number)
+        const toDate = new Date(y, m - 1, d, 23, 59, 59, 999)
         if (movementDate > toDate) matchesDate = false
       }
     }
