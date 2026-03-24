@@ -267,7 +267,9 @@ export default function StockMovements() {
     let matchesType = true
     if (filterType !== 'all') {
       if (filterType === 'exits') {
-        matchesType = movement.type === 'exit' || movement.type === 'sale'
+        matchesType = movement.type === 'exit'
+      } else if (filterType === 'sale') {
+        matchesType = movement.type === 'sale'
       } else if (filterType === 'entries') {
         matchesType = movement.type === 'entry'
       } else if (filterType === 'transfers') {
@@ -632,7 +634,8 @@ export default function StockMovements() {
               >
                 <option value="all">Todos los tipos</option>
                 <option value="entries">Entradas</option>
-                <option value="exits">Salidas</option>
+                <option value="sale">Ventas</option>
+                <option value="exits">Salidas (sin ventas)</option>
                 <option value="transfers">Transferencias</option>
                 <option value="adjustment">Ajustes</option>
                 <option value="damage">Merma/Dañado</option>
