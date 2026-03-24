@@ -477,8 +477,9 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    const lineHeight = 8 * 1.4 * 0.3528 // fontSize * lineHeightFactor * pt-to-mm
     const extraLines = Math.max(0, descLines.length - 1)
-    const productRowHeight = baseRowHeight + (extraLines * 3.5)
+    const productRowHeight = baseRowHeight + (extraLines * lineHeight)
 
     if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248)
@@ -498,9 +499,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    descLines.forEach((line, lineIdx) => {
-      doc.text(line, cols.desc + 4, textY + (lineIdx * 3.5))
-    })
+    doc.text(descLines, cols.desc + 4, textY, { lineHeightFactor: 1.4 })
 
     // Laboratorio (solo modo farmacia)
     if (isPharmacy) {
