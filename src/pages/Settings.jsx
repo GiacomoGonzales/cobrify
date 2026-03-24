@@ -5119,9 +5119,9 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCatalogLogo(true)
                                   try {
-                                    const compressed = await compressImage(file, { maxWidth: 512, maxHeight: 512, quality: 0.9 })
+                                    // Subir sin comprimir para preservar transparencia PNG
                                     const logoRef = ref(storage, `businesses/${getBusinessId()}/catalog-logo`)
-                                    await uploadBytes(logoRef, compressed, { contentType: file.type })
+                                    await uploadBytes(logoRef, file, { contentType: file.type })
                                     const url = await getDownloadURL(logoRef)
                                     setCatalogLogoUrl(url)
                                     toast.success('Logo del catálogo subido')
