@@ -1195,7 +1195,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   setTransferDate(e.target.value)
                 }
               }}
-              min={getLocalDateString()}
+              min={getYesterdayDateString()}
               max={getLocalDateString()}
             />
             <Input
@@ -1204,7 +1204,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               required
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              min={getLocalDateString()}
+              min={getYesterdayDateString()}
               max={getTomorrowDateString()}
             />
             <Input
