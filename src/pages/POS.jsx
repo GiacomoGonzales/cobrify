@@ -2567,7 +2567,7 @@ export default function POS() {
           price: effectivePrice,
           quantity: item.quantity,
           taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
-          igvRate: taxConfig.igvExempt ? 0 : item.igvRate, // Per-product IGV rate (undefined = use global)
+          igvRate: taxConfig.igvExempt ? 0 : (taxConfig.taxType === 'reduced' ? taxConfig.igvRate : item.igvRate), // Ley restaurantes: forzar tasa global
         }
       }),
       taxConfig.igvRate
@@ -3092,7 +3092,7 @@ export default function POS() {
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
-        ...(!taxConfig.igvExempt && item.igvRate && { igvRate: item.igvRate }), // Per-product IGV rate (no aplica si exonerado)
+        ...(!taxConfig.igvExempt && (taxConfig.taxType === 'reduced' ? { igvRate: taxConfig.igvRate } : (item.igvRate ? { igvRate: item.igvRate } : {}))), // Ley restaurantes: forzar tasa global
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
