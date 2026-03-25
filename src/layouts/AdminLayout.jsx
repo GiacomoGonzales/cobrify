@@ -137,7 +137,7 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-50 overflow-x-hidden max-w-full">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden max-w-full" style={{ zoom: 0.8 }}>
       {/* iOS Status Bar */}
       <div className="ios-status-bar bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 lg:hidden flex-shrink-0" />
 
