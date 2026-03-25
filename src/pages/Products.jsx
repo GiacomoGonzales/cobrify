@@ -1885,12 +1885,12 @@ export default function Products() {
         // con guiones (-) que CODE128 puede causar en teclados español
         JsBarcode(svg, code.toUpperCase(), {
           format: 'CODE39',
-          width: 2,
-          height: 50,
+          width: 1.5,
+          height: 80,
           displayValue: true,
           fontSize: 10,
           margin: 0,
-          textMargin: 2
+          textMargin: 1
         })
         return svg.outerHTML
       } catch (e) {
@@ -1928,13 +1928,12 @@ export default function Products() {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; }
   .label {
-    width: 30mm; height: 20mm; padding: 1mm;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 30mm; height: 20mm; padding: 0;
     page-break-after: always; overflow: hidden;
   }
   .label:last-child { page-break-after: avoid; }
-  .barcode { display: flex; justify-content: center; width: 100%; }
-  .barcode svg { width: 28mm; height: 18mm; }
+  .barcode { width: 30mm; height: 20mm; }
+  .barcode svg { width: 30mm; height: 20mm; }
 </style>
 </head>
 <body>${labelsHTML}</body>
