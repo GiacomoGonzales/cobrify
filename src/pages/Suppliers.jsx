@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle, MoreVertical, Phone, Mail, MapPin } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle, MoreVertical, Phone, Mail, MapPin, FileSpreadsheet } from 'lucide-react'
 import { z } from 'zod'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -20,6 +20,7 @@ import {
   deleteSupplier,
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import ImportSuppliersModal from '@/components/ImportSuppliersModal'
 
 // Schema de validación para proveedores
 const supplierSchema = z.object({
@@ -42,6 +43,7 @@ export default function Suppliers() {
   const [editingSupplier, setEditingSupplier] = useState(null)
   const [deletingSupplier, setDeletingSupplier] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
@@ -260,6 +262,43 @@ export default function Suppliers() {
     }
   }
 
+  const handleImportSuppliers = async (suppliersToImport) => {
+    const businessId = getBusinessId()
+    if (!businessId) return { success: 0, failed: suppliersToImport.length }
+
+    let success = 0
+    let failed = 0
+    let duplicates = 0
+
+    // Obtener proveedores existentes para evitar duplicados por RUC/DNI
+    const existingDocs = new Set(suppliers.map(s => s.documentNumber).filter(Boolean))
+
+    for (const supplier of suppliersToImport) {
+      try {
+        // Verificar duplicado por número de documento
+        if (supplier.documentNumber && existingDocs.has(supplier.documentNumber)) {
+          duplicates++
+          continue
+        }
+
+        const result = await createSupplier(businessId, supplier)
+        if (result.success) {
+          success++
+          if (supplier.documentNumber) existingDocs.add(supplier.documentNumber)
+        } else {
+          failed++
+        }
+      } catch (err) {
+        failed++
+      }
+    }
+
+    // Recargar lista
+    if (success > 0) loadSuppliers()
+
+    return { success, failed, duplicates }
+  }
+
   const filteredSuppliers = suppliers.filter(supplier => {
     const search = searchTerm.toLowerCase()
     return (
@@ -308,10 +347,16 @@ export default function Suppliers() {
             Gestiona tus proveedores y realiza compras
           </p>
         </div>
-        <Button onClick={openCreateModal} className="w-full sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Proveedor
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex-1 sm:flex-initial">
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Proveedor
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -689,6 +734,11 @@ export default function Suppliers() {
           </div>
         </div>
       </Modal>
+      <ImportSuppliersModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportSuppliers}
+      />
     </div>
   )
 }
