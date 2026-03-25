@@ -338,7 +338,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
           subcategoria: 'Tabletas',
-          afectacion_igv: 'GRAVADO'
+          afectacion_igv: 'GRAVADO',
+          presentacion1_nombre: 'Caja x30',
+          presentacion1_cantidad: 30,
+          presentacion1_precio: 40.00,
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         },
         {
           sku: 'MED-002',
@@ -365,7 +374,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
           subcategoria: 'Cápsulas',
-          afectacion_igv: 'GRAVADO'
+          afectacion_igv: 'GRAVADO',
+          presentacion1_nombre: 'Caja x100',
+          presentacion1_cantidad: 100,
+          presentacion1_precio: 100.00,
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         },
         {
           sku: 'MED-003',
@@ -392,7 +410,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
           subcategoria: '',
-          afectacion_igv: 'EXONERADO'
+          afectacion_igv: 'EXONERADO',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
         }
       ]
     } else {
