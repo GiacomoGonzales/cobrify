@@ -1881,19 +1881,21 @@ export default function Products() {
     const generateBarcodeSVG = (code) => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       try {
-        JsBarcode(svg, code, {
-          format: 'CODE128',
-          width: 1.5,
-          height: 30,
+        // CODE39: más compatible con pistolas lectoras, no tiene problemas
+        // con guiones (-) que CODE128 puede causar en teclados español
+        JsBarcode(svg, code.toUpperCase(), {
+          format: 'CODE39',
+          width: 2,
+          height: 50,
           displayValue: true,
-          fontSize: 8,
+          fontSize: 10,
           margin: 0,
-          textMargin: 1
+          textMargin: 2
         })
         return svg.outerHTML
       } catch (e) {
         console.error('Error generando barcode:', e)
-        return `<span style="font-size:7pt">${code}</span>`
+        return `<span style="font-size:9pt; font-weight:bold">${code}</span>`
       }
     }
 
@@ -1901,14 +1903,11 @@ export default function Products() {
     for (const product of selectedProds) {
       const qty = labelQuantities[product.id] || 1
       const code = product.code || product.sku || product.id.slice(-8)
-      const name = product.name || ''
-      const shortName = name.length > 28 ? name.substring(0, 28) + '..' : name
       const barcodeSVG = generateBarcodeSVG(code)
 
       for (let i = 0; i < qty; i++) {
         labelsHTML += `
           <div class="label">
-            <div class="name">${shortName}</div>
             <div class="barcode">${barcodeSVG}</div>
           </div>`
       }
@@ -1929,14 +1928,13 @@ export default function Products() {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; }
   .label {
-    width: 30mm; height: 20mm; padding: 0.5mm 1mm;
-    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    width: 30mm; height: 20mm; padding: 1mm;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
     page-break-after: always; overflow: hidden;
   }
   .label:last-child { page-break-after: avoid; }
-  .name { font-size: 5.5pt; font-weight: bold; text-align: center; line-height: 1.15; max-height: 4.5mm; overflow: hidden; width: 100%; }
   .barcode { display: flex; justify-content: center; width: 100%; }
-  .barcode svg { width: 26mm; height: 10mm; }
+  .barcode svg { width: 28mm; height: 18mm; }
 </style>
 </head>
 <body>${labelsHTML}</body>
