@@ -420,11 +420,25 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   </cac:PaymentTerms>`
 
     if (paymentInstallments.length > 0) {
-      const adjustFactor = hasDetraction && paymentTotalAmount > 0
+      // Verificar si las cuotas ya están ajustadas por detracción
+      // Si la suma de cuotas ≈ netPayableAmount, no ajustar (el usuario ya descontó la detracción)
+      // Si la suma de cuotas ≈ paymentTotalAmount, ajustar con el factor
+      const cuotasSum = paymentInstallments.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0)
+      const alreadyAdjusted = hasDetraction && Math.abs(cuotasSum - netPayableAmount) < 1
+      const adjustFactor = (hasDetraction && !alreadyAdjusted && paymentTotalAmount > 0)
         ? netPayableAmount / paymentTotalAmount : 1
 
+      let cuotasAccum = 0
       paymentInstallments.forEach((cuota, index) => {
-        const cuotaAmount = parseFloat(cuota.amount || 0) * adjustFactor
+        let cuotaAmount
+        if (index === paymentInstallments.length - 1) {
+          // Última cuota: ajustar para que la suma sea exacta (evita error por redondeo)
+          cuotaAmount = creditAmount - cuotasAccum
+        } else {
+          cuotaAmount = parseFloat(cuota.amount || 0) * adjustFactor
+          cuotaAmount = Math.round(cuotaAmount * 100) / 100
+        }
+        cuotasAccum += cuotaAmount
         paymentTermsXml += `
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
