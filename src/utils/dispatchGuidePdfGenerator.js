@@ -732,6 +732,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
 
   // Función para calcular altura dinámica de cada item
+  const pharmacyFontSize = 6
+  const pharmacyLineH = 7
   const calculateItemHeight = (item) => {
     const itemDesc = item.description || item.name || '-'
     doc.setFontSize(8)
@@ -739,6 +741,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     // En farmacia, agregar línea de lote/vencimiento si existe
     let batchLine = ''
+    let marcaLineCount = 1
+    let labLineCount = 1
     if (isPharmacy) {
       const product = item.productId ? productsMap[item.productId] : null
       // Priorizar datos del item (seleccionados en el formulario) sobre los del producto
@@ -755,10 +759,19 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       if (batch) parts.push(`Lote: ${batch}`)
       if (expDate) parts.push(`Venc: ${expDate}`)
       batchLine = parts.join('  |  ')
+
+      // Calcular líneas de marca y laboratorio
+      doc.setFontSize(pharmacyFontSize)
+      const marcaText = item.marca || product?.marca || ''
+      const labText = item.laboratoryName || product?.laboratoryName || ''
+      if (marcaText) marcaLineCount = doc.splitTextToSize(marcaText, colWidths.marca - 4).length
+      if (labText) labLineCount = doc.splitTextToSize(labText, colWidths.lab - 4).length
+      doc.setFontSize(8)
     }
 
     const totalLines = descLines.length + (batchLine ? 1 : 0)
-    const calculatedHeight = Math.max(minRowHeight, totalLines * lineHeight + (spacious ? 12 : 8))
+    const pharmacyExtraHeight = isPharmacy ? Math.max(marcaLineCount, labLineCount) * pharmacyLineH : 0
+    const calculatedHeight = Math.max(minRowHeight, totalLines * lineHeight + (spacious ? 12 : 8), pharmacyExtraHeight + (spacious ? 12 : 8))
     return { height: calculatedHeight, descLines, batchLine }
   }
 
@@ -841,12 +854,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
     itemColX += colWidths.code
 
-    // Marca (solo modo farmacia)
+    // Marca y Laboratorio (solo modo farmacia) - font reducido, multilínea
     if (isPharmacy) {
+      doc.setFontSize(pharmacyFontSize)
       const marcaText = item.marca || product?.marca || ''
       if (marcaText) {
-        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
-        doc.text(marcaLines[0], itemColX + colWidths.marca/2, centerYRow, { align: 'center' })
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 4)
+        const marcaStartY = currentY + (spacious ? 10 : 8)
+        marcaLines.forEach((line, i) => {
+          doc.text(line, itemColX + colWidths.marca/2, marcaStartY + (i * pharmacyLineH), { align: 'center' })
+        })
       }
       doc.line(itemColX + colWidths.marca, currentY, itemColX + colWidths.marca, currentY + rowHeight)
       itemColX += colWidths.marca
@@ -854,11 +871,15 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       // Laboratorio
       const labText = item.laboratoryName || product?.laboratoryName || ''
       if (labText) {
-        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
-        doc.text(labLines[0], itemColX + colWidths.lab/2, centerYRow, { align: 'center' })
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 4)
+        const labStartY = currentY + (spacious ? 10 : 8)
+        labLines.forEach((line, i) => {
+          doc.text(line, itemColX + colWidths.lab/2, labStartY + (i * pharmacyLineH), { align: 'center' })
+        })
       }
       doc.line(itemColX + colWidths.lab, currentY, itemColX + colWidths.lab, currentY + rowHeight)
       itemColX += colWidths.lab
+      doc.setFontSize(8)
     }
 
     // Descripción - múltiples líneas

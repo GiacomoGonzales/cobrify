@@ -86,7 +86,7 @@ const DEMO_GUIDES = [
 
 export default function DispatchGuides() {
   const navigate = useNavigate()
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user, businessMode } = useAppContext()
 
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
@@ -1471,6 +1471,13 @@ export default function DispatchGuides() {
                       <tr className="border-b border-purple-200">
                         <th className="text-left py-2 px-2 text-gray-600">#</th>
                         <th className="text-left py-2 px-2 text-gray-600">Descripción</th>
+                        {businessMode === 'pharmacy' && (
+                          <>
+                            <th className="text-left py-2 px-2 text-gray-600">Marca</th>
+                            <th className="text-left py-2 px-2 text-gray-600">Laborat.</th>
+                            <th className="text-left py-2 px-2 text-gray-600">Lote</th>
+                          </>
+                        )}
                         <th className="text-center py-2 px-2 text-gray-600">Cantidad</th>
                         <th className="text-center py-2 px-2 text-gray-600">Unidad</th>
                       </tr>
@@ -1480,6 +1487,26 @@ export default function DispatchGuides() {
                         <tr key={index} className="border-b border-purple-100">
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
                           <td className="py-2 px-2 font-medium">{item.description || item.name || '-'}</td>
+                          {businessMode === 'pharmacy' && (
+                            <>
+                              <td className="py-2 px-2 text-gray-600">{item.marca || '-'}</td>
+                              <td className="py-2 px-2 text-gray-600">{item.laboratoryName || '-'}</td>
+                              <td className="py-2 px-2 text-gray-600 text-xs">
+                                {item.batchNumber || '-'}
+                                {item.batchExpiryDate && (
+                                  <span className="block text-gray-400">
+                                    Venc: {item.batchExpiryDate?.toDate
+                                      ? item.batchExpiryDate.toDate().toLocaleDateString('es-PE')
+                                      : item.batchExpiryDate?.seconds
+                                        ? new Date(item.batchExpiryDate.seconds * 1000).toLocaleDateString('es-PE')
+                                        : typeof item.batchExpiryDate === 'string'
+                                          ? item.batchExpiryDate
+                                          : '-'}
+                                  </span>
+                                )}
+                              </td>
+                            </>
+                          )}
                           <td className="py-2 px-2 text-center">{item.quantity || 1}</td>
                           <td className="py-2 px-2 text-center">{item.unit || 'UNIDAD'}</td>
                         </tr>
