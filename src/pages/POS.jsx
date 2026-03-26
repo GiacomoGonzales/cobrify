@@ -270,7 +270,7 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, userPermissions } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, userPermissions } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -4424,7 +4424,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </span>
                           )}
                         </p>
-                        {!product.hasVariants && getStockBadge(product)}
+                        {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
                       </div>
                       {/* Tablet/Desktop: precio arriba, stock abajo */}
@@ -4433,7 +4433,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                         </p>
                         <div className="mt-0.5">
-                          {!product.hasVariants && getStockBadge(product)}
+                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
                           {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
                         </div>
                       </div>

@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }) => {
   const [assignedSellerId, setAssignedSellerId] = useState(null) // Vendedor asignado al sub-usuario
   const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
+  const [hideStockInPOS, setHideStockInPOS] = useState(false) // Ocultar stock en tarjetas del POS
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
@@ -154,6 +155,7 @@ export const AuthProvider = ({ children }) => {
                 setAssignedSellerId(userData.assignedSellerId || null)
                 setAssignedSellerName(userData.assignedSellerName || null)
                 setIndependentCashRegister(userData.independentCashRegister || false)
+                setHideStockInPOS(userData.hideStockInPOS || false)
                 console.log('✅ Permisos cargados:', userData.allowedPages)
                 console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
                 console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
@@ -722,6 +724,7 @@ export const AuthProvider = ({ children }) => {
     assignedSellerId, // Vendedor asignado al sub-usuario en POS
     assignedSellerName,
     independentCashRegister, // Si el sub-usuario tiene caja independiente
+    hideStockInPOS, // Ocultar stock en tarjetas del POS
     hasPageAccess,
     hasWarehouseAccess, // Función para verificar acceso a un almacén
     filterWarehousesByAccess, // Función para filtrar almacenes según permisos

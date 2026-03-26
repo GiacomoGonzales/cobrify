@@ -49,6 +49,7 @@ export default function Users() {
   const [posSellers, setPosSellers] = useState([])
   const [assignedSellerId, setAssignedSellerId] = useState('')
   const [independentCashRegister, setIndependentCashRegister] = useState(false)
+  const [hideStockInPOS, setHideStockInPOS] = useState(false)
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
@@ -207,6 +208,7 @@ export default function Users() {
     setAllowedPaymentMethods([])
     setAssignedSellerId('')
     setIndependentCashRegister(false)
+    setHideStockInPOS(false)
     reset({
       email: '',
       password: '',
@@ -226,6 +228,7 @@ export default function Users() {
     setAllowedPaymentMethods(userToEdit.allowedPaymentMethods || [])
     setAssignedSellerId(userToEdit.assignedSellerId || '')
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
+    setHideStockInPOS(userToEdit.hideStockInPOS || false)
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -311,6 +314,7 @@ export default function Users() {
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerObj?.name || null,
           independentCashRegister,
+          hideStockInPOS,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -345,6 +349,7 @@ export default function Users() {
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerForCreate?.name || null,
           independentCashRegister,
+          hideStockInPOS,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -996,6 +1001,26 @@ export default function Users() {
                       </p>
                     </div>
                   )}
+
+                  {/* Ocultar stock */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-purple-100">
+                      <input
+                        type="checkbox"
+                        checked={hideStockInPOS}
+                        onChange={() => setHideStockInPOS(!hideStockInPOS)}
+                        className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">Ocultar stock en productos</span>
+                        <p className="text-xs text-purple-600 mt-0.5">
+                          {hideStockInPOS
+                            ? 'El usuario NO verá el stock en las tarjetas del POS'
+                            : 'El usuario puede ver el stock en las tarjetas del POS'}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               )}
             </div>

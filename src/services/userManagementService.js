@@ -76,6 +76,8 @@ export const RESTAURANT_PAGES = [
   { id: 'kitchen', name: 'Cocina', path: '/cocina', category: 'operaciones' },
   { id: 'waiters', name: 'Mozos', path: '/mozos', category: 'operaciones' },
   { id: 'envios', name: 'Envíos', path: '/envios', category: 'operaciones' },
+  // Documentos
+  { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
   // Inventario y Producción
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },

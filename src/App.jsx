@@ -225,6 +225,9 @@ function App() {
               <Route path="ordenes" element={<Orders />} />
               <Route path="cocina" element={<Kitchen />} />
               <Route path="facturas" element={<InvoiceList />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />

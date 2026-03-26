@@ -1939,10 +1939,9 @@ export default function Products() {
     const generateBarcodeSVG = (code) => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       try {
-        // CODE39: más compatible con pistolas lectoras, no tiene problemas
-        // con guiones (-) que CODE128 puede causar en teclados español
-        JsBarcode(svg, code.toUpperCase(), {
-          format: 'CODE39',
+        // CODE128: más compacto que CODE39, ideal para etiquetas pequeñas 30x20mm
+        JsBarcode(svg, code, {
+          format: 'CODE128',
           width: 1.5,
           height: 80,
           displayValue: true,
