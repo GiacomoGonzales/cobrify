@@ -5,6 +5,7 @@ import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { getUbigeoName } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -436,14 +437,10 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const phone = companySettings?.phone || ''
   const email = companySettings?.email || ''
 
-  // Construir dirección completa con ubicación (igual que facturas y transportista)
-  let fullAddress = companySettings?.address || ''
-  if (companySettings?.district || companySettings?.province || companySettings?.department) {
-    const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
-    if (locationParts.length > 0) {
-      fullAddress += ' - ' + locationParts.join(', ')
-    }
-  }
+  // Dirección y ubicación (departamento, provincia, distrito) en líneas separadas
+  const fullAddress = companySettings?.address || ''
+  const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+  const locationLine = locationParts.length > 0 ? locationParts.join(', ') : ''
 
   // Calcular altura total del texto para centrarlo verticalmente
   const maxTextWidth = centerWidth - 15
@@ -452,6 +449,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   let totalTextHeight = 14 // Nombre comercial
   if (legalName && legalName !== commercialName) totalTextHeight += 12
   if (fullAddress) totalTextHeight += addrLineCount * 9
+  if (locationLine) totalTextHeight += 9
   if (phone) totalTextHeight += 9
   if (email) totalTextHeight += 10
 
@@ -473,8 +471,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     centerY += 12
   }
 
-  // Dirección y teléfono (mismo formato que facturas)
-  if (fullAddress || phone) {
+  // Dirección, ubicación y teléfono
+  if (fullAddress || locationLine || phone) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
@@ -486,6 +484,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
         doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
       })
       centerY += Math.min(addrLines.length, 3) * 9
+    }
+    // Departamento, Provincia, Distrito en línea aparte
+    if (locationLine) {
+      doc.text(locationLine, centerX + centerWidth/2, centerY, { align: 'center' })
+      centerY += 9
     }
     // Teléfono en línea aparte
     if (phone) {
@@ -549,13 +552,19 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += spacious ? 16 : 12
 
-  // Fecha de inicio de traslado
+  // Fecha de emisión (izquierda) | Fecha de inicio de traslado (derecha)
   doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text('Fecha de inicio de traslado:', MARGIN_LEFT, currentY)
+  doc.text('Fecha de emisión:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.transferDate), MARGIN_LEFT + 115, currentY)
+  doc.text(formatDate(guide.issueDate || guide.createdAt || guide.transferDate), MARGIN_LEFT + 75, currentY)
+
+  const colRightX = MARGIN_LEFT + CONTENT_WIDTH * 0.45
+  doc.setFont('helvetica', 'bold')
+  doc.text('Fecha de inicio de traslado:', colRightX, currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(formatDate(guide.transferDate), colRightX + 115, currentY)
   currentY += spacious ? 18 : 14
 
   // Fila: Destinatario | Punto de partida
@@ -587,7 +596,21 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const originAddress = guide.origin?.address || companySettings?.address || '-'
   const originLines = doc.splitTextToSize(originAddress, CONTENT_WIDTH * 0.5)
   doc.text(originLines[0], colMidX, currentY)
-  currentY += spacious ? 14 : 11
+  currentY += spacious ? 12 : 9
+  // Líneas adicionales de dirección de origen
+  if (originLines[1]) {
+    doc.text(originLines[1], colMidX, currentY)
+    currentY += spacious ? 12 : 9
+  }
+  // Departamento, Provincia, Distrito de origen
+  const originLocationName = getUbigeoName(guide.origin?.ubigeo || '')
+  if (originLocationName) {
+    doc.setFont('helvetica', 'italic')
+    doc.text(originLocationName, colMidX, currentY)
+    doc.setFont('helvetica', 'normal')
+    currentY += spacious ? 12 : 9
+  }
+  currentY += spacious ? 4 : 3
 
   // RUC destinatario | Punto de llegada
   doc.setFont('helvetica', 'bold')
@@ -614,11 +637,20 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const destAddress = guide.destination?.address || '-'
   const destLines = doc.splitTextToSize(destAddress, CONTENT_WIDTH * 0.5)
   doc.text(destLines[0], colMidX, currentY)
+  currentY += spacious ? 12 : 9
   if (destLines[1]) {
-    currentY += 10
     doc.text(destLines[1], colMidX, currentY)
+    currentY += spacious ? 12 : 9
   }
-  currentY += spacious ? 22 : 18
+  // Departamento, Provincia, Distrito de destino
+  const destLocationName = getUbigeoName(destUbigeo)
+  if (destLocationName) {
+    doc.setFont('helvetica', 'italic')
+    doc.text(destLocationName, colMidX, currentY)
+    doc.setFont('helvetica', 'normal')
+    currentY += spacious ? 12 : 9
+  }
+  currentY += spacious ? 12 : 10
 
   // Línea divisoria
   doc.setLineWidth(0.5)
@@ -1034,10 +1066,13 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     // Fila 3: Nombre del Conductor | Licencia
     doc.setFont('helvetica', 'normal')
     doc.text('Nombre del Conductor:', MARGIN_LEFT, currentY)
-    doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12) // Mismo ancho que Placa y DNI
-    // Si es M1/L y no hay nombre, mostrar "N/A"
-    const nameDisplay = driverFullName === '-' && guide.isM1LVehicle ? 'N/A' : driverFullName.substring(0, 22)
-    doc.text(nameDisplay, leftValueX + 5, currentY) // Truncar para que quepa en el recuadro
+    // Calcular ancho del recuadro según el largo del nombre (mínimo leftBoxWidth, máximo hasta antes de "Licencia")
+    const nameBoxMaxWidth = rightLabelX - leftValueX - 10
+    const nameDisplay = driverFullName === '-' && guide.isM1LVehicle ? 'N/A' : driverFullName
+    const nameTextWidth = doc.getTextWidth(nameDisplay) + 10
+    const nameBoxWidth = Math.max(leftBoxWidth, Math.min(nameTextWidth, nameBoxMaxWidth))
+    doc.rect(leftValueX, currentY - 8, nameBoxWidth, 12)
+    doc.text(nameDisplay, leftValueX + 5, currentY)
 
     doc.text('Licencia:', rightLabelX, currentY)
     doc.rect(rightValueX - 5, currentY - 8, 70, 12)

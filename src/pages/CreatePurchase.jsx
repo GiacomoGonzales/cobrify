@@ -1192,7 +1192,7 @@ export default function CreatePurchase() {
               id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               batchNumber: item.batchNumber || '',
               quantity: parseFloat(item.quantity) || 0,
-              expirationDate: item.expirationDate ? Timestamp.fromDate(new Date(item.expirationDate)) : null,
+              expirationDate: item.expirationDate ? Timestamp.fromDate(parseLocalDate(item.expirationDate)) : null,
               purchaseId: resultId || null,
               purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
               costPrice: parseFloat(item.cost) || 0,
