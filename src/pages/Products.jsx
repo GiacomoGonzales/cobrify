@@ -1959,7 +1959,8 @@ export default function Products() {
     let labelsHTML = ''
     for (const product of selectedProds) {
       const qty = labelQuantities[product.id] || 1
-      const code = product.code || product.sku || product.id.slice(-8)
+      const rawCode = product.code || product.sku || product.id.slice(-8)
+      const code = rawCode.replace(/-/g, '')
       const barcodeSVG = generateBarcodeSVG(code)
 
       for (let i = 0; i < qty; i++) {
@@ -2311,10 +2312,14 @@ export default function Products() {
         ? (getCategoryById(categories, product.category)?.name || product.category)
         : ''
 
-      // Concatenar todos los campos buscables
+      // Concatenar todos los campos buscables (incluir versión sin guiones para compatibilidad con pistola lectora)
+      const code = product.code || ''
+      const sku = product.sku || ''
       const searchableText = [
-        product.code || '',
-        product.sku || '',
+        code,
+        code.replace(/-/g, ''),
+        sku,
+        sku.replace(/-/g, ''),
         product.name || '',
         categoryName,
         product.description || ''

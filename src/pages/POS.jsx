@@ -1448,11 +1448,15 @@ export default function POS() {
       // Dividir búsqueda en palabras individuales para búsqueda flexible
       const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
 
-      // Concatenar campos buscables
+      // Concatenar campos buscables (incluir versión sin guiones para compatibilidad con pistola lectora)
+      const code = p.code || ''
+      const sku = p.sku || ''
       const searchableText = [
         p.name || '',
-        p.code || '',
-        p.sku || ''
+        code,
+        code.replace(/-/g, ''),
+        sku,
+        sku.replace(/-/g, '')
       ].join(' ').toLowerCase()
 
       // Verificar que TODAS las palabras estén presentes (en cualquier orden)
