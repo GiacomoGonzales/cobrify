@@ -351,7 +351,7 @@ export default function CreatePurchase() {
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               cost: item.unitPrice, // El costo es el precio unitario de compra
-              costWithoutIGV: item.unitPrice > 0 ? Math.round((item.unitPrice / 1.18) * 100) / 100 : 0,
+              costWithoutIGV: item.unitPrice > 0 ? item.unitPrice / 1.18 : 0,
               batchNumber: item.batchNumber || '',
               expirationDate: item.expirationDate
                 ? (item.expirationDate.toDate ? getLocalDateString(item.expirationDate.toDate()) : getLocalDateString(new Date(item.expirationDate)))
@@ -408,8 +408,8 @@ export default function CreatePurchase() {
     const newItems = [...purchaseItems]
     const costWithIGV = parseFloat(value) || 0
     newItems[index].cost = costWithIGV
-    // Calcular costo sin IGV: costo con IGV / 1.18 (redondeado a 2 decimales)
-    newItems[index].costWithoutIGV = costWithIGV > 0 ? Math.round((costWithIGV / 1.18) * 100) / 100 : 0
+    // Calcular costo sin IGV sin redondear para mantener precisión
+    newItems[index].costWithoutIGV = costWithIGV > 0 ? costWithIGV / 1.18 : 0
     setPurchaseItems(newItems)
   }
 
@@ -418,8 +418,8 @@ export default function CreatePurchase() {
     const newItems = [...purchaseItems]
     const costWithoutIGV = parseFloat(value) || 0
     newItems[index].costWithoutIGV = costWithoutIGV
-    // Calcular costo con IGV: costo sin IGV * 1.18 (redondeado a 2 decimales)
-    newItems[index].cost = costWithoutIGV > 0 ? Math.round((costWithoutIGV * 1.18) * 100) / 100 : 0
+    // Calcular costo con IGV sin redondear para mantener precisión
+    newItems[index].cost = costWithoutIGV > 0 ? costWithoutIGV * 1.18 : 0
     setPurchaseItems(newItems)
   }
 
@@ -493,7 +493,7 @@ export default function CreatePurchase() {
       const costValue = item.lastPurchasePrice || item.averageCost || 0
       if (costValue > 0) {
         newItems[index].cost = costValue
-        newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+        newItems[index].costWithoutIGV = costValue / 1.18
       }
     } else {
       // Para productos
@@ -503,7 +503,7 @@ export default function CreatePurchase() {
         const costValue = item.cost
         newItems[index].cost = costValue
         // Calcular costo sin IGV automáticamente
-        newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+        newItems[index].costWithoutIGV = costValue / 1.18
       }
     }
 
@@ -692,7 +692,7 @@ export default function CreatePurchase() {
           newItems[currentItemIndex].quantity = data.stock ? parseFloat(data.stock) : 1
           newItems[currentItemIndex].cost = costValue
           newItems[currentItemIndex].unitPrice = productData.price || 0
-          newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? Math.round((costValue / 1.18) * 100) / 100 : 0
+          newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? costValue / 1.18 : 0
           setPurchaseItems(newItems)
 
           // Actualizar búsqueda y cerrar dropdown
@@ -847,7 +847,7 @@ export default function CreatePurchase() {
       ...item,
       quantity: Number(item.quantity) || 1, // Default a 1 si está vacío o inválido
       cost: Number(item.cost) || 0,
-      costWithoutIGV: item.costWithoutIGV || (Number(item.cost) > 0 ? Math.round((Number(item.cost) / 1.18) * 100) / 100 : 0)
+      costWithoutIGV: item.costWithoutIGV || (Number(item.cost) > 0 ? Number(item.cost) / 1.18 : 0)
     }))
     setPurchaseItems(normalizedItems)
 
@@ -1834,7 +1834,7 @@ export default function CreatePurchase() {
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         placeholder="0.00"
                         value={item.costWithoutIGV || ''}
                         onChange={e => updateCostWithoutIGV(index, e.target.value)}
@@ -1846,9 +1846,9 @@ export default function CreatePurchase() {
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         placeholder="0.00"
-                        value={item.cost ? parseFloat(item.cost.toFixed(2)) : ''}
+                        value={item.cost || ''}
                         onChange={e => updateCostWithIGV(index, e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
@@ -2039,7 +2039,7 @@ export default function CreatePurchase() {
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="any"
                       value={item.costWithoutIGV || ''}
                       onChange={e => updateCostWithoutIGV(index, e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -2050,8 +2050,8 @@ export default function CreatePurchase() {
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
-                      value={item.cost ? parseFloat(item.cost.toFixed(2)) : ''}
+                      step="any"
+                      value={item.cost || ''}
                       onChange={e => updateCostWithIGV(index, e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
