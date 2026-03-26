@@ -321,9 +321,28 @@ export default function Inventory() {
         return
       }
 
-      const result = await getProducts(getBusinessId())
-      if (result.success) {
-        setProducts(result.data || [])
+      const businessId = getBusinessId()
+
+      // Carga rápida: primeros 200 productos para mostrar algo inmediato
+      const firstBatch = await getProducts(businessId, { limit: 200 })
+      if (firstBatch.success && firstBatch.data?.length > 0) {
+        setProducts(firstBatch.data)
+        setIsLoading(false)
+
+        // Si hay menos de 200, ya tenemos todo
+        if (firstBatch.data.length < 200) return
+
+        // Carga completa en background para filtros
+        const allResult = await getProducts(businessId)
+        if (allResult.success) {
+          setProducts(allResult.data || [])
+        }
+      } else {
+        // Fallback: cargar todo de una vez
+        const result = await getProducts(businessId)
+        if (result.success) {
+          setProducts(result.data || [])
+        }
       }
     } catch (error) {
       console.error('Error al cargar productos:', error)
