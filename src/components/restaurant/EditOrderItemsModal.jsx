@@ -166,9 +166,9 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
         <div className="flex items-center gap-2">
           <Edit className="w-5 h-5" />
           <div>
-            <div className="text-lg font-bold">Editar Orden - Mesa {table.number}</div>
+            <div className="text-lg font-bold">Editar Orden - {table?.waiter ? `Mesa ${table.number}` : (table?.number || 'Orden')}</div>
             <div className="text-sm font-normal text-gray-600">
-              Mozo: {table.waiter} | Orden: {order.orderNumber || '#' + order.id.slice(-6)}
+              {table?.waiter ? `Mozo: ${table.waiter} | ` : ''}Orden: {order?.orderNumber || '#' + (order?.id?.slice(-6) || '')}
             </div>
           </div>
         </div>

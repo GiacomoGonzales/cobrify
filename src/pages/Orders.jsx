@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -14,6 +14,7 @@ import { db } from '@/lib/firebase'
 import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
 import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
+import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { Capacitor } from '@capacitor/core'
@@ -55,6 +56,10 @@ export default function Orders() {
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
+
+  // Estado para modal de editar orden
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false)
+  const [orderToEdit, setOrderToEdit] = useState(null)
 
   // Estado para modal de cierre de orden
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
@@ -1073,7 +1078,23 @@ export default function Orders() {
                   )}
 
                   {/* Botones de acción */}
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {/* Botón de editar orden (para órdenes activas) */}
+                    {order.status !== 'delivered' && (
+                      <Button
+                        onClick={() => {
+                          setOrderToEdit(order)
+                          setShowEditOrderModal(true)
+                        }}
+                        variant="outline"
+                        className="flex-1"
+                        size="sm"
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" />
+                        Editar
+                      </Button>
+                    )}
+
                     {/* Botón de cerrar cuenta (solo para órdenes listas) */}
                     {order.status === 'ready' && (
                       <Button
@@ -1191,6 +1212,21 @@ export default function Orders() {
           onSaveNewOrder={handleOrderItemsAdded}
         />
       )}
+
+      {/* Modal para editar items de una orden */}
+      <EditOrderItemsModal
+        isOpen={showEditOrderModal}
+        onClose={() => {
+          setShowEditOrderModal(false)
+          setOrderToEdit(null)
+        }}
+        table={orderToEdit?.tableNumber ? { number: orderToEdit.tableNumber } : { number: orderToEdit?.orderType === 'delivery' ? 'Delivery' : 'Para Llevar' }}
+        order={orderToEdit}
+        onSuccess={() => {
+          setShowEditOrderModal(false)
+          setOrderToEdit(null)
+        }}
+      />
 
       {/* Comanda para imprimir (oculta, fuera de pantalla para react-to-print) */}
       {orderToPrint && (

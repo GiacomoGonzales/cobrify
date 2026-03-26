@@ -288,6 +288,7 @@ export default function POS() {
   }
 
   const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
@@ -1275,41 +1276,27 @@ export default function POS() {
         const defaultWarehouse = (demoData.warehouses || []).find(w => w.isDefault) || demoData.warehouses?.[0] || null
         setSelectedWarehouse(defaultWarehouse)
         setIsLoading(false)
+        setProductsLoading(false)
         return
       }
 
       const businessId = getBusinessId()
       console.log('🛒 POS loadInitialData - businessId:', businessId, '| user.uid:', user?.uid)
 
-      // Cargar todo en paralelo para máxima velocidad
+      // FASE 1: Cargar configuración esencial primero (datos ligeros)
       const [
-        productsResult,
-        customersResult,
         settingsResult,
         categoriesResult,
         warehousesResult,
         branchesResult,
         sellersResult
       ] = await Promise.all([
-        getProducts(businessId),
-        getCustomers(businessId),
         getCompanySettings(businessId),
         getProductCategories(businessId),
         getWarehouses(businessId),
         getActiveBranches(businessId),
         getSellers(businessId)
       ])
-
-      // Procesar productos
-      console.log('🛒 POS getProducts resultado:', productsResult.success, '| cantidad:', productsResult.data?.length, '| error:', productsResult.error)
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
-      }
-
-      // Procesar clientes
-      if (customersResult.success) {
-        setCustomers(customersResult.data || [])
-      }
 
       // Procesar configuración de empresa
       if (settingsResult.success && settingsResult.data) {
@@ -1434,6 +1421,26 @@ export default function POS() {
           if (assigned) setSelectedSeller(assigned)
         }
       }
+
+      // FASE 2: Cargar productos y clientes en background (datos pesados)
+      // El POS ya es usable mientras estos cargan
+      setIsLoading(false)
+      setProductsLoading(true)
+
+      const [productsResult, customersResult] = await Promise.all([
+        getProducts(businessId),
+        getCustomers(businessId)
+      ])
+
+      console.log('🛒 POS getProducts resultado:', productsResult.success, '| cantidad:', productsResult.data?.length)
+      if (productsResult.success) {
+        setProducts(productsResult.data || [])
+      }
+      if (customersResult.success) {
+        setCustomers(customersResult.data || [])
+      }
+      setProductsLoading(false)
+      return
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast.error('Error al cargar los datos. Por favor, recarga la página.')
@@ -4294,7 +4301,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           )}
 
           {/* Products Grid */}
-          {filteredProducts.length === 0 ? (
+          {productsLoading ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Loader2 className="w-12 h-12 text-primary-400 mx-auto mb-4 animate-spin" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Cargando productos...</h3>
+              </CardContent>
+            </Card>
+          ) : filteredProducts.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
                 <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
