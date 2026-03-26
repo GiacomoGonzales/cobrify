@@ -1510,10 +1510,15 @@ export default function POS() {
 
     const timer = setTimeout(() => {
       // Buscar productos que coincidan exactamente con el código de barras o SKU
+      // También comparar sin guiones para compatibilidad con pistola lectora
       const searchLower = searchTerm.toLowerCase()
-      const exactMatches = products.filter(p =>
-        p.code?.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
-      )
+      const searchNoHyphens = searchLower.replace(/-/g, '')
+      const exactMatches = products.filter(p => {
+        const code = p.code?.toLowerCase() || ''
+        const sku = p.sku?.toLowerCase() || ''
+        return code === searchLower || sku === searchLower ||
+          code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens
+      })
 
       // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
       if (exactMatches.length === 1) {
