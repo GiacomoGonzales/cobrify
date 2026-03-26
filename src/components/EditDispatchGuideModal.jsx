@@ -330,6 +330,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     if (guide.items && guide.items.length > 0) {
       setItems(guide.items.map((item, idx) => ({
         id: item.id || idx + 1,
+        productId: item.productId || '',
         code: item.sku || item.code || '',
         description: item.description || item.name || '',
         quantity: item.quantity || 0,
@@ -338,6 +339,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         gtin: item.gtin || '',
         subpCode: item.subpCode || '',
         isNormalized: item.isNormalized || false,
+        batchNumber: item.batchNumber || '',
+        batchExpiryDate: item.batchExpiryDate || '',
+        marca: item.marca || '',
+        laboratoryName: item.laboratoryName || '',
       })))
     } else {
       setItems([])

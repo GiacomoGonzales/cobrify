@@ -843,7 +843,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     // Marca (solo modo farmacia)
     if (isPharmacy) {
-      const marcaText = product?.marca || ''
+      const marcaText = item.marca || product?.marca || ''
       if (marcaText) {
         const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
         doc.text(marcaLines[0], itemColX + colWidths.marca/2, centerYRow, { align: 'center' })
@@ -852,7 +852,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       itemColX += colWidths.marca
 
       // Laboratorio
-      const labText = product?.laboratoryName || ''
+      const labText = item.laboratoryName || product?.laboratoryName || ''
       if (labText) {
         const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
         doc.text(labLines[0], itemColX + colWidths.lab/2, centerYRow, { align: 'center' })
@@ -1293,16 +1293,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 /**
  * Exporta el PDF como blob para enviar por WhatsApp u otros usos
  */
-export const getDispatchGuidePDFBlob = async (guide, companySettings) => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+export const getDispatchGuidePDFBlob = async (guide, companySettings, products = []) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
   return doc.output('blob')
 }
 
 /**
  * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
  */
-export const previewDispatchGuidePDF = async (guide, companySettings) => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+export const previewDispatchGuidePDF = async (guide, companySettings, products = []) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
   const isNativePlatform = Capacitor.isNativePlatform()
 
   if (isNativePlatform) {
@@ -1348,8 +1348,8 @@ export const previewDispatchGuidePDF = async (guide, companySettings) => {
 /**
  * Comparte el PDF por WhatsApp u otras apps
  */
-export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share') => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share', products = []) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
   const isNativePlatform = Capacitor.isNativePlatform()
   const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
 

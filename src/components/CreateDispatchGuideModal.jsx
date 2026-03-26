@@ -616,6 +616,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         searchTerm: product.name || '',
         batchNumber,
         batchExpiryDate,
+        marca: product.marca || '',
+        laboratoryName: product.laboratoryName || '',
       }
     }))
     setShowProductSearch(null)

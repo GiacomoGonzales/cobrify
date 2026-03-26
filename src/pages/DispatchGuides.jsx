@@ -102,6 +102,7 @@ export default function DispatchGuides() {
   const [printingTicket, setPrintingTicket] = useState(null) // Guía para imprimir en ticket
   const ticketRef = useRef(null) // Ref para el componente de ticket
   const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
+  const [allProducts, setAllProducts] = useState([]) // Productos para PDF (marca, lab, SKU)
   const [selectedGuide, setSelectedGuide] = useState(null) // Guía seleccionada para ver detalles
   const [editingGuide, setEditingGuide] = useState(null) // Guía en edición
   const [branches, setBranches] = useState([])
@@ -143,12 +144,29 @@ export default function DispatchGuides() {
     loadPrinterConfig()
   }, [user])
 
-  // Cargar guías y datos de empresa al montar el componente
+  // Cargar guías, datos de empresa y productos al montar el componente
   useEffect(() => {
     loadGuides()
     loadCompanySettings()
     loadBranches()
+    loadAllProducts()
   }, [])
+
+  // Cargar productos para PDF (marca, laboratorio, SKU)
+  const loadAllProducts = async () => {
+    if (isDemoMode) return
+    try {
+      const businessId = getBusinessId()
+      if (businessId) {
+        const result = await getProducts(businessId)
+        if (result.success) {
+          setAllProducts(result.data || [])
+        }
+      }
+    } catch (e) {
+      console.error('Error cargando productos:', e)
+    }
+  }
 
   // Cargar sucursales para filtro
   const loadBranches = async () => {
@@ -290,16 +308,7 @@ export default function DispatchGuides() {
     setDownloadingPdf(guide.id)
     try {
       toast.info(`Generando PDF de ${guide.number}...`)
-      // Cargar productos para obtener SKU actualizado
-      let products = []
-      const businessId = getBusinessId()
-      if (businessId) {
-        const productsResult = await getProducts(businessId)
-        if (productsResult.success) {
-          products = productsResult.data || []
-        }
-      }
-      await generateDispatchGuidePDF(guide, companySettings, true, products)
+      await generateDispatchGuidePDF(guide, companySettings, true, allProducts)
       toast.success('PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -321,7 +330,7 @@ export default function DispatchGuides() {
     setPreviewingPdf(guide.id)
     try {
       toast.info(`Generando vista previa de ${guide.number}...`)
-      await previewDispatchGuidePDF(guide, companySettings)
+      await previewDispatchGuidePDF(guide, companySettings, allProducts)
     } catch (error) {
       console.error('Error al generar vista previa:', error)
       toast.error('Error al generar la vista previa')
@@ -342,7 +351,7 @@ export default function DispatchGuides() {
     setSharingPdf(guide.id)
     try {
       toast.info(`Preparando PDF para compartir...`)
-      const result = await shareDispatchGuidePDF(guide, companySettings, method)
+      const result = await shareDispatchGuidePDF(guide, companySettings, method, allProducts)
       if (result.success) {
         if (!isNativePlatform) {
           toast.success('PDF listo para compartir')
