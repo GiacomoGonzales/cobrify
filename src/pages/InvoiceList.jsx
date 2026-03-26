@@ -972,9 +972,23 @@ Gracias por tu preferencia.`
       return
     }
 
-    // Si es boleta/factura convertida desde nota de venta, no sincronizar (ya tiene movimientos de la nota original)
-    if (invoice.convertedFrom || invoice.skipStockDeduction) {
-      toast.info('Este comprobante fue convertido desde una nota de venta. Los movimientos de stock pertenecen a la nota original.')
+    // Si es factura/boleta convertida desde nota de venta, sincronizar usando la nota original
+    if (invoice.convertedFrom && invoice.convertedFrom.id) {
+      try {
+        const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+        const { db: fireDb } = await import('@/lib/firebase')
+        const notaRef = docRef(fireDb, 'businesses', bId, 'invoices', invoice.convertedFrom.id)
+        const notaSnap = await getDocFn(notaRef)
+        if (notaSnap.exists()) {
+          const notaData = { id: notaSnap.id, ...notaSnap.data() }
+          // Sincronizar movimientos de la nota original
+          await handleSyncStockMovements(notaData)
+          return
+        }
+      } catch (e) {
+        console.error('Error al buscar nota original:', e)
+      }
+      toast.info('No se encontró la nota de venta original para sincronizar')
       return
     }
 

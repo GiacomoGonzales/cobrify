@@ -3822,7 +3822,7 @@ export default function POS() {
               }
             }
 
-            // 6.3. Marcar nota(s) de venta como convertida(s)
+            // 6.3. Marcar nota(s) de venta como convertida(s) y verificar movimientos de stock
             if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
               try {
                 await Promise.all(_pendingNotaVentaIds.map(notaId =>
@@ -3830,6 +3830,58 @@ export default function POS() {
                 ))
               } catch (error) {
                 console.error('Error al marcar notas de venta como convertidas:', error)
+              }
+
+              // Verificar que las notas originales tengan movimientos de stock
+              try {
+                const { getStockMovements, createStockMovement } = await import('@/services/warehouseService')
+                const movementsResult = await getStockMovements(businessId)
+                const allMovements = movementsResult.success ? movementsResult.data : []
+
+                for (const notaId of _pendingNotaVentaIds) {
+                  // Buscar movimientos de la nota original
+                  const notaMovements = allMovements.filter(m => m.referenceId === notaId && m.type === 'sale')
+
+                  if (notaMovements.length === 0) {
+                    // La nota no tiene movimientos - crearlos ahora
+                    console.log('⚠️ Nota', notaId, 'sin movimientos de stock. Creando...')
+                    const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+                    const { db: fireDb } = await import('@/lib/firebase')
+                    const notaRef = docRef(fireDb, 'businesses', businessId, 'invoices', notaId)
+                    const notaSnap = await getDocFn(notaRef)
+
+                    if (notaSnap.exists()) {
+                      const notaData = notaSnap.data()
+                      const notaItems = notaData.items || []
+                      const notaWarehouseId = notaData.warehouseId || bgSelectedWarehouse?.id || ''
+
+                      for (const item of notaItems) {
+                        const productId = item.productId || item.id
+                        if (!productId || item.isCustom) continue
+                        const productData = bgProducts.find(p => p.id === productId)
+                        if (!productData || productData.trackStock === false) continue
+
+                        const qty = (item.quantity || 0) * (item.presentationFactor || 1)
+                        await createStockMovement(businessId, {
+                          productId,
+                          productName: item.name || item.description || '',
+                          warehouseId: notaWarehouseId,
+                          type: 'sale',
+                          quantity: -qty,
+                          reason: 'Venta',
+                          referenceType: 'invoice',
+                          referenceId: notaId,
+                          referenceNumber: notaData.number || '',
+                          userId: bgUserUid,
+                          notes: `Venta ${item.name || item.description} - Nota de Venta ${notaData.number || ''} (auto-sync conversión)`
+                        })
+                      }
+                      console.log('✅ Movimientos de stock creados para nota', notaId)
+                    }
+                  }
+                }
+              } catch (syncError) {
+                console.error('⚠️ Error al verificar/crear movimientos de stock de notas:', syncError)
               }
             }
 
