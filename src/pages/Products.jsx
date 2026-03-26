@@ -32,7 +32,7 @@ import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehou
 import { getActiveBranches } from '@/services/branchService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -1407,6 +1407,60 @@ export default function Products() {
         }
       }
 
+      // Auto-crear laboratorios que no existen (solo modo farmacia)
+      if (businessMode === 'pharmacy') {
+        const labsRef = collection(db, 'businesses', getBusinessId(), 'laboratories')
+        const labsSnapshot = await getDocs(labsRef)
+        const existingLabs = labsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+        const labNameToId = new Map()
+        existingLabs.forEach(lab => {
+          labNameToId.set(lab.name.toLowerCase().trim(), lab.id)
+        })
+
+        // Identificar laboratorios nuevos del Excel
+        const newLabNames = new Set()
+        for (const product of productsToImport) {
+          if (product.laboratoryName && product.laboratoryName.trim() !== '') {
+            const labName = product.laboratoryName.trim()
+            if (!labNameToId.has(labName.toLowerCase())) {
+              newLabNames.add(labName)
+            }
+          }
+        }
+
+        // Crear laboratorios nuevos
+        if (newLabNames.size > 0) {
+          for (const labName of newLabNames) {
+            try {
+              const newLabDoc = await addDoc(labsRef, {
+                name: labName,
+                country: '',
+                website: '',
+                notes: 'Creado automáticamente durante importación',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+              })
+              labNameToId.set(labName.toLowerCase(), newLabDoc.id)
+            } catch (err) {
+              console.error(`Error al crear laboratorio "${labName}":`, err)
+            }
+          }
+          toast.info(`${newLabNames.size} laboratorio(s) creado(s) automáticamente`)
+          // Recargar laboratorios en el state
+          loadLaboratories()
+        }
+
+        // Asignar laboratoryId a cada producto según el nombre
+        for (const product of productsToImport) {
+          if (product.laboratoryName && product.laboratoryName.trim() !== '') {
+            const labId = labNameToId.get(product.laboratoryName.trim().toLowerCase())
+            if (labId) {
+              product.laboratoryId = labId
+            }
+          }
+        }
+      }
+
       // Obtener productos existentes para verificar duplicados
       const existingProductsResult = await getProducts(getBusinessId())
       const existingProducts = existingProductsResult.success ? existingProductsResult.data : []
@@ -1477,6 +1531,10 @@ export default function Products() {
             if (product.location) updates.location = product.location
             if (product.afectacionIgv) updates.afectacionIgv = product.afectacionIgv
             if (product.presentations) updates.presentations = product.presentations
+            if (product.laboratoryId) {
+              updates.laboratoryId = product.laboratoryId
+              updates.laboratoryName = product.laboratoryName || ''
+            }
 
             // Actualizar stock si corresponde
             if (product.trackStock && targetWarehouse) {
@@ -2478,7 +2536,7 @@ export default function Products() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-          <Button
+<Button
             variant="outline"
             onClick={() => setIsImportModalOpen(true)}
             className="w-full sm:w-auto"

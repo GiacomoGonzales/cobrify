@@ -4405,6 +4405,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     {product.genericName && (
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
                     )}
+                    {businessMode === 'pharmacy' && product.laboratoryName && (
+                      <p className="text-[10px] sm:text-xs text-blue-600 font-medium mt-0.5 truncate">{product.laboratoryName}</p>
+                    )}
                     {/* Product description */}
                     {businessSettings?.showDescriptionInPOS && product.description && (
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 whitespace-pre-line">{product.description}</p>

@@ -6844,6 +6844,174 @@ export const socialMetaTags = onRequest(
   }
 )
 
+// ==================== META TAGS DINÁMICOS PARA MENÚ DIGITAL (RESTAURANTE) ====================
+
+/**
+ * Genera HTML con meta tags dinámicos para un menú digital de restaurante
+ */
+function generateMenuMetaTagsHTML(business, slug) {
+  const businessName = business.name || business.businessName || 'Restaurante'
+  const slogan = business.companySlogan || ''
+  const tagline = slogan || `¡Haz tu pedido en ${businessName}!`
+  const description = `${tagline} — Menú digital de ${businessName}. Mira nuestra carta y pide desde tu mesa.`
+  const logoUrl = business.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const themeColor = business.catalogColor || '#10B981'
+  const url = `https://cobrifyperu.com/menu/${slug}`
+
+  // Usar logo del negocio como imagen OG
+  const socialImageUrl = business.catalogSocialImage || business.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary Meta Tags -->
+  <title>${businessName} - Menú Digital</title>
+  <meta name="title" content="${businessName} - Menú Digital" />
+  <meta name="description" content="${description}" />
+  <meta name="theme-color" content="${themeColor}" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="${logoUrl}" />
+  <link rel="apple-touch-icon" href="${logoUrl}" />
+
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${businessName}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:title" content="${businessName} — Menú Digital 🍽️" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${socialImageUrl}" />
+  <meta property="og:image:url" content="${socialImageUrl}" />
+  <meta property="og:image:secure_url" content="${socialImageUrl}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Menú digital de ${businessName}" />
+  <meta property="og:locale" content="es_PE" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="${url}" />
+  <meta name="twitter:title" content="${businessName} — Menú Digital 🍽️" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${socialImageUrl}" />
+  <meta name="twitter:image:alt" content="Menú digital de ${businessName}" />
+</head>
+<body>
+  <script>window.location.href = "${url}";</script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=${url}">
+    <p>Redirigiendo a <a href="${url}">${businessName} - Menú Digital</a>...</p>
+  </noscript>
+</body>
+</html>`
+}
+
+/**
+ * Cloud Function para servir meta tags dinámicos para menús digitales de restaurantes
+ * Permite que cada menú tenga su propia preview en WhatsApp/Facebook con logo y nombre del negocio
+ */
+export const menuMetaTags = onRequest(
+  {
+    region: 'us-central1',
+    cors: true,
+    maxInstances: 10,
+    invoker: 'public'
+  },
+  async (req, res) => {
+    try {
+      const userAgent = req.headers['user-agent'] || ''
+      // Firebase Hosting 2nd gen: el path original llega en x-forwarded-url header
+      // o podemos extraerlo de req.originalUrl. Probar todas las fuentes.
+      const forwardedUrl = req.headers['x-forwarded-url'] || ''
+      const originalUrl = req.originalUrl || ''
+      const path = req.path || req.url || ''
+
+      console.log(`🍽️ [MenuMeta] path=${path}, originalUrl=${originalUrl}, x-forwarded-url=${forwardedUrl}, headers=${JSON.stringify(Object.keys(req.headers))}, UA: ${userAgent.substring(0, 80)}`)
+
+      // Extraer el slug de todas las fuentes posibles
+      let slug = null
+      for (const p of [forwardedUrl, originalUrl, path]) {
+        if (!p) continue
+        const parts = p.split('/').filter(Boolean)
+        if (parts[0] === 'menu' && parts[1]) {
+          slug = parts[1].split('?')[0]
+          break
+        }
+      }
+
+      // Si no encontramos slug con /menu/X, intentar el primer segmento
+      // (Firebase puede enviar solo /lafilomena sin /menu/)
+      if (!slug) {
+        for (const p of [forwardedUrl, originalUrl, path]) {
+          if (!p) continue
+          const parts = p.split('/').filter(Boolean)
+          if (parts[0] && parts[0] !== 'menu' && parts[0] !== 'index.html') {
+            slug = parts[0].split('?')[0]
+            break
+          }
+        }
+      }
+
+      if (!slug) {
+        console.log(`🍽️ [MenuMeta] No slug found, fallback to index`)
+        res.redirect(302, '/')
+        return
+      }
+
+      console.log(`🍽️ [MenuMeta] slug=${slug}, isSocialBot=${isSocialBot(userAgent)}`)
+
+      // Solo servir meta tags a bots de redes sociales
+      // Usuarios normales: proxy del index.html de Firebase Hosting para que la SPA cargue
+      if (!isSocialBot(userAgent)) {
+        console.log(`🍽️ [MenuMeta] Normal user, proxying index.html`)
+        try {
+          // Fetch index.html desde Firebase Hosting CDN (usa .web.app para evitar loop)
+          const indexResponse = await axios.get('https://cobrify-395fe.web.app/index.html', {
+            timeout: 5000,
+            headers: { 'Accept': 'text/html' }
+          })
+          res.set('Content-Type', 'text/html; charset=utf-8')
+          res.set('Cache-Control', 'no-cache')
+          res.status(200).send(indexResponse.data)
+        } catch (proxyErr) {
+          console.error('⚠️ [MenuMeta] Error proxying index.html:', proxyErr.message)
+          res.redirect(302, '/')
+        }
+        return
+      }
+
+      // Bot de redes sociales: buscar negocio y servir meta tags dinámicos
+      const businessesSnapshot = await db.collection('businesses')
+        .where('catalogSlug', '==', slug)
+        .where('catalogEnabled', '==', true)
+        .limit(1)
+        .get()
+
+      if (businessesSnapshot.empty) {
+        console.log(`🍽️ [MenuMeta] No menu found for slug: ${slug}`)
+        res.redirect(302, `/menu/${slug}`)
+        return
+      }
+
+      const businessDoc = businessesSnapshot.docs[0]
+      const business = businessDoc.data()
+
+      console.log(`🍽️ [MenuMeta] Found: ${business.name || business.businessName}, serving meta tags`)
+      const html = generateMenuMetaTagsHTML(business, slug)
+      res.set('Content-Type', 'text/html; charset=utf-8')
+      res.set('Cache-Control', 'public, max-age=300')
+      res.status(200).send(html)
+
+    } catch (error) {
+      console.error('❌ [MenuMeta] Error:', error)
+      res.redirect(302, '/')
+    }
+  }
+)
+
 // ==================== META TAGS DINÁMICOS PARA CATÁLOGO PÚBLICO ====================
 
 /**

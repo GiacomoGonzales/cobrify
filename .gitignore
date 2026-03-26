@@ -77,3 +77,5 @@ logs_temp.txt
 
 # Firebase cache
 .firebase/
+
+.vercel

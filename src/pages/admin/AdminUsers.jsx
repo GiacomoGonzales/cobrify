@@ -585,14 +585,20 @@ export default function AdminUsers() {
     return result
   }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
 
-  // Estadísticas rápidas
+  // Estadísticas rápidas (usa fecha real de periodo para "activos")
   const stats = useMemo(() => {
+    const now = new Date()
+    const isReallyActive = (u) => {
+      const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
+        (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
+      return pEnd && pEnd > now && u.status !== 'suspended'
+    }
     return {
       total: users.length,
-      active: users.filter(u => u.status === 'active').length,
+      active: users.filter(u => isReallyActive(u)).length,
       trial: users.filter(u => u.status === 'trial').length,
       suspended: users.filter(u => u.status === 'suspended').length,
-      expired: users.filter(u => u.status === 'expired').length,
+      expired: users.filter(u => !isReallyActive(u) && u.status !== 'suspended' && u.status !== 'trial').length,
       cobrify: users.filter(u => !u.createdByReseller).length,
       reseller: users.filter(u => u.createdByReseller).length
     }

@@ -137,7 +137,7 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-50 overflow-x-hidden max-w-full">
+    <div className="bg-gray-50 overflow-x-hidden max-w-full" style={{ zoom: 0.8, minHeight: '125vh' }}>
       {/* iOS Status Bar */}
       <div className="ios-status-bar bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 lg:hidden flex-shrink-0" />
 
@@ -236,7 +236,8 @@ export default function AdminLayout() {
       <div className="w-full">
         {/* Sidebar - Desktop (fixed) */}
         <aside
-          className="hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white h-screen fixed top-0 left-0 z-30 w-72"
+          className="hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white fixed top-0 left-0 z-30 w-72"
+          style={{ height: '125vh' }}
         >
           {/* Decorative blur */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl"></div>
@@ -311,7 +312,7 @@ export default function AdminLayout() {
         </aside>
 
         {/* Main Content */}
-        <main className="min-h-screen min-w-0 overflow-x-hidden lg:ml-72" style={{ zoom: 0.8 }}>
+        <main className="min-h-screen min-w-0 overflow-x-hidden lg:ml-72">
           {/* Top Bar */}
           <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-200/50 px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
