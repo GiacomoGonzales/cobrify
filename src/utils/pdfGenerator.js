@@ -1178,26 +1178,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
 
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
-  // Farmacia con descuento: CANT(7%) | U.M.(6%) | DESCRIPCIÓN(22%) | LAB(12%) | MARCA(10%) | P.UNIT.(12%) | DCTO(12%) | IMPORTE(19%)
-  // Farmacia sin descuento: CANT(7%) | U.M.(6%) | DESCRIPCIÓN(27%) | LAB(14%) | MARCA(11%) | P.UNIT.(16%) | IMPORTE(19%)
-  // Normal con descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | DCTO. | IMPORTE
-  // Normal sin descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
+  // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
+  // Normal: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | (DCTO.) | IMPORTE
   const colWidths = hasAnyItemDiscount ? {
     cant: CONTENT_WIDTH * 0.07,
     um: CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.25 : CONTENT_WIDTH * 0.40,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.11 : 0,
+    code: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.18 : CONTENT_WIDTH * 0.40,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.15,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.11 : CONTENT_WIDTH * 0.15,
     dcto: CONTENT_WIDTH * 0.12,
     total: CONTENT_WIDTH * 0.19
   } : {
     cant: CONTENT_WIDTH * 0.07,
-    um: isPharmacy ? CONTENT_WIDTH * 0.10 : CONTENT_WIDTH * 0.06,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.31 : CONTENT_WIDTH * 0.49,
+    um: isPharmacy ? CONTENT_WIDTH * 0.06 : CONTENT_WIDTH * 0.06,
+    code: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.25 : CONTENT_WIDTH * 0.49,
     lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.11 : CONTENT_WIDTH * 0.17,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: isPharmacy ? CONTENT_WIDTH * 0.19 : CONTENT_WIDTH * 0.19
   }
@@ -1206,7 +1206,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const cols = hasAnyItemDiscount ? {
     cant: colX,
     um: colX += colWidths.cant,
-    desc: colX += colWidths.um,
+    code: colX += colWidths.um,
+    desc: colX += colWidths.code,
     lab: colX += colWidths.desc,
     marca: colX += colWidths.lab,
     pu: colX += colWidths.marca,
@@ -1215,7 +1216,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   } : {
     cant: colX,
     um: colX += colWidths.cant,
-    desc: colX += colWidths.um,
+    code: colX += colWidths.um,
+    desc: colX += colWidths.code,
     lab: colX += colWidths.desc,
     marca: colX += colWidths.lab,
     pu: colX += colWidths.marca,
@@ -1272,8 +1274,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       } else if (item.batchNumber) {
         let batchStr = `Lote: ${item.batchNumber}`
         if (item.batchExpiryDate) {
-          const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)
-          if (!isNaN(d.getTime())) {
+          let d
+          if (item.batchExpiryDate.toDate) d = item.batchExpiryDate.toDate()
+          else if (item.batchExpiryDate.seconds) d = new Date(item.batchExpiryDate.seconds * 1000)
+          else d = new Date(item.batchExpiryDate)
+          if (d && !isNaN(d.getTime())) {
             batchStr += ` (Venc: ${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })})`
           }
         }
@@ -1310,6 +1315,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const headerTextY = startY + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
     doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
+    if (isPharmacy) {
+      doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
+    }
     doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
     if (isPharmacy) {
       doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
@@ -1389,6 +1397,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const unitCode = item.unit || 'UNIDAD'
     const unitText = unitLabels[unitCode] || unitCode
     doc.text(unitText, cols.um + colWidths.um / 2, centerY, { align: 'center' })
+
+    // Código del producto (solo modo farmacia)
+    if (isPharmacy && colWidths.code > 0) {
+      doc.setFontSize(6.5)
+      const codeText = item.code || ''
+      if (codeText) {
+        const codeLines = doc.splitTextToSize(codeText, colWidths.code - 4)
+        doc.text(codeLines[0], cols.code + colWidths.code / 2, centerY, { align: 'center' })
+      }
+    }
 
     // Descripción - múltiples líneas desde arriba
     doc.setFontSize(8)
