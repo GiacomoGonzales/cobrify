@@ -1180,26 +1180,28 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
   // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
   // Normal: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | (DCTO.) | IMPORTE
+  // Farmacia sin dcto: CANT(5) UM(5) CODE(8) DESC(30) LAB(12) MARCA(10) PU(10) IMPORTE(13) = 93% + 7% ajuste desc
+  // Normal sin dcto:   CANT(7) UM(6) DESC(49) PU(17) IMPORTE(19) = ~100% (no cambia)
   const colWidths = hasAnyItemDiscount ? {
-    cant: CONTENT_WIDTH * 0.07,
-    um: CONTENT_WIDTH * 0.06,
-    code: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.18 : CONTENT_WIDTH * 0.40,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.11 : CONTENT_WIDTH * 0.15,
-    dcto: CONTENT_WIDTH * 0.12,
-    total: CONTENT_WIDTH * 0.19
+    cant: CONTENT_WIDTH * 0.05,
+    um: CONTENT_WIDTH * 0.05,
+    code: isPharmacy ? CONTENT_WIDTH * 0.07 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.23 : CONTENT_WIDTH * 0.40,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.11 : 0,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.09 : CONTENT_WIDTH * 0.15,
+    dcto: CONTENT_WIDTH * 0.10,
+    total: isPharmacy ? CONTENT_WIDTH * 0.11 : CONTENT_WIDTH * 0.19
   } : {
-    cant: CONTENT_WIDTH * 0.07,
-    um: isPharmacy ? CONTENT_WIDTH * 0.06 : CONTENT_WIDTH * 0.06,
-    code: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.25 : CONTENT_WIDTH * 0.49,
+    cant: CONTENT_WIDTH * 0.05,
+    um: isPharmacy ? CONTENT_WIDTH * 0.05 : CONTENT_WIDTH * 0.06,
+    code: isPharmacy ? CONTENT_WIDTH * 0.07 : 0,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.32 : CONTENT_WIDTH * 0.49,
     lab: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.17,
+    marca: isPharmacy ? CONTENT_WIDTH * 0.09 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.09 : CONTENT_WIDTH * 0.17,
     dcto: 0,
-    total: isPharmacy ? CONTENT_WIDTH * 0.19 : CONTENT_WIDTH * 0.19
+    total: isPharmacy ? CONTENT_WIDTH * 0.13 : CONTENT_WIDTH * 0.19
   }
 
   let colX = MARGIN_LEFT
