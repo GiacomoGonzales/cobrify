@@ -87,8 +87,8 @@ export const uploadProductImage = async (businessId, productId, file) => {
 
     // Generar nombre único
     const timestamp = Date.now()
-    const fileName = `${productId}_${timestamp}.jpg`
-    const storagePath = `products/${businessId}/${fileName}`
+    const storageFileName = `${productId}_${timestamp}.jpg`
+    const storagePath = `products/${businessId}/${storageFileName}`
 
     // Subir a Storage
     console.log('☁️ Subiendo imagen a Storage...')
