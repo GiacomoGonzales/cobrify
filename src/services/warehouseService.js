@@ -493,8 +493,14 @@ export const updateWarehouseStock = (product, warehouseId, quantity) => {
 export const getStockInWarehouse = (product, warehouseId) => {
   if (!product.warehouseStocks) return product.stock || 0
 
-  const warehouseStock = product.warehouseStocks.find(ws => ws.warehouseId === warehouseId)
-  return warehouseStock?.stock || 0
+  // Soportar formato array [{ warehouseId, stock }] y objeto { warehouseId: stock }
+  if (Array.isArray(product.warehouseStocks)) {
+    const warehouseStock = product.warehouseStocks.find(ws => ws.warehouseId === warehouseId)
+    return warehouseStock?.stock || 0
+  }
+
+  // Formato objeto
+  return product.warehouseStocks[warehouseId] ?? 0
 }
 
 /**
@@ -583,12 +589,21 @@ export const getOrphanStock = (product, activeWarehouses = null) => {
 
   // Calcular stock solo en almacenes activos
   let activeWarehouseTotal = 0
-  if (product.warehouseStocks && product.warehouseStocks.length > 0) {
-    product.warehouseStocks.forEach(ws => {
-      if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
-        activeWarehouseTotal += ws.stock || 0
-      }
-    })
+  if (product.warehouseStocks) {
+    if (Array.isArray(product.warehouseStocks)) {
+      product.warehouseStocks.forEach(ws => {
+        if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
+          activeWarehouseTotal += ws.stock || 0
+        }
+      })
+    } else {
+      // Formato objeto { warehouseId: stock }
+      Object.entries(product.warehouseStocks).forEach(([whId, stock]) => {
+        if (activeWarehouseIds === null || activeWarehouseIds.includes(whId)) {
+          activeWarehouseTotal += stock || 0
+        }
+      })
+    }
   }
 
   const orphanStock = product.stock - activeWarehouseTotal

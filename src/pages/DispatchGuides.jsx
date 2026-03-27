@@ -1529,10 +1529,8 @@ export default function DispatchGuides() {
             </div>
 
             {/* Footer */}
-            <div className="border-t px-6 py-4 bg-gray-50">
-              <div className="flex flex-wrap justify-between gap-3">
-                {/* Botones izquierda */}
-                <div className="flex gap-2">
+            <div className="border-t px-4 py-4 bg-gray-50">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   <Button
                     variant="outline"
                     onClick={() => setSelectedGuide(null)}
@@ -1561,11 +1559,17 @@ export default function DispatchGuides() {
                             email: recipient.email || '',
                           },
                           items: (guide.items || []).map(item => ({
+                            productId: item.productId || '',
                             name: item.name || item.description || '',
                             description: item.description || item.name || '',
                             quantity: item.quantity || 1,
                             unit: item.unit || 'NIU',
                             price: 0,
+                            code: item.code || '',
+                            marca: item.marca || '',
+                            laboratoryName: item.laboratoryName || '',
+                            batchNumber: item.batchNumber || '',
+                            batchExpiryDate: item.batchExpiryDate || '',
                           })),
                         }
                       })
@@ -1623,10 +1627,8 @@ export default function DispatchGuides() {
                       CDR
                     </Button>
                   )}
-                </div>
 
-                {/* Botones derecha - PDF */}
-                <div className="flex gap-2">
+
                   {/* Vista previa / Imprimir PDF */}
                   <Button
                     variant="outline"
@@ -1691,9 +1693,9 @@ export default function DispatchGuides() {
                       )}
                     </Button>
                   )}
-                </div>
               </div>
             </div>
+
           </div>
         </div>
         )

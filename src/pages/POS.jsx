@@ -946,23 +946,32 @@ export default function POS() {
       navigate(location.pathname, { replace: true, state: null })
     }
 
-    // Detectar si viene de una guía de remisión
-    if (location.state?.fromDispatchGuide && !dispatchGuideLoadedRef.current) {
+    // Detectar si viene de una guía de remisión (esperar a que products esté cargado)
+    if (location.state?.fromDispatchGuide && !dispatchGuideLoadedRef.current && products.length > 0) {
       const guideInfo = location.state
       dispatchGuideLoadedRef.current = true
 
-      // Cargar items de la guía al carrito (sin precios, el usuario los completa)
+      // Cargar items de la guía al carrito con precios del producto
       if (guideInfo.items && guideInfo.items.length > 0) {
-        const cartItems = guideInfo.items.map(item => ({
-          id: `guide-${Date.now()}-${Math.random()}`,
-          productId: '',
-          name: item.name || '',
-          description: item.description || '',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
-          unit: item.unit || 'NIU',
-          code: '',
-        }))
+        const cartItems = guideInfo.items.map((item, idx) => {
+          const product = item.productId ? products.find(p => p.id === item.productId) : null
+          return {
+            id: product?.id || `guide-${Date.now()}-${idx}`,
+            productId: item.productId || '',
+            name: item.name || '',
+            description: item.description || '',
+            price: product?.price || item.price || 0,
+            quantity: item.quantity || 1,
+            unit: item.unit || 'NIU',
+            code: item.code || product?.sku || product?.code || '',
+            sku: product?.sku || item.code || '',
+            marca: item.marca || product?.marca || '',
+            laboratoryName: item.laboratoryName || product?.laboratoryName || '',
+            batchNumber: item.batchNumber || '',
+            batchExpiryDate: item.batchExpiryDate || '',
+            taxAffectation: product?.taxAffectation || '10',
+          }
+        })
         setCart(cartItems)
       }
 
@@ -1002,7 +1011,7 @@ export default function POS() {
 
       navigate(location.pathname, { replace: true, state: null })
     }
-  }, [location.state, customers])
+  }, [location.state, customers, products])
 
   // Cargar documento para edición o duplicación si viene en la URL
   useEffect(() => {
@@ -1661,7 +1670,11 @@ export default function POS() {
   // Helper: formatear fecha de vencimiento
   const formatBatchExpiry = (date) => {
     if (!date) return 'Sin fecha'
-    const d = date.toDate ? date.toDate() : new Date(date)
+    let d
+    if (date.toDate) d = date.toDate()
+    else if (date.seconds) d = new Date(date.seconds * 1000)
+    else d = new Date(date)
+    if (isNaN(d.getTime())) return 'Sin fecha'
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 

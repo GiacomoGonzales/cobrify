@@ -582,26 +582,23 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
   currentY += spacious ? 14 : 11
 
-  // Nombre destinatario | Dirección partida
+  // Nombre destinatario | Dirección partida (en paralelo, multilínea)
   const recipientName = recipient.name || recipient.businessName || '-'
   doc.setFont('helvetica', 'normal')
-  const recipientNameMaxWidth = CONTENT_WIDTH * 0.48
+  const recipientNameMaxWidth = colMidX - MARGIN_LEFT - 5
   const recipientNameLines = doc.splitTextToSize(recipientName, recipientNameMaxWidth)
-  doc.text(recipientNameLines[0], MARGIN_LEFT, currentY)
-  if (recipientNameLines.length > 1 && recipientNameLines[1]) {
-    currentY += 9
-    doc.text(recipientNameLines[1], MARGIN_LEFT, currentY)
-  }
 
   const originAddress = guide.origin?.address || companySettings?.address || '-'
   const originLines = doc.splitTextToSize(originAddress, CONTENT_WIDTH * 0.5)
-  doc.text(originLines[0], colMidX, currentY)
-  currentY += spacious ? 12 : 9
-  // Líneas adicionales de dirección de origen
-  if (originLines[1]) {
-    doc.text(originLines[1], colMidX, currentY)
-    currentY += spacious ? 12 : 9
+
+  // Renderizar ambas columnas línea por línea
+  const maxLines = Math.max(recipientNameLines.length, originLines.length)
+  for (let i = 0; i < maxLines; i++) {
+    if (recipientNameLines[i]) doc.text(recipientNameLines[i], MARGIN_LEFT, currentY)
+    if (originLines[i]) doc.text(originLines[i], colMidX, currentY)
+    if (i < maxLines - 1) currentY += spacious ? 12 : 9
   }
+  currentY += spacious ? 12 : 9
   // Departamento, Provincia, Distrito de origen
   const originLocationName = getUbigeoName(guide.origin?.ubigeo || '')
   if (originLocationName) {
