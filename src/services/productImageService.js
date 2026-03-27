@@ -59,9 +59,13 @@ export const compressImage = (file, maxWidth = 800, quality = 0.8) => {
  */
 export const uploadProductImage = async (businessId, productId, file) => {
   try {
-    // Validar tipo de archivo
+    // Validar tipo de archivo (flexible para Android donde file.type puede estar vacío)
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!validTypes.includes(file.type)) {
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    const fileName = (file.name || '').toLowerCase()
+    const hasValidType = validTypes.includes(file.type)
+    const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext))
+    if (!hasValidType && !hasValidExt) {
       throw new Error('Tipo de archivo no válido. Use JPG, PNG, WebP o GIF.')
     }
 
@@ -71,9 +75,15 @@ export const uploadProductImage = async (businessId, productId, file) => {
       throw new Error('La imagen es muy grande. Máximo 5MB.')
     }
 
-    // Comprimir imagen
+    // Comprimir imagen (con fallback si falla la compresión)
     console.log('📸 Comprimiendo imagen...')
-    const compressedBlob = await compressImage(file)
+    let compressedBlob
+    try {
+      compressedBlob = await compressImage(file)
+    } catch (compressError) {
+      console.warn('⚠️ Compresión falló, usando archivo original:', compressError)
+      compressedBlob = file
+    }
 
     // Generar nombre único
     const timestamp = Date.now()

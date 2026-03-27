@@ -1021,9 +1021,13 @@ export default function Products() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validar tipo
+    // Validar tipo (flexible para Android donde file.type puede estar vacío)
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!validTypes.includes(file.type)) {
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    const fileName = (file.name || '').toLowerCase()
+    const hasValidType = validTypes.includes(file.type)
+    const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext))
+    if (!hasValidType && !hasValidExt) {
       toast.error('Tipo de archivo no válido. Use JPG, PNG, WebP o GIF.')
       return
     }
