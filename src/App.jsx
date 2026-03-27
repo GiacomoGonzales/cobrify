@@ -80,6 +80,7 @@ import Expenses from './pages/Expenses'
 import Loans from './pages/Loans'
 import Certificates from './pages/Certificates'
 import CashFlow from './pages/CashFlow'
+import Accounting from './pages/Accounting'
 // Pharmacy pages
 import Laboratories from './pages/Laboratories'
 import ExpiryAlerts from './pages/ExpiryAlerts'
@@ -348,6 +349,7 @@ function App() {
               <Route path="prestamos" element={<Loans />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
+              <Route path="contabilidad" element={<Accounting />} />
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />

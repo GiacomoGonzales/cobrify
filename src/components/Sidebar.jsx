@@ -288,6 +288,13 @@ function Sidebar() {
       menuId: 'cash-flow',
     },
     {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
+    {
       path: '/reclamos',
       icon: BookOpen,
       label: 'Libro de Reclamos',
@@ -474,6 +481,13 @@ function Sidebar() {
       pageId: 'cash-flow',
       menuId: 'cash-flow',
     },
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
     // --- Otros ---
     {
       path: '/reclamos',
@@ -649,6 +663,13 @@ function Sidebar() {
       label: 'Flujo de Caja',
       pageId: 'cash-flow',
       menuId: 'cash-flow',
+    },
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
     },
     {
       path: '/reclamos',
