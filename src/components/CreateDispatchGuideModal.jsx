@@ -1888,9 +1888,15 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                                   </div>
                                 </div>
                                 {(() => {
-                                  const whStock = selectedWarehouseId && product.warehouseStocks
-                                    ? (product.warehouseStocks[selectedWarehouseId] ?? product.stock)
-                                    : product.stock
+                                  let whStock = product.stock
+                                  if (selectedWarehouseId && product.warehouseStocks) {
+                                    if (Array.isArray(product.warehouseStocks)) {
+                                      const ws = product.warehouseStocks.find(ws => ws.warehouseId === selectedWarehouseId)
+                                      whStock = ws ? ws.stock : 0
+                                    } else {
+                                      whStock = product.warehouseStocks[selectedWarehouseId] ?? product.stock
+                                    }
+                                  }
                                   return whStock != null ? (
                                     <span className={`text-xs ml-2 flex-shrink-0 ${whStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
                                       Stock: {whStock}
