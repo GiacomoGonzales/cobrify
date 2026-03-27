@@ -1331,8 +1331,21 @@ export default function CashRegister() {
     ? subUsers.find(u => u.uid === selectedCashUser || u.id === selectedCashUser)?.displayName || 'Usuario'
     : null
 
-  // Sub-usuarios con caja independiente (los únicos que aparecen como opción en el selector)
-  const independentSubUsers = subUsers.filter(u => u.independentCashRegister)
+  // Sub-usuarios con caja independiente, filtrados por sucursal seleccionada
+  const independentSubUsers = subUsers.filter(u => {
+    if (!u.independentCashRegister) return false
+    // Filtrar por sucursal: si hay sucursal seleccionada, solo mostrar usuarios asignados a ella
+    if (selectedBranch) {
+      const userBranches = u.allowedBranches || []
+      // Si el usuario no tiene restricción de sucursales, tiene acceso a todas
+      if (userBranches.length === 0) return true
+      return userBranches.includes(selectedBranch.id)
+    }
+    // Sucursal principal: mostrar usuarios sin restricción o con acceso a 'main'
+    const userBranches = u.allowedBranches || []
+    if (userBranches.length === 0) return true
+    return userBranches.includes('main')
+  })
 
   // Mostrar selector solo si es owner y tiene sub-usuarios con caja independiente
   const showUserSelector = isOwner && independentSubUsers.length > 0 && !isDemoMode

@@ -1350,11 +1350,20 @@ export default function POS() {
         }
 
         // Verificar si la caja diaria está abierta (si el setting lo requiere)
+        // Nota: calcular branchId aquí porque selectedBranch aún no se ha establecido en el estado
         if (businessData.requireOpenCashRegister) {
-          // Sub-usuario con caja compartida: buscar sesión sin filtrar por usuario (sesión del owner)
           const isSharedCashUser = userPermissions?.ownerId && !independentCashRegister
           const cashUserUid = isSharedCashUser ? null : (user?.uid || null)
-          const cashResult = await getCashRegisterSession(businessId, selectedBranch?.id || null, cashUserUid)
+          // Determinar branchId del usuario sin depender del estado
+          const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+          let cashBranchId = null
+          if (!hasMainAccess && branchesResult.success) {
+            const userBranches = filterBranchesByAccess ? filterBranchesByAccess(branchesResult.data || []) : (branchesResult.data || [])
+            if (userBranches.length > 0) {
+              cashBranchId = userBranches[0].id
+            }
+          }
+          const cashResult = await getCashRegisterSession(businessId, cashBranchId, cashUserUid)
           setCashRegisterOpen(cashResult.success && cashResult.data !== null)
         }
 
