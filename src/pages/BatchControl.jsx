@@ -36,6 +36,8 @@ function BatchControl() {
     quantity: 0
   })
 
+  const [syncingBatches, setSyncingBatches] = useState(false)
+
   const businessId = getBusinessId()
 
   useEffect(() => {
@@ -94,6 +96,89 @@ function BatchControl() {
       toast.error('Error al cargar productos')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Sincronizar stock de productos con sus lotes
+  const handleSyncBatchStock = async () => {
+    if (isDemoMode) {
+      toast.info('No disponible en modo demo')
+      return
+    }
+    if (!confirm('Esto asignará el stock disponible del producto a sus lotes existentes cuando estén desincronizados. ¿Continuar?')) return
+
+    setSyncingBatches(true)
+    try {
+      let syncCount = 0
+
+      for (const product of products) {
+        const batches = product.batches || []
+        if (batches.length === 0) continue
+
+        const whStocks = product.warehouseStocks || []
+        const totalStock = whStocks.length > 0
+          ? whStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+          : (product.stock || 0)
+        const batchesTotal = batches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+
+        // Solo sincronizar si hay desincronización: producto tiene stock pero lotes suman diferente
+        if (totalStock > 0 && batchesTotal !== totalStock) {
+          let updatedBatches
+          const activeBatches = batches.filter(b => !b.isExpired)
+
+          if (activeBatches.length === 1) {
+            // Un solo lote activo: asignarle todo el stock
+            updatedBatches = batches.map(b =>
+              b === activeBatches[0] ? { ...b, quantity: totalStock } : b
+            )
+          } else if (activeBatches.length > 1) {
+            // Varios lotes: repartir proporcionalmente o equitativamente
+            if (batchesTotal > 0) {
+              // Proporcionalmente al ratio actual
+              let assigned = 0
+              updatedBatches = batches.map((b, idx) => {
+                if (b.isExpired) return b
+                const isLast = idx === batches.length - 1 || activeBatches[activeBatches.length - 1] === b
+                if (isLast) {
+                  return { ...b, quantity: totalStock - assigned }
+                }
+                const ratio = (b.quantity || 0) / batchesTotal
+                const qty = Math.round(totalStock * ratio)
+                assigned += qty
+                return { ...b, quantity: qty }
+              })
+            } else {
+              // Todos en 0: asignar todo al primer lote activo
+              let assignedFirst = false
+              updatedBatches = batches.map(b => {
+                if (!b.isExpired && !assignedFirst) {
+                  assignedFirst = true
+                  return { ...b, quantity: totalStock }
+                }
+                return b
+              })
+            }
+          } else {
+            continue // Solo lotes expirados, no sincronizar
+          }
+
+          const productRef = doc(db, 'businesses', businessId, 'products', product.id)
+          await updateDoc(productRef, { batches: updatedBatches })
+          syncCount++
+        }
+      }
+
+      if (syncCount > 0) {
+        toast.success(`${syncCount} producto(s) sincronizado(s)`)
+        loadProducts()
+      } else {
+        toast.info('Todos los lotes ya están sincronizados con el stock')
+      }
+    } catch (error) {
+      console.error('Error al sincronizar lotes:', error)
+      toast.error('Error al sincronizar')
+    } finally {
+      setSyncingBatches(false)
     }
   }
 
@@ -184,9 +269,23 @@ function BatchControl() {
 
       if (!matchesSearch) return false
 
+      // Filtrar por almacén: solo productos con stock en ese almacén
+      if (filterWarehouse !== 'all') {
+        const ws = (p.warehouseStocks || []).find(ws => ws.warehouseId === filterWarehouse)
+        if (!ws || ws.stock <= 0) return false
+      }
+
+      // Filtrar por sucursal: solo productos con stock en almacenes de esa sucursal
+      if (filterBranch !== 'all' && filterWarehouse === 'all') {
+        const warehouseIds = filteredWarehouses.map(w => w.id)
+        const hasStock = (p.warehouseStocks || []).some(ws =>
+          warehouseIds.includes(ws.warehouseId) && ws.stock > 0
+        )
+        if (!hasStock && filterBranch !== 'main') return false
+      }
+
       if (selectedFilter === 'with-batches') return p.batches && p.batches.length > 0
       if (selectedFilter === 'expiring') {
-        // Productos con al menos un lote que vence en 90 días
         return p.batches?.some(b => {
           const status = getExpirationStatus(b.expirationDate)
           return status && ['expired', 'critical', 'warning', 'caution'].includes(status.status)
@@ -377,6 +476,18 @@ function BatchControl() {
           </h1>
           <p className="text-gray-600 mt-1">Gestiona los lotes y fechas de vencimiento de tus productos</p>
         </div>
+        <Button
+          onClick={handleSyncBatchStock}
+          disabled={syncingBatches || loading}
+          variant="outline"
+          size="sm"
+        >
+          {syncingBatches ? (
+            <><Package className="w-4 h-4 mr-2 animate-spin" /> Sincronizando...</>
+          ) : (
+            <><Package className="w-4 h-4 mr-2" /> Sincronizar Stock a Lotes</>
+          )}
+        </Button>
       </div>
 
       {/* Stats Cards */}

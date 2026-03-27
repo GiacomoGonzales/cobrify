@@ -94,9 +94,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
 
-  // Sucursales disponibles
+  // Sucursales y almacenes disponibles
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState('')
+  const [warehouses, setWarehouses] = useState([])
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
@@ -238,6 +240,32 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
     loadBranches()
   }, [isOpen, user?.uid, getBusinessId, filterBranchesByAccess])
+
+  // Cargar almacenes disponibles
+  useEffect(() => {
+    const loadWarehouses = async () => {
+      if (!user?.uid || !isOpen) return
+      try {
+        const { getWarehouses } = await import('@/services/warehouseService')
+        const result = await getWarehouses(getBusinessId())
+        if (result.success) {
+          let whs = (result.data || []).filter(w => w.isActive !== false)
+          // Filtrar por sucursal si hay una seleccionada
+          if (selectedBranchId) {
+            whs = whs.filter(w => w.branchId === selectedBranchId || !w.branchId)
+          }
+          setWarehouses(whs)
+          // Auto-seleccionar primer almacén
+          if (whs.length > 0 && !selectedWarehouseId) {
+            setSelectedWarehouseId(whs[0].id)
+          }
+        }
+      } catch (error) {
+        console.error('Error al cargar almacenes:', error)
+      }
+    }
+    loadWarehouses()
+  }, [isOpen, user?.uid, selectedBranchId])
 
   // Cargar clientes registrados
   useEffect(() => {
@@ -908,9 +936,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         additionalInfo,
 
-        // Sucursal seleccionada
+        // Sucursal y almacén seleccionados
         branchId: selectedBranchId || null,
         branchName: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name || null : null,
+        warehouseId: selectedWarehouseId || null,
+        warehouseName: selectedWarehouseId ? warehouses.find(w => w.id === selectedWarehouseId)?.name || null : null,
       }
 
       console.log('Creando guía de remisión:', dispatchGuide)
@@ -1020,6 +1050,52 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                   <p className="text-xs text-blue-600 mt-1">
                     Selecciona desde qué sucursal se genera esta guía de remisión
                   </p>
+                </div>
+              </div>
+              {/* Selector de almacén */}
+              {warehouses.length > 0 && (
+                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-blue-200">
+                  <Package className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-blue-800 mb-1">
+                      Almacén
+                    </label>
+                    <select
+                      value={selectedWarehouseId}
+                      onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                      className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    >
+                      {warehouses.map(wh => (
+                        <option key={wh.id} value={wh.id}>{wh.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Stock y lotes se mostrarán de este almacén
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mostrar almacén si no hay sucursales */}
+          {branches.length === 0 && warehouses.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Package className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-blue-800 mb-1">
+                    Almacén
+                  </label>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                    className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    {warehouses.map(wh => (
+                      <option key={wh.id} value={wh.id}>{wh.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -1811,11 +1887,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                                     )}
                                   </div>
                                 </div>
-                                {product.stock != null && (
-                                  <span className={`text-xs ml-2 flex-shrink-0 ${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                    Stock: {product.stock}
-                                  </span>
-                                )}
+                                {(() => {
+                                  const whStock = selectedWarehouseId && product.warehouseStocks
+                                    ? (product.warehouseStocks[selectedWarehouseId] ?? product.stock)
+                                    : product.stock
+                                  return whStock != null ? (
+                                    <span className={`text-xs ml-2 flex-shrink-0 ${whStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                      Stock: {whStock}
+                                    </span>
+                                  ) : null
+                                })()}
                               </button>
                             ))
                           ) : (
