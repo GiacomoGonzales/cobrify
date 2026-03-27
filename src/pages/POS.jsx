@@ -270,7 +270,7 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, userPermissions } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -5632,6 +5632,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             onChange={(e) => updateItemObservations(itemId, e.target.value)}
                             className="flex-1 min-w-0 text-xs xl:text-sm px-2 xl:px-3 py-1.5 xl:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                           />
+                          {!hideDiscountInPOS && (
                           <div className="flex items-center gap-1 shrink-0">
                             <Tag className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-orange-500 flex-shrink-0" />
                             <input
@@ -5645,6 +5646,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               className="w-16 xl:w-20 text-xs xl:text-sm px-1.5 xl:px-2 py-1.5 xl:py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
+                          )}
                         </div>
 
                         {/* Fila 3: Cantidad + Precio (ancho completo) */}
@@ -5840,7 +5842,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </div>
 
                 {/* Descuento General */}
-                {cart.length > 0 && (
+                {cart.length > 0 && !hideDiscountInPOS && (
                   <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
                     <div className="flex items-center gap-2">
                       <Tag className="w-4 h-4 xl:w-5 xl:h-5 text-green-600 shrink-0" />

@@ -50,6 +50,7 @@ export default function Users() {
   const [assignedSellerId, setAssignedSellerId] = useState('')
   const [independentCashRegister, setIndependentCashRegister] = useState(false)
   const [hideStockInPOS, setHideStockInPOS] = useState(false)
+  const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
@@ -209,6 +210,7 @@ export default function Users() {
     setAssignedSellerId('')
     setIndependentCashRegister(false)
     setHideStockInPOS(false)
+    setHideDiscountInPOS(false)
     reset({
       email: '',
       password: '',
@@ -229,6 +231,7 @@ export default function Users() {
     setAssignedSellerId(userToEdit.assignedSellerId || '')
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
+    setHideDiscountInPOS(userToEdit.hideDiscountInPOS || false)
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -315,6 +318,7 @@ export default function Users() {
           assignedSellerName: selectedSellerObj?.name || null,
           independentCashRegister,
           hideStockInPOS,
+          hideDiscountInPOS,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -350,6 +354,7 @@ export default function Users() {
           assignedSellerName: selectedSellerForCreate?.name || null,
           independentCashRegister,
           hideStockInPOS,
+          hideDiscountInPOS,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -1017,6 +1022,26 @@ export default function Users() {
                           {hideStockInPOS
                             ? 'El usuario NO verá el stock en las tarjetas del POS'
                             : 'El usuario puede ver el stock en las tarjetas del POS'}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Ocultar descuentos */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-purple-100">
+                      <input
+                        type="checkbox"
+                        checked={hideDiscountInPOS}
+                        onChange={() => setHideDiscountInPOS(!hideDiscountInPOS)}
+                        className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">Ocultar descuentos en POS</span>
+                        <p className="text-xs text-purple-600 mt-0.5">
+                          {hideDiscountInPOS
+                            ? 'El usuario NO podrá aplicar descuentos en el POS'
+                            : 'El usuario puede aplicar descuentos en el POS'}
                         </p>
                       </div>
                     </label>
