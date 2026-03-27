@@ -1234,7 +1234,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const itemName = item.name || item.description || ''
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    // En farmacia el código tiene su propia columna, no repetirlo en la descripción
+    let itemDesc = (isValidCode && !isPharmacy) ? `${rawCode} - ${itemName}` : itemName
     // Concatenar atributos de variante si existen (talla, color, etc.)
     if (item.isVariant && item.variantAttributes) {
       const attrs = Object.entries(item.variantAttributes)
@@ -1431,20 +1432,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio (solo modo farmacia) - centrado verticalmente
+    // Laboratorio (solo modo farmacia) - font reducido, multilínea
     if (isPharmacy) {
-      doc.setFontSize(7)
+      doc.setFontSize(6)
       const labText = item.laboratoryName || ''
       if (labText) {
-        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
-        doc.text(labLines[0], cols.lab + colWidths.lab / 2, centerY, { align: 'center' })
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 4)
+        const labStartY = dataRowY + (spacious ? 10 : 8)
+        labLines.slice(0, 3).forEach((line, i) => {
+          doc.text(line, cols.lab + colWidths.lab / 2, labStartY + (i * 7), { align: 'center' })
+        })
       }
 
       // Marca
       const marcaText = item.marca || ''
       if (marcaText) {
-        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
-        doc.text(marcaLines[0], cols.marca + colWidths.marca / 2, centerY, { align: 'center' })
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 4)
+        const marcaStartY = dataRowY + (spacious ? 10 : 8)
+        marcaLines.slice(0, 3).forEach((line, i) => {
+          doc.text(line, cols.marca + colWidths.marca / 2, marcaStartY + (i * 7), { align: 'center' })
+        })
       }
     }
 
