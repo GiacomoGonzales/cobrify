@@ -287,8 +287,21 @@ export default function Customers() {
         businessData = settingsResult.success ? settingsResult.data : null;
       }
 
+      // Cargar facturas para obtener servicios por cliente
+      toast.info('Cargando datos de servicios...')
+      let invoices = []
+      if (!isDemoMode) {
+        const businessId = getBusinessId()
+        const { collection, getDocs, query, where } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+        const q = query(invoicesRef, where('status', '!=', 'annulled'))
+        const snapshot = await getDocs(q)
+        invoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+      }
+
       // Generar Excel
-      await generateCustomersExcel(customers, businessData);
+      await generateCustomersExcel(customers, businessData, invoices);
       toast.success(`${customers.length} cliente(s) exportado(s) exitosamente`);
     } catch (error) {
       console.error('Error al exportar clientes:', error);

@@ -8,8 +8,23 @@ import { Share } from '@capacitor/share';
 /**
  * Generar reporte de clientes en Excel
  */
-export const generateCustomersExcel = async (customers, businessData) => {
+export const generateCustomersExcel = async (customers, businessData, invoices = []) => {
   const workbook = XLSX.utils.book_new();
+
+  // Construir mapa de servicios por cliente (documentNumber -> productos únicos)
+  const servicesByCustomer = {}
+  if (invoices.length > 0) {
+    invoices.forEach(inv => {
+      const docNum = inv.customer?.documentNumber || inv.clientDocumentNumber || ''
+      if (!docNum) return
+      if (!servicesByCustomer[docNum]) servicesByCustomer[docNum] = new Set()
+      const items = inv.items || []
+      items.forEach(item => {
+        const name = item.name || item.description || ''
+        if (name) servicesByCustomer[docNum].add(name)
+      })
+    })
+  }
 
   // Preparar datos de los clientes
   const customerData = [
@@ -32,6 +47,7 @@ export const generateCustomersExcel = async (customers, businessData) => {
     'Email',
     'Teléfono',
     'Dirección',
+    'Servicios/Productos',
     'Cantidad Pedidos',
     'Total Gastado',
     'Fecha de Registro'
@@ -46,6 +62,10 @@ export const generateCustomersExcel = async (customers, businessData) => {
       'PASSPORT': 'Pasaporte'
     };
 
+    const docNum = customer.documentNumber || ''
+    const services = servicesByCustomer[docNum]
+    const servicesText = services ? [...services].join(', ') : 'N/A'
+
     customerData.push([
       documentTypes[customer.documentType] || customer.documentType || 'N/A',
       customer.documentNumber || 'N/A',
@@ -53,6 +73,7 @@ export const generateCustomersExcel = async (customers, businessData) => {
       customer.email || 'N/A',
       customer.phone || 'N/A',
       customer.address || 'N/A',
+      servicesText,
       customer.ordersCount || 0,
       customer.totalSpent || 0,
       customer.createdAt ? format(customer.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
@@ -82,6 +103,7 @@ export const generateCustomersExcel = async (customers, businessData) => {
     { width: 25 },  // Email
     { width: 15 },  // Teléfono
     { width: 35 },  // Dirección
+    { width: 50 },  // Servicios/Productos
     { width: 12 },  // Cantidad Pedidos
     { width: 15 },  // Total Gastado
     { width: 15 },  // Fecha de Registro
