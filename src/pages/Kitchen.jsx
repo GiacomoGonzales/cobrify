@@ -539,7 +539,7 @@ export default function Kitchen() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ transform: 'scale(0.7)', transformOrigin: 'top left', width: '142.86%' }}>
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

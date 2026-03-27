@@ -713,7 +713,7 @@ export default function Orders() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ transform: 'scale(0.7)', transformOrigin: 'top left', width: '142.86%' }}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
@@ -902,6 +902,20 @@ export default function Orders() {
                       <span className={`text-sm font-semibold ${statusConfig.color}`}>
                         {elapsed}
                       </span>
+                      {order.status !== 'delivered' && !order.tableNumber && (
+                        <Button
+                          onClick={() => {
+                            setOrderToEdit(order)
+                            setShowEditOrderModal(true)
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="p-1.5"
+                          title="Editar orden"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button
                         onClick={() => handlePrintKitchenTicket(order)}
                         variant="outline"
@@ -1079,22 +1093,6 @@ export default function Orders() {
 
                   {/* Botones de acción */}
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    {/* Botón de editar orden (para órdenes activas) */}
-                    {order.status !== 'delivered' && (
-                      <Button
-                        onClick={() => {
-                          setOrderToEdit(order)
-                          setShowEditOrderModal(true)
-                        }}
-                        variant="outline"
-                        className="flex-1"
-                        size="sm"
-                      >
-                        <Edit2 className="w-4 h-4 mr-2" />
-                        Editar
-                      </Button>
-                    )}
-
                     {/* Botón de cerrar cuenta (solo para órdenes listas) */}
                     {order.status === 'ready' && (
                       <Button

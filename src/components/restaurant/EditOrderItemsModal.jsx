@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Edit, Plus, Minus, Trash2, Loader2, X } from 'lucide-react'
+import { Edit, Plus, Minus, Trash2, Loader2, Search } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import { removeOrderItem, updateOrderItemQuantity } from '@/services/orderService'
+import { removeOrderItem, updateOrderItemQuantity, addOrderItems } from '@/services/orderService'
+import { getProducts } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -18,6 +19,12 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   const [updatingItemIndex, setUpdatingItemIndex] = useState(null)
   const [recargoConfig, setRecargoConfig] = useState({ enabled: false, rate: 10 })
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
+
+  // Estado para agregar items
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [products, setProducts] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [addingProduct, setAddingProduct] = useState(false)
 
   // Cargar configuración del negocio
   useEffect(() => {
@@ -65,18 +72,35 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
 
     if (isOpen) {
       loadConfig()
+      setShowAddItem(false)
+      setSearchTerm('')
     }
   }, [isOpen, business, getBusinessId, demoContext])
 
+  // Cargar productos cuando se abre el buscador
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (!showAddItem || demoContext) return
+      try {
+        const result = await getProducts(getBusinessId())
+        if (result.success) {
+          setProducts(result.data || [])
+        }
+      } catch (e) {
+        console.error('Error cargando productos:', e)
+      }
+    }
+    loadProducts()
+  }, [showAddItem])
+
   const handleUpdateQuantity = async (itemIndex, currentQuantity, delta) => {
-    // Verificar si está en modo demo
     if (demoContext) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
     }
 
     const newQuantity = currentQuantity + delta
-    if (newQuantity < 1) return // No permitir cantidades menores a 1
+    if (newQuantity < 1) return
 
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
@@ -98,7 +122,6 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const handleRemoveItem = async (itemIndex) => {
-    // Verificar si está en modo demo
     if (demoContext) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
@@ -125,18 +148,51 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     }
   }
 
+  const handleAddProduct = async (product) => {
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo.')
+      return
+    }
+
+    setAddingProduct(true)
+    try {
+      const price = product.price || 0
+      const newItem = {
+        productId: product.id,
+        name: product.name,
+        price,
+        quantity: 1,
+        total: price,
+        notes: '',
+        category: product.category || '',
+      }
+      const result = await addOrderItems(getBusinessId(), order.id, [newItem])
+      if (result.success) {
+        toast.success(`${product.name} agregado`)
+        setShowAddItem(false)
+        setSearchTerm('')
+        onSuccess()
+      } else {
+        toast.error('Error al agregar: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al agregar producto')
+    } finally {
+      setAddingProduct(false)
+    }
+  }
+
   const calculateTotals = () => {
     if (!order || !order.items) return { subtotal: 0, igv: 0, recargo: 0, total: 0 }
 
     const itemsTotal = order.items.reduce((sum, item) => sum + item.total, 0)
 
-    // Calcular recargo al consumo si está habilitado
     let recargo = 0
     if (recargoConfig.enabled) {
       recargo = itemsTotal * (recargoConfig.rate / 100)
     }
 
-    // Calcular IGV
     const igvRate = taxConfig.igvRate || 18
     const baseConRecargo = itemsTotal + recargo
 
@@ -157,6 +213,10 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   if (!table || !order) return null
 
   const totals = calculateTotals()
+
+  const filteredProducts = searchTerm.length >= 2
+    ? products.filter(p => p.name?.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 8)
+    : []
 
   return (
     <Modal
@@ -247,6 +307,55 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
             <div className="text-center py-12 text-gray-500">
               No hay items en esta orden
             </div>
+          )}
+
+          {/* Agregar producto */}
+          {showAddItem ? (
+            <div className="border rounded-lg p-3 bg-blue-50 space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar producto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+              {filteredProducts.length > 0 && (
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {filteredProducts.map(product => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleAddProduct(product)}
+                      disabled={addingProduct}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-blue-100 transition-colors text-left"
+                    >
+                      <span className="font-medium truncate">{product.name}</span>
+                      <span className="text-gray-500 shrink-0 ml-2">S/ {(product.price || 0).toFixed(2)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchTerm.length >= 2 && filteredProducts.length === 0 && (
+                <p className="text-xs text-gray-500 text-center py-2">No se encontraron productos</p>
+              )}
+              <button
+                onClick={() => { setShowAddItem(false); setSearchTerm('') }}
+                className="text-xs text-gray-500 hover:text-gray-700 w-full text-center"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddItem(true)}
+              className="w-full border-2 border-dashed border-gray-300 rounded-lg p-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Agregar producto
+            </button>
           )}
         </div>
 
