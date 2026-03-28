@@ -36,6 +36,7 @@ import {
   MoreVertical,
   FlaskConical,
   CalendarClock,
+  RefreshCw,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -52,10 +53,10 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
-import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
+import { getProducts, getProductCategories, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
@@ -198,6 +199,7 @@ export default function Inventory() {
   const [historyProduct, setHistoryProduct] = useState(null)
   const [productMovements, setProductMovements] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isRecalculating, setIsRecalculating] = useState(false)
 
   // Estado para migración de stock huérfano
   const [isMigratingOrphanStock, setIsMigratingOrphanStock] = useState(false)
@@ -669,18 +671,13 @@ export default function Inventory() {
         notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}`
       })
 
-      // Actualizar stock del producto en el almacén
-      const updatedProduct = updateWarehouseStock(
-        damageProduct,
+      // Actualizar stock del producto en el almacén (transacción atómica)
+      const updateResult = await updateProductStockTransaction(
+        businessId,
+        damageProduct.id,
         damageData.warehouseId,
         -quantity
       )
-
-      // Guardar en Firestore
-      const updateResult = await updateProduct(businessId, damageProduct.id, {
-        stock: updatedProduct.stock,
-        warehouseStocks: updatedProduct.warehouseStocks
-      })
 
       if (!updateResult.success) {
         throw new Error('Error al actualizar el stock')
@@ -879,6 +876,33 @@ export default function Inventory() {
     setProductMovements([])
   }
 
+  // Recalcular stock desde movimientos
+  const handleRecalculateStock = async () => {
+    if (!historyProduct || isDemoMode) return
+    setIsRecalculating(true)
+    try {
+      const businessId = getBusinessId()
+      const result = await recalculateStockFromMovements(businessId, historyProduct.id)
+      if (result.success) {
+        if (result.corrected) {
+          toast.success(`Stock corregido: ${result.previousStock} → ${result.stockFromMovements}`)
+        } else {
+          toast.success('El stock ya estaba correcto')
+        }
+        loadProducts()
+        // Actualizar el producto en el modal
+        setHistoryProduct(prev => ({ ...prev, stock: result.stockFromMovements }))
+      } else {
+        toast.error('Error al recalcular: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al recalcular stock:', error)
+      toast.error('Error al recalcular el stock')
+    } finally {
+      setIsRecalculating(false)
+    }
+  }
+
   // Función para obtener info del tipo de movimiento
   const getMovementTypeInfo = (type) => {
     const types = {
@@ -1047,25 +1071,21 @@ export default function Inventory() {
     try {
       const businessId = getBusinessId()
 
-      // 1. Actualizar stock - Salida del almacén origen
-      let updatedProduct = updateWarehouseStock(
-        transferProduct,
+      // 1. Actualizar stock - Salida del almacén origen (transacción atómica)
+      const exitResult = await updateProductStockTransaction(
+        businessId,
+        transferProduct.id,
         transferData.fromWarehouse,
         -quantity
       )
 
-      // 2. Actualizar stock - Entrada al almacén destino
-      updatedProduct = updateWarehouseStock(
-        updatedProduct,
-        transferData.toWarehouse,
-        quantity
-      )
-
-      // 2.1. Actualizar lotes si aplica
-      const productUpdates = {
-        stock: updatedProduct.stock,
-        warehouseStocks: updatedProduct.warehouseStocks
+      if (!exitResult.success) {
+        throw new Error('Error al descontar stock del almacén origen')
       }
+
+      // 2. Actualizar stock - Entrada al almacén destino (transacción atómica)
+      // Incluir actualización de lotes si aplica
+      const extraUpdates = {}
 
       if (selectedBatchData) {
         const updatedBatches = (transferProduct.batches || []).map(b => {
@@ -1074,7 +1094,7 @@ export default function Inventory() {
           }
           return b
         })
-        productUpdates.batches = updatedBatches
+        extraUpdates.batches = updatedBatches
 
         // Actualizar fecha de vencimiento más próxima
         const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
@@ -1084,19 +1104,24 @@ export default function Inventory() {
             const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
             return dateA - dateB
           })
-          productUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
-          productUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+          extraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+          extraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
         } else {
-          productUpdates.expirationDate = null
-          productUpdates.batchNumber = null
+          extraUpdates.expirationDate = null
+          extraUpdates.batchNumber = null
         }
       }
 
-      // 3. Guardar en Firestore
-      const updateResult = await updateProduct(businessId, transferProduct.id, productUpdates)
+      const entryResult = await updateProductStockTransaction(
+        businessId,
+        transferProduct.id,
+        transferData.toWarehouse,
+        quantity,
+        extraUpdates
+      )
 
-      if (!updateResult.success) {
-        throw new Error('Error al actualizar el stock')
+      if (!entryResult.success) {
+        throw new Error('Error al ingresar stock al almacén destino')
       }
 
       const batchNote = selectedBatchData ? ` (Lote: ${transferData.selectedBatch})` : ''
@@ -3437,32 +3462,72 @@ export default function Inventory() {
           )}
 
           {/* Resumen de movimientos */}
-          {!isLoadingHistory && productMovements.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t">
-              <div className="bg-gray-50 p-3 rounded-lg text-center">
-                <p className="text-xs text-gray-600">Total</p>
-                <p className="text-lg font-bold text-gray-900">{productMovements.length}</p>
-              </div>
-              <div className="bg-green-50 p-3 rounded-lg text-center">
-                <p className="text-xs text-gray-600">Entradas</p>
-                <p className="text-lg font-bold text-green-600">
-                  {productMovements.filter(m => m.type === 'entry' || m.type === 'transfer_in').length}
-                </p>
-              </div>
-              <div className="bg-red-50 p-3 rounded-lg text-center">
-                <p className="text-xs text-gray-600">Salidas</p>
-                <p className="text-lg font-bold text-red-600">
-                  {productMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale' || m.type === 'damage').length}
-                </p>
-              </div>
-              <div className="bg-purple-50 p-3 rounded-lg text-center">
-                <p className="text-xs text-gray-600">Ajustes</p>
-                <p className="text-lg font-bold text-purple-600">
-                  {productMovements.filter(m => m.type === 'adjustment').length}
-                </p>
-              </div>
-            </div>
-          )}
+          {!isLoadingHistory && productMovements.length > 0 && (() => {
+            const stockFromMovements = productMovements.reduce((sum, m) => sum + (m.quantity || 0), 0)
+            const currentStock = historyProduct?.stock || 0
+            const hasDiscrepancy = Math.abs(stockFromMovements - currentStock) >= 1
+
+            return (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t">
+                  <div className="bg-gray-50 p-3 rounded-lg text-center">
+                    <p className="text-xs text-gray-600">Total</p>
+                    <p className="text-lg font-bold text-gray-900">{productMovements.length}</p>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <p className="text-xs text-gray-600">Entradas</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {productMovements.filter(m => m.type === 'entry' || m.type === 'transfer_in').length}
+                    </p>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded-lg text-center">
+                    <p className="text-xs text-gray-600">Salidas</p>
+                    <p className="text-lg font-bold text-red-600">
+                      {productMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale' || m.type === 'damage').length}
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-lg text-center">
+                    <p className="text-xs text-gray-600">Ajustes</p>
+                    <p className="text-lg font-bold text-purple-600">
+                      {productMovements.filter(m => m.type === 'adjustment').length}
+                    </p>
+                  </div>
+                </div>
+
+                {hasDiscrepancy && (
+                  <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">
+                          Stock desincronizado
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          Stock actual: <span className="font-bold">{currentStock}</span> — Según movimientos: <span className="font-bold">{stockFromMovements}</span>
+                        </p>
+                      </div>
+                    </div>
+                    {!isDemoMode && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRecalculateStock}
+                        disabled={isRecalculating}
+                        className="border-yellow-400 text-yellow-800 hover:bg-yellow-100 flex-shrink-0"
+                      >
+                        {isRecalculating ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                        )}
+                        Corregir
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
+            )
+          })()}
 
           <div className="flex justify-end pt-4">
             <Button

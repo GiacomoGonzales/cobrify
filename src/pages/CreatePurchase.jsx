@@ -18,6 +18,7 @@ import {
   updatePurchase,
   getPurchase,
   updateProduct,
+  updateProductStockTransaction,
   createProduct,
   getProductCategories,
 } from '@/services/firestoreService'
@@ -964,18 +965,8 @@ export default function CreatePurchase() {
           if (warehouseChangedInEdit && originalQuantities[productId]) {
             const originalQty = originalQuantities[productId]
 
-            // Restar del almacén original
-            const afterRemoval = updateWarehouseStock(product, originalWarehouseId, -originalQty)
-            await updateProduct(businessId, productId, {
-              stock: afterRemoval.stock,
-              warehouseStocks: afterRemoval.warehouseStocks
-            })
-
-            // Actualizar en memoria
-            const idx = products.findIndex(p => p.id === productId)
-            if (idx >= 0) {
-              products[idx] = { ...products[idx], ...afterRemoval }
-            }
+            // Restar del almacén original (transacción atómica)
+            await updateProductStockTransaction(businessId, productId, originalWarehouseId, -originalQty)
 
             // Registrar movimiento de salida del almacén original
             await createStockMovement(businessId, {
@@ -995,22 +986,13 @@ export default function CreatePurchase() {
             stockDifferences[productId] = newQuantities[productId] || 0
           } else if (difference !== 0) {
             // Solo ajustar si hay diferencia (no cambió almacén)
-            const updatedProduct = updateWarehouseStock(
-              product,
+            // Actualizar stock usando transacción atómica
+            await updateProductStockTransaction(
+              businessId,
+              productId,
               originalWarehouseId,
               difference // Positivo = aumentar, Negativo = reducir
             )
-
-            await updateProduct(businessId, productId, {
-              stock: updatedProduct.stock,
-              warehouseStocks: updatedProduct.warehouseStocks
-            })
-
-            // Actualizar en memoria
-            const idx = products.findIndex(p => p.id === productId)
-            if (idx >= 0) {
-              products[idx] = { ...products[idx], ...updatedProduct }
-            }
 
             // Registrar movimiento de ajuste
             await createStockMovement(businessId, {
@@ -1123,16 +1105,6 @@ export default function CreatePurchase() {
           // En modo creación: sumar stock completo
           const shouldUpdateStock = !isEditMode || warehouseChangedInEdit
 
-          let updatedProduct = product
-          if (shouldUpdateStock) {
-            // Actualizar stock usando el helper de almacén
-            updatedProduct = updateWarehouseStock(
-              product,
-              selectedWarehouse?.id || '',
-              newQuantity // Positivo porque es una entrada
-            )
-          }
-
           // Calcular costo promedio ponderado con el stock existente
           const currentStock = product.stock || 0
           const currentCost = product.cost || 0
@@ -1168,12 +1140,8 @@ export default function CreatePurchase() {
           // Redondear costo promedio a 2 decimales antes de guardar
           const roundedAverageCost = Math.round(averageCost * 100) / 100
 
-          const updates = {
-            // Solo actualizar stock si corresponde
-            ...(shouldUpdateStock && {
-              stock: updatedProduct.stock,
-              warehouseStocks: updatedProduct.warehouseStocks,
-            }),
+          // Preparar datos extra (costo, proveedor, lotes)
+          const extraUpdates = {
             cost: roundedAverageCost,
             ...(selectedSupplier && {
               lastSupplier: {
@@ -1200,8 +1168,8 @@ export default function CreatePurchase() {
             }))
 
             const updatedBatches = [...currentBatches, ...newBatches]
-            updates.batches = updatedBatches
-            updates.trackExpiration = true
+            extraUpdates.batches = updatedBatches
+            extraUpdates.trackExpiration = true
 
             const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
             if (activeBatches.length > 0) {
@@ -1211,12 +1179,25 @@ export default function CreatePurchase() {
                 return dateA - dateB
               })
               const nearestBatch = activeBatches[0]
-              updates.expirationDate = nearestBatch.expirationDate
-              updates.batchNumber = nearestBatch.batchNumber
+              extraUpdates.expirationDate = nearestBatch.expirationDate
+              extraUpdates.batchNumber = nearestBatch.batchNumber
             }
           }
 
-          const result = await updateProduct(businessId, grouped.productId, cleanUndefined(updates))
+          let result
+          if (shouldUpdateStock) {
+            // Actualizar stock + datos extra en transacción atómica
+            result = await updateProductStockTransaction(
+              businessId,
+              grouped.productId,
+              selectedWarehouse?.id || '',
+              newQuantity,
+              cleanUndefined(extraUpdates)
+            )
+          } else {
+            // Solo actualizar datos extra (sin cambio de stock)
+            result = await updateProduct(businessId, grouped.productId, cleanUndefined(extraUpdates))
+          }
           if (!result.success) {
             console.error('❌ Error actualizando producto:', grouped.productId, result.error, 'Updates:', JSON.stringify(updates, (key, value) => {
               if (value instanceof Date) return `Date(${value.toISOString()})`

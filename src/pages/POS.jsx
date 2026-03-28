@@ -3721,28 +3721,36 @@ export default function POS() {
               })
 
               for (const item of itemsForMovement) {
-                try {
-                  const quantityForMovement = item.quantity * (item.presentationFactor || 1)
-                  const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
-                  const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
-                  if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
-                  if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
-                  await createStockMovement(businessId, {
-                    productId: item.id,
-                    productName: item.name || '',
-                    warehouseId: bgSelectedWarehouse?.id || '',
-                    type: 'sale',
-                    quantity: -quantityForMovement,
-                    reason: 'Venta',
-                    referenceType: 'invoice',
-                    referenceId: bgInvoiceId || '',
-                    referenceNumber: bgNumberResult?.number || '',
-                    userId: bgUserUid,
-                    ...(item.batchNumber && { batchNumber: item.batchNumber }),
-                    notes: noteParts.join(' - ')
-                  })
-                } catch (err) {
-                  console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
+                const quantityForMovement = item.quantity * (item.presentationFactor || 1)
+                const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
+                const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
+                if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
+                if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
+                const movementData = {
+                  productId: item.id,
+                  productName: item.name || '',
+                  warehouseId: bgSelectedWarehouse?.id || '',
+                  type: 'sale',
+                  quantity: -quantityForMovement,
+                  reason: 'Venta',
+                  referenceType: 'invoice',
+                  referenceId: bgInvoiceId || '',
+                  referenceNumber: bgNumberResult?.number || '',
+                  userId: bgUserUid,
+                  ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  notes: noteParts.join(' - ')
+                }
+                // Reintentar hasta 3 veces si falla para evitar movimientos perdidos
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                  try {
+                    await createStockMovement(businessId, movementData)
+                    break // Éxito, salir del retry
+                  } catch (err) {
+                    console.error(`📦 [StockMovement] Intento ${attempt}/3 falló para: ${item.name}`, err)
+                    if (attempt === 3) {
+                      console.error('📦 [StockMovement] CRÍTICO: No se pudo registrar movimiento después de 3 intentos para:', item.name)
+                    }
+                  }
                 }
               }
 

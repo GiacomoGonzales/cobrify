@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries } from '@/services/firestoreService'
+import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
@@ -549,16 +549,12 @@ export default function CreateCreditNote() {
 
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
-                const updatedProduct = updateWarehouseStock(
-                  productData,
+                await updateProductStockTransaction(
+                  user.uid,
+                  item.productId,
                   warehouseId,
                   quantityToRestore
                 )
-
-                await updateProduct(user.uid, item.productId, {
-                  stock: updatedProduct.stock,
-                  warehouseStocks: updatedProduct.warehouseStocks
-                })
 
                 await createStockMovement(user.uid, {
                   productId: item.productId,

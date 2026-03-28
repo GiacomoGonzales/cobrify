@@ -192,6 +192,10 @@ export default function Dashboard() {
         inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') {
       return false
     }
+    // Si está en proceso de anulación SUNAT (voiding), tampoco contar
+    if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') {
+      return false
+    }
     return true
   })
 
@@ -263,7 +267,7 @@ export default function Dashboard() {
   }
 
   // Calcular cambio del día anterior
-  const yesterdaySales = invoices
+  const yesterdaySales = validInvoicesForSales
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false

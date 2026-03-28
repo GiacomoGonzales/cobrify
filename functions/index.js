@@ -5005,28 +5005,10 @@ export const voidInvoice = onRequest(
             console.error('❌ Error al restaurar documento original:', restoreError.message)
           }
         } else {
-          // Es factura/boleta: Devolver stock de los productos
-          if (invoiceData.items && invoiceData.items.length > 0) {
-            console.log('📦 Devolviendo stock de productos...')
-            for (const item of invoiceData.items) {
-              if (item.productId && !item.productId.startsWith('custom-')) {
-                try {
-                  const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                  const productDoc = await productRef.get()
-                  if (productDoc.exists) {
-                    const currentStock = productDoc.data().stock || 0
-                    await productRef.update({
-                      stock: currentStock + (item.quantity || 0),
-                      updatedAt: FieldValue.serverTimestamp()
-                    })
-                    console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
-                  }
-                } catch (stockError) {
-                  console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
-                }
-              }
-            }
-          }
+          // NOTA: La devolución de stock se maneja en el frontend
+          // usando updateProductStockTransaction (transacción atómica) + createStockMovement.
+          // No devolver stock aquí para evitar doble devolución.
+          console.log('📦 Stock será devuelto por el frontend (evitando doble devolución)')
         }
 
         // Actualizar estadísticas del cliente (si existe)
@@ -5645,28 +5627,9 @@ export const voidBoleta = onRequest(
           voidCdrData: statusResult.cdrData || null
         })
 
-        // Devolver stock de los productos
-        if (boletaData.items && boletaData.items.length > 0) {
-          console.log('📦 Devolviendo stock de productos...')
-          for (const item of boletaData.items) {
-            if (item.productId && !item.productId.startsWith('custom-')) {
-              try {
-                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                const productDoc = await productRef.get()
-                if (productDoc.exists) {
-                  const currentStock = productDoc.data().stock || 0
-                  await productRef.update({
-                    stock: currentStock + (item.quantity || 0),
-                    updatedAt: FieldValue.serverTimestamp()
-                  })
-                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
-                }
-              } catch (stockError) {
-                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
-              }
-            }
-          }
-        }
+        // NOTA: La devolución de stock se maneja en el frontend (InvoiceList.jsx)
+        // usando updateProductStockTransaction (transacción atómica) + createStockMovement.
+        // No devolver stock aquí para evitar doble devolución.
 
         // Actualizar estadísticas del cliente
         if (boletaData.customer?.documentNumber) {
@@ -6066,28 +6029,9 @@ export const voidBoletaQPse = onRequest(
           summaryDocumentId: summaryDocRef.id
         })
 
-        // Devolver stock de los productos
-        if (boletaData.items && boletaData.items.length > 0) {
-          console.log('📦 Devolviendo stock de productos...')
-          for (const item of boletaData.items) {
-            if (item.productId && !item.productId.startsWith('custom-')) {
-              try {
-                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                const productDoc = await productRef.get()
-                if (productDoc.exists) {
-                  const currentStock = productDoc.data().stock || 0
-                  await productRef.update({
-                    stock: currentStock + (item.quantity || 0),
-                    updatedAt: FieldValue.serverTimestamp()
-                  })
-                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
-                }
-              } catch (stockError) {
-                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
-              }
-            }
-          }
-        }
+        // NOTA: La devolución de stock se maneja en el frontend (InvoiceList.jsx)
+        // usando updateProductStockTransaction (transacción atómica) + createStockMovement.
+        // No devolver stock aquí para evitar doble devolución.
 
         // Actualizar estadísticas del cliente
         if (boletaData.customer?.documentNumber) {
@@ -6557,28 +6501,10 @@ export const voidInvoiceQPse = onRequest(
             console.error('❌ [QPse] Error al restaurar documento original:', restoreError.message)
           }
         } else {
-          // Es factura/boleta: Devolver stock de los productos
-          if (invoiceData.items && invoiceData.items.length > 0) {
-            console.log('📦 Devolviendo stock de productos...')
-            for (const item of invoiceData.items) {
-              if (item.productId && !item.productId.startsWith('custom-')) {
-                try {
-                  const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                  const productDoc = await productRef.get()
-                  if (productDoc.exists) {
-                    const currentStock = productDoc.data().stock || 0
-                    await productRef.update({
-                      stock: currentStock + (item.quantity || 0),
-                      updatedAt: FieldValue.serverTimestamp()
-                    })
-                    console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
-                  }
-                } catch (stockError) {
-                  console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
-                }
-              }
-            }
-          }
+          // NOTA: La devolución de stock se maneja en el frontend
+          // usando updateProductStockTransaction (transacción atómica) + createStockMovement.
+          // No devolver stock aquí para evitar doble devolución.
+          console.log('📦 Stock será devuelto por el frontend (evitando doble devolución)')
         }
 
         // Actualizar estadísticas del cliente

@@ -841,6 +841,94 @@ export const syncAllProductsStock = async (businessId, targetWarehouseId) => {
 }
 
 /**
+ * Recalcular stock de un producto basándose en la suma de sus movimientos de stock.
+ * Útil cuando el stock del producto está desfasado por race conditions.
+ * Suma todos los movimientos por almacén y corrige el producto.
+ *
+ * @param {string} businessId - ID del negocio
+ * @param {string} productId - ID del producto a recalcular
+ * @returns {Object} - { success, corrected, stockFromMovements, previousStock, byWarehouse }
+ */
+export const recalculateStockFromMovements = async (businessId, productId) => {
+  try {
+    // 1. Obtener todos los movimientos del producto
+    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    const q = query(movementsRef, where('productId', '==', productId))
+    const snapshot = await getDocs(q)
+
+    // 2. Sumar cantidades por almacén
+    const stockByWarehouse = {}
+    let totalFromMovements = 0
+
+    snapshot.docs.forEach(docSnap => {
+      const mov = docSnap.data()
+      const qty = mov.quantity || 0
+      const whId = mov.warehouseId || 'default'
+
+      if (!stockByWarehouse[whId]) {
+        stockByWarehouse[whId] = 0
+      }
+      stockByWarehouse[whId] += qty
+      totalFromMovements += qty
+    })
+
+    // No permitir negativos por almacén
+    Object.keys(stockByWarehouse).forEach(whId => {
+      if (stockByWarehouse[whId] < 0) stockByWarehouse[whId] = 0
+    })
+
+    const correctedTotal = Object.values(stockByWarehouse).reduce((sum, s) => sum + s, 0)
+
+    // 3. Leer producto actual
+    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    const productDoc = await getDoc(productRef)
+    if (!productDoc.exists()) {
+      return { success: false, error: 'Producto no encontrado' }
+    }
+
+    const product = productDoc.data()
+    const previousStock = product.stock || 0
+    const previousWarehouseStocks = product.warehouseStocks || []
+
+    // 4. Construir nuevo warehouseStocks
+    const newWarehouseStocks = previousWarehouseStocks.map(ws => {
+      const calculatedStock = stockByWarehouse[ws.warehouseId] || 0
+      return { ...ws, stock: calculatedStock }
+    })
+
+    // Agregar almacenes que tienen movimientos pero no están en warehouseStocks
+    Object.keys(stockByWarehouse).forEach(whId => {
+      if (whId === 'default') return
+      if (!newWarehouseStocks.find(ws => ws.warehouseId === whId)) {
+        newWarehouseStocks.push({
+          warehouseId: whId,
+          stock: stockByWarehouse[whId],
+          minStock: 0,
+        })
+      }
+    })
+
+    // 5. Actualizar producto
+    await updateDoc(productRef, {
+      stock: correctedTotal,
+      warehouseStocks: newWarehouseStocks,
+      updatedAt: serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      corrected: previousStock !== correctedTotal,
+      stockFromMovements: correctedTotal,
+      previousStock,
+      byWarehouse: stockByWarehouse,
+    }
+  } catch (error) {
+    console.error('Error al recalcular stock desde movimientos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Recalcular stock general basándose en la suma de warehouseStocks
  * Útil cuando warehouseStocks es el valor correcto y stock general está desactualizado
  *
@@ -993,6 +1081,7 @@ export default {
   migrateOrphanStock,
   // Stock Sync
   syncAllProductsStock,
+  recalculateStockFromMovements,
   recalculateStockFromWarehouses,
   getTotalAvailableStock,
   // Inventory Counts

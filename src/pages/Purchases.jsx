@@ -34,7 +34,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct } from '@/services/firestoreService'
+import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
 
 /**
@@ -300,18 +300,13 @@ export default function Purchases() {
             const quantityToDeduct = parseFloat(item.quantity) || 0
             if (quantityToDeduct <= 0) continue
 
-            // Descontar stock usando el helper de almacén (cantidad negativa = salida)
-            const updatedProduct = updateWarehouseStock(
-              productData,
+            // Descontar stock usando transacción atómica
+            await updateProductStockTransaction(
+              businessId,
+              item.productId,
               warehouseId,
               -quantityToDeduct
             )
-
-            // Guardar en Firestore
-            await updateProduct(businessId, item.productId, {
-              stock: updatedProduct.stock,
-              warehouseStocks: updatedProduct.warehouseStocks
-            })
 
             // Registrar movimiento de stock
             await createStockMovement(businessId, {

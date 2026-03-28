@@ -50,7 +50,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
-import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -612,18 +612,13 @@ Gracias por tu preferencia.`
                 // Calcular cantidad a restaurar (considerando factor de presentación)
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
-                // Actualizar stock usando el helper de almacén (cantidad positiva = entrada)
-                const updatedProduct = updateWarehouseStock(
-                  productData,
+                // Actualizar stock usando transacción atómica
+                await updateProductStockTransaction(
+                  businessId,
+                  item.productId,
                   warehouseId,
                   quantityToRestore
                 )
-
-                // Guardar en Firestore
-                await updateProduct(businessId, item.productId, {
-                  stock: updatedProduct.stock,
-                  warehouseStocks: updatedProduct.warehouseStocks
-                })
 
                 // Registrar movimiento de stock
                 await createStockMovement(businessId, {
@@ -787,16 +782,12 @@ Gracias por tu preferencia.`
 
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
-                const updatedProduct = updateWarehouseStock(
-                  productData,
+                await updateProductStockTransaction(
+                  businessId,
+                  item.productId,
                   warehouseId,
                   quantityToRestore
                 )
-
-                await updateProduct(businessId, item.productId, {
-                  stock: updatedProduct.stock,
-                  warehouseStocks: updatedProduct.warehouseStocks
-                })
 
                 await createStockMovement(businessId, {
                   productId: item.productId,
@@ -1052,14 +1043,9 @@ Gracias por tu preferencia.`
         // Crear el movimiento faltante y descontar stock del producto
         const quantityForMovement = (item.quantity || 0) * (item.presentationFactor || 1)
 
-        // Descontar stock del producto
-        const { updateWarehouseStock } = await import('@/services/warehouseService')
-        const { updateProduct } = await import('@/services/firestoreService')
-        const updatedProduct = updateWarehouseStock(productData, warehouseId, -quantityForMovement)
-        await updateProduct(bId, productId, {
-          stock: updatedProduct.stock,
-          warehouseStocks: updatedProduct.warehouseStocks
-        })
+        // Descontar stock del producto (transacción atómica)
+        const { updateProductStockTransaction: updateStockTx } = await import('@/services/firestoreService')
+        await updateStockTx(bId, productId, warehouseId, -quantityForMovement)
 
         // Crear movimiento
         await createStockMovement(bId, {

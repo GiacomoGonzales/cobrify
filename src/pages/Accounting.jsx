@@ -9,6 +9,8 @@ import { db } from '@/lib/firebase'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { prepareInvoiceXML } from '@/services/sunatService'
+import { getCompanySettings } from '@/services/firestoreService'
 
 export default function Accounting() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
@@ -93,9 +95,47 @@ export default function Accounting() {
     }
   }
 
-  const downloadXml = (inv) => {
+  const [generatingXml, setGeneratingXml] = useState(null)
+
+  const downloadXml = async (inv) => {
+    // 1. Intentar URL guardada (XML firmado real)
     const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
-    if (url) window.open(url, '_blank')
+    if (url) {
+      window.open(url, '_blank')
+      return
+    }
+
+    // 2. Generar XML desde los datos del comprobante
+    setGeneratingXml(inv.id)
+    try {
+      const businessId = getBusinessId()
+      const settingsResult = await getCompanySettings(businessId)
+      if (!settingsResult.success) {
+        toast.error('Error al cargar datos de la empresa')
+        return
+      }
+
+      const result = await prepareInvoiceXML(inv, settingsResult.data)
+      if (!result.success) {
+        toast.error('Error al generar XML: ' + result.error)
+        return
+      }
+
+      // Descargar el XML generado
+      const blob = new Blob([result.xml], { type: 'application/xml' })
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = result.fileName || `${inv.number || 'doc'}.xml`
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+      toast.success('XML descargado')
+    } catch (error) {
+      console.error('Error generando XML:', error)
+      toast.error('Error al generar el XML')
+    } finally {
+      setGeneratingXml(null)
+    }
   }
 
   // Filtrado
@@ -320,9 +360,9 @@ export default function Accounting() {
                       <td className="py-3 px-4 text-center"><StatusBadge inv={inv} /></td>
                       <td className="py-3 px-4 text-center">
                         {hasXml(inv) ? (
-                          <CheckCircle className="w-4 h-4 text-green-500 mx-auto" />
+                          <CheckCircle className="w-4 h-4 text-green-500 mx-auto" title="XML firmado disponible" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-red-400 mx-auto" />
+                          <span className="text-xs text-gray-400" title="XML se generará al descargar">—</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -334,12 +374,18 @@ export default function Accounting() {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {hasXml(inv) && (
-                            <button onClick={() => downloadXml(inv)} title="Descargar XML"
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded">
+                          <button
+                            onClick={() => downloadXml(inv)}
+                            title={hasXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
+                            disabled={generatingXml === inv.id}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                          >
+                            {generatingXml === inv.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
                               <Code className="w-4 h-4" />
-                            </button>
-                          )}
+                            )}
+                          </button>
                           {hasCdr(inv) && (
                             <button onClick={() => downloadCdr(inv)} title="Descargar CDR"
                               className="p-1 text-green-600 hover:bg-green-50 rounded">
