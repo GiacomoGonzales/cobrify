@@ -6,7 +6,6 @@ const REVIEW_STORAGE_KEY = 'cobrify_review_state'
 const SALES_COUNT_KEY = 'cobrify_sales_count'
 const SALES_THRESHOLD = 15 // Mostrar después de 15 ventas
 const SNOOZE_DAYS = 30 // Si dice "ahora no", esperar 30 días
-const REMIND_DAYS = 60 // Si ya calificó, no volver a mostrar por 60 días
 
 /**
  * Obtiene el estado guardado del review prompt
@@ -56,7 +55,7 @@ const shouldShowReview = () => {
   const now = Date.now()
   const daysSince = (now - state.lastShown) / (1000 * 60 * 60 * 24)
 
-  if (state.completed) return daysSince > REMIND_DAYS
+  if (state.completed) return false // Ya calificó, no volver a mostrar
   if (state.snoozed) return daysSince > SNOOZE_DAYS
 
   return true
