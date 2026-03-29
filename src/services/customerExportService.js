@@ -47,6 +47,7 @@ export const generateCustomersExcel = async (customers, businessData, invoices =
     'Email',
     'Teléfono',
     'Dirección',
+    'Cumpleaños',
     'Servicios/Productos',
     'Cantidad Pedidos',
     'Total Gastado',
@@ -73,6 +74,7 @@ export const generateCustomersExcel = async (customers, businessData, invoices =
       customer.email || 'N/A',
       customer.phone || 'N/A',
       customer.address || 'N/A',
+      customer.birthDate ? customer.birthDate.split('-').reverse().join('/') : 'N/A',
       servicesText,
       customer.ordersCount || 0,
       customer.totalSpent || 0,
@@ -103,6 +105,7 @@ export const generateCustomersExcel = async (customers, businessData, invoices =
     { width: 25 },  // Email
     { width: 15 },  // Teléfono
     { width: 35 },  // Dirección
+    { width: 12 },  // Cumpleaños
     { width: 50 },  // Servicios/Productos
     { width: 12 },  // Cantidad Pedidos
     { width: 15 },  // Total Gastado

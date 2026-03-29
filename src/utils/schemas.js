@@ -46,6 +46,8 @@ export const customerSchema = z.object({
   subscriptionPlan: z.string().optional().or(z.literal('')),
   subscriptionPrice: z.union([z.string(), z.number()]).optional().or(z.literal('')),
   subscriptionExpiry: z.string().optional().or(z.literal('')),
+  // Cumpleaños del cliente
+  birthDate: z.string().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
   // Solo validar si hay número de documento
   if (data.documentNumber && data.documentNumber.trim() !== '') {

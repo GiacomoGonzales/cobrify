@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -37,6 +37,17 @@ export default function Customers() {
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [sortBy, setSortBy] = useState('name') // name, orders, spent, expiry
   const [subscriptionFilter, setSubscriptionFilter] = useState('all') // all, expired, expiring, active
+  const [birthMonthFilter, setBirthMonthFilter] = useState('all') // all, 1-12, this
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState({
+    name: true,
+    document: true,
+    contact: true,
+    address: true,
+    birthday: true,
+    orders: true,
+    spent: true,
+  })
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
@@ -117,6 +128,7 @@ export default function Customers() {
       address: '',
       studentName: '',
       studentSchedule: '',
+      birthDate: '',
     })
     setIsModalOpen(true)
   }
@@ -138,6 +150,7 @@ export default function Customers() {
       subscriptionPlan: customer.subscriptionPlan || '',
       subscriptionPrice: customer.subscriptionPrice || '',
       subscriptionExpiry: customer.subscriptionExpiry || '',
+      birthDate: customer.birthDate || '',
     })
     setIsModalOpen(true)
   }
@@ -343,6 +356,16 @@ export default function Customers() {
         if (subscriptionFilter === 'expiring') return status === 'expiring'
         if (subscriptionFilter === 'active') return status === 'active'
       }
+
+      // Filtro de cumpleaños
+      if (birthMonthFilter !== 'all') {
+        if (!customer.birthDate) return false
+        const month = parseInt(customer.birthDate.split('-')[1])
+        if (birthMonthFilter === 'this') {
+          return month === new Date().getMonth() + 1
+        }
+        return month === parseInt(birthMonthFilter)
+      }
       return true
     })
     .sort((a, b) => {
@@ -370,7 +393,7 @@ export default function Customers() {
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
-  }, [searchTerm, sortBy, subscriptionFilter])
+  }, [searchTerm, sortBy, subscriptionFilter, birthMonthFilter])
 
   const getDocumentBadge = type => {
     const badges = {
@@ -465,6 +488,30 @@ export default function Customers() {
                 </select>
               </div>
             )}
+            {/* Filtro de cumpleaños */}
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+              <Cake className="w-4 h-4 text-gray-500" />
+              <select
+                value={birthMonthFilter}
+                onChange={e => setBirthMonthFilter(e.target.value)}
+                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Cumpleaños</option>
+                <option value="this">Este mes</option>
+                <option value="1">Enero</option>
+                <option value="2">Febrero</option>
+                <option value="3">Marzo</option>
+                <option value="4">Abril</option>
+                <option value="5">Mayo</option>
+                <option value="6">Junio</option>
+                <option value="7">Julio</option>
+                <option value="8">Agosto</option>
+                <option value="9">Septiembre</option>
+                <option value="10">Octubre</option>
+                <option value="11">Noviembre</option>
+                <option value="12">Diciembre</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -687,99 +734,138 @@ export default function Customers() {
             </div>
 
             {/* Tabla para desktop */}
-            <div className="hidden lg:block overflow-x-auto">
-            <Table>
+            <div className="hidden lg:block">
+              {/* Column picker */}
+              <div className="flex justify-end px-4 py-2 border-b">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowColumnPicker(!showColumnPicker)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Columns3 className="w-3.5 h-3.5" />
+                    Columnas
+                  </button>
+                  {showColumnPicker && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowColumnPicker(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[160px]">
+                        {[
+                          { key: 'name', label: 'Nombre' },
+                          { key: 'document', label: 'Documento' },
+                          { key: 'contact', label: 'Contacto' },
+                          { key: 'address', label: 'Dirección' },
+                          { key: 'birthday', label: 'Cumpleaños' },
+                          { key: 'orders', label: 'Pedidos' },
+                          { key: 'spent', label: 'Total Gastado' },
+                        ].map(col => (
+                          <label key={col.key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns[col.key]}
+                              onChange={() => setVisibleColumns(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-xs text-gray-700">{col.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nombre / Razón Social</TableHead>
-                  <TableHead>Documento</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  {businessSettings?.posCustomFields?.showStudentField ? (
-                    <>
-                      <TableHead>Alumno</TableHead>
-                      <TableHead>Horario</TableHead>
-                    </>
-                  ) : (
-                    <TableHead className="hidden lg:table-cell">Dirección</TableHead>
+                  {visibleColumns.name && <TableHead className="text-xs py-2">Nombre</TableHead>}
+                  {visibleColumns.document && <TableHead className="text-xs py-2">Documento</TableHead>}
+                  {visibleColumns.contact && <TableHead className="text-xs py-2">Contacto</TableHead>}
+                  {visibleColumns.address && (
+                    businessSettings?.posCustomFields?.showStudentField ? (
+                      <>
+                        <TableHead className="text-xs py-2">Alumno</TableHead>
+                        <TableHead className="text-xs py-2">Horario</TableHead>
+                      </>
+                    ) : (
+                      <TableHead className="text-xs py-2">Dirección</TableHead>
+                    )
                   )}
                   {businessSettings?.posCustomFields?.showVehiclePlateField && (
-                    <TableHead>Placa</TableHead>
+                    <TableHead className="text-xs py-2">Placa</TableHead>
                   )}
                   {businessSettings?.posCustomFields?.showSubscriptionFields && (
                     <>
-                      <TableHead>Plan</TableHead>
-                      <TableHead className="text-right">Precio</TableHead>
-                      <TableHead>Vencimiento</TableHead>
+                      <TableHead className="text-xs py-2">Plan</TableHead>
+                      <TableHead className="text-xs py-2 text-right">Precio</TableHead>
+                      <TableHead className="text-xs py-2">Vence</TableHead>
                     </>
                   )}
-                  <TableHead className="text-center hidden md:table-cell">Pedidos</TableHead>
-                  <TableHead className="text-right hidden md:table-cell">Total Gastado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  {visibleColumns.birthday && <TableHead className="text-xs py-2">Cumple</TableHead>}
+                  {visibleColumns.orders && <TableHead className="text-xs py-2 text-center">Ped.</TableHead>}
+                  {visibleColumns.spent && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
+                  <TableHead className="text-xs py-2 text-right w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayedCustomers.map(customer => (
                   <TableRow key={customer.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{customer.name}</p>
+                    {visibleColumns.name && (
+                      <TableCell className="py-1.5">
+                        <p className="text-xs font-medium truncate max-w-[180px]">{customer.name}</p>
                         {customer.businessName && customer.businessName !== customer.name && (
-                          <p className="text-xs text-gray-500">{customer.businessName}</p>
+                          <p className="text-[10px] text-gray-500 truncate max-w-[180px]">{customer.businessName}</p>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        {customer.documentType && customer.documentNumber ? (
-                          <>
-                            {getDocumentBadge(customer.documentType)}
-                            <span className="text-sm">{customer.documentNumber}</span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-gray-400">Sin documento</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        {customer.email && (
-                          <p className="text-sm">{customer.email}</p>
-                        )}
-                        {customer.phone && (
-                          <p className="text-xs text-gray-500">{customer.phone}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    {businessSettings?.posCustomFields?.showStudentField ? (
-                      <>
-                        <TableCell>
-                          <p className="text-sm">{customer.studentName || '-'}</p>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm text-gray-600">{customer.studentSchedule || '-'}</p>
-                        </TableCell>
-                      </>
-                    ) : (
-                      <TableCell className="hidden lg:table-cell">
-                        <p className="text-sm text-gray-600">{customer.address || '-'}</p>
                       </TableCell>
                     )}
+                    {visibleColumns.document && (
+                      <TableCell className="py-1.5">
+                        {customer.documentType && customer.documentNumber ? (
+                          <div className="flex items-center gap-1">
+                            {getDocumentBadge(customer.documentType)}
+                            <span className="text-xs">{customer.documentNumber}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                    )}
+                    {visibleColumns.contact && (
+                      <TableCell className="py-1.5">
+                        {customer.phone && <p className="text-xs">{customer.phone}</p>}
+                        {customer.email && <p className="text-[10px] text-gray-500 truncate max-w-[150px]">{customer.email}</p>}
+                      </TableCell>
+                    )}
+                    {visibleColumns.address && (
+                      businessSettings?.posCustomFields?.showStudentField ? (
+                        <>
+                          <TableCell className="py-1.5">
+                            <p className="text-xs">{customer.studentName || '-'}</p>
+                          </TableCell>
+                          <TableCell className="py-1.5">
+                            <p className="text-xs text-gray-600">{customer.studentSchedule || '-'}</p>
+                          </TableCell>
+                        </>
+                      ) : (
+                        <TableCell className="py-1.5">
+                          <p className="text-xs text-gray-600 truncate max-w-[150px]">{customer.address || '-'}</p>
+                        </TableCell>
+                      )
+                    )}
                     {businessSettings?.posCustomFields?.showVehiclePlateField && (
-                      <TableCell>
-                        <p className="text-sm font-medium uppercase">{customer.vehiclePlate || '-'}</p>
+                      <TableCell className="py-1.5">
+                        <p className="text-xs font-medium uppercase">{customer.vehiclePlate || '-'}</p>
                       </TableCell>
                     )}
                     {businessSettings?.posCustomFields?.showSubscriptionFields && (
                       <>
-                        <TableCell>
-                          <p className="text-sm">{customer.subscriptionPlan || '-'}</p>
+                        <TableCell className="py-1.5">
+                          <p className="text-xs">{customer.subscriptionPlan || '-'}</p>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <p className="text-sm font-medium">{customer.subscriptionPrice ? formatCurrency(Number(customer.subscriptionPrice)) : '-'}</p>
+                        <TableCell className="py-1.5 text-right">
+                          <p className="text-xs">{customer.subscriptionPrice ? formatCurrency(Number(customer.subscriptionPrice)) : '-'}</p>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-1.5">
                           {customer.subscriptionExpiry ? (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                               new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date()
                                 ? 'bg-red-100 text-red-700'
                                 : new Date(customer.subscriptionExpiry + 'T23:59:59') < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -789,36 +875,58 @@ export default function Customers() {
                               {new Date(customer.subscriptionExpiry + 'T00:00:00').toLocaleDateString('es-PE')}
                             </span>
                           ) : (
-                            <span className="text-sm text-gray-400">-</span>
+                            <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
                       </>
                     )}
-                    <TableCell className="text-center hidden md:table-cell">
-                      <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
-                        <span className="text-sm font-semibold">{customer.ordersCount || 0}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right hidden md:table-cell">
-                      <span className="text-sm font-semibold text-gray-900">
-                        {formatCurrency(customer.totalSpent || 0)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end space-x-2">
+                    {visibleColumns.birthday && (
+                      <TableCell className="py-1.5">
+                        {customer.birthDate ? (() => {
+                          const [y, m, d] = customer.birthDate.split('-')
+                          const today = new Date()
+                          const isBirthdayMonth = parseInt(m) === today.getMonth() + 1
+                          const isBirthdayToday = isBirthdayMonth && parseInt(d) === today.getDate()
+                          return (
+                            <span className={`text-xs ${isBirthdayToday ? 'font-bold text-pink-600' : isBirthdayMonth ? 'font-medium text-purple-600' : 'text-gray-600'}`}>
+                              {`${d}/${m}`}
+                              {isBirthdayToday && ' 🎂'}
+                            </span>
+                          )
+                        })() : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                    )}
+                    {visibleColumns.orders && (
+                      <TableCell className="py-1.5 text-center">
+                        <span className="inline-flex items-center justify-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                          {customer.ordersCount || 0}
+                        </span>
+                      </TableCell>
+                    )}
+                    {visibleColumns.spent && (
+                      <TableCell className="py-1.5 text-right">
+                        <span className="text-xs font-semibold text-gray-900">
+                          {formatCurrency(customer.totalSpent || 0)}
+                        </span>
+                      </TableCell>
+                    )}
+                    <TableCell className="py-1.5">
+                      <div className="flex items-center justify-end gap-0.5">
                         <button
                           onClick={() => openEditModal(customer)}
-                          className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                           title="Editar"
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setDeletingCustomer(customer)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Eliminar"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </TableCell>
@@ -937,6 +1045,13 @@ export default function Customers() {
             placeholder="Av. Principal 123, Distrito, Lima"
             error={errors.address?.message}
             {...register('address')}
+          />
+
+          <Input
+            label="Cumpleaños"
+            type="date"
+            error={errors.birthDate?.message}
+            {...register('birthDate')}
           />
 
           {/* Campos Alumno y Horario - solo si está habilitado en configuración */}
