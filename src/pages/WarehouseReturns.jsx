@@ -62,7 +62,7 @@ export default function WarehouseReturns() {
       if (projectsResult.success) setProjects(projectsResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
-      if (settingsResult) setBusinessInfo(settingsResult)
+      if (settingsResult?.success) setBusinessInfo(settingsResult.data || {})
     } catch (error) {
       console.error('Error:', error)
     } finally {
