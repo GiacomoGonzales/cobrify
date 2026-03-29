@@ -5232,8 +5232,8 @@ export default function Settings() {
                               { key: 6, name: 'Sábado' },
                               { key: 0, name: 'Domingo' },
                             ].map(day => (
-                              <div key={day.key} className="flex items-center gap-2">
-                                <label className="flex items-center gap-2 w-28 flex-shrink-0">
+                              <div key={day.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <label className="flex items-center gap-2 w-24 sm:w-28 flex-shrink-0">
                                   <input
                                     type="checkbox"
                                     checked={businessHours.days[day.key]?.open || false}
@@ -5256,9 +5256,9 @@ export default function Settings() {
                                         ...prev,
                                         days: { ...prev.days, [day.key]: { ...prev.days[day.key], from: e.target.value } }
                                       }))}
-                                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
                                     />
-                                    <span className="text-gray-400 text-sm">a</span>
+                                    <span className="text-gray-400 text-xs sm:text-sm">a</span>
                                     <input
                                       type="time"
                                       value={businessHours.days[day.key]?.to || '18:00'}
@@ -5266,7 +5266,7 @@ export default function Settings() {
                                         ...prev,
                                         days: { ...prev.days, [day.key]: { ...prev.days[day.key], to: e.target.value } }
                                       }))}
-                                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
                                     />
                                   </div>
                                 )}
