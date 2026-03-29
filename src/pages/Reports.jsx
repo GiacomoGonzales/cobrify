@@ -992,6 +992,22 @@ export default function Reports() {
       .map(([, value]) => value)
   }, [filteredInvoices, dateRange, customStartDate, customEndDate, invoices])
 
+  // Ventas por hora del día
+  const salesByHour = useMemo(() => {
+    const hours = {}
+    for (let h = 0; h < 24; h++) {
+      hours[h] = { hora: `${String(h).padStart(2, '0')}:00`, ventas: 0, total: 0 }
+    }
+    filteredInvoices.forEach(inv => {
+      const date = inv.createdAt?.toDate ? inv.createdAt.toDate() : (inv.createdAt ? new Date(inv.createdAt) : null)
+      if (!date) return
+      const hour = date.getHours()
+      hours[hour].ventas += 1
+      hours[hour].total += (inv.total || 0)
+    })
+    return Object.values(hours).filter(h => h.ventas > 0)
+  }, [filteredInvoices])
+
   // Datos para gráfico de torta de tipos de documentos
   const documentTypesData = useMemo(() => {
     return [
@@ -2248,6 +2264,33 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Ventas por Hora del Día */}
+          {salesByHour.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ventas por Hora del Día</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={salesByHour}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="hora" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(value, name) => [
+                        name === 'total' ? `S/ ${value.toFixed(2)}` : value,
+                        name === 'total' ? 'Ingresos' : 'Cantidad'
+                      ]}
+                      labelFormatter={(label) => `Hora: ${label}`}
+                    />
+                    <Bar dataKey="ventas" fill="#6366f1" name="ventas" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total" fill="#10b981" name="total" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
