@@ -1612,7 +1612,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     // Pie de página
     printer = addSeparator(printer, format.separator, paperWidth, 'center');
 
-    await printer
+    printer = printer
       .bold()
       .text('*** PRECUENTA ***\n')
       .clearFormatting()

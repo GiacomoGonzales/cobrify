@@ -2370,51 +2370,56 @@ Gracias por tu preferencia.`
           inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
         )
         return (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-4 print:hidden">
-          <span className="text-sm font-medium whitespace-nowrap">
-            {selectedInvoiceIds.size} seleccionado{selectedInvoiceIds.size !== 1 ? 's' : ''}
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-gray-900 text-white rounded-xl shadow-2xl px-3 py-2 sm:px-5 sm:py-3 flex items-center gap-2 sm:gap-4 max-w-[calc(100vw-2rem)] print:hidden">
+          <span className="text-xs sm:text-sm font-medium whitespace-nowrap">
+            {selectedInvoiceIds.size} sel.
           </span>
-          <div className="w-px h-6 bg-gray-600" />
+          <div className="w-px h-6 bg-gray-600 hidden sm:block" />
           {allAreConvertibleNotas && (
             <Button
               onClick={handleBulkConvertNotasVenta}
-              className="bg-green-500 text-white hover:bg-green-600 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+              className="bg-green-500 text-white hover:bg-green-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
             >
               <Receipt className="w-4 h-4" />
-              Convertir a Comprobante
+              <span className="hidden sm:inline">Convertir a Comprobante</span>
+              <span className="sm:hidden">Convertir</span>
             </Button>
           )}
           <Button
             onClick={handleBulkPrintTickets}
             disabled={isBulkPrinting || isBulkDownloadingPDF}
-            className="bg-white text-gray-900 hover:bg-gray-100 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+            className="bg-white text-gray-900 hover:bg-gray-100 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
           >
             {isBulkPrinting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Imprimiendo {bulkPrintProgress.current} de {bulkPrintProgress.total}...
+                <span className="hidden sm:inline">Imprimiendo {bulkPrintProgress.current}/{bulkPrintProgress.total}...</span>
+                <span className="sm:hidden">{bulkPrintProgress.current}/{bulkPrintProgress.total}</span>
               </>
             ) : (
               <>
                 <Printer className="w-4 h-4" />
-                Imprimir tickets
+                <span className="hidden sm:inline">Imprimir tickets</span>
+                <span className="sm:hidden">Imprimir</span>
               </>
             )}
           </Button>
           <Button
             onClick={handleBulkDownloadPDFs}
             disabled={isBulkPrinting || isBulkDownloadingPDF}
-            className="bg-blue-500 text-white hover:bg-blue-600 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+            className="bg-blue-500 text-white hover:bg-blue-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
           >
             {isBulkDownloadingPDF ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Descargando {bulkPDFProgress.current} de {bulkPDFProgress.total}...
+                <span className="hidden sm:inline">Descargando {bulkPDFProgress.current}/{bulkPDFProgress.total}...</span>
+                <span className="sm:hidden">{bulkPDFProgress.current}/{bulkPDFProgress.total}</span>
               </>
             ) : (
               <>
                 <Download className="w-4 h-4" />
-                Descargar PDFs
+                <span className="hidden sm:inline">Descargar PDFs</span>
+                <span className="sm:hidden">PDFs</span>
               </>
             )}
           </Button>
