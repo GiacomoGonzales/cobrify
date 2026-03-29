@@ -230,6 +230,7 @@ export const productSchema = z.object({
     .nullable()
     .optional(),
   noStock: z.boolean().optional(),
+  marca: z.string().optional(),
   // NUEVO: Stock por almacén para productos simples
   warehouseStocks: z.array(warehouseStockSchema).optional(),
   // Campos para sistema de variantes

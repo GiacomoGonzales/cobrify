@@ -487,6 +487,7 @@ export default function Products() {
       sku: '',
       name: '',
       description: '',
+      marca: '',
       price: '',
       cost: '',
       weight: '',
@@ -601,6 +602,7 @@ export default function Products() {
       sku: product.sku || '',
       name: product.name,
       description: product.description || '',
+      marca: product.marca || '',
       price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
@@ -695,6 +697,7 @@ export default function Products() {
       sku: '', // Limpiar SKU para evitar duplicados
       name: `${product.name} (copia)`, // Agregar indicador de copia
       description: product.description || '',
+      marca: product.marca || '',
       price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
@@ -813,6 +816,8 @@ export default function Products() {
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
+        // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
+        ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
         // Product location (works in all modes when enabled)
         location: businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null),
         // Add modifiers if in restaurant mode (only include if exists)
@@ -2326,7 +2331,9 @@ export default function Products() {
         sku.replace(/-/g, ''),
         product.name || '',
         categoryName,
-        product.description || ''
+        product.description || '',
+        product.marca || '',
+        product.laboratoryName || ''
       ].join(' ').toLowerCase()
 
       // Verificar que TODAS las palabras de búsqueda estén presentes (en cualquier orden)
@@ -3814,6 +3821,15 @@ export default function Products() {
                 />
               </div>
             </div>
+
+            {/* Marca - disponible en todos los modos excepto farmacia (que lo tiene en su sección) */}
+            {businessMode !== 'pharmacy' && (
+              <Input
+                label="Marca (Opcional)"
+                placeholder="Ej: Esika, Nike, Samsung"
+                {...register('marca')}
+              />
+            )}
 
             {/* SKU */}
             <div>

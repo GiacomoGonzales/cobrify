@@ -655,6 +655,15 @@ const ProductFormModal = ({
               </div>
             </div>
 
+            {/* Marca - disponible en todos los modos */}
+            {businessMode !== 'pharmacy' && (
+              <Input
+                label="Marca (Opcional)"
+                placeholder="Ej: Esika, Nike, Samsung"
+                {...register('marca')}
+              />
+            )}
+
             {/* SKU */}
             {showSku && (
               <div>

@@ -1817,7 +1817,7 @@ export default function CreatePurchase() {
                         min="0"
                         step="any"
                         placeholder="0.00"
-                        value={item.costWithoutIGV || ''}
+                        value={item.costWithoutIGV ? parseFloat(item.costWithoutIGV.toFixed(6)) : ''}
                         onChange={e => updateCostWithoutIGV(index, e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
@@ -1829,7 +1829,7 @@ export default function CreatePurchase() {
                         min="0"
                         step="any"
                         placeholder="0.00"
-                        value={item.cost || ''}
+                        value={item.cost ? parseFloat(item.cost.toFixed(6)) : ''}
                         onChange={e => updateCostWithIGV(index, e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
@@ -2021,7 +2021,7 @@ export default function CreatePurchase() {
                       type="number"
                       min="0"
                       step="any"
-                      value={item.costWithoutIGV || ''}
+                      value={item.costWithoutIGV ? parseFloat(item.costWithoutIGV.toFixed(6)) : ''}
                       onChange={e => updateCostWithoutIGV(index, e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
@@ -2032,7 +2032,7 @@ export default function CreatePurchase() {
                       type="number"
                       min="0"
                       step="any"
-                      value={item.cost || ''}
+                      value={item.cost ? parseFloat(item.cost.toFixed(6)) : ''}
                       onChange={e => updateCostWithIGV(index, e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />

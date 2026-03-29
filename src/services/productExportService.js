@@ -105,6 +105,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         codigo_barras: product.code || '',
         nombre: product.name || '',
         descripcion: product.description || '',
+        marca: product.marca || '',
         ubicacion: product.location || '',
         costo: safeNum(product.cost),
         precio: getEffectivePrice(product),

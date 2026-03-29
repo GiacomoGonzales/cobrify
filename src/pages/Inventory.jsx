@@ -1215,7 +1215,9 @@ export default function Inventory() {
         item.name || '',
         item.code || '',
         item.sku || '',
-        item.category || ''
+        item.category || '',
+        item.marca || '',
+        item.laboratoryName || ''
       ].join(' ').toLowerCase()
 
       // Verificar que TODAS las palabras estén presentes (en cualquier orden)

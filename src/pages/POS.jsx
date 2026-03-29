@@ -1483,7 +1483,9 @@ export default function POS() {
         code,
         code.replace(/-/g, ''),
         sku,
-        sku.replace(/-/g, '')
+        sku.replace(/-/g, ''),
+        p.marca || '',
+        p.laboratoryName || ''
       ].join(' ').toLowerCase()
 
       // Verificar que TODAS las palabras estén presentes (en cualquier orden)
