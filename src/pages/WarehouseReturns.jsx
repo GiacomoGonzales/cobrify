@@ -360,6 +360,7 @@ export default function WarehouseReturns() {
                                 quantity: i.quantity,
                                 unit: i.unit || 'NIU',
                               })),
+                              transferReason: '13',
                               transferDescription: `Retorno a almacén ${ret.number || ''} - Proyecto: ${ret.projectName}`,
                             })
                           }}

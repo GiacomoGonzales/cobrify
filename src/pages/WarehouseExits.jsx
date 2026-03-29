@@ -329,6 +329,7 @@ export default function WarehouseExits() {
                                 quantity: i.quantity,
                                 unit: i.unit || 'NIU',
                               })),
+                              transferReason: '13',
                               transferDescription: `Salida de almacén ${exit.number || ''} - Proyecto: ${exit.projectName}`,
                             })
                           }}

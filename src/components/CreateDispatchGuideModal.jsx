@@ -388,6 +388,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       loadItemsWithSku()
 
+      // Pre-llenar motivo de traslado si viene en la referencia
+      if (referenceInvoice.transferReason) {
+        setTransferReason(referenceInvoice.transferReason)
+      }
+
+      // Pre-llenar descripción del traslado si viene en la referencia
+      if (referenceInvoice.transferDescription) {
+        setTransferDescription(referenceInvoice.transferDescription)
+      }
+
       // Pre-llenar fechas (usando hora de Perú)
       setIssueDate(getLocalDateString(0))  // Hoy
       setTransferDate(getLocalDateString(0))  // Hoy (el usuario puede cambiar)
