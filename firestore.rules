@@ -561,6 +561,18 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Warehouse Exits (Salidas de almacén - para modo logística)
+      match /warehouseExits/{exitId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Warehouse Returns (Retornos a almacén - para modo logística)
+      match /warehouseReturns/{returnId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Projects (Proyectos/Obras - para modo logística)
       match /projects/{projectId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
