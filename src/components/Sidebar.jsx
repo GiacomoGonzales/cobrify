@@ -919,7 +919,6 @@ function Sidebar() {
       label: 'Productos',
       pageId: 'products',
     },
-    { divider: true, label: 'Logística' },
     {
       path: '/proyectos',
       icon: HardHat,
@@ -948,7 +947,6 @@ function Sidebar() {
       pageId: 'logistics-reports',
       menuId: 'logistics-reports',
     },
-    { divider: true, label: 'Inventario' },
     {
       path: '/inventario',
       icon: ClipboardList,
@@ -970,7 +968,6 @@ function Sidebar() {
       pageId: 'stock-movements',
       menuId: 'stock-movements',
     },
-    { divider: true, label: 'Documentos' },
     {
       path: '/guias-remision',
       icon: Truck,
@@ -978,7 +975,6 @@ function Sidebar() {
       pageId: 'dispatch-guides',
       menuId: 'dispatch-guides',
     },
-    { divider: true, label: 'Compras' },
     {
       path: '/compras',
       icon: ShoppingBag,
@@ -993,7 +989,6 @@ function Sidebar() {
       pageId: 'suppliers',
       menuId: 'suppliers',
     },
-    { divider: true },
     {
       path: '/reportes',
       icon: BarChart3,
