@@ -456,6 +456,7 @@ export default function POS() {
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
@@ -666,6 +667,7 @@ export default function POS() {
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setPrintMargins(printerConfigResult.config.printMargins ?? 8)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
+          setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -7074,7 +7076,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               createdAt: new Date(),
             }}
             companySettings={companySettings}
-            paperWidth={80}
+            paperWidth={ticketPaperWidth}
             webPrintLegible={webPrintLegible}
             compactPrint={compactPrint}
             printMargins={printMargins}

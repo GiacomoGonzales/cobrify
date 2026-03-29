@@ -118,6 +118,7 @@ export default function DispatchGuides() {
 
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -136,6 +137,7 @@ export default function DispatchGuides() {
         if (result.success && result.config) {
           setPrintMargins(result.config.printMargins ?? 8)
           setSimplePrint(result.config.simplePrint || false)
+          setTicketPaperWidth(result.config.paperWidth || 80)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1707,7 +1709,7 @@ export default function DispatchGuides() {
           ref={ticketRef}
           guide={printingTicket}
           companySettings={companySettings}
-          paperWidth={80}
+          paperWidth={ticketPaperWidth}
           printMargins={printMargins}
           simplePrint={simplePrint}
         />

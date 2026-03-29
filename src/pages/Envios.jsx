@@ -94,6 +94,7 @@ export default function Envios() {
   // Company settings (for PDF generation)
   const [companySettings, setCompanySettings] = useState(null)
   const [printingTicket, setPrintingTicket] = useState(null)
+  const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Tab Arqueo
   const [arqueoMotoristaId, setArqueoMotoristaId] = useState('')
@@ -112,6 +113,9 @@ export default function Envios() {
     try {
       const result = await getCompanySettings(getBusinessId())
       if (result.success && result.data) setCompanySettings(result.data)
+      const { getPrinterConfig: getPC } = await import('@/services/thermalPrinterService')
+      const pcResult = await getPC(getBusinessId())
+      if (pcResult.success && pcResult.config) setTicketPaperWidth(pcResult.config.paperWidth || 80)
     } catch (error) {
       console.error('Error loading company settings:', error)
     }
@@ -514,7 +518,7 @@ export default function Envios() {
         <DeliveryTicket
           delivery={printingTicket}
           companySettings={companySettings}
-          paperWidth={80}
+          paperWidth={ticketPaperWidth}
         />
       )}
     </div>
