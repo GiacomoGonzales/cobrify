@@ -10,6 +10,7 @@ import { createDeliveryRecord } from '@/services/motoristaService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
+import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useYapeListener } from '@/hooks/useYapeListener'
 import { useReactToPrint } from 'react-to-print'
@@ -648,6 +649,9 @@ export default function MainLayout() {
 
       {/* Indicador de estado offline */}
       <OfflineIndicator />
+
+      {/* Prompt para calificar en Play Store */}
+      <ReviewPrompt />
 
       {/* Comanda oculta para impresión web (react-to-print) */}
       {alertOrderToPrint && alertCompanySettings && (

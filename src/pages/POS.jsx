@@ -3527,6 +3527,9 @@ export default function POS() {
             const bgInvoiceId = result.id
             console.log('✅ Factura guardada en Firestore:', bgInvoiceId)
 
+            // Incrementar contador de ventas para review prompt
+            try { const { incrementSalesCount } = await import('@/components/ReviewPrompt'); incrementSalesCount() } catch (e) { /* ignore */ }
+
             // 3.0.1. Si es cargo a habitación (hotel), agregar al folio del huésped
             if (selectedRoom?.reservation && invoiceData.payments?.some(p => p.methodKey === 'ROOM')) {
               try {
