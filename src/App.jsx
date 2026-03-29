@@ -108,6 +108,11 @@ import StudentPaymentControl from './pages/StudentPaymentControl'
 import Production from './pages/Production'
 // Envíos
 import Envios from './pages/Envios'
+// Logística
+import Projects from './pages/Projects'
+import WarehouseExits from './pages/WarehouseExits'
+import WarehouseReturns from './pages/WarehouseReturns'
+import LogisticsReports from './pages/LogisticsReports'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -379,6 +384,12 @@ function App() {
               <Route path="servicios-hotel" element={<HotelServices />} />
               <Route path="housekeeping" element={<HotelHousekeeping />} />
               <Route path="auditoria-hotel" element={<HotelNightAudit />} />
+
+              {/* Rutas de modo logística */}
+              <Route path="proyectos" element={<Projects />} />
+              <Route path="salidas-almacen" element={<WarehouseExits />} />
+              <Route path="retornos-almacen" element={<WarehouseReturns />} />
+              <Route path="reportes-logisticos" element={<LogisticsReports />} />
 
               {/* Rutas de modo inmobiliaria */}
               <Route path="propiedades" element={<Properties />} />

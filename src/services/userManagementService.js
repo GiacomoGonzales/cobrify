@@ -141,6 +141,24 @@ export const HOTEL_PAGES = [
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
 ]
 
+// ============ PÁGINAS MODO LOGÍSTICA ============
+export const LOGISTICS_PAGES = [
+  // Logística
+  { id: 'projects', name: 'Proyectos / Obras', path: '/proyectos', category: 'logistica' },
+  { id: 'warehouse-exits', name: 'Salidas de Almacén', path: '/salidas-almacen', category: 'logistica' },
+  { id: 'warehouse-returns', name: 'Retornos a Almacén', path: '/retornos-almacen', category: 'logistica' },
+  { id: 'logistics-reports', name: 'Reportes Logísticos', path: '/reportes-logisticos', category: 'logistica' },
+  // Inventario
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
+  // Documentos
+  { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
+  // Compras
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+]
+
 // ============ PÁGINAS MODO TRANSPORTE ============
 // Hereda las mismas páginas que retail
 export const TRANSPORT_PAGES = [
@@ -178,6 +196,7 @@ export const CATEGORY_NAMES = {
   operaciones: 'Operaciones',
   finanzas: 'Finanzas',
   equipo: 'Equipo',
+  logistica: 'Logística',
   sistema: 'Sistema',
   otros: 'Otros',
 }
@@ -191,6 +210,7 @@ export const AVAILABLE_PAGES = [
   ...REAL_ESTATE_PAGES,
   ...TRANSPORT_PAGES,
   ...HOTEL_PAGES,
+  ...LOGISTICS_PAGES,
 ]
 
 /**
@@ -209,6 +229,8 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...TRANSPORT_PAGES]
   } else if (businessMode === 'hotel') {
     return [...COMMON_PAGES, ...HOTEL_PAGES]
+  } else if (businessMode === 'logistics') {
+    return [...COMMON_PAGES, ...LOGISTICS_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]

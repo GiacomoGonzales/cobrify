@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -2671,6 +2671,33 @@ export default function Settings() {
                       </p>
                     </div>
                   </label>
+
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'logistics'
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="logistics"
+                      checked={businessMode === 'logistics'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                    />
+                    <HardHat className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'logistics' ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-900">
+                        Modo Logística
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para empresas de construcción y logística.
+                        Incluye: proyectos/obras, salidas y retornos de almacén con guías de remisión, reportes logísticos.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -3082,6 +3109,53 @@ export default function Settings() {
                               }
                             }}
                             className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'logistics' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'projects', label: 'Proyectos / Obras', description: 'Gestión de proyectos y obras activas' },
+                        { id: 'warehouse-exits', label: 'Salidas de Almacén', description: 'Registro de salidas de materiales a obras' },
+                        { id: 'warehouse-returns', label: 'Retornos a Almacén', description: 'Registro de retornos desde obras' },
+                        { id: 'logistics-reports', label: 'Reportes Logísticos', description: 'Historial y estado de inventario por obra' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'dispatch-guides', label: 'Guías de Remisión', description: 'Guías de remisión SUNAT' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-indigo-200 bg-indigo-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-medium text-gray-900 block">{item.label}</span>

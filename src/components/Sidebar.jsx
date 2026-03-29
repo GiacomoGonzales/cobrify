@@ -47,6 +47,10 @@ import {
   UserCheck,
   Award,
   BookOpen,
+  // Iconos para modo logística
+  HardHat,
+  ArrowUpFromLine,
+  ArrowDownToLine,
   // Iconos para modo hotel
   BedDouble,
   CalendarCheck,
@@ -875,6 +879,136 @@ function Sidebar() {
     },
   ]
 
+  // Menú para modo LOGÍSTICA (construcción, obras, proyectos)
+  const logisticsMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
+      path: '/facturas',
+      icon: FileText,
+      label: 'Ventas',
+      pageId: 'invoices',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/productos',
+      icon: Package,
+      label: 'Productos',
+      pageId: 'products',
+    },
+    { divider: true, label: 'Logística' },
+    {
+      path: '/proyectos',
+      icon: HardHat,
+      label: 'Proyectos / Obras',
+      pageId: 'projects',
+      menuId: 'projects',
+    },
+    {
+      path: '/salidas-almacen',
+      icon: ArrowUpFromLine,
+      label: 'Salidas de Almacén',
+      pageId: 'warehouse-exits',
+      menuId: 'warehouse-exits',
+    },
+    {
+      path: '/retornos-almacen',
+      icon: ArrowDownToLine,
+      label: 'Retornos a Almacén',
+      pageId: 'warehouse-returns',
+      menuId: 'warehouse-returns',
+    },
+    {
+      path: '/reportes-logisticos',
+      icon: BarChart3,
+      label: 'Reportes Logísticos',
+      pageId: 'logistics-reports',
+      menuId: 'logistics-reports',
+    },
+    { divider: true, label: 'Inventario' },
+    {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'inventory',
+      menuId: 'inventory',
+    },
+    {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'warehouses',
+      menuId: 'warehouses',
+    },
+    {
+      path: '/movimientos',
+      icon: History,
+      label: 'Movimientos de Stock',
+      pageId: 'stock-movements',
+      menuId: 'stock-movements',
+    },
+    { divider: true, label: 'Documentos' },
+    {
+      path: '/guias-remision',
+      icon: Truck,
+      label: 'Guías de Remisión',
+      pageId: 'dispatch-guides',
+      menuId: 'dispatch-guides',
+    },
+    { divider: true, label: 'Compras' },
+    {
+      path: '/compras',
+      icon: ShoppingBag,
+      label: 'Compras',
+      pageId: 'purchases',
+      menuId: 'purchases',
+    },
+    {
+      path: '/proveedores',
+      icon: Truck,
+      label: 'Proveedores',
+      pageId: 'suppliers',
+      menuId: 'suppliers',
+    },
+    { divider: true },
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+      menuId: 'reports',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio
   // Si businessMode es null (cargando), no mostrar nada aún
   const menuItems = businessMode === 'restaurant'
@@ -885,9 +1019,11 @@ function Sidebar() {
         ? realEstateMenuItems
         : businessMode === 'hotel'
           ? hotelMenuItems
-          : (businessMode === 'retail' || businessMode === 'transport')
-            ? retailMenuItems
-            : [] // Si es null, array vacío mientras carga
+          : businessMode === 'logistics'
+            ? logisticsMenuItems
+            : (businessMode === 'retail' || businessMode === 'transport')
+              ? retailMenuItems
+              : [] // Si es null, array vacío mientras carga
 
   // Agregar opciones adicionales según el rol
   const additionalItems = [
