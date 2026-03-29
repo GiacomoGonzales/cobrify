@@ -197,10 +197,9 @@ export default function WarehouseExits() {
   // Filtrar productos en el buscador del modal
   const filteredProducts = productSearch.length >= 1
     ? products.filter(p => {
-      const term = productSearch.toLowerCase()
-      return p.name?.toLowerCase().includes(term) ||
-        p.code?.toLowerCase().includes(term) ||
-        p.barcode?.toLowerCase().includes(term)
+      const words = productSearch.toLowerCase().split(/\s+/).filter(Boolean)
+      const searchable = `${p.name || ''} ${p.code || ''} ${p.barcode || ''}`.toLowerCase()
+      return words.every(w => searchable.includes(w))
     }).slice(0, 10)
     : []
 
