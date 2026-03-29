@@ -60,6 +60,7 @@ export default function LandingRouter() {
   const [reseller, setReseller] = useState(null)
   const [catalogDomain, setCatalogDomain] = useState(null) // hostname del dominio personalizado de catálogo
   const [catalogIsRestaurant, setCatalogIsRestaurant] = useState(false)
+  const [catalogBusinessData, setCatalogBusinessData] = useState(null) // datos del negocio precargados
   const [searchParams] = useSearchParams()
   const [pwaRedirect, setPwaRedirect] = useState(null) // null, '/login', '/app/dashboard'
 
@@ -153,9 +154,18 @@ export default function LandingRouter() {
           )
           const catalogSnap = await getDocs(catalogQuery)
           if (!catalogSnap.empty) {
-            const bizData = catalogSnap.docs[0].data()
+            const bizDoc = catalogSnap.docs[0]
+            const bizData = { id: bizDoc.id, ...bizDoc.data() }
             console.log('✅ LandingRouter: Found catalog domain:', normalizedHost, '| mode:', bizData.businessMode)
+
+            // Actualizar título y favicon inmediatamente con datos del negocio
+            const businessName = bizData.businessName || bizData.name || normalizedHost
+            const logoUrl = bizData.catalogLogoUrl || bizData.logoUrl || null
+            const catalogColor = bizData.catalogColor || null
+            updatePageBranding(businessName, logoUrl, catalogColor)
+
             setCatalogDomain(normalizedHost)
+            setCatalogBusinessData(bizData)
             if (bizData.businessMode === 'restaurant') {
               setCatalogIsRestaurant(true)
             }
@@ -196,7 +206,7 @@ export default function LandingRouter() {
 
   // Si es dominio personalizado de catálogo, mostrar catálogo directamente
   if (catalogDomain) {
-    return <CatalogoPublico customDomain={catalogDomain} isRestaurantMenu={catalogIsRestaurant} />
+    return <CatalogoPublico customDomain={catalogDomain} isRestaurantMenu={catalogIsRestaurant} preloadedBusiness={catalogBusinessData} />
   }
 
   // Si no hay reseller ni catálogo, mostrar landing de Cobrify

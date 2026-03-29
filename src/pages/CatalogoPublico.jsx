@@ -1905,7 +1905,7 @@ const DEMO_RESTAURANT_DATA = {
 }
 
 // Componente principal
-export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null }) {
+export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null, preloadedBusiness = null }) {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
@@ -1946,38 +1946,43 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           return
         }
 
-        // Buscar negocio por catalogSlug o por customDomain
-        let businessesSnap
-        if (customDomain) {
-          // Buscar por dominio personalizado
-          const domainQuery = query(
-            collection(db, 'businesses'),
-            where('customDomain', '==', customDomain),
-            where('catalogEnabled', '==', true)
-          )
-          businessesSnap = await getDocs(domainQuery)
+        // Usar datos precargados del negocio si están disponibles (dominio personalizado)
+        let businessData
+        if (preloadedBusiness) {
+          businessData = preloadedBusiness
+          setBusiness(businessData)
         } else {
-          // Buscar por slug (flujo normal)
-          const slugQuery = query(
-            collection(db, 'businesses'),
-            where('catalogSlug', '==', slug),
-            where('catalogEnabled', '==', true)
-          )
-          businessesSnap = await getDocs(slugQuery)
-        }
+          // Buscar negocio por catalogSlug o por customDomain
+          let businessesSnap
+          if (customDomain) {
+            const domainQuery = query(
+              collection(db, 'businesses'),
+              where('customDomain', '==', customDomain),
+              where('catalogEnabled', '==', true)
+            )
+            businessesSnap = await getDocs(domainQuery)
+          } else {
+            const slugQuery = query(
+              collection(db, 'businesses'),
+              where('catalogSlug', '==', slug),
+              where('catalogEnabled', '==', true)
+            )
+            businessesSnap = await getDocs(slugQuery)
+          }
 
-        if (businessesSnap.empty) {
-          setError(isRestaurantMenu ? 'Menú no encontrado' : 'Catálogo no encontrado')
-          return
-        }
+          if (businessesSnap.empty) {
+            setError(isRestaurantMenu ? 'Menú no encontrado' : 'Catálogo no encontrado')
+            return
+          }
 
-        const businessDoc = businessesSnap.docs[0]
-        const businessData = { id: businessDoc.id, ...businessDoc.data() }
-        setBusiness(businessData)
+          const businessDoc = businessesSnap.docs[0]
+          businessData = { id: businessDoc.id, ...businessDoc.data() }
+          setBusiness(businessData)
+        }
 
         // Cargar productos visibles en catálogo/menú
         const productsQuery = query(
-          collection(db, 'businesses', businessDoc.id, 'products'),
+          collection(db, 'businesses', businessData.id, 'products'),
           where('catalogVisible', '==', true)
         )
         const productsSnap = await getDocs(productsQuery)
