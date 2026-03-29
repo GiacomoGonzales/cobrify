@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowDownToLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, CheckCircle, AlertTriangle, XCircle, Download } from 'lucide-react'
+import { ArrowDownToLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, CheckCircle, AlertTriangle, XCircle, Download, FileText } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -12,6 +12,7 @@ import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
+import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 const CONDITION_CONFIG = {
   good: { label: 'Buen estado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -33,6 +34,7 @@ export default function WarehouseReturns() {
   const [isSaving, setIsSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState(null)
+  const [guideReference, setGuideReference] = useState(null)
 
   // Estado del formulario
   const [selectedProject, setSelectedProject] = useState('')
@@ -338,13 +340,35 @@ export default function WarehouseReturns() {
                         {ret.receivedBy && <p className="text-sm text-gray-600">Recibido por: <strong>{ret.receivedBy}</strong></p>}
                         {ret.notes && <p className="text-sm text-gray-600 italic">Nota: {ret.notes}</p>}
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(ret, businessInfo, 'return') }}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex-shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Descargar PDF
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(ret, businessInfo, 'return') }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          PDF
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setGuideReference({
+                              items: ret.items?.map(i => ({
+                                productId: i.productId,
+                                name: i.productName,
+                                description: i.productName,
+                                code: i.productCode,
+                                quantity: i.quantity,
+                                unit: i.unit || 'NIU',
+                              })),
+                              transferDescription: `Retorno a almacén ${ret.number || ''} - Proyecto: ${ret.projectName}`,
+                            })
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Guía de Remisión
+                        </button>
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm mt-2">
@@ -571,6 +595,13 @@ export default function WarehouseReturns() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal Guía de Remisión */}
+      <CreateDispatchGuideModal
+        isOpen={!!guideReference}
+        onClose={() => setGuideReference(null)}
+        referenceInvoice={guideReference}
+      />
     </div>
   )
 }

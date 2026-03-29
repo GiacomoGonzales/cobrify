@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download } from 'lucide-react'
+import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -12,6 +12,7 @@ import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
+import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
@@ -27,6 +28,7 @@ export default function WarehouseExits() {
   const [isSaving, setIsSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState(null)
+  const [guideReference, setGuideReference] = useState(null)
 
   // Estado del formulario
   const [selectedProject, setSelectedProject] = useState('')
@@ -306,14 +308,36 @@ export default function WarehouseExits() {
                 {expandedId === exit.id && (
                   <div className="border-t border-gray-100 px-4 pb-4">
                     <div className="flex items-center justify-between mt-3 mb-2">
-                      {exit.notes && <p className="text-sm text-gray-600 italic">Nota: {exit.notes}</p>}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(exit, businessInfo, 'exit') }}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors ml-auto"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Descargar PDF
-                      </button>
+                      {exit.notes && <p className="text-sm text-gray-600 italic flex-1">Nota: {exit.notes}</p>}
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(exit, businessInfo, 'exit') }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          PDF
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setGuideReference({
+                              items: exit.items?.map(i => ({
+                                productId: i.productId,
+                                name: i.productName,
+                                description: i.productName,
+                                code: i.productCode,
+                                quantity: i.quantity,
+                                unit: i.unit || 'NIU',
+                              })),
+                              transferDescription: `Salida de almacén ${exit.number || ''} - Proyecto: ${exit.projectName}`,
+                            })
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Guía de Remisión
+                        </button>
+                      </div>
                     </div>
                     <table className="w-full text-sm mt-2">
                       <thead>
@@ -493,6 +517,13 @@ export default function WarehouseExits() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal Guía de Remisión */}
+      <CreateDispatchGuideModal
+        isOpen={!!guideReference}
+        onClose={() => setGuideReference(null)}
+        referenceInvoice={guideReference}
+      />
     </div>
   )
 }
