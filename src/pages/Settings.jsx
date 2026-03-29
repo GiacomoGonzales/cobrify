@@ -2536,169 +2536,18 @@ export default function Settings() {
                 <p className="text-sm text-gray-600 mb-4">
                   Selecciona el modo que mejor se adapte a tu negocio. Esto cambiará las opciones del menú lateral.
                 </p>
-                <div className="space-y-3">
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'retail'
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="retail"
-                      checked={businessMode === 'retail'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                    />
-                    <Store className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'retail' ? 'text-primary-600' : 'text-gray-400 group-hover:text-primary-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Modo Retail (Tienda/Comercio)
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para tiendas, comercios, ferreterías, farmacias y negocios de venta de productos.
-                        Incluye: POS, productos, inventario, almacenes, compras, proveedores.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'restaurant'
-                      ? 'border-orange-500 bg-orange-50'
-                      : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="restaurant"
-                      checked={businessMode === 'restaurant'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
-                    />
-                    <UtensilsCrossed className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'restaurant' ? 'text-orange-600' : 'text-gray-400 group-hover:text-orange-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900">
-                        Modo Restaurante
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para restaurantes, cafeterías, bares y negocios de comida.
-                        Incluye: mesas, mozos, órdenes, cocina, menú/productos, caja, reportes.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'pharmacy'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="pharmacy"
-                      checked={businessMode === 'pharmacy'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500"
-                    />
-                    <Pill className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'pharmacy' ? 'text-green-600' : 'text-gray-400 group-hover:text-green-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-green-900">
-                        Modo Farmacia
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para farmacias, boticas y droguerías.
-                        Incluye: medicamentos, laboratorios, control de lotes, alertas de vencimiento, inventario FEFO.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'hotel'
-                      ? 'border-cyan-500 bg-cyan-50'
-                      : 'border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="hotel"
-                      checked={businessMode === 'hotel'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-cyan-600 border-gray-300 focus:ring-cyan-500"
-                    />
-                    <Building2 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'hotel' ? 'text-cyan-600' : 'text-gray-400 group-hover:text-cyan-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-cyan-900">
-                        Modo Hotelería
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para hoteles, hostales y alojamientos.
-                        Incluye: habitaciones, reservas, check-in/check-out, folio de huésped, servicios (piscina, áreas recreativas), housekeeping.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'transport'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="transport"
-                      checked={businessMode === 'transport'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
-                    />
-                    <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'transport' ? 'text-amber-600' : 'text-gray-400 group-hover:text-amber-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-amber-900">
-                        Modo Transporte
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para empresas de transporte de carga y pasajeros.
-                        Incluye: campos adicionales para vehículos, rutas y servicios de transporte.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
-                    businessMode === 'logistics'
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="businessMode"
-                      value="logistics"
-                      checked={businessMode === 'logistics'}
-                      onChange={(e) => setBusinessMode(e.target.value)}
-                      className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                    />
-                    <HardHat className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                      businessMode === 'logistics' ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600'
-                    }`} />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-900">
-                        Modo Logística
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        Para empresas de construcción y logística.
-                        Incluye: proyectos/obras, salidas y retornos de almacén con guías de remisión, reportes logísticos.
-                      </p>
-                    </div>
-                  </label>
-                </div>
+                <select
+                  value={businessMode}
+                  onChange={(e) => setBusinessMode(e.target.value)}
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  <option value="retail">Retail (Tienda/Comercio) — POS, productos, inventario, almacenes, compras</option>
+                  <option value="restaurant">Restaurante — Mesas, mozos, órdenes, cocina, menú, caja</option>
+                  <option value="pharmacy">Farmacia — Medicamentos, laboratorios, lotes, alertas de vencimiento</option>
+                  <option value="hotel">Hotelería — Habitaciones, reservas, check-in/out, housekeeping</option>
+                  <option value="transport">Transporte — Vehículos, rutas, servicios de transporte</option>
+                  <option value="logistics">Logística — Proyectos/obras, salidas y retornos de almacén, reportes</option>
+                </select>
               </div>
 
               {/* Divider */}
