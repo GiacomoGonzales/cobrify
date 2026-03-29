@@ -164,10 +164,11 @@ export default function Reports() {
     loadBranches()
   }, [user])
 
-  // Recargar datos cuando cambia el rango de fecha
+  // Solo recargar desde Firestore cuando se selecciona "Todo el período"
+  // Los demás rangos se filtran client-side con los datos ya cargados
   useEffect(() => {
-    if (user?.uid) loadData()
-  }, [dateRange, customStartDate, customEndDate])
+    if (user?.uid && dateRange === 'all' && invoices.length === 0) loadData()
+  }, [dateRange])
 
   // Cargar sucursales para filtro
   const loadBranches = async () => {
@@ -199,29 +200,14 @@ export default function Reports() {
         return
       }
 
-      // Optimización: cargar facturas según rango de fecha seleccionado
+      // Cargar facturas: si es "all" traer todo, sino traer último año (suficiente para todos los rangos)
       let invoicesFetcher
       if (dateRange === 'all') {
         invoicesFetcher = getInvoices(getBusinessId())
       } else {
-        // Calcular fecha de inicio según el rango (con margen extra para comparativa)
         const sinceDate = new Date()
-        switch (dateRange) {
-          case 'week': sinceDate.setDate(sinceDate.getDate() - 21); break // 3 semanas para comparativa
-          case 'month': sinceDate.setTime(new Date(sinceDate.getFullYear(), sinceDate.getMonth() - 1, 1).getTime()); break // Mes anterior completo para comparativa
-          case 'quarter': sinceDate.setMonth(sinceDate.getMonth() - 6); break
-          case 'year': sinceDate.setTime(new Date(sinceDate.getFullYear() - 1, 0, 1).getTime()); break // Año anterior para comparativa
-          case 'custom':
-            if (customStartDate) {
-              const cs = new Date(customStartDate + 'T00:00:00')
-              const duration = customEndDate ? new Date(customEndDate + 'T23:59:59') - cs : 0
-              sinceDate.setTime(cs.getTime() - duration - 86400000) // extra for comparison
-            } else {
-              sinceDate.setMonth(sinceDate.getMonth() - 2)
-            }
-            break
-          default: sinceDate.setMonth(sinceDate.getMonth() - 2)
-        }
+        sinceDate.setFullYear(sinceDate.getFullYear() - 1)
+        sinceDate.setDate(1)
         sinceDate.setHours(0, 0, 0, 0)
         invoicesFetcher = getRecentInvoices(getBusinessId(), sinceDate)
       }
@@ -1716,42 +1702,45 @@ export default function Reports() {
               </select>
             </div>
           )}
-          <Select
-            value={dateRange}
-            onChange={e => setDateRange(e.target.value)}
-            className="w-full sm:w-48"
-          >
-            <option value="week">Última semana</option>
-            <option value="month">Este mes</option>
-            <option value="quarter">Último trimestre</option>
-            <option value="year">Este año</option>
-            <option value="all">Todo el período</option>
-            <option value="custom">Personalizado</option>
-          </Select>
-          {dateRange === 'custom' && (
-            <>
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
-                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { value: 'week', label: 'Semana' },
+              { value: 'month', label: 'Este mes' },
+              { value: 'quarter', label: 'Trimestre' },
+              { value: 'year', label: 'Este año' },
+              { value: 'all', label: 'Todo' },
+              { value: 'custom', label: 'Personalizado' },
+            ].map(option => (
+              <button
+                key={option.value}
+                onClick={() => setDateRange(option.value)}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  dateRange === option.value
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+            {dateRange === 'custom' && (
+              <>
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={e => setCustomStartDate(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none w-full min-w-0"
-                  title="Desde"
+                  className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
                 />
-              </div>
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
-                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <span className="text-gray-400 text-sm">—</span>
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={e => setCustomEndDate(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none w-full min-w-0"
-                  title="Hasta"
+                  className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
                 />
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
