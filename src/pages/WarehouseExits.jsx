@@ -92,9 +92,13 @@ export default function WarehouseExits() {
     return ws ? ws.stock : (product.stock || 0)
   }
 
-  const updateItemQuantity = (productId, quantity) => {
-    const qty = Math.max(1, parseInt(quantity) || 1)
-    setItems(items.map(i => i.productId === productId ? { ...i, quantity: qty } : i))
+  const updateItemQuantity = (productId, value) => {
+    const raw = value === '' ? '' : parseInt(value) || ''
+    setItems(items.map(i => i.productId === productId ? { ...i, quantity: raw } : i))
+  }
+
+  const finalizeItemQuantity = (productId) => {
+    setItems(items.map(i => i.productId === productId ? { ...i, quantity: Math.max(1, parseInt(i.quantity) || 1) } : i))
   }
 
   const removeItem = (productId) => {
@@ -428,6 +432,7 @@ export default function WarehouseExits() {
                           min="1"
                           value={item.quantity}
                           onChange={e => updateItemQuantity(item.productId, e.target.value)}
+                          onBlur={() => finalizeItemQuantity(item.productId)}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-indigo-500"
                         />
                       </td>
