@@ -138,9 +138,8 @@ function generateHTML(reseller, domain) {
 }
 
 export default async function handler(req, res) {
-  // Obtener el dominio del header
-  const host = req.headers['x-forwarded-host'] || req.headers.host || ''
-  const domain = host.toLowerCase().replace(/:\d+$/, '')
+  // Obtener el dominio del query param (fallback desde domain-meta) o del header
+  const domain = (req.query.domain || req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase().replace(/:\d+$/, '')
   const userAgent = req.headers['user-agent'] || ''
 
   console.log(`[ResellerMeta] domain=${domain}, UA=${userAgent.substring(0, 50)}`)

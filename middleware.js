@@ -70,10 +70,13 @@ export default function middleware(request) {
     }
   }
 
-  // Caso 3: Dominio de reseller (ruta raíz)
+  // Caso 3: Dominio personalizado (ruta raíz de dominio externo)
+  // Puede ser catálogo de negocio o landing de reseller
   if (pathname === '/' && isResellerDomain(hostname)) {
-    // Reescribir a la API de reseller
-    url.pathname = '/api/reseller-meta'
+    const normalizedHost = hostname.toLowerCase().replace(/^www\./, '').split(':')[0]
+    // Redirigir a domain-meta que busca catálogos, con fallback a reseller-meta
+    url.pathname = '/api/domain-meta'
+    url.searchParams.set('domain', normalizedHost)
     return Response.redirect(url.toString(), 307)
   }
 
