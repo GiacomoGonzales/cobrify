@@ -147,7 +147,7 @@ export default function NotificationTest() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header con botón atrás */}
-      <div className="bg-purple-600 text-white p-4 sticky top-0 z-10">
+      <div className="bg-purple-600 text-white p-4 sticky top-0 z-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}

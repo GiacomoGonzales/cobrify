@@ -325,7 +325,66 @@ export default function Accounting() {
       {/* Tabla */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Vista móvil: tarjetas */}
+          <div className="sm:hidden space-y-3 p-3">
+            {filtered.length === 0 ? (
+              <p className="text-center py-12 text-gray-500">No se encontraron comprobantes</p>
+            ) : (
+              filtered.map(inv => (
+                <div key={inv.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <span className="font-medium text-primary-600 text-sm">{inv.number || '-'}</span>
+                      <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${inv.documentType === 'factura' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                        {inv.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                      </span>
+                    </div>
+                    <span className="font-semibold text-sm">S/ {(inv.total || 0).toFixed(2)}</span>
+                  </div>
+                  <p className="text-sm text-gray-700 truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</p>
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                    <span>{inv.customer?.documentNumber || '-'}</span>
+                    <span>{formatDate(inv.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-gray-500">SUNAT:</span>
+                        <StatusBadge inv={inv} />
+                      </div>
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-gray-500">XML:</span>
+                        {hasXml(inv) ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> : <span className="text-gray-400">—</span>}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-gray-500">CDR:</span>
+                        {hasCdr(inv) ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => downloadXml(inv)}
+                        title={hasXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
+                        disabled={generatingXml === inv.id}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                      >
+                        {generatingXml === inv.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
+                      </button>
+                      {hasCdr(inv) && (
+                        <button onClick={() => downloadCdr(inv)} title="Descargar CDR"
+                          className="p-1.5 text-green-600 hover:bg-green-50 rounded">
+                          <Download className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Vista desktop: tabla */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b">
