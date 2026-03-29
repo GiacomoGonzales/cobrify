@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat } from 'lucide-react'
+import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -10,6 +10,8 @@ import { getWarehouseExits, createWarehouseExit } from '@/services/warehouseExit
 import { getProjects } from '@/services/projectService'
 import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
+import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
+import { getCompanySettings } from '@/services/firestoreService'
 
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
@@ -19,6 +21,7 @@ export default function WarehouseExits() {
   const [projects, setProjects] = useState([])
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [businessInfo, setBusinessInfo] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -41,16 +44,18 @@ export default function WarehouseExits() {
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const [exitsResult, projectsResult, productsResult, warehousesResult] = await Promise.all([
+      const [exitsResult, projectsResult, productsResult, warehousesResult, settingsResult] = await Promise.all([
         getWarehouseExits(businessId),
         getProjects(businessId),
         getProducts(businessId),
         getWarehouses(businessId),
+        getCompanySettings(businessId),
       ])
       if (exitsResult.success) setExits(exitsResult.data || [])
       if (projectsResult.success) setProjects(projectsResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
+      if (settingsResult) setBusinessInfo(settingsResult)
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -300,7 +305,16 @@ export default function WarehouseExits() {
                 {/* Detalle expandido */}
                 {expandedId === exit.id && (
                   <div className="border-t border-gray-100 px-4 pb-4">
-                    {exit.notes && <p className="text-sm text-gray-600 mt-3 mb-2 italic">Nota: {exit.notes}</p>}
+                    <div className="flex items-center justify-between mt-3 mb-2">
+                      {exit.notes && <p className="text-sm text-gray-600 italic">Nota: {exit.notes}</p>}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(exit, businessInfo, 'exit') }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors ml-auto"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Descargar PDF
+                      </button>
+                    </div>
                     <table className="w-full text-sm mt-2">
                       <thead>
                         <tr className="text-xs text-gray-500 border-b">

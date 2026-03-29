@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowDownToLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { ArrowDownToLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, CheckCircle, AlertTriangle, XCircle, Download } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -10,6 +10,8 @@ import { getWarehouseReturns, createWarehouseReturn } from '@/services/warehouse
 import { getProjects } from '@/services/projectService'
 import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
+import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
+import { getCompanySettings } from '@/services/firestoreService'
 
 const CONDITION_CONFIG = {
   good: { label: 'Buen estado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -25,6 +27,7 @@ export default function WarehouseReturns() {
   const [projects, setProjects] = useState([])
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [businessInfo, setBusinessInfo] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -48,16 +51,18 @@ export default function WarehouseReturns() {
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const [returnsResult, projectsResult, productsResult, warehousesResult] = await Promise.all([
+      const [returnsResult, projectsResult, productsResult, warehousesResult, settingsResult] = await Promise.all([
         getWarehouseReturns(businessId),
         getProjects(businessId),
         getProducts(businessId),
         getWarehouses(businessId),
+        getCompanySettings(businessId),
       ])
       if (returnsResult.success) setReturns(returnsResult.data || [])
       if (projectsResult.success) setProjects(projectsResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
+      if (settingsResult) setBusinessInfo(settingsResult)
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -328,8 +333,19 @@ export default function WarehouseReturns() {
 
                 {expandedId === ret.id && (
                   <div className="border-t border-gray-100 px-4 pb-4">
-                    {ret.receivedBy && <p className="text-sm text-gray-600 mt-3">Recibido por: <strong>{ret.receivedBy}</strong></p>}
-                    {ret.notes && <p className="text-sm text-gray-600 mt-1 italic">Nota: {ret.notes}</p>}
+                    <div className="flex items-center justify-between mt-3">
+                      <div>
+                        {ret.receivedBy && <p className="text-sm text-gray-600">Recibido por: <strong>{ret.receivedBy}</strong></p>}
+                        {ret.notes && <p className="text-sm text-gray-600 italic">Nota: {ret.notes}</p>}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(ret, businessInfo, 'return') }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex-shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Descargar PDF
+                      </button>
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm mt-2">
                         <thead>
