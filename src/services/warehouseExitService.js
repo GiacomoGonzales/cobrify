@@ -8,6 +8,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
 
@@ -40,13 +41,26 @@ export const getWarehouseExits = async (businessId) => {
  * @param {Object} exitData - { projectId, projectName, warehouseId, warehouseName, items, notes, userId, userName }
  * items: [{ productId, productName, productCode, quantity, unit }]
  */
+const getNextExitNumber = async (businessId) => {
+  const counterRef = doc(db, 'businesses', businessId, 'counters', 'warehouseExits')
+  const num = await runTransaction(db, async (transaction) => {
+    const counterDoc = await transaction.get(counterRef)
+    const current = counterDoc.exists() ? (counterDoc.data().lastNumber || 0) : 0
+    const next = current + 1
+    transaction.set(counterRef, { lastNumber: next }, { merge: true })
+    return next
+  })
+  return `SAL-${String(num).padStart(5, '0')}`
+}
+
 export const createWarehouseExit = async (businessId, exitData) => {
   try {
-    // Calcular totales
     const totalItems = exitData.items.reduce((sum, item) => sum + item.quantity, 0)
+    const number = await getNextExitNumber(businessId)
 
     const docRef = await addDoc(collection(db, 'businesses', businessId, 'warehouseExits'), {
       ...exitData,
+      number,
       totalItems,
       status: 'completed',
       createdAt: serverTimestamp(),

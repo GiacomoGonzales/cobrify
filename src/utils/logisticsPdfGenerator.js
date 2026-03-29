@@ -1,262 +1,358 @@
 import jsPDF from 'jspdf'
 
 const BLACK = [0, 0, 0]
-const GRAY = [100, 100, 100]
-const LIGHT_GRAY = [220, 220, 220]
+const GRAY = [120, 120, 120]
+const LIGHT_GRAY = [230, 230, 230]
 const WHITE = [255, 255, 255]
-const INDIGO = [79, 70, 229]
+
+const hexToRgb = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [79, 70, 229]
+}
+
+const loadLogo = async (logoUrl) => {
+  if (!logoUrl) return null
+  try {
+    // Intentar cache
+    const cached = localStorage.getItem('logistics_pdf_logo')
+    if (cached) {
+      const { url, data, timestamp } = JSON.parse(cached)
+      if (url === logoUrl && Date.now() - timestamp < 24 * 60 * 60 * 1000) return data
+    }
+    // Descargar
+    const response = await fetch(logoUrl)
+    const blob = await response.blob()
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const base64 = reader.result
+        try { localStorage.setItem('logistics_pdf_logo', JSON.stringify({ url: logoUrl, data: base64, timestamp: Date.now() })) } catch (e) { /* storage full */ }
+        resolve(base64)
+      }
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
 
 /**
- * Genera PDF A4 para Salida de Almacén o Retorno a Almacén
- * @param {Object} movement - datos de la salida o retorno
- * @param {Object} business - datos del negocio
- * @param {string} type - 'exit' | 'return'
+ * Genera PDF A4 para Salida o Retorno de Almacén
  */
-export const generateLogisticsMovementPDF = (movement, business = {}, type = 'exit') => {
+export const generateLogisticsMovementPDF = async (movement, business = {}, type = 'exit') => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 40
   const contentWidth = pageWidth - margin * 2
   let y = margin
 
   const isExit = type === 'exit'
   const title = isExit ? 'SALIDA DE ALMACÉN' : 'RETORNO A ALMACÉN'
+  const ACCENT = hexToRgb(business.pdfAccentColor || '#4F46E5')
+  const ACCENT_LIGHT = ACCENT.map(c => Math.min(255, c + 180))
 
-  // ===== HEADER =====
-  // Nombre del negocio
-  doc.setFontSize(14)
+  // ===== LOGO =====
+  const logoData = await loadLogo(business.logoUrl)
+  let logoEndX = margin
+
+  if (logoData) {
+    try {
+      const img = new Image()
+      img.src = logoData
+      await new Promise(r => { img.onload = r; img.onerror = r })
+      const ratio = img.width / img.height
+      const maxH = 50
+      const maxW = 120
+      let w = maxW, h = maxW / ratio
+      if (h > maxH) { h = maxH; w = h * ratio }
+      doc.addImage(logoData, 'AUTO', margin, y, w, h, undefined, 'FAST')
+      logoEndX = margin + w + 15
+    } catch { /* skip logo */ }
+  }
+
+  // ===== HEADER: Info del negocio =====
+  const infoX = logoEndX
+  let infoY = y + 2
+
+  doc.setFontSize(13)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(business.tradeName || business.name || 'EMPRESA', margin, y)
-  y += 16
+  doc.text(business.tradeName || business.name || 'EMPRESA', infoX, infoY + 12)
+  infoY += 16
 
-  if (business.address) {
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...GRAY)
-    doc.text(business.address, margin, y)
-    y += 11
-  }
-  if (business.phone) {
-    doc.text(`Tel: ${business.phone}`, margin, y)
-    y += 11
-  }
-  if (business.ruc || business.documentNumber) {
-    doc.text(`RUC: ${business.ruc || business.documentNumber}`, margin, y)
-    y += 11
-  }
-
-  // Título del documento (derecha)
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...INDIGO)
-  doc.text(title, pageWidth - margin, margin, { align: 'right' })
-
-  // Fecha
-  doc.setFontSize(9)
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  const dateStr = formatTimestamp(movement.createdAt)
-  doc.text(`Fecha: ${dateStr}`, pageWidth - margin, margin + 16, { align: 'right' })
+  if (business.address) { doc.text(business.address, infoX, infoY + 10); infoY += 11 }
+  if (business.phone) { doc.text(`Tel: ${business.phone}`, infoX, infoY + 10); infoY += 11 }
+  if (business.ruc || business.documentNumber) { doc.text(`RUC: ${business.ruc || business.documentNumber}`, infoX, infoY + 10); infoY += 11 }
 
-  y = Math.max(y, margin + 40) + 10
+  // ===== HEADER: Cuadro del documento (derecha) =====
+  const boxW = 170
+  const boxH = 60
+  const boxX = pageWidth - margin - boxW
+  const boxY = y
+
+  // Marco con color acento
+  doc.setDrawColor(...ACCENT)
+  doc.setLineWidth(2)
+  doc.rect(boxX, boxY, boxW, boxH)
+
+  // Barra de color arriba
+  doc.setFillColor(...ACCENT)
+  doc.rect(boxX, boxY, boxW, 20, 'F')
+
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...WHITE)
+  doc.text(title, boxX + boxW / 2, boxY + 14, { align: 'center' })
+
+  // Número
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...ACCENT)
+  doc.text(movement.number || '-', boxX + boxW / 2, boxY + 38, { align: 'center' })
+
+  // Fecha debajo del número
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...GRAY)
+  doc.text(formatTimestamp(movement.createdAt), boxX + boxW / 2, boxY + 52, { align: 'center' })
+
+  y = Math.max(infoY, boxY + boxH) + 20
 
   // ===== LÍNEA SEPARADORA =====
-  doc.setDrawColor(...LIGHT_GRAY)
-  doc.setLineWidth(1)
+  doc.setDrawColor(...ACCENT)
+  doc.setLineWidth(1.5)
   doc.line(margin, y, pageWidth - margin, y)
-  y += 15
+  y += 18
 
   // ===== DATOS DEL MOVIMIENTO =====
-  const labelX = margin
-  const valueX = margin + 120
-
-  const addField = (label, value) => {
-    doc.setFontSize(9)
+  const drawField = (label, value, x, width) => {
+    doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...GRAY)
-    doc.text(label, labelX, y)
+    doc.setTextColor(...ACCENT)
+    doc.text(label.toUpperCase(), x, y)
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
-    doc.text(value || '-', valueX, y)
-    y += 15
+    const lines = doc.splitTextToSize(value || '-', width - 5)
+    doc.text(lines[0], x, y + 12)
   }
 
-  addField('Proyecto / Obra:', `${movement.projectName || '-'}${movement.projectCode ? ` (${movement.projectCode})` : ''}`)
-  addField(isExit ? 'Almacén origen:' : 'Almacén destino:', movement.warehouseName || '-')
-  addField('Registrado por:', movement.userName || '-')
+  const halfW = contentWidth / 2
+
+  drawField('Proyecto / Obra', `${movement.projectName || '-'}${movement.projectCode ? ` (${movement.projectCode})` : ''}`, margin, halfW)
+  drawField(isExit ? 'Almacén Origen' : 'Almacén Destino', movement.warehouseName || '-', margin + halfW, halfW)
+  y += 28
+
+  drawField('Registrado por', movement.userName || '-', margin, halfW)
   if (!isExit && movement.receivedBy) {
-    addField('Recibido por:', movement.receivedBy)
+    drawField('Recibido por', movement.receivedBy, margin + halfW, halfW)
   }
+  y += 28
+
   if (movement.notes) {
-    addField('Observaciones:', movement.notes)
+    drawField('Observaciones', movement.notes, margin, contentWidth)
+    y += 28
   }
 
   y += 5
 
   // ===== TABLA DE ITEMS =====
   const items = movement.items || []
+  const rowH = 20
 
-  // Columnas
-  const cols = isExit
-    ? [
-      { label: '#', width: 25, align: 'center' },
-      { label: 'Código', width: 80, align: 'left' },
-      { label: 'Descripción', width: contentWidth - 25 - 80 - 60 - 50, align: 'left' },
-      { label: 'Cantidad', width: 60, align: 'center' },
-      { label: 'Unidad', width: 50, align: 'center' },
+  // Definir columnas
+  let cols
+  if (isExit) {
+    cols = [
+      { label: '#', w: 25, align: 'center' },
+      { label: 'CÓDIGO', w: 80, align: 'left' },
+      { label: 'DESCRIPCIÓN', w: contentWidth - 25 - 80 - 65 - 50, align: 'left' },
+      { label: 'CANTIDAD', w: 65, align: 'center' },
+      { label: 'UNIDAD', w: 50, align: 'center' },
     ]
-    : [
-      { label: '#', width: 25, align: 'center' },
-      { label: 'Código', width: 70, align: 'left' },
-      { label: 'Descripción', width: contentWidth - 25 - 70 - 55 - 45 - 90 - 100, align: 'left' },
-      { label: 'Cant.', width: 55, align: 'center' },
-      { label: 'Und.', width: 45, align: 'center' },
-      { label: 'Estado', width: 90, align: 'center' },
-      { label: 'Observación', width: 100, align: 'left' },
+  } else {
+    cols = [
+      { label: '#', w: 22, align: 'center' },
+      { label: 'CÓDIGO', w: 65, align: 'left' },
+      { label: 'DESCRIPCIÓN', w: contentWidth - 22 - 65 - 50 - 45 - 80 - 95, align: 'left' },
+      { label: 'CANT.', w: 50, align: 'center' },
+      { label: 'UND.', w: 45, align: 'center' },
+      { label: 'ESTADO', w: 80, align: 'center' },
+      { label: 'OBSERVACIÓN', w: 95, align: 'left' },
     ]
+  }
 
   // Header de tabla
-  doc.setFillColor(...INDIGO)
-  doc.rect(margin, y, contentWidth, 20, 'F')
-  doc.setFontSize(8)
+  doc.setFillColor(...ACCENT)
+  doc.rect(margin, y, contentWidth, rowH, 'F')
+  doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...WHITE)
 
   let colX = margin
   cols.forEach(col => {
-    const textX = col.align === 'center' ? colX + col.width / 2 : colX + 4
-    doc.text(col.label, textX, y + 13, { align: col.align === 'center' ? 'center' : 'left' })
-    colX += col.width
+    const tx = col.align === 'center' ? colX + col.w / 2 : colX + 4
+    doc.text(col.label, tx, y + 13, { align: col.align === 'center' ? 'center' : 'left' })
+    colX += col.w
   })
-  y += 20
+  y += rowH
 
-  // Filas de datos
+  // Filas
   doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-
   items.forEach((item, idx) => {
-    // Verificar si necesita nueva página
-    if (y > doc.internal.pageSize.getHeight() - 150) {
+    if (y > pageHeight - 150) {
       doc.addPage()
       y = margin
     }
 
-    const rowH = 18
-    // Fila alternada
     if (idx % 2 === 0) {
-      doc.setFillColor(245, 245, 250)
+      doc.setFillColor(...ACCENT_LIGHT)
       doc.rect(margin, y, contentWidth, rowH, 'F')
     }
 
+    // Bordes horizontales
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.setLineWidth(0.3)
+    doc.line(margin, y + rowH, pageWidth - margin, y + rowH)
+
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
-    colX = margin
+
+    const condLabel = item.condition === 'good' ? 'Buen estado' : item.condition === 'damaged' ? 'Dañado' : 'Perdido'
     const rowData = isExit
       ? [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und']
-      : [
-        String(idx + 1),
-        item.productCode || '-',
-        item.productName || '-',
-        String(item.quantity),
-        item.unit || 'und',
-        item.condition === 'good' ? 'Buen estado' : item.condition === 'damaged' ? 'Dañado' : 'Perdido',
-        item.conditionNotes || '-',
-      ]
+      : [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und', condLabel, item.conditionNotes || '']
 
+    colX = margin
     cols.forEach((col, ci) => {
-      const textX = col.align === 'center' ? colX + col.width / 2 : colX + 4
-      const text = (rowData[ci] || '').substring(0, col.width / 4) // truncar si es muy largo
-      doc.text(text, textX, y + 12, { align: col.align === 'center' ? 'center' : 'left' })
-      colX += col.width
+      const tx = col.align === 'center' ? colX + col.w / 2 : colX + 4
+      let text = rowData[ci] || ''
+      // Truncar
+      const maxChars = Math.floor(col.w / 4.5)
+      if (text.length > maxChars) text = text.substring(0, maxChars - 1) + '…'
+      doc.text(text, tx, y + 13, { align: col.align === 'center' ? 'center' : 'left' })
+      colX += col.w
     })
 
     y += rowH
   })
 
-  // Borde de tabla
-  doc.setDrawColor(...LIGHT_GRAY)
-  doc.setLineWidth(0.5)
-  doc.rect(margin, y - items.length * 18 - 20, contentWidth, items.length * 18 + 20)
+  // Borde exterior de la tabla
+  doc.setDrawColor(...ACCENT)
+  doc.setLineWidth(0.8)
+  doc.rect(margin, y - items.length * rowH - rowH, contentWidth, (items.length + 1) * rowH)
 
-  y += 10
+  // Bordes verticales de columnas
+  colX = margin
+  cols.forEach((col, ci) => {
+    if (ci > 0) {
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(0.3)
+      doc.line(colX, y - items.length * rowH - rowH, colX, y)
+    }
+    colX += col.w
+  })
+
+  y += 15
 
   // ===== RESUMEN =====
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(`Total: ${movement.totalItems || items.reduce((s, i) => s + i.quantity, 0)} unidades en ${items.length} productos`, margin, y)
-  y += 14
+  const totalQty = movement.totalItems || items.reduce((s, i) => s + i.quantity, 0)
+  doc.text(`Total: ${totalQty} unidades en ${items.length} producto${items.length !== 1 ? 's' : ''}`, margin, y)
+  y += 16
 
   if (!isExit) {
+    const good = movement.goodItems || 0
+    const damaged = movement.damagedItems || 0
+    const lost = movement.lostItems || 0
     doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    const good = movement.goodItems || items.filter(i => i.condition === 'good').reduce((s, i) => s + i.quantity, 0)
-    const damaged = movement.damagedItems || items.filter(i => i.condition === 'damaged').reduce((s, i) => s + i.quantity, 0)
-    const lost = movement.lostItems || items.filter(i => i.condition === 'lost').reduce((s, i) => s + i.quantity, 0)
+
+    doc.setFillColor(220, 252, 231)
+    doc.roundedRect(margin, y - 4, 90, 16, 3, 3, 'F')
     doc.setTextColor(22, 163, 74)
-    doc.text(`Buen estado: ${good}`, margin, y)
-    doc.setTextColor(202, 138, 4)
-    doc.text(`Dañados: ${damaged}`, margin + 100, y)
-    doc.setTextColor(220, 38, 38)
-    doc.text(`Perdidos: ${lost}`, margin + 190, y)
-    y += 14
+    doc.text(`  Buen estado: ${good}`, margin + 2, y + 7)
+
+    doc.setFillColor(254, 249, 195)
+    doc.roundedRect(margin + 95, y - 4, 80, 16, 3, 3, 'F')
+    doc.setTextColor(161, 98, 7)
+    doc.text(`  Dañados: ${damaged}`, margin + 97, y + 7)
+
+    doc.setFillColor(254, 226, 226)
+    doc.roundedRect(margin + 180, y - 4, 80, 16, 3, 3, 'F')
+    doc.setTextColor(185, 28, 28)
+    doc.text(`  Perdidos: ${lost}`, margin + 182, y + 7)
+
+    y += 20
   }
 
   // ===== FIRMAS =====
-  const signatureY = Math.max(y + 60, doc.internal.pageSize.getHeight() - 120)
+  const signatureY = Math.min(Math.max(y + 80, pageHeight - 130), pageHeight - 60)
+  const needNewPage = signatureY > pageHeight - 60
+  if (needNewPage) doc.addPage()
+  const finalSignY = needNewPage ? 120 : signatureY
 
-  // Verificar si cabe en la página
-  if (signatureY > doc.internal.pageSize.getHeight() - 40) {
-    doc.addPage()
-  }
-  const finalSignY = signatureY > doc.internal.pageSize.getHeight() - 40 ? margin + 60 : signatureY
+  const signWidth = 160
+  const sign1X = margin + 40
+  const sign2X = pageWidth - margin - signWidth - 40
 
+  // Línea firma izquierda
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
-
-  // Firma izquierda - quien entrega
-  const sign1X = margin + 30
-  const sign2X = pageWidth - margin - 170
-  const signWidth = 140
-
   doc.line(sign1X, finalSignY, sign1X + signWidth, finalSignY)
+
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isExit ? 'Entregado por' : 'Entregado por (obra)', sign1X + signWidth / 2, finalSignY + 12, { align: 'center' })
+  doc.text(isExit ? 'Entregado por (Almacén)' : 'Entregado por (Obra)', sign1X + signWidth / 2, finalSignY + 14, { align: 'center' })
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(movement.userName || '', sign1X + signWidth / 2, finalSignY + 24, { align: 'center' })
+  doc.text(movement.userName || '', sign1X + signWidth / 2, finalSignY + 26, { align: 'center' })
 
-  // Firma derecha - quien recibe
-  doc.setDrawColor(...BLACK)
+  // Línea firma derecha
   doc.line(sign2X, finalSignY, sign2X + signWidth, finalSignY)
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isExit ? 'Recibido por (obra)' : 'Recibido por (almacén)', sign2X + signWidth / 2, finalSignY + 12, { align: 'center' })
+  doc.text(isExit ? 'Recibido por (Obra)' : 'Recibido por (Almacén)', sign2X + signWidth / 2, finalSignY + 14, { align: 'center' })
   if (!isExit && movement.receivedBy) {
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...BLACK)
-    doc.text(movement.receivedBy, sign2X + signWidth / 2, finalSignY + 24, { align: 'center' })
+    doc.text(movement.receivedBy, sign2X + signWidth / 2, finalSignY + 26, { align: 'center' })
   }
 
-  // Pie de página
+  // Sello "Firma y Sello"
+  doc.setFontSize(6)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(...GRAY)
+  doc.text('Firma y Sello', sign1X + signWidth / 2, finalSignY + 38, { align: 'center' })
+  doc.text('Firma y Sello', sign2X + signWidth / 2, finalSignY + 38, { align: 'center' })
+
+  // ===== PIE DE PÁGINA =====
   doc.setFontSize(7)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(...GRAY)
-  doc.text('Documento generado por Cobrify', pageWidth / 2, doc.internal.pageSize.getHeight() - 20, { align: 'center' })
+  doc.text('Documento generado por Cobrify', pageWidth / 2, pageHeight - 20, { align: 'center' })
 
   return doc
 }
 
 /**
- * Descargar PDF de movimiento logístico
+ * Descargar PDF
  */
-export const downloadLogisticsMovementPDF = (movement, business, type = 'exit') => {
-  const doc = generateLogisticsMovementPDF(movement, business, type)
+export const downloadLogisticsMovementPDF = async (movement, business, type = 'exit') => {
+  const doc = await generateLogisticsMovementPDF(movement, business, type)
   const prefix = type === 'exit' ? 'Salida' : 'Retorno'
-  const projectName = (movement.projectName || 'obra').replace(/[^a-zA-Z0-9]/g, '_')
-  const fileName = `${prefix}_${projectName}_${formatTimestampShort(movement.createdAt)}.pdf`
+  const num = movement.number || formatTimestampShort(movement.createdAt)
+  const fileName = `${prefix}_${num}.pdf`
   doc.save(fileName)
 }
 

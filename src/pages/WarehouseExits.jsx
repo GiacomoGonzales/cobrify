@@ -276,8 +276,8 @@ export default function WarehouseExits() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <HardHat className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        {exit.number && <span className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{exit.number}</span>}
                         <span className="font-semibold text-gray-900 truncate">{exit.projectName}</span>
-                        {exit.projectCode && <span className="text-xs text-indigo-600 font-mono">({exit.projectCode})</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                         <span className="flex items-center gap-1">

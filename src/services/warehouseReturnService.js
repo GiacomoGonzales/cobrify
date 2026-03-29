@@ -7,6 +7,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
 
@@ -40,15 +41,29 @@ export const getWarehouseReturns = async (businessId) => {
  * items: [{ productId, productName, productCode, quantity, unit, condition, conditionNotes }]
  * condition: 'good' | 'damaged' | 'lost'
  */
+const getNextReturnNumber = async (businessId) => {
+  const counterRef = doc(db, 'businesses', businessId, 'counters', 'warehouseReturns')
+  const num = await runTransaction(db, async (transaction) => {
+    const counterDoc = await transaction.get(counterRef)
+    const current = counterDoc.exists() ? (counterDoc.data().lastNumber || 0) : 0
+    const next = current + 1
+    transaction.set(counterRef, { lastNumber: next }, { merge: true })
+    return next
+  })
+  return `RET-${String(num).padStart(5, '0')}`
+}
+
 export const createWarehouseReturn = async (businessId, returnData) => {
   try {
     const totalItems = returnData.items.reduce((sum, item) => sum + item.quantity, 0)
+    const number = await getNextReturnNumber(businessId)
     const goodItems = returnData.items.filter(i => i.condition === 'good').reduce((s, i) => s + i.quantity, 0)
     const damagedItems = returnData.items.filter(i => i.condition === 'damaged').reduce((s, i) => s + i.quantity, 0)
     const lostItems = returnData.items.filter(i => i.condition === 'lost').reduce((s, i) => s + i.quantity, 0)
 
     const docRef = await addDoc(collection(db, 'businesses', businessId, 'warehouseReturns'), {
       ...returnData,
+      number,
       totalItems,
       goodItems,
       damagedItems,
