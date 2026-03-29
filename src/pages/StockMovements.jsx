@@ -444,61 +444,27 @@ export default function StockMovements() {
     toast.success(`${filteredMovements.length} movimientos exportados`)
   }
 
-  // Calcular saldo después de cada movimiento
-  // Usa el stock actual del producto y recalcula hacia atrás desde el más reciente
+  // Calcular saldo acumulativo por producto+almacén
+  // Ordena de más antiguo a más nuevo, suma quantity (que ya tiene signo correcto)
   const movementsWithBalance = (() => {
-    // Agrupar movimientos por producto+almacén
-    const grouped = {}
-
-    // Ordenar por fecha descendente (más reciente primero) para recalcular hacia atrás
+    // Ordenar por fecha ascendente (más antiguo primero)
     const sortedMovements = [...filteredMovements].sort((a, b) => {
       const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt)
       const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt)
-      return dateB - dateA
+      return dateA - dateB
     })
 
-    // Procesar cada movimiento de más reciente a más antiguo
+    // Acumular saldo por producto+almacén
+    const runningBalance = {}
+    const balanceMap = {}
+
     sortedMovements.forEach(mov => {
       const key = `${mov.productId}_${mov.warehouseId}`
-
-      if (!grouped[key]) {
-        // Obtener stock actual del producto en este almacén
-        const product = products.find(p => p.id === mov.productId)
-        let currentStock = 0
-        if (product) {
-          const ws = product.warehouseStocks?.find(w => w.warehouseId === mov.warehouseId)
-          currentStock = ws ? (ws.stock || 0) : (product.stock || 0)
-        }
-        grouped[key] = { balance: currentStock, movements: [] }
-      }
-
-      // Este movimiento tiene como saldo final el balance actual
-      const stockAfter = grouped[key].balance
-
-      // Calcular el efecto de este movimiento para obtener el saldo anterior
-      let effect = 0
-      if (mov.type === 'entry' || mov.type === 'transfer_in') {
-        effect = Math.abs(mov.quantity)
-      } else if (mov.type === 'exit' || mov.type === 'sale' || mov.type === 'transfer_out' || mov.type === 'damage') {
-        effect = -Math.abs(mov.quantity)
-      } else if (mov.type === 'adjustment') {
-        effect = mov.quantity
-      }
-
-      // Restar el efecto para obtener el saldo antes de este movimiento
-      grouped[key].balance -= effect
-      grouped[key].movements.push({ id: mov.id, stockAfter })
+      if (runningBalance[key] === undefined) runningBalance[key] = 0
+      runningBalance[key] += (mov.quantity || 0)
+      balanceMap[mov.id] = runningBalance[key]
     })
 
-    // Crear mapa de movimiento.id -> stockAfter
-    const balanceMap = {}
-    Object.values(grouped).forEach(group => {
-      group.movements.forEach(mov => {
-        balanceMap[mov.id] = mov.stockAfter
-      })
-    })
-
-    // Retornar los movimientos filtrados originales con el saldo calculado
     return filteredMovements.map(mov => ({
       ...mov,
       stockAfter: balanceMap[mov.id] ?? null

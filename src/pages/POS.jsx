@@ -3444,17 +3444,30 @@ export default function POS() {
         setProducts(prev => prev.map(product => {
           const cartItem = cart.find(ci => ci.id === product.id || ci.productId === product.id)
           if (!cartItem) return product
+          const quantityToDeduct = cartItem.quantity * (cartItem.presentationFactor || 1)
           if (product.hasVariants && product.variants?.length > 0) {
             const updatedVariants = product.variants.map(v => {
               if (v.sku === cartItem.variantSku || v.name === cartItem.variantName) {
-                return { ...v, stock: Math.max(0, (v.stock || 0) - cartItem.quantity) }
+                const newStock = Math.max(0, (v.stock || 0) - quantityToDeduct)
+                const updatedWs = (v.warehouseStocks || []).map(ws =>
+                  ws.warehouseId === selectedWarehouse?.id
+                    ? { ...ws, stock: Math.max(0, (ws.stock || 0) - quantityToDeduct) }
+                    : ws
+                )
+                return { ...v, stock: newStock, warehouseStocks: updatedWs }
               }
               return v
             })
             return { ...product, variants: updatedVariants }
           }
           if (product.stock != null) {
-            return { ...product, stock: Math.max(0, product.stock - cartItem.quantity) }
+            const newStock = Math.max(0, product.stock - quantityToDeduct)
+            const updatedWarehouseStocks = (product.warehouseStocks || []).map(ws =>
+              ws.warehouseId === selectedWarehouse?.id
+                ? { ...ws, stock: Math.max(0, (ws.stock || 0) - quantityToDeduct) }
+                : ws
+            )
+            return { ...product, stock: newStock, warehouseStocks: updatedWarehouseStocks }
           }
           return product
         }))
