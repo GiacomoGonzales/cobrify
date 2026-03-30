@@ -1834,27 +1834,30 @@ export default function CreateQuotation() {
         isOpen={showNewCustomerModal}
         onClose={() => !isCreatingCustomer && setShowNewCustomerModal(false)}
         title="Crear Nuevo Cliente"
+        maxWidth="md"
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Tipo de Documento *"
-              value={manualCustomer.documentType}
-              onChange={e =>
-                setManualCustomer({ ...manualCustomer, documentType: e.target.value })
-              }
-            >
-              <option value="DNI">DNI</option>
-              <option value="RUC">RUC</option>
-              <option value="CE">Carnet de Extranjería</option>
-              <option value="PASSPORT">Pasaporte</option>
-            </Select>
-
-            <div>
+        <div className="space-y-3">
+          {/* Tipo + Número de documento con lupa */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="w-full sm:w-36 flex-shrink-0">
+              <Select
+                label="Tipo *"
+                value={manualCustomer.documentType}
+                onChange={e =>
+                  setManualCustomer({ ...manualCustomer, documentType: e.target.value })
+                }
+              >
+                <option value="DNI">DNI</option>
+                <option value="RUC">RUC</option>
+                <option value="CE">CE</option>
+                <option value="PASSPORT">Pasaporte</option>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Número de Documento <span className="text-red-500">*</span>
+                N° Documento <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <input
                   type="text"
                   value={manualCustomer.documentNumber}
@@ -1868,13 +1871,13 @@ export default function CreateQuotation() {
                       ? '20123456789'
                       : 'Número'
                   }
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                 />
                 <button
                   type="button"
                   onClick={handleLookupDocument}
                   disabled={isLookingUpDocument}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center flex-shrink-0 transition-colors"
                   title="Buscar datos del documento"
                 >
                   {isLookingUpDocument ? (
@@ -1884,20 +1887,17 @@ export default function CreateQuotation() {
                   )}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Ingrese DNI (8 dígitos) o RUC (11 dígitos) y haga clic en buscar
-              </p>
             </div>
+          </div>
 
-            <div className="sm:col-span-2">
-              <Input
-                label="Nombre / Razón Social *"
-                value={manualCustomer.name}
-                onChange={e => setManualCustomer({ ...manualCustomer, name: e.target.value })}
-                placeholder="Nombre completo o razón social"
-              />
-            </div>
+          <Input
+            label="Nombre / Razón Social *"
+            value={manualCustomer.name}
+            onChange={e => setManualCustomer({ ...manualCustomer, name: e.target.value })}
+            placeholder="Nombre completo o razón social"
+          />
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               type="email"
               label="Email"
@@ -1905,7 +1905,6 @@ export default function CreateQuotation() {
               onChange={e => setManualCustomer({ ...manualCustomer, email: e.target.value })}
               placeholder="cliente@email.com"
             />
-
             <Input
               type="tel"
               label="Teléfono"
@@ -1913,18 +1912,16 @@ export default function CreateQuotation() {
               onChange={e => setManualCustomer({ ...manualCustomer, phone: e.target.value })}
               placeholder="987654321"
             />
-
-            <div className="sm:col-span-2">
-              <Input
-                label="Dirección"
-                value={manualCustomer.address}
-                onChange={e => setManualCustomer({ ...manualCustomer, address: e.target.value })}
-                placeholder="Dirección completa"
-              />
-            </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <Input
+            label="Dirección"
+            value={manualCustomer.address}
+            onChange={e => setManualCustomer({ ...manualCustomer, address: e.target.value })}
+            placeholder="Dirección completa"
+          />
+
+          <div className="flex justify-end gap-3 pt-2">
             <Button
               type="button"
               variant="outline"
