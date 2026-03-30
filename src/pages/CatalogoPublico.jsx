@@ -237,7 +237,7 @@ const getVariantPrices = (variant, business) => {
 
 // Modal de producto con soporte para modificadores
 function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false }) {
-  const showPrices = globalShowPrices && !product.catalogHidePrice
+  const showPrices = globalShowPrices && !product?.catalogHidePrice
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
