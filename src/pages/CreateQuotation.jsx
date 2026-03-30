@@ -92,7 +92,7 @@ const UNITS = [
 
 export default function CreateQuotation() {
   const { user } = useAuth()
-  const { businessSettings } = useAppContext()
+  const { businessSettings, getBusinessId } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
@@ -178,10 +178,10 @@ export default function CreateQuotation() {
     setIsLoading(true)
     try {
       const [customersResult, productsResult, branchesResult, sellersResult] = await Promise.all([
-        getCustomers(user.uid),
-        getProducts(user.uid),
-        getActiveBranches(user.uid),
-        getSellers(user.uid),
+        getCustomers(getBusinessId()),
+        getProducts(getBusinessId()),
+        getActiveBranches(getBusinessId()),
+        getSellers(getBusinessId()),
       ])
 
       if (customersResult.success) {
@@ -202,7 +202,7 @@ export default function CreateQuotation() {
 
       // Si hay quotationId, cargar la cotización para edición
       if (quotationId) {
-        const quotationResult = await getQuotation(user.uid, quotationId)
+        const quotationResult = await getQuotation(getBusinessId(), quotationId)
         if (quotationResult.success) {
           const q = quotationResult.data
           setIsEditing(true)
@@ -288,7 +288,7 @@ export default function CreateQuotation() {
 
       // Si hay cloneId, cargar datos de la cotización para duplicar (sin modo edición)
       if (cloneId && !quotationId) {
-        const cloneResult = await getQuotation(user.uid, cloneId)
+        const cloneResult = await getQuotation(getBusinessId(), cloneId)
         if (cloneResult.success) {
           const q = cloneResult.data
 
@@ -656,13 +656,13 @@ export default function CreateQuotation() {
     setIsCreatingCustomer(true)
 
     try {
-      const result = await createCustomer(user.uid, manualCustomer)
+      const result = await createCustomer(getBusinessId(), manualCustomer)
 
       if (result.success) {
         toast.success('Cliente creado exitosamente')
 
         // Recargar clientes
-        const customersResult = await getCustomers(user.uid)
+        const customersResult = await getCustomers(getBusinessId())
         if (customersResult.success) {
           setCustomers(customersResult.data || [])
 
@@ -822,7 +822,7 @@ export default function CreateQuotation() {
           sellerCode: selectedSeller?.code || null,
         }
 
-        const result = await updateQuotation(user.uid, quotationId, quotationData)
+        const result = await updateQuotation(getBusinessId(), quotationId, quotationData)
         if (!result.success) {
           throw new Error(result.error || 'Error al actualizar la cotización')
         }
@@ -837,7 +837,7 @@ export default function CreateQuotation() {
           finalNumber = `${customSeries}-${customNumber.padStart(8, '0')}`
         } else {
           // Usar número automático
-          const numberResult = await getNextQuotationNumber(user.uid)
+          const numberResult = await getNextQuotationNumber(getBusinessId())
           if (!numberResult.success) {
             throw new Error('Error al generar número de cotización')
           }
@@ -877,7 +877,7 @@ export default function CreateQuotation() {
           createdByEmail: user.email || '',
         }
 
-        const result = await createQuotation(user.uid, quotationData)
+        const result = await createQuotation(getBusinessId(), quotationData)
         if (!result.success) {
           throw new Error(result.error || 'Error al crear la cotización')
         }
