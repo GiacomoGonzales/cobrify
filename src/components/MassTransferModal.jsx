@@ -311,7 +311,7 @@ export default function MassTransferModal({
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/50 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] lg:h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
             <div>
