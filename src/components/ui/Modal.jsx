@@ -34,7 +34,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
   // Usar Portal para renderizar el modal fuera del árbol DOM normal
   // Esto soluciona el problema de z-index en iOS Safari
   return createPortal(
-    <div className="fixed inset-0 z-[9999] overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <div className="fixed inset-0 z-[9999] overflow-y-auto">
       {/* Overlay */}
       <div
         className={cn(
@@ -45,10 +45,13 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
       />
 
       {/* Modal */}
-      <div className={cn(
-        "flex min-h-full items-center justify-center relative",
-        fullScreenMobile ? "p-0 lg:p-4" : "p-4"
-      )}>
+      <div
+        className={cn(
+          "flex min-h-full items-center justify-center relative",
+          fullScreenMobile ? "p-0 lg:p-4" : "p-4 pt-safe"
+        )}
+        style={{ paddingTop: fullScreenMobile ? undefined : 'max(1rem, env(safe-area-inset-top))' }}
+      >
         <div
           className={cn(
             'relative bg-white shadow-xl w-full',
@@ -60,14 +63,17 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
         >
           {/* Header - solo si hay título */}
           {title && (
-            <div className={cn(
-              "flex items-center justify-between p-6 border-b border-gray-200 bg-white z-10",
-              fullScreenMobile && "sticky top-0"
-            )}>
-              <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
+            <div
+              className={cn(
+                "flex items-center justify-between p-6 border-b border-gray-200 bg-white z-10",
+                fullScreenMobile && "sticky top-0"
+              )}
+              style={{ paddingTop: fullScreenMobile ? 'max(1.5rem, env(safe-area-inset-top))' : undefined }}
+            >
+              <h3 className="text-xl font-semibold text-gray-900 line-clamp-1">{title}</h3>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-2"
               >
                 <X className="w-5 h-5" />
               </button>

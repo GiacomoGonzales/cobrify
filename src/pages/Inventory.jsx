@@ -882,22 +882,45 @@ export default function Inventory() {
     setIsRecalculating(true)
     try {
       const businessId = getBusinessId()
+      console.log('Recalculando stock para:', historyProduct.id, historyProduct.name)
+      console.log('Stock actual en modal:', historyProduct.stock)
+
       const result = await recalculateStockFromMovements(businessId, historyProduct.id)
+      console.log('Resultado recalculo:', result)
+
       if (result.success) {
+        // Actualizar el producto en el modal con el stock corregido
+        setHistoryProduct(prev => prev ? { ...prev, stock: result.stockFromMovements } : prev)
+
+        // También actualizar el producto en la lista local (stock Y warehouseStocks)
+        setProducts(prev => prev.map(p => {
+          if (p.id !== historyProduct.id) return p
+
+          // Construir nuevo warehouseStocks basado en byWarehouse
+          const newWarehouseStocks = (p.warehouseStocks || []).map(ws => ({
+            ...ws,
+            stock: result.byWarehouse?.[ws.warehouseId] || 0
+          }))
+
+          return {
+            ...p,
+            stock: result.stockFromMovements,
+            warehouseStocks: newWarehouseStocks
+          }
+        }))
+
         if (result.corrected) {
           toast.success(`Stock corregido: ${result.previousStock} → ${result.stockFromMovements}`)
         } else {
-          toast.success('El stock ya estaba correcto')
+          toast.info(`El stock ya estaba correcto (${result.stockFromMovements})`)
         }
-        loadProducts()
-        // Actualizar el producto en el modal
-        setHistoryProduct(prev => ({ ...prev, stock: result.stockFromMovements }))
       } else {
-        toast.error('Error al recalcular: ' + result.error)
+        console.error('Error en recalculo:', result.error)
+        toast.error('Error al recalcular: ' + (result.error || 'Error desconocido'))
       }
     } catch (error) {
       console.error('Error al recalcular stock:', error)
-      toast.error('Error al recalcular el stock')
+      toast.error('Error al recalcular el stock: ' + error.message)
     } finally {
       setIsRecalculating(false)
     }
@@ -3354,8 +3377,9 @@ export default function Inventory() {
       <Modal
         isOpen={showHistoryModal}
         onClose={closeHistoryModal}
-        title={`Historial de Movimientos - ${historyProduct?.name || ''}`}
+        title={`Historial - ${historyProduct?.name || ''}`}
         size="6xl"
+        fullScreenMobile
       >
         <div className="space-y-4">
           {historyProduct && (
@@ -3382,85 +3406,155 @@ export default function Inventory() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto max-h-96">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Almacén</TableHead>
-                    <TableHead className="text-center">Cantidad</TableHead>
-                    <TableHead className="hidden md:table-cell">Motivo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {productMovements.map(movement => {
-                    const typeInfo = getMovementTypeInfo(movement.type)
-                    const Icon = typeInfo.icon
-                    return (
-                      <TableRow key={movement.id}>
-                        <TableCell>
-                          <span className="text-sm text-gray-600">
-                            {formatMovementDate(movement.createdAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={typeInfo.variant}>
-                            <Icon className="w-3 h-3 mr-1 inline" />
-                            {typeInfo.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
-                              <div>
-                                <p className="text-gray-500">
-                                  <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
-                                </p>
-                                <p className="font-medium">
-                                  <span className="text-gray-400">A:</span> {movement.warehouseName}
-                                </p>
-                              </div>
-                            ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
-                              <div>
-                                <p className="font-medium">
-                                  <span className="text-gray-400">De:</span> {movement.warehouseName}
-                                </p>
-                                <p className="text-gray-500">
-                                  <span className="text-gray-400">A:</span> {movement.toWarehouseName}
-                                </p>
-                              </div>
-                            ) : (
-                              <p className="font-medium">{movement.warehouseName}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            className={`font-bold ${
-                              movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {movement.quantity > 0 ? '+' : ''}
-                            {movement.quantity}
-                          </span>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <div>
-                            <p className="text-sm text-gray-600 whitespace-normal break-words">
-                              {movement.notes || movement.reason || '-'}
-                            </p>
-                            {movement.referenceNumber && (
-                              <p className="text-xs text-gray-400 mt-0.5">{movement.referenceNumber}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <>
+              {/* Vista móvil/tablet - Tarjetas */}
+              <div className="md:hidden max-h-[60vh] overflow-y-auto space-y-3">
+                {productMovements.map(movement => {
+                  const typeInfo = getMovementTypeInfo(movement.type)
+                  const Icon = typeInfo.icon
+                  return (
+                    <div
+                      key={movement.id}
+                      className={`p-3 rounded-lg border-l-4 ${
+                        movement.quantity > 0
+                          ? 'bg-green-50 border-green-500'
+                          : 'bg-red-50 border-red-500'
+                      }`}
+                    >
+                      {/* Fila 1: Tipo + Cantidad */}
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant={typeInfo.variant} className="text-xs">
+                          <Icon className="w-3 h-3 mr-1 inline" />
+                          {typeInfo.label}
+                        </Badge>
+                        <span
+                          className={`text-lg font-bold ${
+                            movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {movement.quantity > 0 ? '+' : ''}
+                          {movement.quantity}
+                        </span>
+                      </div>
+
+                      {/* Fila 2: Almacén */}
+                      <div className="text-sm mb-1">
+                        {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
+                          <p className="text-gray-700">
+                            <span className="text-gray-500">De:</span> {movement.fromWarehouseName} → <span className="font-medium">{movement.warehouseName}</span>
+                          </p>
+                        ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
+                          <p className="text-gray-700">
+                            <span className="font-medium">{movement.warehouseName}</span> → <span className="text-gray-500">{movement.toWarehouseName}</span>
+                          </p>
+                        ) : (
+                          <p className="text-gray-700">
+                            <Warehouse className="w-3 h-3 inline mr-1 text-gray-400" />
+                            {movement.warehouseName}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Fila 3: Motivo (si existe) */}
+                      {(movement.notes || movement.reason) && (
+                        <p className="text-xs text-gray-600 mb-1 line-clamp-2">
+                          {movement.notes || movement.reason}
+                        </p>
+                      )}
+
+                      {/* Fila 4: Fecha + Referencia */}
+                      <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-gray-200/50">
+                        <span>{formatMovementDate(movement.createdAt)}</span>
+                        {movement.referenceNumber && (
+                          <span className="text-gray-400">{movement.referenceNumber}</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Vista desktop - Tabla */}
+              <div className="hidden md:block overflow-x-auto max-h-96">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Almacén</TableHead>
+                      <TableHead className="text-center">Cantidad</TableHead>
+                      <TableHead>Motivo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productMovements.map(movement => {
+                      const typeInfo = getMovementTypeInfo(movement.type)
+                      const Icon = typeInfo.icon
+                      return (
+                        <TableRow key={movement.id}>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">
+                              {formatMovementDate(movement.createdAt)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={typeInfo.variant}>
+                              <Icon className="w-3 h-3 mr-1 inline" />
+                              {typeInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
+                                <div>
+                                  <p className="text-gray-500">
+                                    <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
+                                  </p>
+                                  <p className="font-medium">
+                                    <span className="text-gray-400">A:</span> {movement.warehouseName}
+                                  </p>
+                                </div>
+                              ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
+                                <div>
+                                  <p className="font-medium">
+                                    <span className="text-gray-400">De:</span> {movement.warehouseName}
+                                  </p>
+                                  <p className="text-gray-500">
+                                    <span className="text-gray-400">A:</span> {movement.toWarehouseName}
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="font-medium">{movement.warehouseName}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span
+                              className={`font-bold ${
+                                movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}
+                            >
+                              {movement.quantity > 0 ? '+' : ''}
+                              {movement.quantity}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="text-sm text-gray-600 whitespace-normal break-words">
+                                {movement.notes || movement.reason || '-'}
+                              </p>
+                              {movement.referenceNumber && (
+                                <p className="text-xs text-gray-400 mt-0.5">{movement.referenceNumber}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
 
           {/* Resumen de movimientos */}
@@ -3479,19 +3573,21 @@ export default function Inventory() {
                   <div className="bg-green-50 p-3 rounded-lg text-center">
                     <p className="text-xs text-gray-600">Entradas</p>
                     <p className="text-lg font-bold text-green-600">
-                      {productMovements.filter(m => m.type === 'entry' || m.type === 'transfer_in').length}
+                      +{productMovements.filter(m => m.quantity > 0).reduce((sum, m) => sum + m.quantity, 0)}
                     </p>
+                    <p className="text-xs text-gray-500">{productMovements.filter(m => m.quantity > 0).length} mov.</p>
                   </div>
                   <div className="bg-red-50 p-3 rounded-lg text-center">
                     <p className="text-xs text-gray-600">Salidas</p>
                     <p className="text-lg font-bold text-red-600">
-                      {productMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale' || m.type === 'damage').length}
+                      {productMovements.filter(m => m.quantity < 0).reduce((sum, m) => sum + m.quantity, 0)}
                     </p>
+                    <p className="text-xs text-gray-500">{productMovements.filter(m => m.quantity < 0).length} mov.</p>
                   </div>
-                  <div className="bg-purple-50 p-3 rounded-lg text-center">
-                    <p className="text-xs text-gray-600">Ajustes</p>
-                    <p className="text-lg font-bold text-purple-600">
-                      {productMovements.filter(m => m.type === 'adjustment').length}
+                  <div className="bg-blue-50 p-3 rounded-lg text-center">
+                    <p className="text-xs text-gray-600">Balance</p>
+                    <p className={`text-lg font-bold ${stockFromMovements >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {stockFromMovements >= 0 ? '+' : ''}{stockFromMovements}
                     </p>
                   </div>
                 </div>

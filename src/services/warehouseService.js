@@ -298,9 +298,58 @@ export const createStockMovement = async (businessId, movementData) => {
 export const getStockMovements = async (businessId, filters = {}) => {
   try {
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    let movements = []
+
+    // Si se filtra por producto, usar query separada sin orderBy para evitar índice compuesto
+    if (filters.productId) {
+      const productQuery = query(
+        movementsRef,
+        where('productId', '==', filters.productId)
+      )
+      const snapshot = await getDocs(productQuery)
+      snapshot.forEach((doc) => {
+        movements.push({ id: doc.id, ...doc.data() })
+      })
+
+      // Ordenar en cliente
+      movements.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0)
+        const dateB = b.createdAt?.toDate?.() || new Date(0)
+        return dateB - dateA // desc
+      })
+
+      // Filtros adicionales en cliente
+      if (filters.startDate) {
+        const [y, m, d] = filters.startDate.split('-').map(Number)
+        const startDate = new Date(y, m - 1, d, 0, 0, 0)
+        movements = movements.filter(m => {
+          const movDate = m.createdAt?.toDate?.() || new Date(0)
+          return movDate >= startDate
+        })
+      }
+      if (filters.endDate) {
+        const [y, m, d] = filters.endDate.split('-').map(Number)
+        const endDate = new Date(y, m - 1, d, 23, 59, 59)
+        movements = movements.filter(m => {
+          const movDate = m.createdAt?.toDate?.() || new Date(0)
+          return movDate <= endDate
+        })
+      }
+      if (filters.warehouseId) {
+        movements = movements.filter(
+          (m) => m.warehouseId === filters.warehouseId || m.toWarehouse === filters.warehouseId
+        )
+      }
+      if (filters.type) {
+        movements = movements.filter((m) => m.type === filters.type)
+      }
+
+      return { success: true, data: movements, lastDoc: null, hasMore: false }
+    }
+
+    // Query general (sin filtro de producto)
     const constraints = []
 
-    // Filtros en Firestore (server-side) para reducir lectura
     if (filters.startDate) {
       const [y, m, d] = filters.startDate.split('-').map(Number)
       constraints.push(where('createdAt', '>=', Timestamp.fromDate(new Date(y, m - 1, d, 0, 0, 0))))
@@ -312,37 +361,30 @@ export const getStockMovements = async (businessId, filters = {}) => {
 
     constraints.push(orderBy('createdAt', 'desc'))
 
-    // Paginación con límite
     const pageSize = filters.pageSize || 200
     constraints.push(firestoreLimit(pageSize))
 
-    // Cursor para cargar más
     if (filters.startAfterDoc) {
       constraints.push(startAfter(filters.startAfterDoc))
     }
 
     const q = query(movementsRef, ...constraints)
     const snapshot = await getDocs(q)
-    let movements = []
 
     snapshot.forEach((doc) => {
       movements.push({ id: doc.id, ...doc.data() })
     })
 
-    // Filtrar en cliente (campos que no pueden ser compound index con createdAt)
+    // Filtrar en cliente
     if (filters.warehouseId) {
       movements = movements.filter(
         (m) => m.warehouseId === filters.warehouseId || m.toWarehouse === filters.warehouseId
       )
     }
-    if (filters.productId) {
-      movements = movements.filter((m) => m.productId === filters.productId)
-    }
     if (filters.type) {
       movements = movements.filter((m) => m.type === filters.type)
     }
 
-    // Último documento para paginación cursor
     const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null
     const hasMore = snapshot.docs.length === pageSize
 
@@ -851,19 +893,33 @@ export const syncAllProductsStock = async (businessId, targetWarehouseId) => {
  */
 export const recalculateStockFromMovements = async (businessId, productId) => {
   try {
-    // 1. Obtener todos los movimientos del producto
+    // 1. Obtener almacenes para identificar el principal
+    const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
+    const warehousesSnap = await getDocs(warehousesRef)
+    const warehouses = []
+    warehousesSnap.forEach(doc => warehouses.push({ id: doc.id, ...doc.data() }))
+    const defaultWarehouse = warehouses.find(w => w.isDefault) || warehouses[0]
+    const defaultWarehouseId = defaultWarehouse?.id || null
+
+    console.log('Almacén principal:', defaultWarehouseId, defaultWarehouse?.name)
+
+    // 2. Obtener todos los movimientos del producto
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
     const q = query(movementsRef, where('productId', '==', productId))
     const snapshot = await getDocs(q)
 
-    // 2. Sumar cantidades por almacén
+    // 3. Sumar cantidades por almacén
     const stockByWarehouse = {}
     let totalFromMovements = 0
 
     snapshot.docs.forEach(docSnap => {
       const mov = docSnap.data()
       const qty = mov.quantity || 0
-      const whId = mov.warehouseId || 'default'
+      // Si no tiene warehouseId o es 'default', usar el almacén principal
+      let whId = mov.warehouseId
+      if (!whId || whId === 'default') {
+        whId = defaultWarehouseId || 'default'
+      }
 
       if (!stockByWarehouse[whId]) {
         stockByWarehouse[whId] = 0
@@ -872,14 +928,10 @@ export const recalculateStockFromMovements = async (businessId, productId) => {
       totalFromMovements += qty
     })
 
-    // No permitir negativos por almacén
-    Object.keys(stockByWarehouse).forEach(whId => {
-      if (stockByWarehouse[whId] < 0) stockByWarehouse[whId] = 0
-    })
+    console.log('Stock por almacén:', stockByWarehouse)
+    console.log('Total desde movimientos:', totalFromMovements)
 
-    const correctedTotal = Object.values(stockByWarehouse).reduce((sum, s) => sum + s, 0)
-
-    // 3. Leer producto actual
+    // 4. Leer producto actual
     const productRef = doc(db, 'businesses', businessId, 'products', productId)
     const productDoc = await getDoc(productRef)
     if (!productDoc.exists()) {
@@ -889,37 +941,58 @@ export const recalculateStockFromMovements = async (businessId, productId) => {
     const product = productDoc.data()
     const previousStock = product.stock || 0
     const previousWarehouseStocks = product.warehouseStocks || []
+    const previousWarehouseTotal = previousWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
-    // 4. Construir nuevo warehouseStocks
-    const newWarehouseStocks = previousWarehouseStocks.map(ws => {
+    console.log('Stock anterior (general):', previousStock)
+    console.log('Stock anterior (warehouseStocks):', previousWarehouseTotal)
+    console.log('Stock corregido:', totalFromMovements)
+
+    // 5. Construir nuevo warehouseStocks
+    const newWarehouseStocks = []
+    const processedWarehouseIds = new Set()
+
+    // Primero, actualizar los almacenes que ya existen en el producto
+    previousWarehouseStocks.forEach(ws => {
       const calculatedStock = stockByWarehouse[ws.warehouseId] || 0
-      return { ...ws, stock: calculatedStock }
+      newWarehouseStocks.push({ ...ws, stock: calculatedStock })
+      processedWarehouseIds.add(ws.warehouseId)
     })
 
     // Agregar almacenes que tienen movimientos pero no están en warehouseStocks
     Object.keys(stockByWarehouse).forEach(whId => {
-      if (whId === 'default') return
-      if (!newWarehouseStocks.find(ws => ws.warehouseId === whId)) {
-        newWarehouseStocks.push({
-          warehouseId: whId,
-          stock: stockByWarehouse[whId],
-          minStock: 0,
-        })
-      }
+      if (whId === 'default' || processedWarehouseIds.has(whId)) return
+      newWarehouseStocks.push({
+        warehouseId: whId,
+        stock: stockByWarehouse[whId],
+        minStock: 0,
+      })
     })
 
-    // 5. Actualizar producto
+    // Si no hay warehouseStocks pero hay un almacén principal, crear uno
+    if (newWarehouseStocks.length === 0 && defaultWarehouseId && totalFromMovements !== 0) {
+      newWarehouseStocks.push({
+        warehouseId: defaultWarehouseId,
+        stock: totalFromMovements,
+        minStock: 0,
+      })
+    }
+
+    console.log('Nuevo warehouseStocks:', newWarehouseStocks)
+
+    // 6. Actualizar producto
     await updateDoc(productRef, {
-      stock: correctedTotal,
+      stock: totalFromMovements,
       warehouseStocks: newWarehouseStocks,
       updatedAt: serverTimestamp(),
     })
 
+    console.log('Producto actualizado con stock:', totalFromMovements)
+
     return {
       success: true,
-      corrected: previousStock !== correctedTotal,
-      stockFromMovements: correctedTotal,
-      previousStock,
+      corrected: previousWarehouseTotal !== totalFromMovements || previousStock !== totalFromMovements,
+      stockFromMovements: totalFromMovements,
+      previousStock: previousWarehouseTotal || previousStock,
       byWarehouse: stockByWarehouse,
     }
   } catch (error) {
