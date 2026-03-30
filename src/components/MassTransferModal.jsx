@@ -31,8 +31,6 @@ export default function MassTransferModal({
   const [lastTransfer, setLastTransfer] = useState(null)
   const searchRef = useRef(null)
 
-  if (!isOpen) return null
-
   const warehouseList = allWarehouses || warehouses || []
 
   // Agrupar almacenes por sucursal
@@ -67,6 +65,8 @@ export default function MassTransferModal({
       return terms.every(t => text.includes(t))
     }).slice(0, 10)
   }, [availableProducts, searchTerm])
+
+  if (!isOpen) return null
 
   const getWarehouseStock = (product) => {
     const ws = product.warehouseStocks?.find(s => s.warehouseId === fromWarehouse)
