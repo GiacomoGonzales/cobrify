@@ -7203,6 +7203,52 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200 my-6"></div>
 
+              {/* Ancho de papel para impresión web - SIEMPRE VISIBLE */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-purple-50">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Ancho de papel (impresión web/USB)
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Selecciona el ancho de tu rollo de papel térmico. Si imprimes desde el navegador con una ticketera USB, este ajuste es esencial para que el ticket se vea correctamente.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={async () => {
+                        const newConfig = { ...printerConfig, paperWidth: 58 }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success('Ancho de papel actualizado a 58mm')
+                      }}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                        (printerConfig.paperWidth || 80) === 58
+                          ? 'border-purple-600 bg-purple-100 text-purple-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="font-semibold">58mm</div>
+                      <div className="text-xs mt-1">Impresoras pequeñas</div>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const newConfig = { ...printerConfig, paperWidth: 80 }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success('Ancho de papel actualizado a 80mm')
+                      }}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                        (printerConfig.paperWidth || 80) === 80
+                          ? 'border-purple-600 bg-purple-100 text-purple-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="font-semibold">80mm</div>
+                      <div className="text-xs mt-1">Impresoras estándar (Epson, etc.)</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Modo legible para impresión web - SIEMPRE VISIBLE */}
               <div className="border border-gray-200 rounded-lg p-4 bg-blue-50">
                 <div className="flex items-start space-x-3">
