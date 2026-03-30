@@ -54,9 +54,9 @@ export default function LandingPage() {
               <Link to="/demo" className="text-gray-700 hover:text-primary-600 font-medium transition-colors">
                 Demo
               </Link>
-              <a href="#pricing" className="text-gray-700 hover:text-primary-600 font-medium transition-colors">
+              {/*<a href="#pricing" className="text-gray-700 hover:text-primary-600 font-medium transition-colors">
                 Precios
-              </a>
+              </a>*/}
               <a href="#resellers" className="text-orange-600 hover:text-orange-700 font-medium transition-colors">
                 Resellers
               </a>
@@ -438,13 +438,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
+      {/* Demos & Pricing Section */}
+      <section id="demos" className="py-20 px-4 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
         <div className="container mx-auto max-w-6xl text-center relative z-10">
+          {/* Pricing cards - OCULTO */}
+          <div style={{ display: 'none' }}>
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
             Planes que se adaptan a tu negocio
           </h2>
@@ -717,8 +719,9 @@ export default function LandingPage() {
             <p>* Facturación ilimitada con certificado digital propio. Sin certificado, el límite es de 500 comprobantes mensuales.</p>
           </div>
 
+          </div>
           {/* Demos Section */}
-          <div className="mt-20 pt-12 border-t border-gray-200">
+          <div>
             <h3 className="text-3xl font-bold text-gray-900 mb-4">
               Prueba nuestras demos antes de contratar
             </h3>
