@@ -110,20 +110,46 @@ export default function InventoryCountModal({
     const initialCountData = {}
     products.forEach(product => {
       if (product.stock !== null && product.stock !== undefined || (product.hasVariants && product.variants?.length > 0)) {
-        // Usar el stock del almacén seleccionado
         const warehouseStock = getWarehouseStock(product, warehouseId)
+        const activeBatches = (product.batches || []).filter(b => b.quantity > 0)
+        const price = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
 
-        initialCountData[product.id] = {
-          productId: product.id,
-          productName: product.name,
-          productCode: product.code || '-',
-          category: product.category,
-          systemStock: warehouseStock,
-          physicalCount: '',
-          price: product.hasVariants ? (product.basePrice || 0) : (product.price || 0),
-          isIngredient: product.isIngredient || false,
-          // Guardar warehouseStocks original para actualizar correctamente
-          warehouseStocks: product.warehouseStocks || [],
+        if (activeBatches.length > 0) {
+          // Productos con lotes: una fila por lote
+          activeBatches.forEach(batch => {
+            const batchId = batch.lotNumber || batch.batchNumber || batch.id
+            const key = `${product.id}_batch_${batchId}`
+            initialCountData[key] = {
+              productId: product.id,
+              productName: product.name,
+              productCode: product.code || '-',
+              category: product.category,
+              systemStock: batch.quantity,
+              physicalCount: '',
+              price,
+              isIngredient: false,
+              warehouseStocks: product.warehouseStocks || [],
+              // Datos del lote
+              isBatchRow: true,
+              batchId,
+              batchData: batch,
+              batchExpiration: batch.expirationDate || batch.expiryDate || null,
+              allBatches: product.batches || [],
+            }
+          })
+        } else {
+          // Productos sin lotes: fila normal
+          initialCountData[product.id] = {
+            productId: product.id,
+            productName: product.name,
+            productCode: product.code || '-',
+            category: product.category,
+            systemStock: warehouseStock,
+            physicalCount: '',
+            price,
+            isIngredient: product.isIngredient || false,
+            warehouseStocks: product.warehouseStocks || [],
+          }
         }
       }
     })
@@ -192,7 +218,7 @@ export default function InventoryCountModal({
 
   // Filtrar productos
   const filteredProducts = useMemo(() => {
-    return Object.values(countData).filter(item => {
+    return Object.entries(countData).map(([key, item]) => ({ ...item, _countKey: key })).filter(item => {
       // Búsqueda flexible: dividir en palabras y verificar que TODAS estén presentes
       const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
       const searchableText = [
@@ -395,35 +421,134 @@ export default function InventoryCountModal({
       let successCount = 0
       let errorCount = 0
 
+      // Agrupar items de lotes por producto para actualizar todos los lotes de un producto juntos
+      const batchItemsByProduct = {}
+      const normalItems = []
+
       for (const item of itemsToUpdate) {
+        if (item.isBatchRow) {
+          if (!batchItemsByProduct[item.productId]) batchItemsByProduct[item.productId] = []
+          batchItemsByProduct[item.productId].push(item)
+        } else {
+          normalItems.push(item)
+        }
+      }
+
+      // Procesar productos con lotes (actualizar lotes + stock del almacén)
+      for (const [productId, batchItems] of Object.entries(batchItemsByProduct)) {
+        try {
+          const firstItem = batchItems[0]
+          const allBatches = [...(firstItem.allBatches || [])]
+
+          let totalDifference = 0
+          for (const batchItem of batchItems) {
+            const newQty = parseFloat(batchItem.physicalCount)
+            const diff = newQty - batchItem.systemStock
+            totalDifference += diff
+
+            // Actualizar cantidad del lote
+            const batchIdx = allBatches.findIndex(b =>
+              (b.lotNumber || b.batchNumber || b.id) === batchItem.batchId
+            )
+            if (batchIdx >= 0) {
+              allBatches[batchIdx] = { ...allBatches[batchIdx], quantity: newQty }
+            }
+          }
+
+          // Recalcular stock del almacén
+          const currentWarehouseStocks = firstItem.warehouseStocks || []
+          let newWarehouseStocks = [...currentWarehouseStocks]
+          const selectedIdx = newWarehouseStocks.findIndex(ws => ws.warehouseId === selectedWarehouse.id)
+          const currentWhStock = selectedIdx >= 0 ? (newWarehouseStocks[selectedIdx].stock || 0) : 0
+          const newWhStock = currentWhStock + totalDifference
+
+          if (selectedIdx >= 0) {
+            newWarehouseStocks[selectedIdx] = { ...newWarehouseStocks[selectedIdx], stock: newWhStock }
+          } else if (newWhStock > 0) {
+            newWarehouseStocks.push({ warehouseId: selectedWarehouse.id, stock: newWhStock, minStock: 0 })
+          }
+
+          const totalFromWarehouses = newWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+          // Actualizar fecha de vencimiento más próxima
+          const activeBatches = allBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
+          const batchUpdates = { batches: allBatches }
+          if (activeBatches.length > 0) {
+            activeBatches.sort((a, b) => {
+              const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+              const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+              return dateA - dateB
+            })
+            batchUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+            batchUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+          } else {
+            batchUpdates.expirationDate = null
+            batchUpdates.batchNumber = null
+          }
+
+          const result = await updateProduct(businessId, productId, {
+            stock: totalFromWarehouses,
+            warehouseStocks: newWarehouseStocks,
+            ...batchUpdates,
+          })
+
+          if (result.success) {
+            // Crear un movimiento por cada lote ajustado
+            for (const batchItem of batchItems) {
+              const newQty = parseFloat(batchItem.physicalCount)
+              const diff = newQty - batchItem.systemStock
+              if (diff !== 0) {
+                await createStockMovement(businessId, {
+                  productId,
+                  type: 'adjustment',
+                  quantity: diff,
+                  reason: 'Ajuste por recuento de inventario',
+                  referenceType: 'inventory_count',
+                  previousStock: batchItem.systemStock,
+                  newStock: newQty,
+                  userId,
+                  warehouseId: selectedWarehouse?.id || null,
+                  warehouseName: selectedWarehouse?.name || 'General',
+                  batchNumber: batchItem.batchId,
+                  notes: `Recuento lote ${batchItem.batchId}: ${newQty}, Sistema: ${batchItem.systemStock}, Dif: ${diff > 0 ? '+' : ''}${diff} (${selectedWarehouse?.name || 'General'})`,
+                })
+              }
+            }
+            successCount += batchItems.length
+          } else {
+            errorCount += batchItems.length
+          }
+        } catch (error) {
+          console.error(`Error al actualizar lotes de producto:`, error)
+          errorCount += batchItems.length
+        }
+      }
+
+      // Procesar items normales (sin lotes)
+      for (const item of normalItems) {
         try {
           const newStock = parseFloat(item.physicalCount)
           const difference = newStock - item.systemStock
 
           let result
           if (item.isIngredient) {
-            // Actualizar insumo (los insumos no usan warehouseStocks)
             result = await updateIngredient(businessId, item.productId, {
               stock: newStock,
             })
           } else {
-            // Actualizar producto - actualizar el almacén seleccionado
             const currentWarehouseStocks = item.warehouseStocks || []
             let newWarehouseStocks = [...currentWarehouseStocks]
 
-            // Buscar si el almacén seleccionado ya existe en warehouseStocks
             const selectedIdx = newWarehouseStocks.findIndex(
               ws => ws.warehouseId === selectedWarehouse.id
             )
 
             if (selectedIdx >= 0) {
-              // Actualizar el stock del almacén seleccionado con el nuevo valor
               newWarehouseStocks[selectedIdx] = {
                 ...newWarehouseStocks[selectedIdx],
                 stock: newStock
               }
             } else {
-              // Si no existe el almacén, crear entrada (solo si el nuevo stock es > 0)
               if (newStock > 0) {
                 newWarehouseStocks.push({
                   warehouseId: selectedWarehouse.id,
@@ -433,17 +558,14 @@ export default function InventoryCountModal({
               }
             }
 
-            // Recalcular stock total desde warehouseStocks
             const totalFromWarehouses = newWarehouseStocks.reduce(
               (sum, ws) => sum + (ws.stock || 0), 0
             )
 
-            const updateData = {
+            result = await updateProduct(businessId, item.productId, {
               stock: totalFromWarehouses,
               warehouseStocks: newWarehouseStocks
-            }
-
-            result = await updateProduct(businessId, item.productId, updateData)
+            })
           }
 
           if (result.success) {
@@ -493,6 +615,7 @@ export default function InventoryCountModal({
               difference: parseFloat(item.physicalCount) - item.systemStock,
               price: item.price,
               isIngredient: item.isIngredient || false,
+              ...(item.isBatchRow && { batchNumber: item.batchId }),
             })),
             status: errorCount > 0 ? 'partial' : 'completed',
             successCount,
@@ -737,12 +860,18 @@ export default function InventoryCountModal({
               ) : (
                 filteredProducts.map(item => {
                   const { diff, value, status } = getDifference(item)
+                  const mobileKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
                   return (
-                    <div key={item.productId} className="p-3 bg-white">
+                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : ''}`}>
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{item.productName}</p>
                           <p className="text-xs text-gray-500">{item.productCode}</p>
+                          {item.isBatchRow && (
+                            <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              Lote: {item.batchId}
+                            </span>
+                          )}
                         </div>
                         <div className="text-right ml-2">
                           <p className="text-xs text-gray-500">Sistema</p>
@@ -756,7 +885,7 @@ export default function InventoryCountModal({
                             inputMode="numeric"
                             min="0"
                             value={item.physicalCount}
-                            onChange={e => handleCountChange(item.productId, e.target.value)}
+                            onChange={e => handleCountChange(item._countKey, e.target.value)}
                             placeholder="Conteo físico"
                             className={`w-full px-3 py-2 text-center text-lg font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                               status === 'missing' ? 'border-red-300 bg-red-50' :
@@ -767,7 +896,7 @@ export default function InventoryCountModal({
                           />
                         </div>
                         <button
-                          onClick={() => handleCopySystemStock(item.productId)}
+                          onClick={() => handleCopySystemStock(item._countKey)}
                           className="p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-lg"
                         >
                           <RefreshCw className="w-5 h-5" />
@@ -794,6 +923,7 @@ export default function InventoryCountModal({
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sistema</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Conteo</th>
@@ -804,7 +934,7 @@ export default function InventoryCountModal({
               <tbody className="divide-y divide-gray-200">
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
                       {searchTerm || categoryFilter !== 'all' || differenceFilter !== 'all'
                         ? 'No se encontraron productos con los filtros aplicados'
                         : 'No hay productos con control de stock'}
@@ -813,13 +943,33 @@ export default function InventoryCountModal({
                 ) : (
                   filteredProducts.map(item => {
                     const { diff, value, status } = getDifference(item)
+                    const itemKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
                     return (
-                      <tr key={item.productId} className="hover:bg-gray-50">
+                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : ''}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm">{item.productCode}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="font-medium text-sm">{item.productName}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.isBatchRow ? (
+                            <div>
+                              <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">{item.batchId}</span>
+                              {item.batchExpiration && (
+                                <div className="text-[10px] text-gray-500 mt-0.5">
+                                  Vence: {(() => {
+                                    const d = item.batchExpiration
+                                    if (d?.toDate) return d.toDate().toLocaleDateString('es-PE')
+                                    if (d?.seconds) return new Date(d.seconds * 1000).toLocaleDateString('es-PE')
+                                    return new Date(d).toLocaleDateString('es-PE')
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="default" className="text-xs">
@@ -836,7 +986,7 @@ export default function InventoryCountModal({
                               min="0"
                               step="1"
                               value={item.physicalCount}
-                              onChange={e => handleCountChange(item.productId, e.target.value)}
+                              onChange={e => handleCountChange(item._countKey, e.target.value)}
                               placeholder="-"
                               className={`w-20 px-3 py-2 text-center border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                                 status === 'missing' ? 'border-red-300 bg-red-50' :
@@ -846,7 +996,7 @@ export default function InventoryCountModal({
                               }`}
                             />
                             <button
-                              onClick={() => handleCopySystemStock(item.productId)}
+                              onClick={() => handleCopySystemStock(item._countKey)}
                               className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
                               title="Copiar stock del sistema"
                             >
@@ -960,9 +1110,13 @@ export default function InventoryCountModal({
               <tbody className="divide-y">
                 {getProductsWithDifferences().map(item => {
                   const diff = parseFloat(item.physicalCount) - item.systemStock
+                  const confirmKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
                   return (
-                    <tr key={item.productId}>
-                      <td className="px-2 py-2 text-xs">{item.productName}</td>
+                    <tr key={confirmKey}>
+                      <td className="px-2 py-2 text-xs">
+                        {item.productName}
+                        {item.isBatchRow && <span className="ml-1 text-amber-600 font-semibold">[{item.batchId}]</span>}
+                      </td>
                       <td className="px-2 py-2 text-center text-xs">{item.systemStock}</td>
                       <td className="px-2 py-2 text-center text-xs font-semibold">{item.physicalCount}</td>
                       <td className={`px-2 py-2 text-center text-xs font-bold ${diff < 0 ? 'text-red-600' : 'text-green-600'}`}>
