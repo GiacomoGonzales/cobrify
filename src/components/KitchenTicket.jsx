@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, stationName = null }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, stationName = null }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -406,155 +406,342 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           margin: 2px 0 4px 0 !important;
         }
         ` : ''}
+
+        ${ultraCompactKitchen ? `
+        /* === MODO ULTRACOMPACTO COMANDAS === */
+        @media print {
+          .kitchen-ticket-container {
+            font-size: 7pt !important;
+            line-height: 1.05 !important;
+            padding: 0.5mm 1mm !important;
+          }
+        }
+        .kitchen-ticket-container {
+          font-size: 10px !important;
+          line-height: 1.15 !important;
+          padding: 2px 4px !important;
+        }
+        .kitchen-header {
+          margin-bottom: 0 !important;
+          padding-bottom: 2px !important;
+          border-bottom: 1px dashed #000 !important;
+        }
+        .kitchen-title {
+          font-size: 12pt !important;
+          margin-bottom: 0 !important;
+        }
+        .kitchen-subtitle {
+          display: none !important;
+        }
+        .order-number-big {
+          font-size: 16pt !important;
+          padding: 2px 4px !important;
+          margin: 2px 0 !important;
+          border: 1px solid #000 !important;
+        }
+        .order-info {
+          margin: 2px 0 !important;
+          padding: 2px 4px !important;
+          background: none !important;
+          border: none !important;
+        }
+        .info-row {
+          font-size: 8pt !important;
+          margin: 0 !important;
+        }
+        .items-section {
+          margin: 2px 0 !important;
+          padding: 2px 0 !important;
+          border-top: 1px dashed #000 !important;
+          border-bottom: none !important;
+        }
+        .section-title {
+          display: none !important;
+        }
+        .item {
+          margin: 1px 0 !important;
+          padding: 1px 0 !important;
+          background: none !important;
+          border: none !important;
+          border-bottom: 1px dotted #ccc !important;
+        }
+        .item:last-child {
+          border-bottom: none !important;
+        }
+        .item-header {
+          font-size: 9pt !important;
+          margin-bottom: 0 !important;
+        }
+        .item-qty {
+          font-size: 10pt !important;
+          min-width: auto !important;
+          padding: 0 2px 0 0 !important;
+        }
+        .item-modifiers {
+          margin-top: 0 !important;
+          padding: 1px 4px !important;
+          font-size: 7pt !important;
+          background: #333 !important;
+          border: none !important;
+        }
+        .modifier-label {
+          display: none !important;
+        }
+        .modifier-group {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .item-notes {
+          margin-top: 0 !important;
+          padding: 1px 4px !important;
+          font-size: 7pt !important;
+          border: 1px dashed #000 !important;
+        }
+        .notes-label {
+          display: none !important;
+        }
+        .kitchen-footer {
+          margin-top: 2px !important;
+          padding-top: 2px !important;
+          border-top: 1px dashed #000 !important;
+        }
+        .footer-time {
+          font-size: 7pt !important;
+          margin: 0 !important;
+        }
+        .station-name {
+          font-size: 10pt !important;
+          padding: 1px 4px !important;
+          margin: 1px 0 2px 0 !important;
+        }
+        .uc-copy-badge {
+          font-size: 9pt !important;
+          padding: 1px !important;
+          margin-bottom: 1px !important;
+          border-width: 1px !important;
+        }
+        ` : ''}
       `}</style>
 
-      {/* HEADER */}
-      <div className="kitchen-header">
-        {order._isCopy && (
-          <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '3px solid #000', padding: '4px', background: '#f0f0f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-            *** COPIA ***
+      {ultraCompactKitchen ? (
+        <>
+          {/* === MODO ULTRACOMPACTO === */}
+          <div className="kitchen-header">
+            {order._isCopy && (
+              <div className="uc-copy-badge" style={{ fontSize: '10pt', fontWeight: 900, border: '2px solid #000', padding: '1px' }}>COPIA</div>
+            )}
+            <div className="kitchen-title">COMANDA{order._printNote ? ` - ${order._printNote}` : ''}</div>
+            {stationName && (
+              <div className="station-name">{stationName.toUpperCase()}</div>
+            )}
           </div>
-        )}
-        <div className="kitchen-title">{order._printNote ? `COMANDA - ${order._printNote}` : 'COMANDA'}</div>
-        {stationName && (
-          <div className="station-name">★ {stationName.toUpperCase()} ★</div>
-        )}
-        <div className="kitchen-subtitle">
-          {companySettings?.tradeName || companySettings?.name || 'RESTAURANTE'}
-        </div>
-      </div>
 
-      {/* NÚMERO DE ORDEN DESTACADO */}
-      <div className="order-number-big">
-        {order.orderNumber || '#' + order.id?.slice(-6)}
-      </div>
-
-      {/* INFO DE LA ORDEN */}
-      <div className="order-info">
-
-        {order.tableNumber ? (
-          <div className="info-row">
-            <span className="info-label">MESA:</span>
-            <span>{order.tableNumber}</span>
+          <div className="order-number-big">
+            {order.orderNumber || '#' + order.id?.slice(-6)}
           </div>
-        ) : (
-          <div className="info-row">
-            <span className="info-label">TIPO:</span>
-            <span>{getOrderTypeLabel(order.orderType)}</span>
+
+          <div className="order-info">
+            {order.tableNumber ? (
+              <div className="info-row">
+                <span className="info-label">MESA:</span>
+                <span>{order.tableNumber}</span>
+                {order.waiterName && <span style={{ marginLeft: 'auto', paddingLeft: '8px' }}>MOZO: {order.waiterName}</span>}
+              </div>
+            ) : (
+              <div className="info-row">
+                <span className="info-label">{getOrderTypeLabel(order.orderType)}</span>
+                {order.customerName && <span style={{ marginLeft: 'auto', paddingLeft: '8px' }}>{order.customerName}</span>}
+              </div>
+            )}
+            {order.customerAddress && (
+              <div className="info-row">
+                <span>{order.customerAddress}</span>
+              </div>
+            )}
           </div>
-        )}
 
-        {order.brandName && (
-          <div className="info-row">
-            <span className="info-label">MARCA:</span>
-            <span>{order.brandName}</span>
-          </div>
-        )}
-
-        {order.waiterName && (
-          <div className="info-row">
-            <span className="info-label">MOZO:</span>
-            <span>{order.waiterName}</span>
-          </div>
-        )}
-
-        {order.source && !order.tableNumber && (
-          <div className="info-row">
-            <span className="info-label">FUENTE:</span>
-            <span>{order.source}</span>
-          </div>
-        )}
-
-        {order.customerName && (
-          <div className="info-row">
-            <span className="info-label">CLIENTE:</span>
-            <span>{order.customerName}</span>
-          </div>
-        )}
-
-        {order.customerPhone && (
-          <div className="info-row">
-            <span className="info-label">TELÉFONO:</span>
-            <span>
-              {order.orderType === 'delivery' ? (
-                <a
-                  href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customerName || ''}, su pedido #${order.orderNumber || ''} está siendo preparado.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#25D366', textDecoration: 'underline', fontWeight: 900 }}
-                >
-                  {order.customerPhone} (WhatsApp)
-                </a>
-              ) : (
-                order.customerPhone
-              )}
-            </span>
-          </div>
-        )}
-
-        {order.customerAddress && (
-          <div className="info-row" style={{ flexDirection: 'column' }}>
-            <span className="info-label">DIRECCIÓN:</span>
-            <span style={{ fontWeight: 700 }}>{order.customerAddress}</span>
-          </div>
-        )}
-
-        <div className="info-row">
-          <span className="info-label">ESTADO:</span>
-          <span>{getStatusLabel(order.status)}</span>
-        </div>
-      </div>
-
-      {/* ITEMS */}
-      <div className="items-section">
-        <div className="section-title">═══ PEDIDO ═══</div>
-
-        {(order.items || []).map((item, index) => (
-          <div key={index} className="item">
-            <div className="item-header">
-              <span className="item-qty">{item.quantity}x</span>
-              <span className="item-name">{item.name}</span>
-            </div>
-
-            {/* Mostrar modificadores con fondo negro (DESTACADO) */}
-            {item.modifiers && item.modifiers.length > 0 && (
-              <div className="item-modifiers">
-                <div className="modifier-label">★ MODIFICADORES ★</div>
-                {item.modifiers.map((modifier, modIdx) => (
-                  <div key={modIdx} className="modifier-group">
-                    <div className="modifier-name">• {modifier.modifierName}:</div>
-                    <div className="modifier-options">
-                      {modifier.options.map((opt, optIdx) => (
-                        <div key={optIdx}>
-                          → {opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
-                          {opt.priceAdjustment > 0 && ` (+S/ ${((opt.priceAdjustment || 0) * (opt.quantity || 1)).toFixed(2)})`}
-                        </div>
-                      ))}
-                    </div>
+          <div className="items-section">
+            {(order.items || []).map((item, index) => (
+              <div key={index} className="item">
+                <div className="item-header">
+                  <span className="item-qty">{item.quantity}x</span>
+                  <span className="item-name">{item.name}</span>
+                </div>
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <div className="item-modifiers">
+                    {item.modifiers.map((modifier, modIdx) => (
+                      <span key={modIdx}>
+                        {modifier.options.map((opt, optIdx) => (
+                          <span key={optIdx}>
+                            {optIdx > 0 && ', '}{opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
+                          </span>
+                        ))}
+                        {modIdx < item.modifiers.length - 1 && ' | '}
+                      </span>
+                    ))}
                   </div>
-                ))}
+                )}
+                {item.notes && (
+                  <div className="item-notes">{item.notes}</div>
+                )}
               </div>
-            )}
-
-            {item.notes && (
-              <div className="item-notes">
-                <div className="notes-label">⚠ ESPECIFICACIONES:</div>
-                <div>{item.notes}</div>
-              </div>
-            )}
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* FOOTER */}
-      <div className="kitchen-footer">
-        <div className="footer-time">
-          {formatDate(order.createdAt)} - {formatTime(order.createdAt)}
-        </div>
-        <div style={{ marginTop: '6px', fontSize: '9pt' }}>
-          ═══════════════════════
-        </div>
-      </div>
+          <div className="kitchen-footer">
+            <div className="footer-time">{formatTime(order.createdAt)}</div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* === MODO NORMAL === */}
+          {/* HEADER */}
+          <div className="kitchen-header">
+            {order._isCopy && (
+              <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '3px solid #000', padding: '4px', background: '#f0f0f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                *** COPIA ***
+              </div>
+            )}
+            <div className="kitchen-title">{order._printNote ? `COMANDA - ${order._printNote}` : 'COMANDA'}</div>
+            {stationName && (
+              <div className="station-name">★ {stationName.toUpperCase()} ★</div>
+            )}
+            <div className="kitchen-subtitle">
+              {companySettings?.tradeName || companySettings?.name || 'RESTAURANTE'}
+            </div>
+          </div>
+
+          {/* NÚMERO DE ORDEN DESTACADO */}
+          <div className="order-number-big">
+            {order.orderNumber || '#' + order.id?.slice(-6)}
+          </div>
+
+          {/* INFO DE LA ORDEN */}
+          <div className="order-info">
+            {order.tableNumber ? (
+              <div className="info-row">
+                <span className="info-label">MESA:</span>
+                <span>{order.tableNumber}</span>
+              </div>
+            ) : (
+              <div className="info-row">
+                <span className="info-label">TIPO:</span>
+                <span>{getOrderTypeLabel(order.orderType)}</span>
+              </div>
+            )}
+
+            {order.brandName && (
+              <div className="info-row">
+                <span className="info-label">MARCA:</span>
+                <span>{order.brandName}</span>
+              </div>
+            )}
+
+            {order.waiterName && (
+              <div className="info-row">
+                <span className="info-label">MOZO:</span>
+                <span>{order.waiterName}</span>
+              </div>
+            )}
+
+            {order.source && !order.tableNumber && (
+              <div className="info-row">
+                <span className="info-label">FUENTE:</span>
+                <span>{order.source}</span>
+              </div>
+            )}
+
+            {order.customerName && (
+              <div className="info-row">
+                <span className="info-label">CLIENTE:</span>
+                <span>{order.customerName}</span>
+              </div>
+            )}
+
+            {order.customerPhone && (
+              <div className="info-row">
+                <span className="info-label">TELÉFONO:</span>
+                <span>
+                  {order.orderType === 'delivery' ? (
+                    <a
+                      href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customerName || ''}, su pedido #${order.orderNumber || ''} está siendo preparado.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#25D366', textDecoration: 'underline', fontWeight: 900 }}
+                    >
+                      {order.customerPhone} (WhatsApp)
+                    </a>
+                  ) : (
+                    order.customerPhone
+                  )}
+                </span>
+              </div>
+            )}
+
+            {order.customerAddress && (
+              <div className="info-row" style={{ flexDirection: 'column' }}>
+                <span className="info-label">DIRECCIÓN:</span>
+                <span style={{ fontWeight: 700 }}>{order.customerAddress}</span>
+              </div>
+            )}
+
+            <div className="info-row">
+              <span className="info-label">ESTADO:</span>
+              <span>{getStatusLabel(order.status)}</span>
+            </div>
+          </div>
+
+          {/* ITEMS */}
+          <div className="items-section">
+            <div className="section-title">═══ PEDIDO ═══</div>
+
+            {(order.items || []).map((item, index) => (
+              <div key={index} className="item">
+                <div className="item-header">
+                  <span className="item-qty">{item.quantity}x</span>
+                  <span className="item-name">{item.name}</span>
+                </div>
+
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <div className="item-modifiers">
+                    <div className="modifier-label">★ MODIFICADORES ★</div>
+                    {item.modifiers.map((modifier, modIdx) => (
+                      <div key={modIdx} className="modifier-group">
+                        <div className="modifier-name">• {modifier.modifierName}:</div>
+                        <div className="modifier-options">
+                          {modifier.options.map((opt, optIdx) => (
+                            <div key={optIdx}>
+                              → {opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
+                              {opt.priceAdjustment > 0 && ` (+S/ ${((opt.priceAdjustment || 0) * (opt.quantity || 1)).toFixed(2)})`}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {item.notes && (
+                  <div className="item-notes">
+                    <div className="notes-label">⚠ ESPECIFICACIONES:</div>
+                    <div>{item.notes}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* FOOTER */}
+          <div className="kitchen-footer">
+            <div className="footer-time">
+              {formatDate(order.createdAt)} - {formatTime(order.createdAt)}
+            </div>
+            <div style={{ marginTop: '6px', fontSize: '9pt' }}>
+              ═══════════════════════
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 })

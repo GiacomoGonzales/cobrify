@@ -1151,48 +1151,63 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
     );
 
-    if (table) {
-      commands.push(ESCPOSCommands.text('Mesa: ' + table.number + '\n'));
-      commands.push(ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'));
-    }
+    if (order._ultraCompact) {
+      // Ultracompacto: info mínima
+      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
+      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+      commands.push(ESCPOSCommands.text('#' + orderNum + ' - ' + time + '\n'));
+      if (table) {
+        commands.push(ESCPOSCommands.text('Mesa: ' + table.number + (table.waiter ? ' | Mozo: ' + table.waiter : '') + '\n'));
+      } else if (order.orderType) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        commands.push(ESCPOSCommands.text((typeLabels[order.orderType] || '') + (order.customerName ? ' - ' + convertSpanishText(order.customerName) : '') + '\n'));
+      }
+      if (order.customerAddress) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(order.customerAddress) + '\n'));
+      }
+    } else {
+      if (table) {
+        commands.push(ESCPOSCommands.text('Mesa: ' + table.number + '\n'));
+        commands.push(ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'));
+      }
 
-    const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
-    commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
+      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
+      commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
 
-    if (order.brandName) {
-      commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
-    }
+      if (order.brandName) {
+        commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
+      }
 
-    // Datos del cliente para delivery/takeaway
-    if (order.customerName) {
-      commands.push(ESCPOSCommands.text('Cliente: ' + convertSpanishText(order.customerName) + '\n'));
-    }
-    if (order.customerPhone) {
-      commands.push(ESCPOSCommands.text('Tel: ' + order.customerPhone + '\n'));
-    }
-    if (order.customerAddress) {
-      commands.push(ESCPOSCommands.text('Dir: ' + convertSpanishText(order.customerAddress) + '\n'));
-    }
-    if (order.orderType && !table) {
-      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-      if (typeLabels[order.orderType]) {
-        commands.push(ESCPOSCommands.bold(false));
-        commands.push(ESCPOSCommands.align(1));
+      if (order.customerName) {
+        commands.push(ESCPOSCommands.text('Cliente: ' + convertSpanishText(order.customerName) + '\n'));
+      }
+      if (order.customerPhone) {
+        commands.push(ESCPOSCommands.text('Tel: ' + order.customerPhone + '\n'));
+      }
+      if (order.customerAddress) {
+        commands.push(ESCPOSCommands.text('Dir: ' + convertSpanishText(order.customerAddress) + '\n'));
+      }
+      if (order.orderType && !table) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        if (typeLabels[order.orderType]) {
+          commands.push(ESCPOSCommands.bold(false));
+          commands.push(ESCPOSCommands.align(1));
+          commands.push(ESCPOSCommands.doubleHeight(true));
+          commands.push(ESCPOSCommands.bold(true));
+          commands.push(ESCPOSCommands.text('*** ' + typeLabels[order.orderType] + ' ***\n'));
+          commands.push(ESCPOSCommands.doubleHeight(false));
+          commands.push(ESCPOSCommands.bold(false));
+          commands.push(ESCPOSCommands.align(0));
+        }
+      }
+
+      if (order.priority === 'urgent') {
         commands.push(ESCPOSCommands.doubleHeight(true));
-        commands.push(ESCPOSCommands.bold(true));
-        commands.push(ESCPOSCommands.text('*** ' + typeLabels[order.orderType] + ' ***\n'));
+        commands.push(ESCPOSCommands.align(1));
+        commands.push(ESCPOSCommands.text('!!! URGENTE !!!\n'));
         commands.push(ESCPOSCommands.doubleHeight(false));
-        commands.push(ESCPOSCommands.bold(false));
         commands.push(ESCPOSCommands.align(0));
       }
-    }
-
-    if (order.priority === 'urgent') {
-      commands.push(ESCPOSCommands.doubleHeight(true));
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.text('!!! URGENTE !!!\n'));
-      commands.push(ESCPOSCommands.doubleHeight(false));
-      commands.push(ESCPOSCommands.align(0));
     }
 
     commands.push(ESCPOSCommands.bold(false));
@@ -1206,20 +1221,27 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 
       // Modificadores
       if (item.modifiers && item.modifiers.length > 0) {
-        for (const modifier of item.modifiers) {
-          for (const option of modifier.options) {
-            let optText = '  > ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
-            if (option.priceAdjustment > 0) {
-              optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
+        if (order._ultraCompact) {
+          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
+            (o.quantity > 1 ? o.quantity + 'x ' : '') + convertSpanishText(o.optionName)
+          ));
+          if (allOpts.length > 0) commands.push(ESCPOSCommands.text('  > ' + allOpts.join(', ') + '\n'));
+        } else {
+          for (const modifier of item.modifiers) {
+            for (const option of modifier.options) {
+              let optText = '  > ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
+              if (option.priceAdjustment > 0) {
+                optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
+              }
+              commands.push(ESCPOSCommands.text(optText + '\n'));
             }
-            commands.push(ESCPOSCommands.text(optText + '\n'));
           }
         }
       }
 
       // Notas del item
       if (item.notes) {
-        commands.push(ESCPOSCommands.text('  Nota: ' + convertSpanishText(item.notes) + '\n'));
+        commands.push(ESCPOSCommands.text('  ' + (order._ultraCompact ? '' : 'Nota: ') + convertSpanishText(item.notes) + '\n'));
       }
     }
 

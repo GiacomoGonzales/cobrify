@@ -7309,6 +7309,35 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Modo ultracompacto para comandas */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-teal-50">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="ultraCompactKitchen"
+                    checked={printerConfig.ultraCompactKitchen || false}
+                    onChange={async (e) => {
+                      const newConfig = {
+                        ...printerConfig,
+                        ultraCompactKitchen: e.target.checked,
+                      }
+                      setPrinterConfig(newConfig)
+                      await savePrinterConfig(getBusinessId(), newConfig)
+                      toast.success(e.target.checked ? 'Comandas ultracompactas activadas' : 'Comandas ultracompactas desactivadas')
+                    }}
+                    className="mt-1 h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="ultraCompactKitchen" className="block text-sm font-medium text-gray-900 cursor-pointer">
+                      Comandas Ultracompactas (Máximo ahorro de papel)
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Reduce las comandas de cocina al mínimo: solo mesa, orden y productos en formato compacto, sin bordes ni fondos decorativos. Ideal para ahorrar papel al máximo.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Márgenes laterales para impresión */}
               <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
                 <div className="flex-1">

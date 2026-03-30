@@ -1336,19 +1336,27 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
 
       // Mostrar modificadores si existen
       if (item.modifiers && item.modifiers.length > 0) {
-        for (const modifier of item.modifiers) {
-          for (const option of modifier.options) {
-            itemsText += `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
-            if (option.priceAdjustment > 0) {
-              itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
+        if (order._ultraCompact) {
+          // Ultracompacto: modificadores en una sola línea
+          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
+            `${o.quantity > 1 ? o.quantity + 'x ' : ''}${convertSpanishText(o.optionName)}`
+          ));
+          if (allOpts.length > 0) itemsText += `  > ${allOpts.join(', ')}\n`;
+        } else {
+          for (const modifier of item.modifiers) {
+            for (const option of modifier.options) {
+              itemsText += `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
+              if (option.priceAdjustment > 0) {
+                itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
+              }
+              itemsText += '\n';
             }
-            itemsText += '\n';
           }
         }
       }
 
       if (item.notes) {
-        itemsText += `  Nota: ${convertSpanishText(item.notes)}\n`;
+        itemsText += `  ${order._ultraCompact ? '' : 'Nota: '}${convertSpanishText(item.notes)}\n`;
       }
     }
 
@@ -1380,55 +1388,72 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
     // Información de la orden
     printer = printer
       .align('left')
-      .bold()
-      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`);
+      .bold();
 
-    if (table) {
+    if (order._ultraCompact) {
+      // Ultracompacto: info mínima en pocas líneas
+      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
+      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+      printer = printer.text(`#${orderNum} - ${time}\n`);
+      if (table) {
+        printer = printer.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}\n`);
+      } else if (order.orderType) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        printer = printer.text(`${typeLabels[order.orderType] || ''} ${order.customerName ? '- ' + convertSpanishText(order.customerName) : ''}\n`);
+      }
+      if (order.customerAddress) {
+        printer = printer.text(`${convertSpanishText(order.customerAddress)}\n`);
+      }
+    } else {
+      printer = printer.text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`);
+
+      if (table) {
+        printer = printer
+          .text(`Mesa: ${table.number}\n`)
+          .text(`Mozo: ${table.waiter || 'N/A'}\n`);
+      }
+
       printer = printer
-        .text(`Mesa: ${table.number}\n`)
-        .text(`Mozo: ${table.waiter || 'N/A'}\n`);
-    }
+        .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`);
 
-    printer = printer
-      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`);
+      if (order.brandName) {
+        printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
+      }
 
-    if (order.brandName) {
-      printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
-    }
+      // Datos del cliente para delivery/takeaway
+      if (order.customerName) {
+        printer = printer.text(`Cliente: ${convertSpanishText(order.customerName)}\n`);
+      }
+      if (order.customerPhone) {
+        printer = printer.text(`Tel: ${order.customerPhone}\n`);
+      }
+      if (order.customerAddress) {
+        printer = printer.text(`Dir: ${convertSpanishText(order.customerAddress)}\n`);
+      }
+      if (order.orderType && !table) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        if (typeLabels[order.orderType]) {
+          printer = printer
+            .clearFormatting()
+            .align('center')
+            .doubleHeight()
+            .bold()
+            .text(`*** ${typeLabels[order.orderType]} ***\n`)
+            .clearFormatting()
+            .align('left');
+        }
+      }
 
-    // Datos del cliente para delivery/takeaway
-    if (order.customerName) {
-      printer = printer.text(`Cliente: ${convertSpanishText(order.customerName)}\n`);
-    }
-    if (order.customerPhone) {
-      printer = printer.text(`Tel: ${order.customerPhone}\n`);
-    }
-    if (order.customerAddress) {
-      printer = printer.text(`Dir: ${convertSpanishText(order.customerAddress)}\n`);
-    }
-    if (order.orderType && !table) {
-      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-      if (typeLabels[order.orderType]) {
+      if (order.priority === 'urgent') {
         printer = printer
           .clearFormatting()
           .align('center')
           .doubleHeight()
           .bold()
-          .text(`*** ${typeLabels[order.orderType]} ***\n`)
+          .text('!!! URGENTE !!!\n')
           .clearFormatting()
           .align('left');
       }
-    }
-
-    if (order.priority === 'urgent') {
-      printer = printer
-        .clearFormatting()
-        .align('center')
-        .doubleHeight()
-        .bold()
-        .text('!!! URGENTE !!!\n')
-        .clearFormatting()
-        .align('left');
     }
 
     printer = printer.clearFormatting();
@@ -2432,58 +2457,75 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
       .text(format.separator)
       .newLine()
       .alignLeft()
-      .bold(true)
-      .text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
-      .newLine();
+      .bold(true);
 
-    if (table) {
-      builder.text(`Mesa: ${table.number}`)
-        .newLine()
-        .text(`Mozo: ${table.waiter || 'N/A'}`)
+    if (order._ultraCompact) {
+      // Ultracompacto: info mínima
+      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
+      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+      builder.text(`#${orderNum} - ${time}`).newLine();
+      if (table) {
+        builder.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}`).newLine();
+      } else if (order.orderType) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        builder.text(`${typeLabels[order.orderType] || ''} ${order.customerName ? '- ' + order.customerName : ''}`).newLine();
+      }
+      if (order.customerAddress) {
+        builder.text(order.customerAddress).newLine();
+      }
+    } else {
+      builder.text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
         .newLine();
-    }
 
-    builder.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
-      .newLine();
+      if (table) {
+        builder.text(`Mesa: ${table.number}`)
+          .newLine()
+          .text(`Mozo: ${table.waiter || 'N/A'}`)
+          .newLine();
+      }
 
-    if (order.brandName) {
-      builder.text(`Marca: ${order.brandName}`)
+      builder.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
         .newLine();
-    }
 
-    // Datos del cliente para delivery/takeaway
-    if (order.customerName) {
-      builder.text(`Cliente: ${order.customerName}`).newLine();
-    }
-    if (order.customerPhone) {
-      builder.text(`Tel: ${order.customerPhone}`).newLine();
-    }
-    if (order.customerAddress) {
-      builder.text(`Dir: ${order.customerAddress}`).newLine();
-    }
-    if (order.orderType && !table) {
-      const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-      if (typeLabels[order.orderType]) {
+      if (order.brandName) {
+        builder.text(`Marca: ${order.brandName}`)
+          .newLine();
+      }
+
+      // Datos del cliente para delivery/takeaway
+      if (order.customerName) {
+        builder.text(`Cliente: ${order.customerName}`).newLine();
+      }
+      if (order.customerPhone) {
+        builder.text(`Tel: ${order.customerPhone}`).newLine();
+      }
+      if (order.customerAddress) {
+        builder.text(`Dir: ${order.customerAddress}`).newLine();
+      }
+      if (order.orderType && !table) {
+        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+        if (typeLabels[order.orderType]) {
+          builder.bold(false)
+            .alignCenter()
+            .doubleHeight(true)
+            .bold(true)
+            .text(`*** ${typeLabels[order.orderType]} ***`)
+            .newLine()
+            .doubleHeight(false)
+            .alignLeft();
+        }
+      }
+
+      if (order.priority === 'urgent') {
         builder.bold(false)
           .alignCenter()
           .doubleHeight(true)
           .bold(true)
-          .text(`*** ${typeLabels[order.orderType]} ***`)
+          .text('!!! URGENTE !!!')
           .newLine()
           .doubleHeight(false)
           .alignLeft();
       }
-    }
-
-    if (order.priority === 'urgent') {
-      builder.bold(false)
-        .alignCenter()
-        .doubleHeight(true)
-        .bold(true)
-        .text('!!! URGENTE !!!')
-        .newLine()
-        .doubleHeight(false)
-        .alignLeft();
     }
 
     builder.bold(false)
@@ -2499,25 +2541,32 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
 
       // Modificadores
       if (item.modifiers && item.modifiers.length > 0) {
-        for (const modifier of item.modifiers) {
-          for (const option of modifier.options) {
-            let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
-            if (option.priceAdjustment > 0) {
-              optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
+        if (order._ultraCompact) {
+          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
+            `${o.quantity > 1 ? o.quantity + 'x ' : ''}${o.optionName}`
+          ));
+          if (allOpts.length > 0) builder.text(`  > ${allOpts.join(', ')}`).newLine();
+        } else {
+          for (const modifier of item.modifiers) {
+            for (const option of modifier.options) {
+              let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
+              if (option.priceAdjustment > 0) {
+                optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
+              }
+              builder.text(optionText).newLine();
             }
-            builder.text(optionText).newLine();
           }
         }
       }
 
       if (item.notes) {
-        builder.text(`  Nota: ${item.notes}`).newLine();
+        builder.text(`  ${order._ultraCompact ? '' : 'Nota: '}${item.notes}`).newLine();
       }
     }
 
     builder.text(format.separator)
       .newLine()
-      .feed(2)
+      .feed(order._ultraCompact ? 1 : 2)
       .cut();
 
     const base64Data = builder.toBase64();

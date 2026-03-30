@@ -91,6 +91,7 @@ export default function Tables() {
   const [orderToPrint, setOrderToPrint] = useState(null)
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
+  const [ultraCompactKitchen, setUltraCompactKitchen] = useState(false)
   const kitchenTicketRef = useRef()
   const [kitchenStations, setKitchenStations] = useState([])
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
@@ -142,6 +143,7 @@ export default function Tables() {
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
           setCompactPrint(printerConfigResult.config.compactPrint || false)
+          setUltraCompactKitchen(printerConfigResult.config.ultraCompactKitchen || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -908,7 +910,7 @@ export default function Tables() {
     const isPartialPrint = !printAll && hasUnprintedItems
     // Es copia si se reimprimen items que ya fueron impresos
     const isCopy = printAll && !hasUnprintedItems
-    const orderToPrintData = { ...selectedOrder, items: itemsToPrint, _isCopy: isCopy }
+    const orderToPrintData = { ...selectedOrder, items: itemsToPrint, _isCopy: isCopy, _ultraCompact: ultraCompactKitchen }
 
     const isNative = Capacitor.isNativePlatform()
 
@@ -1787,6 +1789,7 @@ export default function Tables() {
                     companySettings={companySettings}
                     webPrintLegible={webPrintLegible}
                     compactPrint={compactPrint}
+                    ultraCompactKitchen={ultraCompactKitchen}
                     stationName={ticket.name}
                   />
                 </div>
@@ -1797,6 +1800,7 @@ export default function Tables() {
                 companySettings={companySettings}
                 webPrintLegible={webPrintLegible}
                 compactPrint={compactPrint}
+                ultraCompactKitchen={ultraCompactKitchen}
               />
             )}
           </div>
