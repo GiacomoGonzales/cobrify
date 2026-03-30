@@ -225,6 +225,7 @@ export default function Products() {
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
+  const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({}) // Stock inicial por almacén { warehouseId: quantity }
 
@@ -475,6 +476,7 @@ export default function Products() {
     setAllowDecimalQuantity(false)
     setTrackExpiration(false)
     setCatalogVisible(false)
+    setCatalogHidePrice(false)
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -581,6 +583,7 @@ export default function Products() {
 
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
+    setCatalogHidePrice(product.catalogHidePrice || false)
 
     // Load product image if exists
     setProductImage(null)
@@ -676,6 +679,7 @@ export default function Products() {
     setTaxAffectation(product.taxAffectation || '10')
     setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
     setCatalogVisible(product.catalogVisible || false)
+    setCatalogHidePrice(product.catalogHidePrice || false)
 
     // No copiar la imagen (el usuario puede agregarla manualmente)
     setProductImage(null)
@@ -816,6 +820,7 @@ export default function Products() {
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
+        catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
         // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
         ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
         // Product location (works in all modes when enabled)
@@ -4139,6 +4144,21 @@ export default function Products() {
                   <p className="text-xs text-gray-500 mt-0.5">Visible en tienda online</p>
                 </div>
               </label>
+
+              {catalogVisible && (
+                <label className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors ml-4">
+                  <input
+                    type="checkbox"
+                    checked={catalogHidePrice}
+                    onChange={e => setCatalogHidePrice(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Ocultar precio en catálogo</span>
+                    <p className="text-xs text-gray-500 mt-0.5">Muestra "Consultar" en vez del precio</p>
+                  </div>
+                </label>
+              )}
 
               {businessSettings?.presentationsEnabled && (
                 <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">

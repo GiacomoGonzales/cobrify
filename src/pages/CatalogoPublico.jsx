@@ -236,7 +236,8 @@ const getVariantPrices = (variant, business) => {
 }
 
 // Modal de producto con soporte para modificadores
-function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true, business, ignoreStock = false }) {
+function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false }) {
+  const showPrices = globalShowPrices && !product.catalogHidePrice
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
@@ -2747,7 +2748,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <p className={`text-sm mb-2 line-clamp-2 whitespace-pre-line ${thTextMuted}`}>{product.description}</p>
                     )}
                     <div className="flex items-center justify-between">
-                      {showPrices ? (
+                      {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
@@ -2859,7 +2860,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      {showPrices ? (
+                      {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
