@@ -1357,7 +1357,13 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
       // Encabezado
       .align('center')
       .doubleHeight()
-      .bold()
+      .bold();
+
+    if (order._isCopy) {
+      printer = printer.text('*** COPIA ***\n');
+    }
+
+    printer = printer
       .text(order._printNote ? `*** COMANDA ***\n*** ${order._printNote} ***\n` : '*** COMANDA ***\n')
       .clearFormatting();
 
@@ -2399,8 +2405,14 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
     builder.init()
       .alignCenter()
       .doubleHeight(true)
-      .bold(true)
-      .text('*** COMANDA ***')
+      .bold(true);
+
+    if (order._isCopy) {
+      builder.text('*** COPIA ***')
+        .newLine();
+    }
+
+    builder.text('*** COMANDA ***')
       .newLine();
 
     if (order._printNote) {
@@ -2542,8 +2554,14 @@ export const printStationTicket = async (printerIp, order, station, items, paper
     builder.init()
       .alignCenter()
       .doubleHeight(true)
-      .bold(true)
-      .text(`*** ${station.name?.toUpperCase() || 'ESTACION'} ***`)
+      .bold(true);
+
+    if (order._isCopy) {
+      builder.text('*** COPIA ***')
+        .newLine();
+    }
+
+    builder.text(`*** ${station.name?.toUpperCase() || 'ESTACION'} ***`)
       .newLine()
       .doubleHeight(false)
       .bold(false)

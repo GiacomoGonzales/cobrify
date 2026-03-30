@@ -905,8 +905,10 @@ export default function Tables() {
     const unprintedItems = (selectedOrder.items || []).filter(item => !item.printedToKitchen)
     const hasUnprintedItems = unprintedItems.length > 0
     const itemsToPrint = (!printAll && hasUnprintedItems) ? unprintedItems : (selectedOrder.items || [])
-    const orderToPrintData = { ...selectedOrder, items: itemsToPrint }
     const isPartialPrint = !printAll && hasUnprintedItems
+    // Es copia si se reimprimen items que ya fueron impresos
+    const isCopy = printAll && !hasUnprintedItems
+    const orderToPrintData = { ...selectedOrder, items: itemsToPrint, _isCopy: isCopy }
 
     const isNative = Capacitor.isNativePlatform()
 

@@ -410,6 +410,11 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
 
       {/* HEADER */}
       <div className="kitchen-header">
+        {order._isCopy && (
+          <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '3px solid #000', padding: '4px', background: '#f0f0f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+            *** COPIA ***
+          </div>
+        )}
         <div className="kitchen-title">{order._printNote ? `COMANDA - ${order._printNote}` : 'COMANDA'}</div>
         {stationName && (
           <div className="station-name">★ {stationName.toUpperCase()} ★</div>

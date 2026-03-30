@@ -1135,6 +1135,13 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       ESCPOSCommands.align(1), // Centro
       ESCPOSCommands.bold(true),
       ESCPOSCommands.doubleHeight(true),
+    ];
+
+    if (order._isCopy) {
+      commands.push(ESCPOSCommands.text('*** COPIA ***\n'));
+    }
+
+    commands.push(
       ESCPOSCommands.text('*** COMANDA ***\n'),
       ESCPOSCommands.doubleHeight(false),
       ESCPOSCommands.bold(false),
@@ -1142,7 +1149,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       ESCPOSCommands.align(0), // Izquierda
       ESCPOSCommands.bold(true),
       ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
-    ];
+    );
 
     if (table) {
       commands.push(ESCPOSCommands.text('Mesa: ' + table.number + '\n'));
