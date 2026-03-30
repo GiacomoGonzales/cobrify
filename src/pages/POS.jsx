@@ -2132,9 +2132,8 @@ export default function POS() {
     // Si addIgv está activado y el producto es gravado, agregar IGV al precio
     const customIgvRate = taxConfig.taxType === 'standard' ? (customProduct.igvRate || 18) : (taxConfig.igvRate || 18)
     if (customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt) {
+      // Calcular precio con IGV sin redondear para mantener precisión en los cálculos
       price = price * (1 + customIgvRate / 100)
-      // Redondear a 2 decimales
-      price = Math.round(price * 100) / 100
     }
 
     // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma venta
@@ -6639,32 +6638,64 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             const basePrice = parseFloat(customProduct.price)
             const quantity = parseFloat(customProduct.quantity) || 1
             const igvRate = taxConfig.taxType === 'standard' ? (customProduct.igvRate || 18) : (taxConfig.igvRate || 18)
-            const shouldAddIgv = customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt
-            const finalPrice = shouldAddIgv ? Math.round(basePrice * (1 + igvRate / 100) * 100) / 100 : basePrice
-            const totalFinal = finalPrice * quantity
+            const isGravado = customProduct.taxAffectation === '10' && !taxConfig.igvExempt
+            const shouldAddIgv = customProduct.addIgv && isGravado
+
+            // Calcular precio final unitario (con IGV si aplica)
+            const finalPrice = shouldAddIgv ? basePrice * (1 + igvRate / 100) : basePrice
+
+            // Calcular desglose por unidad
+            let subtotalUnit, igvUnit, totalUnit
+            if (isGravado) {
+              if (shouldAddIgv) {
+                // Precio ingresado es sin IGV
+                subtotalUnit = basePrice
+                totalUnit = finalPrice
+                igvUnit = totalUnit - subtotalUnit
+              } else {
+                // Precio ingresado ya incluye IGV
+                totalUnit = basePrice
+                subtotalUnit = totalUnit / (1 + igvRate / 100)
+                igvUnit = totalUnit - subtotalUnit
+              }
+            } else {
+              // Exonerado o Inafecto: no tiene IGV
+              subtotalUnit = basePrice
+              igvUnit = 0
+              totalUnit = basePrice
+            }
+
+            // Calcular totales
+            const subtotalTotal = subtotalUnit * quantity
+            const igvTotal = igvUnit * quantity
+            const totalFinal = totalUnit * quantity
 
             return (
               <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
                 <p className="text-xs font-medium text-primary-900 mb-2">Vista Previa:</p>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start">
                   <div>
                     <p className="font-semibold text-gray-900">{customProduct.name}</p>
                     <p className="text-sm text-gray-600">
-                      Cantidad: {quantity}
+                      Cantidad: {quantity} × {formatCurrency(totalUnit)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {customProduct.taxAffectation === '10' ? `Gravado (${igvRate}%)` : customProduct.taxAffectation === '20' ? 'Exonerado' : 'Inafecto'}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-primary-600">
-                      {formatCurrency(totalFinal)}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      {formatCurrency(finalPrice)} × {quantity}
-                    </p>
-                    {shouldAddIgv && (
-                      <p className="text-xs text-blue-600 mt-1">
-                        Sin IGV: {formatCurrency(basePrice)} + {igvRate}% IGV
-                      </p>
-                    )}
+                  <div className="text-right space-y-1">
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">{formatCurrency(subtotalTotal)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-gray-600">IGV ({isGravado ? igvRate : 0}%):</span>
+                      <span className="font-medium">{formatCurrency(igvTotal)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 text-base border-t border-primary-200 pt-1 mt-1">
+                      <span className="font-semibold text-gray-700">Total:</span>
+                      <span className="font-bold text-primary-600">{formatCurrency(totalFinal)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
