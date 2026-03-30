@@ -1201,83 +1201,25 @@ export default function Purchases() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end space-x-1">
-                          {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setViewingInstallments(purchase)}
-                              className="text-purple-600 hover:bg-purple-50"
-                              title="Ver cuotas"
-                            >
-                              <List className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {purchase.paymentType === 'credito' &&
-                           purchase.paymentStatus === 'pending' &&
-                           purchase.creditType !== 'cuotas' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openPaymentModal(purchase)}
-                              className="text-green-600 hover:bg-green-50"
-                              title="Registrar abono"
-                            >
-                              <DollarSign className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {purchase.paymentType === 'credito' &&
-                           purchase.creditType !== 'cuotas' &&
-                           (purchase.payments?.length > 0 || purchase.paidAmount > 0) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setViewingPayments(purchase)}
-                              className="text-blue-600 hover:bg-blue-50"
-                              title="Ver historial de pagos"
-                            >
-                              <List className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewingPurchase(purchase)}
-                            title="Ver detalles"
+                        <div className="flex items-center justify-end">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const menuHeight = 250
+                              const spaceBelow = window.innerHeight - rect.bottom
+                              const openUpward = spaceBelow < menuHeight
+                              setMenuPosition({
+                                top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                                right: window.innerWidth - rect.right,
+                                openUpward
+                              })
+                              setOpenMenuId(openMenuId === purchase.id ? null : purchase.id)
+                            }}
+                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                           >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {!purchase._isIngredientPurchase && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => appNavigate(`compras/editar/${purchase.id}`)}
-                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {!purchase._isIngredientPurchase && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openGuideFromPurchase(purchase)}
-                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                              title="Guía de Remisión"
-                            >
-                              <FileText className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeletingPurchase(purchase)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1308,6 +1250,33 @@ export default function Purchases() {
                       <Eye className="w-4 h-4 text-gray-500" />
                       Ver detalles
                     </button>
+                    {!menuPurchase._isIngredientPurchase && (
+                      <button
+                        onClick={() => { appNavigate(`compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Editar
+                      </button>
+                    )}
+                    {!menuPurchase._isIngredientPurchase && (
+                      <button
+                        onClick={() => { openGuideFromPurchase(menuPurchase); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Guía de Remisión
+                      </button>
+                    )}
+                    {menuPurchase.creditType === 'cuotas' && menuPurchase.installments?.length > 0 && (
+                      <button
+                        onClick={() => { setViewingInstallments(menuPurchase); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50"
+                      >
+                        <List className="w-4 h-4" />
+                        Ver cuotas
+                      </button>
+                    )}
                     {menuPurchase.paymentType === 'credito' &&
                      menuPurchase.paymentStatus === 'pending' &&
                      menuPurchase.creditType !== 'cuotas' && (
@@ -1328,24 +1297,6 @@ export default function Purchases() {
                       >
                         <List className="w-4 h-4" />
                         Ver pagos
-                      </button>
-                    )}
-                    {!menuPurchase._isIngredientPurchase && (
-                      <button
-                        onClick={() => { appNavigate(`compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Editar
-                      </button>
-                    )}
-                    {!menuPurchase._isIngredientPurchase && (
-                      <button
-                        onClick={() => { openGuideFromPurchase(menuPurchase); setOpenMenuId(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Guía de Remisión
                       </button>
                     )}
                     <button
