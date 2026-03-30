@@ -422,21 +422,28 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setRecipientDocType(docType)
         setRecipientDocNumber(customer.documentNumber || '')
         setRecipientName(customer.name || '')
-
-        // Limpiar y setear dirección del destinatario
         setRecipientAddress(customer.address || '')
-        setDestinationAddress(customer.address || '')
 
-        // Limpiar campos de ubicación del destinatario (departamento, provincia, distrito)
-        // para evitar que queden datos del cliente anterior
-        setRecipientDepartment(customer.department || '')
-        setRecipientProvince(customer.province || '')
-        setRecipientDistrict(customer.district || '')
-
-        // Limpiar campos de punto de llegada
-        setDestinationDepartment(customer.department || '')
-        setDestinationProvince(customer.province || '')
-        setDestinationDistrict(customer.district || '')
+        if (referenceInvoice.isPurchase) {
+          // En compras: proveedor es el ORIGEN, mi empresa es el DESTINO
+          // La dirección del proveedor va al punto de partida
+          setOriginAddress(customer.address || '')
+          setRecipientDepartment(customer.department || '')
+          setRecipientProvince(customer.province || '')
+          setRecipientDistrict(customer.district || '')
+          // El punto de llegada (mi empresa) se carga automáticamente en el useEffect de sucursal/negocio
+          // pero necesitamos que NO se sobreescriba el origen, así que lo dejamos para que el useEffect
+          // de sucursal cargue la dirección de destino
+        } else {
+          // En ventas: la dirección del cliente va al punto de llegada
+          setDestinationAddress(customer.address || '')
+          setRecipientDepartment(customer.department || '')
+          setRecipientProvince(customer.province || '')
+          setRecipientDistrict(customer.district || '')
+          setDestinationDepartment(customer.department || '')
+          setDestinationProvince(customer.province || '')
+          setDestinationDistrict(customer.district || '')
+        }
       } else {
         // Si no hay cliente, limpiar todos los campos del destinatario
         setRecipientDocType('6')
@@ -508,47 +515,51 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [isOpen, getBusinessId])
 
-  // Actualizar dirección de origen cuando cambia la sucursal seleccionada
+  // Actualizar dirección de origen/destino cuando cambia la sucursal seleccionada
+  // En compras (isPurchase): la dirección de mi empresa va al DESTINO (punto de llegada)
+  // En ventas: la dirección de mi empresa va al ORIGEN (punto de partida)
+  const isPurchase = referenceInvoice?.isPurchase
   useEffect(() => {
     const loadBranchOrBusinessAddress = async () => {
       const businessId = getBusinessId()
       if (!businessId) return
 
+      // Funciones para setear la dirección según si es compra o venta
+      const setAddr = isPurchase ? setDestinationAddress : setOriginAddress
+      const setDept = isPurchase ? setDestinationDepartment : setOriginDepartment
+      const setProv = isPurchase ? setDestinationProvince : setOriginProvince
+      const setDist = isPurchase ? setDestinationDistrict : setOriginDistrict
+
       if (selectedBranchId && branches.length > 0) {
         const selectedBranchData = branches.find(b => b.id === selectedBranchId)
         if (selectedBranchData) {
-          // SIEMPRE usar la dirección de la sucursal seleccionada
-          setOriginAddress(selectedBranchData.address || '')
+          setAddr(selectedBranchData.address || '')
 
-          // Usar ubigeo de la sucursal
           if (selectedBranchData.ubigeo && selectedBranchData.ubigeo.length === 6) {
-            setOriginDepartment(selectedBranchData.ubigeo.substring(0, 2))
-            setOriginProvince(selectedBranchData.ubigeo.substring(2, 4))
-            setOriginDistrict(selectedBranchData.ubigeo.substring(4, 6))
+            setDept(selectedBranchData.ubigeo.substring(0, 2))
+            setProv(selectedBranchData.ubigeo.substring(2, 4))
+            setDist(selectedBranchData.ubigeo.substring(4, 6))
           } else {
-            // Si no tiene ubigeo, limpiar para forzar al usuario a seleccionar
-            setOriginDepartment('')
-            setOriginProvince('')
-            setOriginDistrict('')
+            setDept('')
+            setProv('')
+            setDist('')
           }
-          console.log(`📍 Dirección de sucursal "${selectedBranchData.name}":`, selectedBranchData.address, 'Ubigeo:', selectedBranchData.ubigeo)
           return
         }
       }
 
-      // Si no hay sucursal seleccionada o no se encontró, usar dirección del negocio principal
+      // Si no hay sucursal seleccionada, usar dirección del negocio principal
       if (!selectedBranchId) {
         try {
           const companyResult = await getCompanySettings(businessId)
           if (companyResult.success && companyResult.data) {
             const businessData = companyResult.data
-            setOriginAddress(businessData.address || '')
+            setAddr(businessData.address || '')
             if (businessData.ubigeo && businessData.ubigeo.length === 6) {
-              setOriginDepartment(businessData.ubigeo.substring(0, 2))
-              setOriginProvince(businessData.ubigeo.substring(2, 4))
-              setOriginDistrict(businessData.ubigeo.substring(4, 6))
+              setDept(businessData.ubigeo.substring(0, 2))
+              setProv(businessData.ubigeo.substring(2, 4))
+              setDist(businessData.ubigeo.substring(4, 6))
             }
-            console.log('📍 Usando dirección del negocio principal:', businessData.address)
           }
         } catch (error) {
           console.error('Error al cargar dirección del negocio:', error)

@@ -524,6 +524,7 @@ export default function Purchases() {
         name: purchase.supplier.businessName || '',
         address: purchase.supplier.address || '',
       } : null,
+      isPurchase: true,
     })
   }
 
