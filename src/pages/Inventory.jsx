@@ -59,6 +59,7 @@ import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
+import MassTransferModal from '@/components/MassTransferModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
@@ -206,6 +207,7 @@ export default function Inventory() {
 
   // Estado para modal de recuento de inventario
   const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
+  const [showMassTransferModal, setShowMassTransferModal] = useState(false)
   const [showCountHistory, setShowCountHistory] = useState(false)
   const [countHistory, setCountHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -1544,6 +1546,14 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowMassTransferModal(true)}
+          >
+            <ArrowRightLeft className="w-4 h-4 mr-2" />
+            Traslado Masivo
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -3637,6 +3647,24 @@ export default function Inventory() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Transferencia Masiva */}
+      <MassTransferModal
+        isOpen={showMassTransferModal}
+        onClose={() => setShowMassTransferModal(false)}
+        products={products}
+        warehouses={warehouses}
+        allWarehouses={allWarehouses}
+        branches={branches}
+        businessId={getBusinessId()}
+        userId={user?.uid}
+        userName={user?.displayName || user?.email || ''}
+        companySettings={companySettings}
+        onTransferCompleted={() => {
+          loadProducts()
+          setShowMassTransferModal(false)
+        }}
+      />
 
       {/* Modal de Recuento de Inventario */}
       <InventoryCountModal

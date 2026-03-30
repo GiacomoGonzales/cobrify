@@ -49,7 +49,8 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   let y = margin
 
   const isExit = type === 'exit'
-  const title = isExit ? 'SALIDA DE ALMACÉN' : 'RETORNO A ALMACÉN'
+  const isTransfer = type === 'transfer'
+  const title = isTransfer ? 'TRANSFERENCIA DE ALMACÉN' : isExit ? 'SALIDA DE ALMACÉN' : 'RETORNO A ALMACÉN'
   const ACCENT = hexToRgb(business.pdfAccentColor || '#4F46E5')
   const ACCENT_LIGHT = ACCENT.map(c => Math.min(255, c + 180))
 
@@ -144,15 +145,22 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
 
   const halfW = contentWidth / 2
 
-  drawField('Proyecto / Obra', `${movement.projectName || '-'}${movement.projectCode ? ` (${movement.projectCode})` : ''}`, margin, halfW)
-  drawField(isExit ? 'Almacén Origen' : 'Almacén Destino', movement.warehouseName || '-', margin + halfW, halfW)
-  y += 28
-
-  drawField('Registrado por', movement.userName || '-', margin, halfW)
-  if (!isExit && movement.receivedBy) {
-    drawField('Recibido por', movement.receivedBy, margin + halfW, halfW)
+  if (isTransfer) {
+    drawField('Almacén Origen', movement.fromWarehouseName || '-', margin, halfW)
+    drawField('Almacén Destino', movement.toWarehouseName || '-', margin + halfW, halfW)
+    y += 28
+    drawField('Registrado por', movement.userName || '-', margin, halfW)
+    y += 28
+  } else {
+    drawField('Proyecto / Obra', `${movement.projectName || '-'}${movement.projectCode ? ` (${movement.projectCode})` : ''}`, margin, halfW)
+    drawField(isExit ? 'Almacén Origen' : 'Almacén Destino', movement.warehouseName || '-', margin + halfW, halfW)
+    y += 28
+    drawField('Registrado por', movement.userName || '-', margin, halfW)
+    if (!isExit && movement.receivedBy) {
+      drawField('Recibido por', movement.receivedBy, margin + halfW, halfW)
+    }
+    y += 28
   }
-  y += 28
 
   if (movement.notes) {
     drawField('Observaciones', movement.notes, margin, contentWidth)
@@ -167,7 +175,16 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
 
   // Definir columnas
   let cols
-  if (isExit) {
+  if (isTransfer) {
+    cols = [
+      { label: '#', w: 25, align: 'center' },
+      { label: 'CÓDIGO', w: 70, align: 'left' },
+      { label: 'DESCRIPCIÓN', w: contentWidth - 25 - 70 - 85 - 55 - 50, align: 'left' },
+      { label: 'LOTE', w: 85, align: 'center' },
+      { label: 'CANTIDAD', w: 55, align: 'center' },
+      { label: 'UNIDAD', w: 50, align: 'center' },
+    ]
+  } else if (isExit) {
     cols = [
       { label: '#', w: 25, align: 'center' },
       { label: 'CÓDIGO', w: 80, align: 'left' },
@@ -224,9 +241,11 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
     doc.setTextColor(...BLACK)
 
     const condLabel = item.condition === 'good' ? 'Buen estado' : item.condition === 'damaged' ? 'Dañado' : 'Perdido'
-    const rowData = isExit
-      ? [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und']
-      : [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und', condLabel, item.conditionNotes || '']
+    const rowData = isTransfer
+      ? [String(idx + 1), item.productCode || '-', item.productName || '-', item.batchNumber || '-', String(item.quantity), item.unit || 'und']
+      : isExit
+        ? [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und']
+        : [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und', condLabel, item.conditionNotes || '']
 
     colX = margin
     cols.forEach((col, ci) => {
@@ -310,7 +329,7 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isExit ? 'Entregado por (Almacén)' : 'Entregado por (Obra)', sign1X + signWidth / 2, finalSignY + 14, { align: 'center' })
+  doc.text(isTransfer ? 'Entregado por (Origen)' : isExit ? 'Entregado por (Almacén)' : 'Entregado por (Obra)', sign1X + signWidth / 2, finalSignY + 14, { align: 'center' })
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
@@ -321,7 +340,7 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isExit ? 'Recibido por (Obra)' : 'Recibido por (Almacén)', sign2X + signWidth / 2, finalSignY + 14, { align: 'center' })
+  doc.text(isTransfer ? 'Recibido por (Destino)' : isExit ? 'Recibido por (Obra)' : 'Recibido por (Almacén)', sign2X + signWidth / 2, finalSignY + 14, { align: 'center' })
   if (!isExit && movement.receivedBy) {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
@@ -350,7 +369,7 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
  */
 export const downloadLogisticsMovementPDF = async (movement, business, type = 'exit') => {
   const doc = await generateLogisticsMovementPDF(movement, business, type)
-  const prefix = type === 'exit' ? 'Salida' : 'Retorno'
+  const prefix = type === 'transfer' ? 'Transferencia' : type === 'exit' ? 'Salida' : 'Retorno'
   const num = movement.number || formatTimestampShort(movement.createdAt)
   const fileName = `${prefix}_${num}.pdf`
   doc.save(fileName)
