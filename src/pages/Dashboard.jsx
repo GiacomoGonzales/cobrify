@@ -131,11 +131,14 @@ export default function Dashboard() {
         return
       }
 
-      // Solo cargar facturas de los últimos 14 días (para gráfico de 7 días + comparativa)
+      // Cargar facturas desde el inicio del mes o 14 días atrás (lo que sea más antiguo)
+      // Se necesitan 14 días para el gráfico comparativo y desde inicio del mes para "Ventas del Mes"
       const fourteenDaysAgo = getDaysAgo(14)
+      const monthStart = getStartOfMonthPeru()
+      const sinceDate = monthStart < fourteenDaysAgo ? monthStart : fourteenDaysAgo
 
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
-        getRecentInvoices(businessId, fourteenDaysAgo),
+        getRecentInvoices(businessId, sinceDate),
         getCustomers(businessId),
         getProducts(businessId),
       ])
@@ -275,11 +278,21 @@ export default function Dashboard() {
     ? ((todaysSales - yesterdaySales) / yesterdaySales * 100).toFixed(1)
     : todaysSales > 0 ? '+100.0' : '0.0'
 
+  // Formatear fecha corta en zona Perú (ej: "30 mar")
+  const formatShortDate = (date) => {
+    return date.toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short' })
+  }
+
+  const todayLabel = formatShortDate(new Date())
+  const monthStartDate = getStartOfMonthPeru()
+  const monthRangeLabel = `${formatShortDate(monthStartDate)} - ${todayLabel}`
+
   // Estadísticas
   const hiddenAmount = 'S/ ****'
   const stats = [
     {
       title: 'Ventas del Día',
+      subtitle: todayLabel,
       value: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
       icon: DollarSign,
       change: todaysSales > yesterdaySales ? `+${todayChange}%` : `${todayChange}%`,
@@ -288,6 +301,7 @@ export default function Dashboard() {
     },
     {
       title: 'Ventas del Mes',
+      subtitle: monthRangeLabel,
       value: showAmounts ? formatCurrency(monthSales) : hiddenAmount,
       icon: TrendingUp,
       change: `${validInvoicesForSales.filter(inv => {
@@ -398,7 +412,12 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.title}</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {stat.title}
+                      {stat.subtitle && (
+                        <span className="text-primary-600 ml-1">({stat.subtitle})</span>
+                      )}
+                    </p>
                     {stat.isSalesAmount && (
                       <button
                         onClick={toggleShowAmounts}

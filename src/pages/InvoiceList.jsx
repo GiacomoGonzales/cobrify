@@ -1534,19 +1534,16 @@ Gracias por tu preferencia.`
   }
 
   // Etiqueta del filtro actual
+  const formatShortDate = (date) => {
+    return date.toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })
+  }
+
   const getFilterLabel = () => {
-    switch (dateFilter) {
-      case 'today': return 'Hoy'
-      case '3days': return 'Últimos 3 días'
-      case '7days': return 'Últimos 7 días'
-      case '30days': return 'Últimos 30 días'
-      case 'custom':
-        if (filterStartDate && filterEndDate) {
-          return `${filterStartDate} - ${filterEndDate}`
-        }
-        return 'Personalizado'
-      default: return 'Todo el tiempo'
+    const range = getDateRange()
+    if (range) {
+      return `${formatShortDate(range.start)} - ${formatShortDate(range.end)}`
     }
+    return 'Todo el tiempo'
   }
 
   // Filtrar facturas
@@ -1741,16 +1738,26 @@ Gracias por tu preferencia.`
   }, [invoices, dateFilter, filterStartDate, filterEndDate])
 
   // Estadísticas (basadas en el período seleccionado)
-  // Excluir facturas anuladas y notas de venta convertidas (para evitar doble conteo)
-  const isConvertedNota = (i) => i.documentType === 'nota_venta' && i.convertedTo
-  const statsInvoices = dateFilteredInvoices.filter(i => !isConvertedNota(i))
-  const activeInvoices = statsInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'voided')
+  // Solo contar ventas reales: boletas, facturas, notas de venta (no convertidas)
+  // Excluir: notas de crédito, notas de débito, canceladas, anuladas
+  const isValidSale = (i) => {
+    // Solo boletas, facturas y notas de venta
+    if (i.documentType === 'nota_credito' || i.documentType === 'nota_debito') return false
+    // No contar notas de venta convertidas (ya se cuenta la boleta/factura resultante)
+    if (i.documentType === 'nota_venta' && i.convertedTo) return false
+    // Excluir canceladas y anuladas
+    if (i.status === 'cancelled' || i.status === 'voided' ||
+        i.status === 'pending_cancellation' || i.status === 'partial_refund_pending') return false
+    if (i.sunatStatus === 'voiding' || i.sunatStatus === 'voided') return false
+    return true
+  }
+  const salesInvoices = dateFilteredInvoices.filter(isValidSale)
   const stats = {
-    total: statsInvoices.length,
-    paid: statsInvoices.filter(i => i.status === 'paid').length,
-    pending: statsInvoices.filter(i => i.status === 'pending').length,
-    totalAmount: activeInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
-    totalAll: invoices.filter(i => !isConvertedNota(i)).length,
+    total: salesInvoices.length,
+    paid: salesInvoices.filter(i => i.status === 'paid').length,
+    pending: salesInvoices.filter(i => i.status === 'pending').length,
+    totalAmount: salesInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
+    totalAll: invoices.filter(isValidSale).length,
   }
 
   if (isLoading) {
@@ -2026,25 +2033,34 @@ Gracias por tu preferencia.`
       </Card>
 
       {/* Totals Summary */}
-      {filteredInvoices.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-4 text-sm">
-          <span className="text-gray-600">
-            <span className="font-semibold text-gray-900">{filteredInvoices.length}</span> comprobante{filteredInvoices.length !== 1 ? 's' : ''}
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-600">
-            Total: <span className="font-semibold text-gray-900">{formatCurrency(filteredInvoices.reduce((sum, inv) => sum + (inv.status !== 'cancelled' ? (inv.total || 0) : 0), 0))}</span>
-          </span>
-          {filterPaymentMethod !== 'all' && (
-            <>
-              <span className="text-gray-300">|</span>
-              <span className="text-gray-600">
-                Filtrado por: <span className="font-semibold text-primary-600">{filterPaymentMethod}</span>
-              </span>
-            </>
-          )}
-        </div>
-      )}
+      {filteredInvoices.length > 0 && (() => {
+        const tableSales = filteredInvoices.filter(isValidSale)
+        return (
+          <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-4 text-sm">
+            <span className="text-gray-600">
+              <span className="font-semibold text-gray-900">{tableSales.length}</span> comprobante{tableSales.length !== 1 ? 's' : ''}
+            </span>
+            <span className="text-gray-300">|</span>
+            <span className="text-gray-600">
+              Total: <span className="font-semibold text-gray-900">{formatCurrency(tableSales.reduce((sum, inv) => sum + (inv.total || 0), 0))}</span>
+            </span>
+            {dateFilter !== 'all' && (
+              <>
+                <span className="text-gray-300">|</span>
+                <span className="text-primary-600 text-xs">{getFilterLabel()}</span>
+              </>
+            )}
+            {filterPaymentMethod !== 'all' && (
+              <>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-600">
+                  Filtrado por: <span className="font-semibold text-primary-600">{filterPaymentMethod}</span>
+                </span>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Invoice Table */}
       <Card>
