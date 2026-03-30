@@ -1850,20 +1850,44 @@ export default function CreateQuotation() {
               <option value="PASSPORT">Pasaporte</option>
             </Select>
 
-            <Input
-              label="Número de Documento *"
-              value={manualCustomer.documentNumber}
-              onChange={e =>
-                setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
-              }
-              placeholder={
-                manualCustomer.documentType === 'DNI'
-                  ? '12345678'
-                  : manualCustomer.documentType === 'RUC'
-                  ? '20123456789'
-                  : 'Número'
-              }
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Número de Documento <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualCustomer.documentNumber}
+                  onChange={e =>
+                    setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
+                  }
+                  placeholder={
+                    manualCustomer.documentType === 'DNI'
+                      ? '12345678'
+                      : manualCustomer.documentType === 'RUC'
+                      ? '20123456789'
+                      : 'Número'
+                  }
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={handleLookupDocument}
+                  disabled={isLookingUpDocument}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                  title="Buscar datos del documento"
+                >
+                  {isLookingUpDocument ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Ingrese DNI (8 dígitos) o RUC (11 dígitos) y haga clic en buscar
+              </p>
+            </div>
 
             <div className="sm:col-span-2">
               <Input
