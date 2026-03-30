@@ -23,6 +23,7 @@ import {
   List,
   Store,
   MoreVertical,
+  FileText,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -36,6 +37,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
+import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 /**
  * Parsea fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
@@ -79,6 +81,7 @@ export default function Purchases() {
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
   const [editingPaymentDate, setEditingPaymentDate] = useState(null) // { purchaseId, paymentIndex, date }
+  const [guideReference, setGuideReference] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
   const [visibleCount, setVisibleCount] = useState(20)
@@ -500,6 +503,28 @@ export default function Purchases() {
     } finally {
       setIsRegisteringPayment(false)
     }
+  }
+
+  // Generar Guía de Remisión desde una compra
+  const openGuideFromPurchase = (purchase) => {
+    setGuideReference({
+      items: purchase.items?.map(i => ({
+        productId: i.productId,
+        name: i.productName || i.name,
+        description: i.productName || i.name,
+        code: i.productCode || i.code || '',
+        quantity: i.quantity,
+        unit: i.unit || 'NIU',
+      })),
+      transferReason: '02',
+      transferDescription: `Compra ${purchase.invoiceNumber || ''} - ${purchase.supplier?.businessName || ''}`.trim(),
+      customer: purchase.supplier ? {
+        documentType: purchase.supplier.documentType || (purchase.supplier.documentNumber?.length === 11 ? 'RUC' : 'DNI'),
+        documentNumber: purchase.supplier.documentNumber || '',
+        name: purchase.supplier.businessName || '',
+        address: purchase.supplier.address || '',
+      } : null,
+    })
   }
 
   // Abrir modal de registro de pago con monto sugerido
@@ -1233,6 +1258,17 @@ export default function Purchases() {
                               <Edit2 className="w-4 h-4" />
                             </Button>
                           )}
+                          {!purchase._isIngredientPurchase && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openGuideFromPurchase(purchase)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              title="Guía de Remisión"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1301,6 +1337,15 @@ export default function Purchases() {
                       >
                         <Edit2 className="w-4 h-4" />
                         Editar
+                      </button>
+                    )}
+                    {!menuPurchase._isIngredientPurchase && (
+                      <button
+                        onClick={() => { openGuideFromPurchase(menuPurchase); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Guía de Remisión
                       </button>
                     )}
                     <button
@@ -1933,6 +1978,12 @@ export default function Purchases() {
           </div>
         )}
       </Modal>
+      {/* Modal Guía de Remisión */}
+      <CreateDispatchGuideModal
+        isOpen={!!guideReference}
+        onClose={() => setGuideReference(null)}
+        referenceInvoice={guideReference}
+      />
     </div>
   )
 }

@@ -77,6 +77,27 @@ export default function Dashboard() {
     }
   }
 
+  // Helper: Obtener medianoche de hoy en hora Perú (UTC-5)
+  const getStartOfTodayPeru = () => {
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) // 'YYYY-MM-DD'
+    return new Date(peruDate + 'T00:00:00-05:00')
+  }
+
+  // Helper: Obtener inicio del mes actual en hora Perú
+  const getStartOfMonthPeru = () => {
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [year, month] = peruDate.split('-')
+    return new Date(`${year}-${month}-01T00:00:00-05:00`)
+  }
+
+  // Helper: Obtener inicio del día N días atrás en hora Perú
+  const getDaysAgo = days => {
+    const today = getStartOfTodayPeru()
+    return new Date(today.getTime() - days * 24 * 60 * 60 * 1000)
+  }
+
   const loadDashboardData = async () => {
     if (isDemoMode && demoData) {
       // Load demo data
@@ -111,9 +132,7 @@ export default function Dashboard() {
       }
 
       // Solo cargar facturas de los últimos 14 días (para gráfico de 7 días + comparativa)
-      const fourteenDaysAgo = new Date()
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-      fourteenDaysAgo.setHours(0, 0, 0, 0)
+      const fourteenDaysAgo = getDaysAgo(14)
 
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
         getRecentInvoices(businessId, fourteenDaysAgo),
@@ -135,29 +154,6 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // Helper: Get start of today
-  const getStartOfToday = () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return today
-  }
-
-  // Helper: Get start of month
-  const getStartOfMonth = () => {
-    const date = new Date()
-    date.setDate(1)
-    date.setHours(0, 0, 0, 0)
-    return date
-  }
-
-  // Helper: Get date N days ago
-  const getDaysAgo = days => {
-    const date = new Date()
-    date.setDate(date.getDate() - days)
-    date.setHours(0, 0, 0, 0)
-    return date
   }
 
   // Helper to get date from invoice (handles both Firestore timestamp and regular Date)
@@ -204,7 +200,7 @@ export default function Dashboard() {
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
-      return invDate >= getStartOfToday()
+      return invDate >= getStartOfTodayPeru()
     })
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
 
@@ -213,7 +209,7 @@ export default function Dashboard() {
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
-      return invDate >= getStartOfMonth()
+      return invDate >= getStartOfMonthPeru()
     })
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
 
@@ -235,13 +231,11 @@ export default function Dashboard() {
 
   for (let i = 6; i >= 0; i--) {
     const dayStart = getDaysAgo(i)
-    const dayEnd = new Date(dayStart)
-    dayEnd.setHours(23, 59, 59, 999)
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
 
     // Semana anterior (mismo día, 7 días antes)
     const prevDayStart = getDaysAgo(i + 7)
-    const prevDayEnd = new Date(prevDayStart)
-    prevDayEnd.setHours(23, 59, 59, 999)
+    const prevDayEnd = new Date(prevDayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
 
     const daySales = validInvoicesForSales
       .filter(inv => {
@@ -272,8 +266,7 @@ export default function Dashboard() {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
       const yesterday = getDaysAgo(1)
-      const yesterdayEnd = new Date(yesterday)
-      yesterdayEnd.setHours(23, 59, 59, 999)
+      const yesterdayEnd = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1)
       return invDate >= yesterday && invDate <= yesterdayEnd
     })
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
@@ -300,7 +293,7 @@ export default function Dashboard() {
       change: `${validInvoicesForSales.filter(inv => {
         const invDate = getInvoiceDate(inv)
         if (!invDate) return false
-        return invDate >= getStartOfMonth()
+        return invDate >= getStartOfMonthPeru()
       }).length} comprobantes`,
       changeType: 'positive',
       isSalesAmount: true,

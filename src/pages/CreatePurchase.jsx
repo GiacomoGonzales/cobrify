@@ -871,6 +871,7 @@ export default function CreatePurchase() {
           contactName: selectedSupplier.contactName || '',
           email: selectedSupplier.email || '',
           phone: selectedSupplier.phone || '',
+          address: selectedSupplier.address || '',
         } : null,
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: parseLocalDate(invoiceDate), // Usar parseLocalDate para evitar problema de timezone
