@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
 import MainLayout from './layouts/MainLayout'
@@ -114,6 +114,14 @@ import WarehouseExits from './pages/WarehouseExits'
 import WarehouseReturns from './pages/WarehouseReturns'
 import LogisticsReports from './pages/LogisticsReports'
 
+// Registro solo accesible para super admin
+function AdminOnlyRegister() {
+  const { isAdmin, isLoading } = useAuth()
+  if (isLoading) return null
+  if (!isAdmin) return <Navigate to="/login" replace />
+  return <Register />
+}
+
 function App() {
   const isNative = Capacitor.isNativePlatform()
 
@@ -152,7 +160,7 @@ function App() {
 
             {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/register" element={<AdminOnlyRegister />} />
 
             {/* Rutas públicas */}
             <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
