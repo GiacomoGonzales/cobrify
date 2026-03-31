@@ -1654,11 +1654,11 @@ export default function POS() {
     }
   }
 
-  // Helper: obtener lotes disponibles ordenados por FEFO
+  // Helper: obtener lotes disponibles ordenados por FEFO (filtrados por almacén seleccionado)
   const getAvailableBatches = (product) => {
     if (!product.batches || !Array.isArray(product.batches)) return []
     return product.batches
-      .filter(b => b.quantity > 0 && !b.isExpired)
+      .filter(b => b.quantity > 0 && !b.isExpired && (!b.warehouseId || !selectedWarehouse || b.warehouseId === selectedWarehouse.id))
       .map(b => ({
         ...b,
         lotNumber: b.lotNumber || b.batchNumber || 'S/N',
