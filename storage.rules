@@ -17,9 +17,10 @@ service firebase.storage {
     }
 
     // Permitir lectura pública de imágenes de productos
+    // Escritura permitida a cualquier usuario autenticado (sub-usuarios necesitan subir imágenes)
     match /businesses/{businessId}/products/{allImages=**} {
       allow read: if true; // Acceso público de lectura
-      allow write: if request.auth != null && request.auth.uid == businessId;
+      allow write: if request.auth != null;
     }
 
     // Permitir lectura pública de imágenes de categorías
@@ -42,7 +43,7 @@ service firebase.storage {
 
     match /{businessId}/products/{allImages=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == businessId;
+      allow write: if request.auth != null;
     }
 
     match /{businessId}/categories/{allImages=**} {
@@ -56,9 +57,10 @@ service firebase.storage {
     }
 
     // Path para imágenes de productos (nuevo formato: products/{businessId}/{filename})
+    // Escritura permitida a cualquier usuario autenticado (sub-usuarios necesitan subir imágenes)
     match /products/{businessId}/{allImages=**} {
       allow read: if true; // Lectura pública
-      allow write: if request.auth != null && request.auth.uid == businessId;
+      allow write: if request.auth != null;
     }
 
     // Path para comprobantes PDF (WhatsApp sharing)
