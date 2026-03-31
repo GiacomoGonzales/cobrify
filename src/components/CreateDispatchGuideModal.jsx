@@ -459,8 +459,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setDestinationDistrict('')
       }
 
-      // Agregar documento como referencia relacionada (solo para facturas/boletas, no cotizaciones)
-      if (referenceInvoice.number && referenceInvoice.documentType !== 'cotizacion') {
+      // Agregar documento como referencia relacionada
+      if (referenceInvoice.isPurchase && referenceInvoice.purchaseInvoice) {
+        // Para compras: agregar la factura del proveedor
+        setRelatedDocuments([{
+          id: 1,
+          type: referenceInvoice.purchaseInvoice.type || '01',
+          series: referenceInvoice.purchaseInvoice.series || '',
+          number: referenceInvoice.purchaseInvoice.number || '',
+        }])
+      } else if (referenceInvoice.number && referenceInvoice.documentType !== 'cotizacion') {
+        // Para ventas: agregar nuestra factura/boleta
         const docType = referenceInvoice.documentType === 'factura' ? '01' : '03'
         setRelatedDocuments([{
           id: 1,
@@ -882,7 +891,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const businessId = getBusinessId()
 
       const dispatchGuide = {
-        referencedInvoice: referenceInvoice && referenceInvoice.documentType !== 'cotizacion' ? {
+        // Para ventas: referencia a nuestra factura/boleta
+        // Para compras: no hay factura propia, la del proveedor va en relatedDocuments
+        referencedInvoice: referenceInvoice && referenceInvoice.id && referenceInvoice.documentType !== 'cotizacion' && !referenceInvoice.isPurchase ? {
           id: referenceInvoice.id,
           documentType: referenceInvoice.documentType === 'factura' ? '01' : '03',
           series: referenceInvoice.number?.split('-')[0] || '',

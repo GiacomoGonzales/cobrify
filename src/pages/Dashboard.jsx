@@ -51,6 +51,8 @@ export default function Dashboard() {
     if (isDemoMode) {
       if (location.pathname.startsWith('/demorestaurant')) return '/demorestaurant'
       if (location.pathname.startsWith('/demopharmacy')) return '/demopharmacy'
+      if (location.pathname.startsWith('/demohotel')) return '/demohotel'
+      if (location.pathname.startsWith('/demoveterinary')) return '/demoveterinary'
       return '/demo'
     }
     return '/app'

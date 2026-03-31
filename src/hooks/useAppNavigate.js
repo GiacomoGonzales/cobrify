@@ -26,6 +26,10 @@ export function useAppNavigate() {
         prefix = '/demorestaurant'
       } else if (location.pathname.startsWith('/demopharmacy')) {
         prefix = '/demopharmacy'
+      } else if (location.pathname.startsWith('/demohotel')) {
+        prefix = '/demohotel'
+      } else if (location.pathname.startsWith('/demoveterinary')) {
+        prefix = '/demoveterinary'
       } else {
         prefix = '/demo'
       }

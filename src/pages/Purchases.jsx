@@ -507,6 +507,11 @@ export default function Purchases() {
 
   // Generar Guía de Remisión desde una compra
   const openGuideFromPurchase = (purchase) => {
+    // Parsear número de factura del proveedor (ej: "F001-123" o "001-000123")
+    const invoiceParts = purchase.invoiceNumber?.split('-') || []
+    const invoiceSeries = invoiceParts[0] || ''
+    const invoiceNumber = invoiceParts[1] || ''
+
     setGuideReference({
       items: purchase.items?.map(i => ({
         productId: i.productId,
@@ -516,7 +521,7 @@ export default function Purchases() {
         quantity: i.quantity,
         unit: i.unit || 'NIU',
       })),
-      transferReason: '02',
+      transferReason: '02', // Compra
       transferDescription: `Compra ${purchase.invoiceNumber || ''} - ${purchase.supplier?.businessName || ''}`.trim(),
       customer: purchase.supplier ? {
         documentType: purchase.supplier.documentType || (purchase.supplier.documentNumber?.length === 11 ? 'RUC' : 'DNI'),
@@ -525,6 +530,13 @@ export default function Purchases() {
         address: purchase.supplier.address || '',
       } : null,
       isPurchase: true,
+      // Documento relacionado: factura del proveedor
+      purchaseInvoice: purchase.invoiceNumber ? {
+        type: '01', // Factura
+        series: invoiceSeries,
+        number: invoiceNumber,
+        fullNumber: purchase.invoiceNumber,
+      } : null,
     })
   }
 
