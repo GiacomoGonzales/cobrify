@@ -2170,16 +2170,39 @@ export default function Inventory() {
                                           const stock = hasWarehouseStocks
                                             ? (item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)?.stock || 0)
                                             : 0
+                                          const wBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
                                           return (
-                                            <div key={warehouse.id} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
-                                              <div className="flex items-center gap-1.5">
-                                                <Warehouse className="w-3 h-3 text-gray-400" />
-                                                <span className="text-xs text-gray-700">{warehouse.name}</span>
-                                                {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                            <div key={warehouse.id} className="bg-white rounded px-2 py-1.5">
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                  <Warehouse className="w-3 h-3 text-gray-400" />
+                                                  <span className="text-xs text-gray-700">{warehouse.name}</span>
+                                                  {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                </div>
+                                                <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                  {stock}
+                                                </span>
                                               </div>
-                                              <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                                {stock}
-                                              </span>
+                                              {wBatches.length > 0 && (
+                                                <div className="mt-1 ml-4 space-y-0.5">
+                                                  {wBatches.map((batch, bIdx) => {
+                                                    const bId = batch.lotNumber || batch.batchNumber || batch.id
+                                                    const expD = (batch.expirationDate || batch.expiryDate)
+                                                    const expDate = expD ? (expD.toDate ? expD.toDate() : new Date(expD)) : null
+                                                    const expStr = expDate ? expDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
+                                                    return (
+                                                      <div key={bId + bIdx} className="flex items-center justify-between text-[10px] bg-amber-50/50 px-1.5 py-0.5 rounded">
+                                                        <div className="flex items-center gap-1">
+                                                          <FlaskConical className="w-2.5 h-2.5 text-amber-500" />
+                                                          <span className="font-medium text-gray-600">{bId}</span>
+                                                          {expStr && <span className="text-gray-400">{expStr}</span>}
+                                                        </div>
+                                                        <span className="font-semibold text-gray-600">{batch.quantity}</span>
+                                                      </div>
+                                                    )
+                                                  })}
+                                                </div>
+                                              )}
                                             </div>
                                           )
                                         })}
@@ -2207,16 +2230,39 @@ export default function Inventory() {
                                             const stock = hasWarehouseStocks
                                               ? (item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)?.stock || 0)
                                               : 0
+                                            const wBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
                                             return (
-                                              <div key={warehouse.id} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
-                                                <div className="flex items-center gap-1.5">
-                                                  <Warehouse className="w-3 h-3 text-gray-400" />
-                                                  <span className="text-xs text-gray-700">{warehouse.name}</span>
-                                                  {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                              <div key={warehouse.id} className="bg-white rounded px-2 py-1.5">
+                                                <div className="flex items-center justify-between">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <Warehouse className="w-3 h-3 text-gray-400" />
+                                                    <span className="text-xs text-gray-700">{warehouse.name}</span>
+                                                    {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                  </div>
+                                                  <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                    {stock}
+                                                  </span>
                                                 </div>
-                                                <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                                  {stock}
-                                                </span>
+                                                {wBatches.length > 0 && (
+                                                  <div className="mt-1 ml-4 space-y-0.5">
+                                                    {wBatches.map((batch, bIdx) => {
+                                                      const bId = batch.lotNumber || batch.batchNumber || batch.id
+                                                      const expD = (batch.expirationDate || batch.expiryDate)
+                                                      const expDate = expD ? (expD.toDate ? expD.toDate() : new Date(expD)) : null
+                                                      const expStr = expDate ? expDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
+                                                      return (
+                                                        <div key={bId + bIdx} className="flex items-center justify-between text-[10px] bg-amber-50/50 px-1.5 py-0.5 rounded">
+                                                          <div className="flex items-center gap-1">
+                                                            <FlaskConical className="w-2.5 h-2.5 text-amber-500" />
+                                                            <span className="font-medium text-gray-600">{bId}</span>
+                                                            {expStr && <span className="text-gray-400">{expStr}</span>}
+                                                          </div>
+                                                          <span className="font-semibold text-gray-600">{batch.quantity}</span>
+                                                        </div>
+                                                      )
+                                                    })}
+                                                  </div>
+                                                )}
                                               </div>
                                             )
                                           })}
@@ -2224,19 +2270,19 @@ export default function Inventory() {
                                       </div>
                                     )
                                   })}
-                                  {/* Lotes dentro de almacenes (mobile) */}
-                                  {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                                  {/* Lotes sin almacén asignado - legacy (mobile) */}
+                                  {item.batches && item.batches.filter(b => b.quantity > 0 && !b.warehouseId).length > 0 && (
                                     <div className="mt-2 border-t border-gray-200 pt-2">
                                       <div className="flex items-center gap-1.5 mb-1.5 px-1">
                                         <FlaskConical className="w-3 h-3 text-amber-600" />
                                         <span className="text-xs font-medium text-amber-700">Lotes</span>
                                         <span className="text-xs text-amber-600 ml-auto">
-                                          {item.batches.filter(b => b.quantity > 0).length} activos
+                                          {item.batches.filter(b => b.quantity > 0 && !b.warehouseId).length} sin asignar
                                         </span>
                                       </div>
                                       <div className="space-y-1">
                                         {item.batches
-                                          .filter(b => b.quantity > 0)
+                                          .filter(b => b.quantity > 0 && !b.warehouseId)
                                           .sort((a, b) => {
                                             const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
                                             const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
@@ -2541,38 +2587,53 @@ export default function Inventory() {
                                             </Badge>
                                           </div>
                                         )}
-                                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        <div className="p-3 space-y-2">
                                           {mainBranchWarehouses.map(warehouse => {
                                             const warehouseStock = hasWarehouseStocks
                                               ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
                                               : null
                                             const stock = warehouseStock?.stock || 0
+                                            const warehouseBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
 
                                             return (
-                                              <div
-                                                key={warehouse.id}
-                                                className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
-                                              >
-                                                <div className="flex items-center space-x-2">
-                                                  <Warehouse className="w-3.5 h-3.5 text-gray-400" />
-                                                  <span className="text-sm text-gray-700">
-                                                    {warehouse.name}
+                                              <div key={warehouse.id} className="bg-white border border-gray-100 rounded-lg p-2.5">
+                                                <div className="flex items-center justify-between">
+                                                  <div className="flex items-center space-x-2">
+                                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                    <span className="text-sm text-gray-700">{warehouse.name}</span>
+                                                    {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                  </div>
+                                                  <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                    {stock}
                                                   </span>
-                                                  {warehouse.isDefault && (
-                                                    <Badge variant="secondary" className="text-xs">Ppal</Badge>
-                                                  )}
                                                 </div>
-                                                <span
-                                                  className={`font-semibold text-sm ${
-                                                    stock >= 4
-                                                      ? 'text-green-600'
-                                                      : stock > 0
-                                                      ? 'text-yellow-600'
-                                                      : 'text-red-600'
-                                                  }`}
-                                                >
-                                                  {stock}
-                                                </span>
+                                                {warehouseBatches.length > 0 && (
+                                                  <div className="mt-1.5 pl-5 space-y-1">
+                                                    {warehouseBatches.map((batch, bIdx) => {
+                                                      const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                                      const expiryDate = batch.expirationDate || batch.expiryDate
+                                                      const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                                      const daysUntilExpiry = expiryD ? Math.ceil((expiryD - new Date()) / (1000 * 60 * 60 * 24)) : null
+                                                      const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                                      const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                                      const expiryStr = expiryD ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
+                                                      return (
+                                                        <div key={batchId + bIdx} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${isExpired ? 'bg-red-50' : isNearExpiry ? 'bg-yellow-50' : 'bg-amber-50/50'}`}>
+                                                          <div className="flex items-center gap-1.5">
+                                                            <FlaskConical className="w-3 h-3 text-amber-500" />
+                                                            <span className="font-medium text-gray-700">{batchId}</span>
+                                                            {expiryStr && (
+                                                              <span className={`${isExpired ? 'text-red-600' : isNearExpiry ? 'text-yellow-600' : 'text-gray-400'}`}>
+                                                                {isExpired ? 'Vencido' : expiryStr}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                          <span className={`font-semibold ${batch.quantity >= 4 ? 'text-green-600' : 'text-yellow-600'}`}>{batch.quantity}</span>
+                                                        </div>
+                                                      )
+                                                    })}
+                                                  </div>
+                                                )}
                                               </div>
                                             )
                                           })}
@@ -2601,38 +2662,53 @@ export default function Inventory() {
                                               </Badge>
                                             </div>
                                           )}
-                                          <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          <div className="p-3 space-y-2">
                                             {branchWarehouses.map(warehouse => {
                                               const warehouseStock = hasWarehouseStocks
                                                 ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
                                                 : null
                                               const stock = warehouseStock?.stock || 0
+                                              const warehouseBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
 
                                               return (
-                                                <div
-                                                  key={warehouse.id}
-                                                  className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
-                                                >
-                                                  <div className="flex items-center space-x-2">
-                                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
-                                                    <span className="text-sm text-gray-700">
-                                                      {warehouse.name}
+                                                <div key={warehouse.id} className="bg-white border border-gray-100 rounded-lg p-2.5">
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="flex items-center space-x-2">
+                                                      <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                      <span className="text-sm text-gray-700">{warehouse.name}</span>
+                                                      {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                    </div>
+                                                    <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                      {stock}
                                                     </span>
-                                                    {warehouse.isDefault && (
-                                                      <Badge variant="secondary" className="text-xs">Ppal</Badge>
-                                                    )}
                                                   </div>
-                                                  <span
-                                                    className={`font-semibold text-sm ${
-                                                      stock >= 4
-                                                        ? 'text-green-600'
-                                                        : stock > 0
-                                                        ? 'text-yellow-600'
-                                                        : 'text-red-600'
-                                                    }`}
-                                                  >
-                                                    {stock}
-                                                  </span>
+                                                  {warehouseBatches.length > 0 && (
+                                                    <div className="mt-1.5 pl-5 space-y-1">
+                                                      {warehouseBatches.map((batch, bIdx) => {
+                                                        const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                                        const expiryDate = batch.expirationDate || batch.expiryDate
+                                                        const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                                        const daysUntilExpiry = expiryD ? Math.ceil((expiryD - new Date()) / (1000 * 60 * 60 * 24)) : null
+                                                        const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                                        const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                                        const expiryStr = expiryD ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''
+                                                        return (
+                                                          <div key={batchId + bIdx} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${isExpired ? 'bg-red-50' : isNearExpiry ? 'bg-yellow-50' : 'bg-amber-50/50'}`}>
+                                                            <div className="flex items-center gap-1.5">
+                                                              <FlaskConical className="w-3 h-3 text-amber-500" />
+                                                              <span className="font-medium text-gray-700">{batchId}</span>
+                                                              {expiryStr && (
+                                                                <span className={`${isExpired ? 'text-red-600' : isNearExpiry ? 'text-yellow-600' : 'text-gray-400'}`}>
+                                                                  {isExpired ? 'Vencido' : expiryStr}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                            <span className={`font-semibold ${batch.quantity >= 4 ? 'text-green-600' : 'text-yellow-600'}`}>{batch.quantity}</span>
+                                                          </div>
+                                                        )
+                                                      })}
+                                                    </div>
+                                                  )}
                                                 </div>
                                               )
                                             })}
@@ -2641,19 +2717,19 @@ export default function Inventory() {
                                       )
                                     })}
 
-                                  {/* Lotes dentro de la sección de almacenes */}
-                                  {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                                  {/* Lotes sin almacén asignado (legacy) */}
+                                  {item.batches && item.batches.filter(b => b.quantity > 0 && !b.warehouseId).length > 0 && (
                                     <div className="mt-3 border-t border-gray-200 pt-3">
                                       <div className="flex items-center gap-2 mb-2 px-1">
                                         <FlaskConical className="w-4 h-4 text-amber-600" />
                                         <span className="font-medium text-sm text-amber-700">Lotes</span>
                                         <Badge variant="warning" className="text-xs">
-                                          {item.batches.filter(b => b.quantity > 0).length} activos
+                                          {item.batches.filter(b => b.quantity > 0 && !b.warehouseId).length} sin asignar
                                         </Badge>
                                       </div>
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {item.batches
-                                          .filter(b => b.quantity > 0)
+                                          .filter(b => b.quantity > 0 && !b.warehouseId)
                                           .sort((a, b) => {
                                             const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
                                             const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
