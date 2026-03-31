@@ -523,7 +523,9 @@ export default function Purchases() {
       })),
       transferReason: '02', // Compra
       transferDescription: `Compra ${purchase.invoiceNumber || ''} - ${purchase.supplier?.businessName || ''}`.trim(),
-      customer: purchase.supplier ? {
+      // Para compras: el proveedor es el ORIGEN, no el destinatario
+      // El destinatario será la propia empresa (se carga en el modal)
+      supplier: purchase.supplier ? {
         documentType: purchase.supplier.documentType || (purchase.supplier.documentNumber?.length === 11 ? 'RUC' : 'DNI'),
         documentNumber: purchase.supplier.documentNumber || '',
         name: purchase.supplier.businessName || '',

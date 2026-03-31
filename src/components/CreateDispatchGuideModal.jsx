@@ -402,8 +402,47 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       setIssueDate(getLocalDateString(0))  // Hoy
       setTransferDate(getLocalDateString(0))  // Hoy (el usuario puede cambiar)
 
-      // Pre-llenar datos del destinatario desde el cliente de la factura
-      if (referenceInvoice.customer) {
+      // Pre-llenar datos según si es compra o venta
+      if (referenceInvoice.isPurchase) {
+        // COMPRA: El proveedor es el ORIGEN, mi empresa es el DESTINATARIO
+        const supplier = referenceInvoice.supplier
+
+        if (supplier) {
+          // Dirección del proveedor va al punto de partida (origen)
+          setOriginAddress(supplier.address || '')
+        }
+
+        // El destinatario será mi propia empresa - se carga desde companySettings
+        // Lo cargamos aquí mismo para tenerlo listo
+        const loadCompanyAsRecipient = async () => {
+          try {
+            const businessId = getBusinessId()
+            const companyResult = await getCompanySettings(businessId)
+            if (companyResult.success && companyResult.data) {
+              const company = companyResult.data
+              setRecipientDocType('6') // RUC
+              setRecipientDocNumber(company.ruc || '')
+              setRecipientName(company.businessName || company.name || '')
+              setRecipientAddress(company.address || '')
+              // El punto de llegada (destino) también es mi empresa
+              setDestinationAddress(company.address || '')
+              if (company.ubigeo && company.ubigeo.length === 6) {
+                setRecipientDepartment(company.ubigeo.substring(0, 2))
+                setRecipientProvince(company.ubigeo.substring(2, 4))
+                setRecipientDistrict(company.ubigeo.substring(4, 6))
+                setDestinationDepartment(company.ubigeo.substring(0, 2))
+                setDestinationProvince(company.ubigeo.substring(2, 4))
+                setDestinationDistrict(company.ubigeo.substring(4, 6))
+              }
+            }
+          } catch (error) {
+            console.error('Error al cargar datos de empresa para destinatario:', error)
+          }
+        }
+        loadCompanyAsRecipient()
+
+      } else if (referenceInvoice.customer) {
+        // VENTA: El cliente es el destinatario
         const customer = referenceInvoice.customer
 
         let docType = '6'
@@ -424,26 +463,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setRecipientName(customer.name || '')
         setRecipientAddress(customer.address || '')
 
-        if (referenceInvoice.isPurchase) {
-          // En compras: proveedor es el ORIGEN, mi empresa es el DESTINO
-          // La dirección del proveedor va al punto de partida
-          setOriginAddress(customer.address || '')
-          setRecipientDepartment(customer.department || '')
-          setRecipientProvince(customer.province || '')
-          setRecipientDistrict(customer.district || '')
-          // El punto de llegada (mi empresa) se carga automáticamente en el useEffect de sucursal/negocio
-          // pero necesitamos que NO se sobreescriba el origen, así que lo dejamos para que el useEffect
-          // de sucursal cargue la dirección de destino
-        } else {
-          // En ventas: la dirección del cliente va al punto de llegada
-          setDestinationAddress(customer.address || '')
-          setRecipientDepartment(customer.department || '')
-          setRecipientProvince(customer.province || '')
-          setRecipientDistrict(customer.district || '')
-          setDestinationDepartment(customer.department || '')
-          setDestinationProvince(customer.province || '')
-          setDestinationDistrict(customer.district || '')
-        }
+        // En ventas: la dirección del cliente va al punto de llegada
+        setDestinationAddress(customer.address || '')
+        setRecipientDepartment(customer.department || '')
+        setRecipientProvince(customer.province || '')
+        setRecipientDistrict(customer.district || '')
+        setDestinationDepartment(customer.department || '')
+        setDestinationProvince(customer.province || '')
+        setDestinationDistrict(customer.district || '')
       } else {
         // Si no hay cliente, limpiar todos los campos del destinatario
         setRecipientDocType('6')
