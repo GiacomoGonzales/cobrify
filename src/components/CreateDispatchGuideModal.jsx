@@ -488,12 +488,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       // Agregar documento como referencia relacionada
       if (referenceInvoice.isPurchase && referenceInvoice.purchaseInvoice) {
-        // Para compras: agregar la factura del proveedor
+        // Para compras: agregar la factura del proveedor con sus datos
+        const supplier = referenceInvoice.supplier
         setRelatedDocuments([{
           id: 1,
           type: referenceInvoice.purchaseInvoice.type || '01',
           series: referenceInvoice.purchaseInvoice.series || '',
           number: referenceInvoice.purchaseInvoice.number || '',
+          // Datos del proveedor para mostrar en el PDF
+          supplierRuc: supplier?.documentNumber || '',
+          supplierName: supplier?.name || '',
+          supplierAddress: supplier?.address || '',
         }])
       } else if (referenceInvoice.number && referenceInvoice.documentType !== 'cotizacion') {
         // Para ventas: agregar nuestra factura/boleta
@@ -940,6 +945,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           series: doc.series,
           number: doc.number,
           fullNumber: `${doc.series}-${doc.number}`,
+          // Datos del proveedor (si aplica - para compras)
+          ...(doc.supplierRuc && {
+            supplierRuc: doc.supplierRuc,
+            supplierName: doc.supplierName,
+            supplierAddress: doc.supplierAddress,
+          }),
         })),
 
         recipient: {

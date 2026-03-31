@@ -1185,6 +1185,29 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     doc.text(docsText, MARGIN_LEFT + 85, currentY)
     currentY += spacious ? 14 : 10
+
+    // Mostrar datos del proveedor si existen (para guías de compra)
+    const docWithSupplier = guide.relatedDocuments.find(d => d.supplierRuc)
+    if (docWithSupplier) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('Proveedor:', MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`RUC: ${docWithSupplier.supplierRuc} - ${docWithSupplier.supplierName}`, MARGIN_LEFT + 85, currentY)
+      currentY += spacious ? 14 : 10
+
+      if (docWithSupplier.supplierAddress) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Dirección:', MARGIN_LEFT, currentY)
+        doc.setFont('helvetica', 'normal')
+        // Dividir dirección si es muy larga
+        const maxWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT - 90
+        const addressLines = doc.splitTextToSize(docWithSupplier.supplierAddress, maxWidth)
+        addressLines.forEach((line, i) => {
+          doc.text(line, MARGIN_LEFT + 85, currentY + (i * (spacious ? 12 : 10)))
+        })
+        currentY += (addressLines.length * (spacious ? 12 : 10)) + (spacious ? 4 : 2)
+      }
+    }
   }
 
   currentY += spacious ? 16 : 10
