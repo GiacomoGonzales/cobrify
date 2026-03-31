@@ -124,6 +124,12 @@ export const REAL_ESTATE_PAGES = [
   { id: 'commissions', name: 'Comisiones', path: '/comisiones', category: 'finanzas' },
 ]
 
+// ============ PÁGINAS MODO VETERINARIA ============
+export const VETERINARY_PAGES = [
+  { id: 'vet-agenda', name: 'Agenda de Citas', path: '/agenda-veterinaria', category: 'veterinaria' },
+  { id: 'vet-alerts', name: 'Recordatorios Veterinarios', path: '/alertas-veterinaria', category: 'veterinaria' },
+]
+
 // ============ PÁGINAS MODO HOTEL ============
 export const HOTEL_PAGES = [
   // Operaciones hoteleras
@@ -197,6 +203,7 @@ export const CATEGORY_NAMES = {
   finanzas: 'Finanzas',
   equipo: 'Equipo',
   logistica: 'Logística',
+  veterinaria: 'Veterinaria',
   sistema: 'Sistema',
   otros: 'Otros',
 }
@@ -211,6 +218,7 @@ export const AVAILABLE_PAGES = [
   ...TRANSPORT_PAGES,
   ...HOTEL_PAGES,
   ...LOGISTICS_PAGES,
+  ...VETERINARY_PAGES,
 ]
 
 /**
@@ -231,6 +239,8 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...HOTEL_PAGES]
   } else if (businessMode === 'logistics') {
     return [...COMMON_PAGES, ...LOGISTICS_PAGES]
+  } else if (businessMode === 'veterinary') {
+    return [...COMMON_PAGES, ...VETERINARY_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]

@@ -77,6 +77,7 @@ import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
+import { completeAppointment } from '@/services/appointmentService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
@@ -349,6 +350,9 @@ export default function POS() {
   // Estado para nota(s) de venta (para marcar como convertida(s) y skip stock al completar)
   // Puede ser un string (una nota) o un array (múltiples notas)
   const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
+
+  // Estado para cita veterinaria (para marcar como completada al finalizar la venta)
+  const [pendingAppointmentData, setPendingAppointmentData] = useState(null)
 
   // Cash register check
   const [cashRegisterOpen, setCashRegisterOpen] = useState(true)
@@ -1469,6 +1473,51 @@ export default function POS() {
       setIsLoading(false)
     }
   }
+
+  // Cargar datos de cita veterinaria desde sessionStorage (cuando viene de la Agenda)
+  useEffect(() => {
+    const appointmentDataStr = sessionStorage.getItem('appointmentData')
+    if (appointmentDataStr && !pendingAppointmentData) {
+      try {
+        const appointmentData = JSON.parse(appointmentDataStr)
+        if (appointmentData.fromAppointment) {
+          console.log('🐾 POS: Cargando datos de cita veterinaria:', appointmentData)
+          setPendingAppointmentData(appointmentData)
+
+          // Pre-llenar datos del cliente
+          setCustomerData(prev => ({
+            ...prev,
+            name: appointmentData.customerName || '',
+            phone: appointmentData.phone || '',
+            petName: appointmentData.petName || '',
+          }))
+
+          // Agregar el servicio al carrito como producto personalizado
+          if (appointmentData.serviceName && appointmentData.servicePrice > 0) {
+            const serviceItem = {
+              id: `appointment-${appointmentData.appointmentId}-${Date.now()}`,
+              code: 'SERVICIO-VET',
+              name: `${appointmentData.serviceName}${appointmentData.petName ? ` - ${appointmentData.petName}` : ''}`,
+              price: appointmentData.servicePrice,
+              quantity: 1,
+              unit: 'ZZ', // Servicio
+              taxAffectation: '10', // Gravado
+              stock: null,
+              isCustom: true,
+            }
+            setCart([serviceItem])
+          }
+
+          // Limpiar sessionStorage para evitar recargas
+          sessionStorage.removeItem('appointmentData')
+          toast.success(`Cita cargada: ${appointmentData.serviceName} - ${appointmentData.petName}`)
+        }
+      } catch (error) {
+        console.error('Error al cargar datos de cita:', error)
+        sessionStorage.removeItem('appointmentData')
+      }
+    }
+  }, [isLoading]) // Se ejecuta cuando termina de cargar
 
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {
@@ -3505,6 +3554,7 @@ export default function POS() {
         const _markOrderPaidOnComplete = markOrderPaidOnComplete
         const _pendingQuotationId = pendingQuotationId
         const _pendingNotaVentaIds = pendingNotaVentaIds
+        const _pendingAppointmentData = pendingAppointmentData
         if (_tableData) setTableData(null)
         if (_pendingOrderId) {
           setPendingOrderId(null)
@@ -3512,6 +3562,7 @@ export default function POS() {
         }
         if (_pendingQuotationId) setPendingQuotationId(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
+        if (_pendingAppointmentData) setPendingAppointmentData(null)
 
         // Capturar datos necesarios para el background (los estados pueden cambiar)
         const bgCart = [...cart]
@@ -3947,6 +3998,16 @@ export default function POS() {
                 }
               } catch (syncError) {
                 console.error('⚠️ Error al verificar/crear movimientos de stock de notas:', syncError)
+              }
+            }
+
+            // 6.4. Marcar cita veterinaria como completada
+            if (_pendingAppointmentData && _pendingAppointmentData.appointmentId) {
+              try {
+                await completeAppointment(businessId, _pendingAppointmentData.appointmentId, bgInvoiceId)
+                console.log('✅ Cita veterinaria marcada como completada:', _pendingAppointmentData.appointmentId)
+              } catch (appointmentError) {
+                console.error('Error al completar cita veterinaria:', appointmentError)
               }
             }
 

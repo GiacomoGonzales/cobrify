@@ -66,7 +66,7 @@ const cleanUndefined = (obj) => {
 
 export default function CreatePurchase() {
   const { user } = useAuth()
-  const { getBusinessId, businessMode } = useAppContext()
+  const { getBusinessId, businessMode, businessSettings } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const location = useLocation()
@@ -1663,11 +1663,11 @@ export default function CreatePurchase() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${businessMode === 'pharmacy' ? 'w-[25%]' : 'w-[35%]'}`}>Producto</th>
+                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 'w-[25%]' : 'w-[35%]'}`}>Producto</th>
                   <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]">Cant.</th>
-                  {businessMode === 'pharmacy' && (
+                  {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                     <>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Lote</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[10%]">Lote</th>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Vence</th>
                     </>
                   )}
@@ -1790,8 +1790,8 @@ export default function CreatePurchase() {
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </td>
-                    {/* Lote y Vencimiento - Solo en modo farmacia */}
-                    {businessMode === 'pharmacy' && (
+                    {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
+                    {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                       <>
                         <td className="px-2 py-2">
                           <input
@@ -1807,7 +1807,8 @@ export default function CreatePurchase() {
                             type="date"
                             value={item.expirationDate || ''}
                             onChange={e => updateItem(index, 'expirationDate', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            style={{ paddingTop: '5px', paddingBottom: '5px' }}
+                            className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
                         </td>
                       </>
@@ -1979,8 +1980,8 @@ export default function CreatePurchase() {
                   </div>
                 </div>
 
-                {/* Lote y Vencimiento - Solo en modo farmacia */}
-                {businessMode === 'pharmacy' && (
+                {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
+                {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">N° Lote</label>

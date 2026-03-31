@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3 } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -23,9 +23,10 @@ import {
 import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 
 export default function Customers() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -51,6 +52,9 @@ export default function Customers() {
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
+  // Estado para modal de historia clínica (veterinaria)
+  const [medicalHistoryCustomer, setMedicalHistoryCustomer] = useState(null)
+
   const {
     register,
     handleSubmit,
@@ -75,6 +79,13 @@ export default function Customers() {
       subscriptionPlan: '',
       subscriptionPrice: '',
       subscriptionExpiry: '',
+      // Campos para mascota (veterinaria)
+      petName: '',
+      petSpecies: '',
+      petBreed: '',
+      petAge: '',
+      petWeight: '',
+      petNotes: '',
     },
   })
 
@@ -151,6 +162,13 @@ export default function Customers() {
       subscriptionPrice: customer.subscriptionPrice || '',
       subscriptionExpiry: customer.subscriptionExpiry || '',
       birthDate: customer.birthDate || '',
+      // Campos de mascota (veterinaria)
+      petName: customer.petName || '',
+      petSpecies: customer.petSpecies || '',
+      petBreed: customer.petBreed || '',
+      petAge: customer.petAge || '',
+      petWeight: customer.petWeight || '',
+      petNotes: customer.petNotes || '',
     })
     setIsModalOpen(true)
   }
@@ -656,6 +674,15 @@ export default function Customers() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      {businessMode === 'veterinary' && customer.petName && (
+                        <button
+                          onClick={() => setMedicalHistoryCustomer(customer)}
+                          className="p-1.5 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          title="Historia Clínica"
+                        >
+                          <ClipboardList className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => openEditModal(customer)}
                         className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -696,6 +723,13 @@ export default function Customers() {
                       )}
                       {businessSettings?.posCustomFields?.showVehiclePlateField && customer.vehiclePlate && (
                         <span className="font-medium uppercase">{customer.vehiclePlate}</span>
+                      )}
+                      {businessMode === 'veterinary' && customer.petName && (
+                        <span className="inline-flex items-center gap-1 text-primary-600">
+                          <PawPrint className="w-3 h-3" />
+                          {customer.petName}
+                          {customer.petSpecies && <span className="text-gray-500">({customer.petSpecies})</span>}
+                        </span>
                       )}
                       {customer.email && (
                         <span className="text-gray-500 truncate max-w-[160px]">{customer.email}</span>
@@ -792,6 +826,13 @@ export default function Customers() {
                   {businessSettings?.posCustomFields?.showVehiclePlateField && (
                     <TableHead className="text-xs py-2">Placa</TableHead>
                   )}
+                  {businessMode === 'veterinary' && (
+                    <>
+                      <TableHead className="text-xs py-2">Mascota</TableHead>
+                      <TableHead className="text-xs py-2">Especie</TableHead>
+                      <TableHead className="text-xs py-2">Raza</TableHead>
+                    </>
+                  )}
                   {businessSettings?.posCustomFields?.showSubscriptionFields && (
                     <>
                       <TableHead className="text-xs py-2">Plan</TableHead>
@@ -855,6 +896,22 @@ export default function Customers() {
                         <p className="text-xs font-medium uppercase">{customer.vehiclePlate || '-'}</p>
                       </TableCell>
                     )}
+                    {businessMode === 'veterinary' && (
+                      <>
+                        <TableCell className="py-1.5">
+                          <div className="flex items-center gap-1">
+                            <PawPrint className="w-3 h-3 text-primary-500" />
+                            <p className="text-xs font-medium">{customer.petName || '-'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <p className="text-xs text-gray-600">{customer.petSpecies || '-'}</p>
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <p className="text-xs text-gray-600">{customer.petBreed || '-'}</p>
+                        </TableCell>
+                      </>
+                    )}
                     {businessSettings?.posCustomFields?.showSubscriptionFields && (
                       <>
                         <TableCell className="py-1.5">
@@ -914,6 +971,15 @@ export default function Customers() {
                     )}
                     <TableCell className="py-1.5">
                       <div className="flex items-center justify-end gap-0.5">
+                        {businessMode === 'veterinary' && customer.petName && (
+                          <button
+                            onClick={() => setMedicalHistoryCustomer(customer)}
+                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Historia Clínica"
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEditModal(customer)}
                           className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -1015,9 +1081,9 @@ export default function Customers() {
           )}
 
           <Input
-            label="Nombre"
+            label={businessMode === 'veterinary' ? 'Nombre del Dueño' : 'Nombre'}
             required
-            placeholder={documentType === ID_TYPES.RUC ? 'Nombre Comercial' : 'Nombre Completo'}
+            placeholder={documentType === ID_TYPES.RUC ? 'Nombre Comercial' : businessMode === 'veterinary' ? 'Nombre del propietario de la mascota' : 'Nombre Completo'}
             error={errors.name?.message}
             {...register('name')}
           />
@@ -1081,6 +1147,73 @@ export default function Customers() {
               {...register('vehiclePlate')}
               className="uppercase"
             />
+          )}
+
+          {/* Campos de Mascota - solo para modo veterinaria */}
+          {businessMode === 'veterinary' && (
+            <>
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <PawPrint className="w-4 h-4" />
+                  Datos de la Mascota
+                </h4>
+                <div className="space-y-4">
+                  <Input
+                    label="Nombre de la Mascota"
+                    placeholder="Ej: Firulais, Michi, Rocky..."
+                    error={errors.petName?.message}
+                    {...register('petName')}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Especie
+                      </label>
+                      <select
+                        {...register('petSpecies')}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Seleccionar...</option>
+                        <option value="Perro">Perro</option>
+                        <option value="Gato">Gato</option>
+                        <option value="Ave">Ave</option>
+                        <option value="Conejo">Conejo</option>
+                        <option value="Hamster">Hamster</option>
+                        <option value="Pez">Pez</option>
+                        <option value="Reptil">Reptil</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <Input
+                      label="Raza"
+                      placeholder="Ej: Labrador, Siamés..."
+                      error={errors.petBreed?.message}
+                      {...register('petBreed')}
+                    />
+                    <Input
+                      label="Edad"
+                      placeholder="Ej: 3 años, 6 meses"
+                      error={errors.petAge?.message}
+                      {...register('petAge')}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Peso"
+                      placeholder="Ej: 5 kg, 500 gr"
+                      error={errors.petWeight?.message}
+                      {...register('petWeight')}
+                    />
+                    <Input
+                      label="Notas / Observaciones"
+                      placeholder="Alergias, condiciones, etc."
+                      error={errors.petNotes?.message}
+                      {...register('petNotes')}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Nivel de precio - solo si está habilitado múltiples precios */}
@@ -1202,6 +1335,16 @@ export default function Customers() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal Historia Clínica (Veterinaria) */}
+      {medicalHistoryCustomer && (
+        <MedicalHistoryModal
+          isOpen={!!medicalHistoryCustomer}
+          onClose={() => setMedicalHistoryCustomer(null)}
+          customer={medicalHistoryCustomer}
+          businessId={getBusinessId()}
+        />
+      )}
     </div>
   )
 }

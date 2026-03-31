@@ -96,6 +96,9 @@ import Properties from './pages/Properties'
 import Operations from './pages/Operations'
 import Commissions from './pages/Commissions'
 import Agents from './pages/Agents'
+// Veterinary pages
+import VeterinaryAlerts from './pages/VeterinaryAlerts'
+import VeterinaryAgenda from './pages/VeterinaryAgenda'
 // Public catalog
 import CatalogoPublico from './pages/CatalogoPublico'
 // Public complaints book
@@ -404,6 +407,10 @@ function App() {
               <Route path="agentes" element={<Agents />} />
               <Route path="operaciones" element={<Operations />} />
               <Route path="comisiones" element={<Commissions />} />
+
+              {/* Rutas de modo veterinaria */}
+              <Route path="agenda-veterinaria" element={<VeterinaryAgenda />} />
+              <Route path="alertas-veterinaria" element={<VeterinaryAlerts />} />
 
               {/* Rutas de administración legacy eliminadas - usar /app/admin/dashboard */}
             </Route>

@@ -59,6 +59,12 @@ import {
   ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
+  // Iconos para modo veterinaria
+  PawPrint,
+  Stethoscope,
+  Syringe,
+  Heart,
+  Bell,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -1004,6 +1010,181 @@ function Sidebar() {
     },
   ]
 
+  // Menú para modo VETERINARIA (clínicas veterinarias, pet shops)
+  // Ordenado por frecuencia de uso: Operación diaria → Ventas → Inventario → Compras → Finanzas → Config
+  const veterinaryMenuItems = [
+    // --- Operación diaria (más usado) ---
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/agenda-veterinaria',
+      icon: Calendar,
+      label: 'Agenda de Citas',
+      pageId: 'vet-agenda',
+      menuId: 'vet-agenda',
+    },
+    {
+      path: '/clientes',
+      icon: PawPrint,
+      label: 'Pacientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/alertas-veterinaria',
+      icon: Bell,
+      label: 'Recordatorios',
+      pageId: 'vet-alerts',
+      menuId: 'vet-alerts',
+    },
+    // --- Ventas y caja ---
+    {
+      path: '/facturas',
+      icon: FileText,
+      label: 'Ventas',
+      pageId: 'invoices',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
+      path: '/cotizaciones',
+      icon: FileCheck,
+      label: 'Cotizaciones',
+      pageId: 'quotations',
+      menuId: 'quotations',
+    },
+    // --- Catálogo e inventario ---
+    {
+      path: '/productos',
+      icon: Heart,
+      label: 'Productos y Servicios',
+      pageId: 'products',
+    },
+    {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'inventory',
+      menuId: 'inventory',
+    },
+    {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'warehouses',
+      menuId: 'warehouses',
+    },
+    {
+      path: '/control-lotes',
+      icon: Package,
+      label: 'Control de Lotes',
+      pageId: 'batch-control',
+      menuId: 'batch-control',
+    },
+    {
+      path: '/alertas-vencimiento',
+      icon: AlertTriangle,
+      label: 'Alertas Vencimiento',
+      pageId: 'expiry-alerts',
+      menuId: 'expiry-alerts',
+    },
+    {
+      path: '/movimientos',
+      icon: History,
+      label: 'Movimientos',
+      pageId: 'stock-movements',
+      menuId: 'stock-movements',
+    },
+    // --- Compras y proveedores ---
+    {
+      path: '/compras',
+      icon: ShoppingBag,
+      label: 'Compras',
+      pageId: 'purchases',
+      menuId: 'purchases',
+    },
+    {
+      path: '/ordenes-compra',
+      icon: ClipboardList,
+      label: 'Órdenes de Compra',
+      pageId: 'purchase-orders',
+      menuId: 'purchase-orders',
+    },
+    {
+      path: '/proveedores',
+      icon: Truck,
+      label: 'Proveedores',
+      pageId: 'suppliers',
+      menuId: 'suppliers',
+    },
+    // --- Finanzas y reportes ---
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+      menuId: 'reports',
+    },
+    {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      menuId: 'expenses',
+    },
+    {
+      path: '/flujo-caja',
+      icon: TrendingUp,
+      label: 'Flujo de Caja',
+      pageId: 'cash-flow',
+      menuId: 'cash-flow',
+    },
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
+    // --- Equipo y otros ---
+    {
+      path: '/vendedores',
+      icon: Stethoscope,
+      label: 'Veterinarios',
+      pageId: 'sellers',
+      menuId: 'sellers',
+    },
+    {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
+    },
+    // --- Configuración (siempre al final) ---
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio
   // Si businessMode es null (cargando), no mostrar nada aún
   const menuItems = businessMode === 'restaurant'
@@ -1016,9 +1197,11 @@ function Sidebar() {
           ? hotelMenuItems
           : businessMode === 'logistics'
             ? logisticsMenuItems
-            : (businessMode === 'retail' || businessMode === 'transport')
-              ? retailMenuItems
-              : [] // Si es null, array vacío mientras carga
+            : businessMode === 'veterinary'
+              ? veterinaryMenuItems
+              : (businessMode === 'retail' || businessMode === 'transport')
+                ? retailMenuItems
+                : [] // Si es null, array vacío mientras carga
 
   // Agregar opciones adicionales según el rol
   const additionalItems = [

@@ -297,6 +297,8 @@ export default function Settings() {
     showBankAccountField: false, // Cta. Cte. Banco de la Nación
     showDetractionField: false, // Detracción
     showGoodsServiceCodeField: false, // Bien o Servicio (código SUNAT)
+    // Control de lotes y vencimientos en compras
+    showBatchExpiryInPurchase: false, // Mostrar campos de lote y fecha de vencimiento en Nueva Compra
   })
 
   // Estados para cambio de contraseña
@@ -2544,6 +2546,7 @@ export default function Settings() {
                   <option value="retail">Retail (Tienda/Comercio) — POS, productos, inventario, almacenes, compras</option>
                   <option value="restaurant">Restaurante — Mesas, mozos, órdenes, cocina, menú, caja</option>
                   <option value="pharmacy">Farmacia — Medicamentos, laboratorios, lotes, alertas de vencimiento</option>
+                  <option value="veterinary">Veterinaria — Pacientes, servicios, medicamentos, control de lotes</option>
                   <option value="hotel">Hotelería — Habitaciones, reservas, check-in/out, housekeeping</option>
                   <option value="transport">Transporte — Vehículos, rutas, servicios de transporte</option>
                   <option value="logistics">Logística — Proyectos/obras, salidas y retornos de almacén, reportes</option>
@@ -2696,6 +2699,24 @@ export default function Settings() {
                       className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                   </label>
+
+                  {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
+                  {businessMode !== 'pharmacy' && (
+                    <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                      posCustomFields.showBatchExpiryInPurchase ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 block">Control de Lotes y Vencimientos</span>
+                        <span className="text-xs text-gray-500">Habilita campos de número de lote y fecha de vencimiento en el registro de compras</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={posCustomFields.showBatchExpiryInPurchase}
+                        onChange={(e) => setPosCustomFields({ ...posCustomFields, showBatchExpiryInPurchase: e.target.checked })}
+                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </label>
+                  )}
 
                 </div>
               </div>
@@ -3005,6 +3026,56 @@ export default function Settings() {
                               }
                             }}
                             className="mt-0.5 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'veterinary' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'sellers', label: 'Veterinarios', description: 'Gestión de veterinarios' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock de productos' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'batch-control', label: 'Control de Lotes', description: 'Gestión de lotes y vencimientos' },
+                        { id: 'expiry-alerts', label: 'Alertas de Vencimiento', description: 'Productos próximos a vencer' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                        { id: 'vet-agenda', label: 'Agenda de Citas', description: 'Calendario de citas programadas' },
+                        { id: 'vet-alerts', label: 'Recordatorios', description: 'Alertas de vacunas y servicios pendientes' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-teal-200 bg-teal-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-medium text-gray-900 block">{item.label}</span>

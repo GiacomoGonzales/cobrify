@@ -412,12 +412,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">
-                      {stat.title}
-                      {stat.subtitle && (
-                        <span className="text-primary-600 ml-1">({stat.subtitle})</span>
-                      )}
-                    </p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.title}</p>
                     {stat.isSalesAmount && (
                       <button
                         onClick={toggleShowAmounts}
@@ -432,6 +427,9 @@ export default function Dashboard() {
                       </button>
                     )}
                   </div>
+                  {stat.subtitle && (
+                    <p className="text-xs text-primary-600 mt-0.5">{stat.subtitle}</p>
+                  )}
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
                   <p
                     className={`text-xs sm:text-sm mt-2 ${

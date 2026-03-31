@@ -250,6 +250,24 @@ service cloud.firestore {
         // Admins pueden leer todos los clientes
         allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Subcollection: Medical History (Historial Médico - modo veterinaria)
+        match /medicalHistory/{recordId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
+
+        // Subcollection: Vaccinations (Vacunas - modo veterinaria)
+        match /vaccinations/{vaccinationId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
+
+        // Subcollection: Recurring Services (Servicios Recurrentes - modo veterinaria)
+        match /recurringServices/{serviceId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
       }
 
       // Subcollection: Products (Productos)
@@ -576,6 +594,12 @@ service cloud.firestore {
       // Subcollection: Projects (Proyectos/Obras - para modo logística)
       match /projects/{projectId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Appointments (Citas Veterinarias)
+      match /appointments/{appointmentId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
