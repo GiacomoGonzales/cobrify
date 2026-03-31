@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
+import UpdatePrompt from './components/UpdatePrompt'
 import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
 import LandingRouter from './components/LandingRouter'
@@ -441,6 +442,7 @@ function App() {
             {/* Ruta 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <UpdatePrompt />
           </ToastProvider>
         </BrandingProvider>
       </AuthProvider>
