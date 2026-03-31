@@ -814,126 +814,87 @@ export default function StockMovements() {
             </div>
 
             {/* Tabla para desktop */}
-            <div className="hidden lg:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Almacén</TableHead>
-                    <TableHead className="text-center">Cantidad</TableHead>
-                    <TableHead className="text-center">Saldo</TableHead>
-                    <TableHead className="hidden md:table-cell">Motivo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="hidden lg:block">
+              <table className="w-full table-fixed text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th className="w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th className="w-[18%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                    <th className="w-[15%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
+                    <th className="w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
+                    <th className="w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Saldo</th>
+                    <th className="w-[29%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
                   {displayedMovements.map(movement => {
                     const typeInfo = getMovementTypeInfo(movement.type)
                     const Icon = typeInfo.icon
                     return (
-                      <TableRow key={movement.id}>
-                        <TableCell>
-                          <span className="text-sm text-gray-600">
-                            {formatDate(movement.createdAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={typeInfo.variant}>
+                      <tr key={movement.id} className="hover:bg-gray-50">
+                        <td className="px-2 py-2 text-xs text-gray-500">
+                          {formatDate(movement.createdAt)}
+                        </td>
+                        <td className="px-2 py-2">
+                          <Badge variant={typeInfo.variant} className="text-xs">
                             <Icon className="w-3 h-3 mr-1 inline" />
                             {typeInfo.label}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-sm">{movement.productName}</p>
-                            <p className="text-xs text-gray-500">{movement.productCode}</p>
-                            {movement.batchNumber && (
-                              <p className="text-xs text-amber-600 mt-0.5">Lote: {movement.batchNumber}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
+                        </td>
+                        <td className="px-2 py-2">
+                          <p className="font-medium text-xs truncate" title={movement.productName}>{movement.productName}</p>
+                          {movement.productCode && <p className="text-[10px] text-gray-400 truncate">{movement.productCode}</p>}
+                          {movement.batchNumber && <p className="text-[10px] text-amber-600">Lote: {movement.batchNumber}</p>}
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="text-xs">
                             {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
-                              <div>
-                                <p className="text-gray-500">
-                                  <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
-                                  {branches.length > 0 && movement.fromWarehouseBranchName && (
-                                    <span className="text-xs text-gray-400 ml-1">({movement.fromWarehouseBranchName})</span>
-                                  )}
-                                </p>
-                                <p className="font-medium">
-                                  <span className="text-gray-400">A:</span> {movement.warehouseName}
-                                  {branches.length > 0 && movement.warehouseBranchName && (
-                                    <span className="text-xs text-gray-400 ml-1">({movement.warehouseBranchName})</span>
-                                  )}
-                                </p>
+                              <>
+                                <p className="text-gray-400 truncate">De: {movement.fromWarehouseName}</p>
+                                <p className="font-medium truncate">A: {movement.warehouseName}</p>
                                 {movement.isCrossBranchTransfer && (
-                                  <Badge variant="warning" className="mt-1 text-xs">
-                                    <Store className="w-3 h-3 mr-1 inline" />
-                                    Entre sucursales
-                                  </Badge>
+                                  <span className="text-[10px] text-amber-600">Entre sucursales</span>
                                 )}
-                              </div>
+                              </>
                             ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
-                              <div>
-                                <p className="font-medium">
-                                  <span className="text-gray-400">De:</span> {movement.warehouseName}
-                                  {branches.length > 0 && movement.warehouseBranchName && (
-                                    <span className="text-xs text-gray-400 ml-1">({movement.warehouseBranchName})</span>
-                                  )}
-                                </p>
-                                <p className="text-gray-500">
-                                  <span className="text-gray-400">A:</span> {movement.toWarehouseName}
-                                  {branches.length > 0 && movement.toWarehouseBranchName && (
-                                    <span className="text-xs text-gray-400 ml-1">({movement.toWarehouseBranchName})</span>
-                                  )}
-                                </p>
+                              <>
+                                <p className="font-medium truncate">De: {movement.warehouseName}</p>
+                                <p className="text-gray-400 truncate">A: {movement.toWarehouseName}</p>
                                 {movement.isCrossBranchTransfer && (
-                                  <Badge variant="warning" className="mt-1 text-xs">
-                                    <Store className="w-3 h-3 mr-1 inline" />
-                                    Entre sucursales
-                                  </Badge>
+                                  <span className="text-[10px] text-amber-600">Entre sucursales</span>
                                 )}
-                              </div>
+                              </>
                             ) : (
-                              <div>
-                                <p className="font-medium">{movement.warehouseName}</p>
+                              <>
+                                <p className="font-medium truncate">{movement.warehouseName}</p>
                                 {branches.length > 0 && movement.warehouseBranchName && (
-                                  <p className="text-xs text-gray-400">{movement.warehouseBranchName}</p>
+                                  <p className="text-[10px] text-gray-400">{movement.warehouseBranchName}</p>
                                 )}
-                              </div>
+                              </>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            className={`font-bold ${
-                              movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {movement.quantity > 0 ? '+' : ''}
-                            {movement.quantity}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <span className={`font-bold ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {movement.quantity > 0 ? '+' : ''}{movement.quantity}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="font-semibold text-gray-700">
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <span className="font-semibold text-gray-700 text-xs">
                             {movement.stockAfter !== null ? movement.stockAfter : '-'}
                           </span>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <div className="max-w-xs">
-                            <p className="text-sm text-gray-600 truncate" title={movement.notes}>
-                              {movement.notes || movement.reason || '-'}
-                            </p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                        <td className="px-2 py-2">
+                          <p className="text-xs text-gray-600 line-clamp-2" title={movement.notes || movement.reason}>
+                            {movement.notes || movement.reason || '-'}
+                          </p>
+                        </td>
+                      </tr>
                     )
                   })}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
             </>
           )}
