@@ -581,9 +581,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [selectedBranchId, branches, isOpen, getBusinessId])
 
-  // Sincronizar ubigeo y dirección del destinatario con el punto de llegada
-  // (generalmente el punto de llegada es la dirección del destinatario)
+  // Sincronizar ubigeo y dirección del destinatario con el punto correspondiente
+  // En ventas: destinatario (cliente) → punto de LLEGADA
+  // En compras: destinatario (proveedor) → punto de PARTIDA
   useEffect(() => {
+    // Para compras, NO sincronizamos automáticamente porque:
+    // - El punto de partida (proveedor) ya se setea en el useEffect inicial
+    // - El punto de llegada (mi empresa) se carga de la sucursal/negocio
+    // Solo sincronizamos para ventas
+    if (isPurchase) return
+
     // Sincronizar departamento
     if (recipientDepartment) {
       setDestinationDepartment(recipientDepartment)
@@ -600,7 +607,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (recipientAddress) {
       setDestinationAddress(recipientAddress)
     }
-  }, [recipientDepartment, recipientProvince, recipientDistrict, recipientAddress])
+  }, [recipientDepartment, recipientProvince, recipientDistrict, recipientAddress, isPurchase])
 
   // Obtener ubigeo completo
   const getUbigeo = (dept, prov, dist) => {
