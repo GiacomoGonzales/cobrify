@@ -12,6 +12,7 @@ function ExpiryAlerts() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
+  const [warehouses, setWarehouses] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('all') // all, expired, 30days, 60days, 90days
@@ -89,6 +90,7 @@ function ExpiryAlerts() {
                 expirationDate: batch.expirationDate,
                 batchQuantity: batch.quantity,
                 batchCost: batch.costPrice,
+                batchWarehouseId: batch.warehouseId || null,
                 isBatch: true, // Marcador para identificar que es un lote
                 stock: batch.quantity // Usar stock del lote
               })
@@ -104,6 +106,12 @@ function ExpiryAlerts() {
       })
 
       setProducts(allItems)
+
+      // Cargar almacenes
+      try {
+        const whSnapshot = await getDocs(collection(db, 'businesses', businessId, 'warehouses'))
+        setWarehouses(whSnapshot.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) { /* no critical */ }
     } catch (error) {
       console.error('Error al cargar productos:', error)
       toast.error('Error al cargar productos')
@@ -393,14 +401,15 @@ function ExpiryAlerts() {
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {/* Header de tabla */}
-          <div className="hidden md:grid md:grid-cols-12 gap-4 p-4 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
-            <div className="col-span-4">
+          <div className="hidden md:grid md:grid-cols-12 gap-3 p-4 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+            <div className="col-span-3">
               <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-gray-900">
                 Producto
                 {sortBy === 'name' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
               </button>
             </div>
-            <div className="col-span-2">Lote</div>
+            <div className="col-span-1">Lote</div>
+            <div className="col-span-2">Almacén</div>
             <div className="col-span-2">
               <button onClick={() => toggleSort('expiration')} className="flex items-center gap-1 hover:text-gray-900">
                 Vencimiento
@@ -470,8 +479,8 @@ function ExpiryAlerts() {
                 </div>
 
                 {/* Vista desktop */}
-                <div className="hidden md:grid md:grid-cols-12 gap-4 items-center">
-                  <div className="col-span-4 flex items-center gap-3">
+                <div className="hidden md:grid md:grid-cols-12 gap-3 items-center">
+                  <div className="col-span-3 flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
                       product.expirationInfo?.status === 'expired' ? 'bg-red-100' :
                       product.expirationInfo?.status === '30days' ? 'bg-red-100' :
@@ -495,8 +504,14 @@ function ExpiryAlerts() {
                       )}
                     </div>
                   </div>
-                  <div className="col-span-2 text-sm text-gray-600">
+                  <div className="col-span-1 text-sm text-gray-600 truncate">
                     {product.batchNumber || '-'}
+                  </div>
+                  <div className="col-span-2 text-xs text-gray-500 truncate">
+                    {product.batchWarehouseId
+                      ? (warehouses.find(w => w.id === product.batchWarehouseId)?.name || 'Almacén')
+                      : <span className="text-gray-400 italic">Sin asignar</span>
+                    }
                   </div>
                   <div className="col-span-2 text-sm">
                     <p className={`font-medium ${
