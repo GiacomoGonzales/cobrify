@@ -117,9 +117,11 @@ export default function InventoryCountModal({
 
         if (activeBatches.length > 0) {
           // Productos con lotes: una fila por lote del almacén seleccionado
+          let batchTotal = 0
           activeBatches.forEach(batch => {
             const batchId = batch.lotNumber || batch.batchNumber || batch.id
             const key = `${product.id}_batch_${batchId}_${warehouseId}`
+            batchTotal += batch.quantity
             initialCountData[key] = {
               productId: product.id,
               productName: product.name,
@@ -138,6 +140,24 @@ export default function InventoryCountModal({
               allBatches: product.batches || [],
             }
           })
+
+          // Si el stock del almacén es mayor que la suma de lotes, hay stock "sin lote"
+          const unassignedStock = warehouseStock - batchTotal
+          if (unassignedStock > 0) {
+            initialCountData[`${product.id}_nolot_${warehouseId}`] = {
+              productId: product.id,
+              productName: product.name,
+              productCode: product.code || '-',
+              category: product.category,
+              systemStock: unassignedStock,
+              physicalCount: '',
+              price,
+              isIngredient: false,
+              warehouseStocks: product.warehouseStocks || [],
+              isUnassignedStock: true,
+              allBatches: product.batches || [],
+            }
+          }
         } else {
           // Productos sin lotes: fila normal
           initialCountData[product.id] = {
@@ -425,13 +445,62 @@ export default function InventoryCountModal({
       // Agrupar items de lotes por producto para actualizar todos los lotes de un producto juntos
       const batchItemsByProduct = {}
       const normalItems = []
+      const unassignedItems = []
 
       for (const item of itemsToUpdate) {
-        if (item.isBatchRow) {
+        if (item.isUnassignedStock) {
+          unassignedItems.push(item)
+        } else if (item.isBatchRow) {
           if (!batchItemsByProduct[item.productId]) batchItemsByProduct[item.productId] = []
           batchItemsByProduct[item.productId].push(item)
         } else {
           normalItems.push(item)
+        }
+      }
+
+      // Procesar stock sin lote asignado (ajustar solo stock del almacén)
+      for (const item of unassignedItems) {
+        try {
+          const newStock = parseFloat(item.physicalCount)
+          const difference = newStock - item.systemStock
+
+          const currentWarehouseStocks = item.warehouseStocks || []
+          let newWarehouseStocks = [...currentWarehouseStocks]
+          const selectedIdx = newWarehouseStocks.findIndex(ws => ws.warehouseId === selectedWarehouse.id)
+          const currentWhStock = selectedIdx >= 0 ? (newWarehouseStocks[selectedIdx].stock || 0) : 0
+
+          if (selectedIdx >= 0) {
+            newWarehouseStocks[selectedIdx] = { ...newWarehouseStocks[selectedIdx], stock: currentWhStock + difference }
+          }
+
+          const totalFromWarehouses = newWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+          const result = await updateProduct(businessId, item.productId, {
+            stock: totalFromWarehouses,
+            warehouseStocks: newWarehouseStocks,
+          })
+
+          if (result.success) {
+            await createStockMovement(businessId, {
+              productId: item.productId,
+              type: 'adjustment',
+              quantity: difference,
+              reason: 'Ajuste por recuento - stock sin lote',
+              referenceType: 'inventory_count',
+              previousStock: item.systemStock,
+              newStock,
+              userId,
+              warehouseId: selectedWarehouse?.id || null,
+              warehouseName: selectedWarehouse?.name || 'General',
+              notes: `Recuento stock sin lote: ${newStock}, Sistema: ${item.systemStock}, Dif: ${difference > 0 ? '+' : ''}${difference} (${selectedWarehouse?.name || 'General'})`,
+            })
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          console.error(`Error al actualizar stock sin lote de ${item.productName}:`, error)
+          errorCount++
         }
       }
 
@@ -864,7 +933,7 @@ export default function InventoryCountModal({
                   const { diff, value, status } = getDifference(item)
                   const mobileKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId)
                   return (
-                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : ''}`}>
+                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : ''}`}>
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{item.productName}</p>
@@ -872,6 +941,11 @@ export default function InventoryCountModal({
                           {item.isBatchRow && (
                             <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                               Lote: {item.batchId}
+                            </span>
+                          )}
+                          {item.isUnassignedStock && (
+                            <span className="text-xs font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              Sin lote asignado
                             </span>
                           )}
                         </div>
@@ -947,7 +1021,7 @@ export default function InventoryCountModal({
                     const { diff, value, status } = getDifference(item)
                     const itemKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
                     return (
-                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : ''}`}>
+                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : ''}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm">{item.productCode}</span>
                         </td>
@@ -969,6 +1043,8 @@ export default function InventoryCountModal({
                                 </div>
                               )}
                             </div>
+                          ) : item.isUnassignedStock ? (
+                            <span className="text-xs font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">Sin lote asignado</span>
                           ) : (
                             <span className="text-xs text-gray-400">-</span>
                           )}
@@ -1118,6 +1194,7 @@ export default function InventoryCountModal({
                       <td className="px-2 py-2 text-xs">
                         {item.productName}
                         {item.isBatchRow && <span className="ml-1 text-amber-600 font-semibold">[{item.batchId}]</span>}
+                        {item.isUnassignedStock && <span className="ml-1 text-red-600 font-semibold">[Sin lote]</span>}
                       </td>
                       <td className="px-2 py-2 text-center text-xs">{item.systemStock}</td>
                       <td className="px-2 py-2 text-center text-xs font-semibold">{item.physicalCount}</td>
