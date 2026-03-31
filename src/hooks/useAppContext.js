@@ -3,6 +3,7 @@ import { useDemo } from '@/contexts/DemoContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import { useDemoPharmacy } from '@/contexts/DemoPharmacyContext'
 import { useDemoHotel } from '@/contexts/DemoHotelContext'
+import { useDemoVeterinary } from '@/contexts/DemoVeterinaryContext'
 
 /**
  * Hook unificado que retorna el contexto apropiado (demo o real)
@@ -14,6 +15,7 @@ export function useAppContext() {
   const demoRestaurantContext = useDemoRestaurant()
   const demoPharmacyContext = useDemoPharmacy()
   const demoHotelContext = useDemoHotel()
+  const demoVeterinaryContext = useDemoVeterinary()
 
   // Si estamos en modo demo de hotel, usar datos de demo de hotel
   if (demoHotelContext?.isDemo) {
@@ -31,6 +33,28 @@ export function useAppContext() {
       userFeatures: { expenseManagement: true },
       hasFeature: (feature) => ['expenseManagement'].includes(feature),
       getBusinessId: demoHotelContext.getBusinessId,
+      login: async () => ({ success: false, error: 'Demo mode' }),
+      logout: async () => {},
+      refreshSubscription: async () => {},
+    }
+  }
+
+  // Si estamos en modo demo de veterinaria, usar datos de demo de veterinaria
+  if (demoVeterinaryContext?.isDemoMode) {
+    return {
+      user: demoVeterinaryContext.demoData.user,
+      isAuthenticated: true,
+      isLoading: false,
+      isAdmin: false,
+      subscription: demoVeterinaryContext.demoData.subscription,
+      hasAccess: true,
+      isDemoMode: true,
+      demoData: demoVeterinaryContext.demoData,
+      businessMode: 'veterinary',
+      businessSettings: { businessMode: 'veterinary', enableProductImages: true, batchControlEnabled: true },
+      userFeatures: { expenseManagement: true },
+      hasFeature: (feature) => ['expenseManagement'].includes(feature),
+      getBusinessId: () => demoVeterinaryContext.demoData.user.uid,
       login: async () => ({ success: false, error: 'Demo mode' }),
       logout: async () => {},
       refreshSubscription: async () => {},
