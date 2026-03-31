@@ -5077,14 +5077,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             // Establecer fecha de vencimiento por defecto a 30 días
                             const defaultDueDate = new Date()
                             defaultDueDate.setDate(defaultDueDate.getDate() + 30)
-                            const dueDateStr = getLocalDateString(defaultDueDate)
-                            setPaymentDueDate(dueDateStr)
-                            // Crear automáticamente una cuota con el total
-                            setPaymentInstallments([{
-                              number: 1,
-                              amount: total.toFixed(2),
-                              dueDate: dueDateStr
-                            }])
+                            setPaymentDueDate(getLocalDateString(defaultDueDate))
                           }}
                           className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
                             paymentType === 'credito'
@@ -5119,30 +5112,33 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {/* Cuotas */}
                           <div>
                             <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-gray-500">
-                                {paymentInstallments.length === 1 ? 'Monto de la cuota' : `Cuotas (${paymentInstallments.length})`}
-                              </label>
-                              {paymentInstallments.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newInstallment = {
-                                      number: paymentInstallments.length + 1,
-                                      amount: '',
-                                      dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
-                                    }
-                                    setPaymentInstallments([...paymentInstallments, newInstallment])
-                                  }}
-                                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                                >
-                                  + Agregar cuota
-                                </button>
-                              )}
+                              <label className="text-xs text-gray-500">Cuotas (opcional)</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Calcular el monto correcto (con detracción si aplica)
+                                  let montoInicial = total
+                                  if (hasDetraction && detractionType && paymentInstallments.length === 0) {
+                                    const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+                                    const detractionAmount = Math.round((total * detractionRate) / 100)
+                                    montoInicial = total - detractionAmount
+                                  }
+                                  const newInstallment = {
+                                    number: paymentInstallments.length + 1,
+                                    amount: paymentInstallments.length === 0 ? montoInicial.toFixed(2) : '',
+                                    dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+                                  }
+                                  setPaymentInstallments([...paymentInstallments, newInstallment])
+                                }}
+                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                              >
+                                + Agregar cuota
+                              </button>
                             </div>
 
-                            {/* Una sola cuota - mostrar campo simple */}
+                            {/* Una sola cuota - mostrar campo simple con opción de editar */}
                             {paymentInstallments.length === 1 && (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded">
                                 <span className="text-xs text-gray-500">S/</span>
                                 <input
                                   type="number"
@@ -5157,12 +5153,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: total.toFixed(2) }])
+                                    // Calcular el neto a pagar (con detracción si aplica)
+                                    let montoNeto = total
+                                    if (hasDetraction && detractionType) {
+                                      const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+                                      const detractionAmount = Math.round((total * detractionRate) / 100)
+                                      montoNeto = total - detractionAmount
+                                    }
+                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: montoNeto.toFixed(2) }])
                                   }}
                                   className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1 bg-primary-50 rounded"
-                                  title="Usar total"
+                                  title="Usar neto a pagar"
                                 >
-                                  Total
+                                  Neto
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentInstallments([])
+                                  }}
+                                  className="text-red-500 hover:text-red-700 p-0.5"
+                                >
+                                  <X className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             )}
