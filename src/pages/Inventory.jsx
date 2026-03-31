@@ -2192,60 +2192,59 @@ export default function Inventory() {
                                       </div>
                                     )
                                   })}
+                                  {/* Lotes dentro de almacenes (mobile) */}
+                                  {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                                    <div className="mt-2 border-t border-gray-200 pt-2">
+                                      <div className="flex items-center gap-1.5 mb-1.5 px-1">
+                                        <FlaskConical className="w-3 h-3 text-amber-600" />
+                                        <span className="text-xs font-medium text-amber-700">Lotes</span>
+                                        <span className="text-xs text-amber-600 ml-auto">
+                                          {item.batches.filter(b => b.quantity > 0).length} activos
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {item.batches
+                                          .filter(b => b.quantity > 0)
+                                          .sort((a, b) => {
+                                            const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                                            const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                                            return dA - dB
+                                          })
+                                          .map((batch, bIdx) => {
+                                            const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                            const expiryDate = batch.expirationDate || batch.expiryDate
+                                            const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                            const now = new Date()
+                                            const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
+                                            const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                            const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                            const expiryStr = expiryD
+                                              ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                              : 'Sin fecha'
+                                            return (
+                                              <div key={batchId + bIdx} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
+                                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                  <FlaskConical className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                                  <span className="text-xs text-gray-700 font-medium truncate">{batchId}</span>
+                                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                                    <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                                    <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                                      {expiryStr}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <span className={`font-semibold text-xs flex-shrink-0 ml-2 ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                  {batch.quantity}
+                                                </span>
+                                              </div>
+                                            )
+                                          })}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             })()}
-
-                            {/* Desglose de Lotes */}
-                            {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
-                              <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
-                                <div className="bg-amber-50 px-3 py-1.5 flex items-center gap-2 border-b border-amber-200">
-                                  <FlaskConical className="w-3 h-3 text-amber-600" />
-                                  <span className="text-xs font-medium text-amber-700">Lotes</span>
-                                  <span className="text-xs text-amber-600 ml-auto">
-                                    {item.batches.filter(b => b.quantity > 0).length} activos
-                                  </span>
-                                </div>
-                                <div className="p-2 space-y-1">
-                                  {item.batches
-                                    .filter(b => b.quantity > 0)
-                                    .sort((a, b) => {
-                                      const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-                                      const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-                                      return dA - dB
-                                    })
-                                    .map((batch, bIdx) => {
-                                      const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
-                                      const expiryDate = batch.expirationDate || batch.expiryDate
-                                      const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
-                                      const now = new Date()
-                                      const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
-                                      const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
-                                      const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
-                                      const expiryStr = expiryD
-                                        ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                        : 'Sin fecha'
-                                      return (
-                                        <div key={batchId + bIdx} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
-                                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                            <FlaskConical className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                                            <span className="text-xs text-gray-700 font-medium truncate">{batchId}</span>
-                                            <div className="flex items-center gap-1 flex-shrink-0">
-                                              <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
-                                              <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
-                                                {expiryStr}
-                                              </span>
-                                            </div>
-                                          </div>
-                                          <span className={`font-semibold text-xs flex-shrink-0 ml-2 ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {batch.quantity}
-                                          </span>
-                                        </div>
-                                      )
-                                    })}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
                       )}
@@ -2599,70 +2598,70 @@ export default function Inventory() {
                                         </div>
                                       )
                                     })}
-                                  </div>
-                                )
-                              })()}
 
-                              {/* Desglose de Lotes */}
-                              {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
-                                <div className="mt-4 border border-amber-200 rounded-lg overflow-hidden">
-                                  <div className="bg-amber-50 px-4 py-2 flex items-center gap-2 border-b border-amber-200">
-                                    <FlaskConical className="w-4 h-4 text-amber-600" />
-                                    <span className="font-medium text-amber-700">Lotes</span>
-                                    <Badge variant="warning" className="text-xs ml-2">
-                                      {item.batches.filter(b => b.quantity > 0).length} activos
-                                    </Badge>
-                                  </div>
-                                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {item.batches
-                                      .filter(b => b.quantity > 0)
-                                      .sort((a, b) => {
-                                        const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-                                        const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-                                        return dA - dB
-                                      })
-                                      .map((batch, bIdx) => {
-                                        const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
-                                        const expiryDate = batch.expirationDate || batch.expiryDate
-                                        const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
-                                        const now = new Date()
-                                        const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
-                                        const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
-                                        const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
-                                        const expiryStr = expiryD
-                                          ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                          : 'Sin fecha'
-                                        return (
-                                          <div
-                                            key={batchId + bIdx}
-                                            className={`flex items-center justify-between p-2.5 border rounded-lg ${
-                                              isExpired ? 'bg-red-50 border-red-200' : isNearExpiry ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'
-                                            }`}
-                                          >
-                                            <div className="flex flex-col gap-0.5">
-                                              <div className="flex items-center gap-1.5">
-                                                <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
-                                                <span className="text-sm font-medium text-gray-800">{batchId}</span>
+                                  {/* Lotes dentro de la sección de almacenes */}
+                                  {item.batches && item.batches.filter(b => b.quantity > 0).length > 0 && (
+                                    <div className="mt-3 border-t border-gray-200 pt-3">
+                                      <div className="flex items-center gap-2 mb-2 px-1">
+                                        <FlaskConical className="w-4 h-4 text-amber-600" />
+                                        <span className="font-medium text-sm text-amber-700">Lotes</span>
+                                        <Badge variant="warning" className="text-xs">
+                                          {item.batches.filter(b => b.quantity > 0).length} activos
+                                        </Badge>
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {item.batches
+                                          .filter(b => b.quantity > 0)
+                                          .sort((a, b) => {
+                                            const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                                            const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                                            return dA - dB
+                                          })
+                                          .map((batch, bIdx) => {
+                                            const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
+                                            const expiryDate = batch.expirationDate || batch.expiryDate
+                                            const expiryD = expiryDate ? (expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate)) : null
+                                            const now = new Date()
+                                            const daysUntilExpiry = expiryD ? Math.ceil((expiryD - now) / (1000 * 60 * 60 * 24)) : null
+                                            const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
+                                            const isNearExpiry = daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30
+                                            const expiryStr = expiryD
+                                              ? expiryD.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                              : 'Sin fecha'
+                                            return (
+                                              <div
+                                                key={batchId + bIdx}
+                                                className={`flex items-center justify-between p-2.5 border rounded-lg ${
+                                                  isExpired ? 'bg-red-50 border-red-200' : isNearExpiry ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'
+                                                }`}
+                                              >
+                                                <div className="flex flex-col gap-0.5">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
+                                                    <span className="text-sm font-medium text-gray-800">{batchId}</span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1 ml-5">
+                                                    <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                                    <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                                      {isExpired ? 'Vencido' : isNearExpiry ? `Vence: ${expiryStr} (${daysUntilExpiry}d)` : expiryStr}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right">
+                                                  <span className={`font-bold text-lg ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                    {batch.quantity}
+                                                  </span>
+                                                  <p className="text-xs text-gray-400">unidades</p>
+                                                </div>
                                               </div>
-                                              <div className="flex items-center gap-1 ml-5">
-                                                <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
-                                                <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
-                                                  {isExpired ? 'Vencido' : isNearExpiry ? `Vence: ${expiryStr} (${daysUntilExpiry}d)` : expiryStr}
-                                                </span>
-                                              </div>
-                                            </div>
-                                            <div className="text-right">
-                                              <span className={`font-bold text-lg ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                                {batch.quantity}
-                                              </span>
-                                              <p className="text-xs text-gray-400">unidades</p>
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
-                                  </div>
+                                            )
+                                          })}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              )
+                              })()}
 
                               {!hasWarehouseStocks && (
                                 <p className="text-xs text-gray-500 mt-2">
