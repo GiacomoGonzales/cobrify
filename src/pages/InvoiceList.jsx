@@ -614,12 +614,38 @@ Gracias por tu preferencia.`
                 // Calcular cantidad a restaurar (considerando factor de presentación)
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
+                // Restaurar cantidad del lote si el item tenía lote
+                const batchExtraUpdates = {}
+                if (item.batchNumber && productData.batches?.length > 0) {
+                  const updatedBatches = productData.batches.map(b => {
+                    const bId = b.lotNumber || b.batchNumber || b.id
+                    if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
+                      return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
+                    }
+                    return b
+                  })
+                  batchExtraUpdates.batches = updatedBatches
+
+                  // Actualizar fecha de vencimiento más próxima
+                  const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
+                  if (activeBatches.length > 0) {
+                    activeBatches.sort((a, b) => {
+                      const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                      const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                      return dateA - dateB
+                    })
+                    batchExtraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+                    batchExtraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+                  }
+                }
+
                 // Actualizar stock usando transacción atómica
                 await updateProductStockTransaction(
                   businessId,
                   item.productId,
                   warehouseId,
-                  quantityToRestore
+                  quantityToRestore,
+                  batchExtraUpdates
                 )
 
                 // Registrar movimiento de stock
@@ -633,7 +659,8 @@ Gracias por tu preferencia.`
                   referenceId: voidingInvoice.id,
                   referenceNumber: voidingInvoice.number,
                   userId: user.uid,
-                  notes: `Stock devuelto por anulación de ${voidingInvoice.number}`
+                  ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  notes: `Stock devuelto por anulación de ${voidingInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
                 })
 
                 console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
@@ -784,11 +811,36 @@ Gracias por tu preferencia.`
 
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
+                // Restaurar cantidad del lote si el item tenía lote
+                const batchExtraUpdates = {}
+                if (item.batchNumber && productData.batches?.length > 0) {
+                  const updatedBatches = productData.batches.map(b => {
+                    const bId = b.lotNumber || b.batchNumber || b.id
+                    if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
+                      return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
+                    }
+                    return b
+                  })
+                  batchExtraUpdates.batches = updatedBatches
+
+                  const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
+                  if (activeBatches.length > 0) {
+                    activeBatches.sort((a, b) => {
+                      const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+                      const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+                      return dateA - dateB
+                    })
+                    batchExtraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+                    batchExtraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+                  }
+                }
+
                 await updateProductStockTransaction(
                   businessId,
                   item.productId,
                   warehouseId,
-                  quantityToRestore
+                  quantityToRestore,
+                  batchExtraUpdates
                 )
 
                 await createStockMovement(businessId, {
@@ -801,7 +853,8 @@ Gracias por tu preferencia.`
                   referenceId: voidingSunatInvoice.id,
                   referenceNumber: voidingSunatInvoice.number,
                   userId: user.uid,
-                  notes: `Stock devuelto por anulación SUNAT de ${voidingSunatInvoice.number}`
+                  ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  notes: `Stock devuelto por anulación SUNAT de ${voidingSunatInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
                 })
 
                 console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
