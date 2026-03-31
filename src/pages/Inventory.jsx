@@ -3611,83 +3611,66 @@ export default function Inventory() {
 
               {/* Vista desktop - Tabla */}
               <div className="hidden md:block overflow-x-auto max-h-96">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Almacén</TableHead>
-                      <TableHead className="text-center">Cantidad</TableHead>
-                      <TableHead>Motivo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full table-fixed text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="w-[15%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                      <th className="w-[14%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                      <th className="w-[18%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
+                      <th className="w-[9%] px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
+                      <th className="w-[44%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
                     {productMovements.map(movement => {
                       const typeInfo = getMovementTypeInfo(movement.type)
                       const Icon = typeInfo.icon
                       return (
-                        <TableRow key={movement.id}>
-                          <TableCell>
-                            <span className="text-sm text-gray-600">
-                              {formatMovementDate(movement.createdAt)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={typeInfo.variant}>
+                        <tr key={movement.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-xs text-gray-500">
+                            {formatMovementDate(movement.createdAt)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge variant={typeInfo.variant} className="text-xs">
                               <Icon className="w-3 h-3 mr-1 inline" />
                               {typeInfo.label}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="text-xs">
                               {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
-                                <div>
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
-                                  </p>
-                                  <p className="font-medium">
-                                    <span className="text-gray-400">A:</span> {movement.warehouseName}
-                                  </p>
-                                </div>
+                                <>
+                                  <p className="text-gray-400">De: {movement.fromWarehouseName}</p>
+                                  <p className="font-medium">A: {movement.warehouseName}</p>
+                                </>
                               ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
-                                <div>
-                                  <p className="font-medium">
-                                    <span className="text-gray-400">De:</span> {movement.warehouseName}
-                                  </p>
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-400">A:</span> {movement.toWarehouseName}
-                                  </p>
-                                </div>
+                                <>
+                                  <p className="font-medium">De: {movement.warehouseName}</p>
+                                  <p className="text-gray-400">A: {movement.toWarehouseName}</p>
+                                </>
                               ) : (
                                 <p className="font-medium">{movement.warehouseName}</p>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span
-                              className={`font-bold ${
-                                movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                              }`}
-                            >
-                              {movement.quantity > 0 ? '+' : ''}
-                              {movement.quantity}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`font-bold ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {movement.quantity > 0 ? '+' : ''}{movement.quantity}
                             </span>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="text-sm text-gray-600 whitespace-normal break-words">
-                                {movement.notes || movement.reason || '-'}
-                              </p>
-                              {movement.referenceNumber && (
-                                <p className="text-xs text-gray-400 mt-0.5">{movement.referenceNumber}</p>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                          <td className="px-3 py-2">
+                            <p className="text-xs text-gray-600 whitespace-normal break-words line-clamp-3">
+                              {movement.notes || movement.reason || '-'}
+                            </p>
+                            {movement.referenceNumber && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">{movement.referenceNumber}</p>
+                            )}
+                          </td>
+                        </tr>
                       )
                     })}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </>
           )}
