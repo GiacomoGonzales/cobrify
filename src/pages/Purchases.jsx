@@ -1351,11 +1351,16 @@ export default function Purchases() {
             {/* Información del proveedor */}
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Proveedor</h3>
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="bg-gray-50 p-4 rounded-lg space-y-1">
                 <p className="font-medium">{viewingPurchase.supplier?.businessName}</p>
                 <p className="text-sm text-gray-600">
-                  {viewingPurchase.supplier?.documentNumber}
+                  {viewingPurchase.supplier?.documentType || 'RUC'}: {viewingPurchase.supplier?.documentNumber}
                 </p>
+                {viewingPurchase.supplier?.address && (
+                  <p className="text-sm text-gray-600">
+                    {viewingPurchase.supplier.address}
+                  </p>
+                )}
               </div>
             </div>
 
