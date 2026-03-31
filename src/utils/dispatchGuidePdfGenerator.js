@@ -455,20 +455,27 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   let centerY = currentY + (headerHeight - totalTextHeight) / 2 + 10
 
-  // Nombre comercial
+  // Nombre comercial (con soporte multilínea si es muy largo)
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(commercialName, centerX + centerWidth/2, centerY, { align: 'center' })
-  centerY += 14
+  const maxNameWidth = centerWidth - 10
+  const commercialNameLines = doc.splitTextToSize(commercialName, maxNameWidth)
+  commercialNameLines.forEach((line, i) => {
+    doc.text(line, centerX + centerWidth/2, centerY + (i * 14), { align: 'center' })
+  })
+  centerY += commercialNameLines.length * 14
 
-  // Razón social (si es diferente)
+  // Razón social (si es diferente) - también con soporte multilínea
   if (legalName && legalName !== commercialName) {
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(legalName, centerX + centerWidth/2, centerY, { align: 'center' })
-    centerY += 12
+    const legalNameLines = doc.splitTextToSize(legalName, maxNameWidth)
+    legalNameLines.forEach((line, i) => {
+      doc.text(line, centerX + centerWidth/2, centerY + (i * 10), { align: 'center' })
+    })
+    centerY += legalNameLines.length * 10 + 2
   }
 
   // Dirección, ubicación y teléfono
