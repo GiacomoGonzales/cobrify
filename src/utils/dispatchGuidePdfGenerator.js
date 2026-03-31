@@ -1149,7 +1149,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     currentY += 5
   }
 
-  // Documento de referencia
+  // Documento de referencia (para ventas)
   if (guide.referencedInvoice) {
     const refDoc = guide.referencedInvoice
     const docTypeName = refDoc.documentType === '01' ? 'Factura' : refDoc.documentType === '03' ? 'Boleta' : 'Comprobante'
@@ -1158,10 +1158,36 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'bold')
     doc.text('Doc. Referencia:', MARGIN_LEFT, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(`${docTypeName}:${refNumber}`, MARGIN_LEFT + 65, currentY)
+    doc.text(`${docTypeName}: ${refNumber}`, MARGIN_LEFT + 70, currentY)
+    currentY += spacious ? 14 : 10
   }
 
-  currentY += spacious ? 26 : 20
+  // Documentos relacionados (para compras y otros)
+  if (guide.relatedDocuments && guide.relatedDocuments.length > 0) {
+    const docTypeNames = {
+      '01': 'Factura',
+      '03': 'Boleta',
+      '09': 'GR Remitente',
+      '31': 'GR Transportista',
+      '49': 'Orden de Compra',
+      '52': 'Liq. Compra'
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.text('Doc. Relacionados:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+
+    const docsText = guide.relatedDocuments.map(d => {
+      const typeName = docTypeNames[d.type] || 'Doc'
+      const number = d.fullNumber || `${d.series}-${d.number}`
+      return `${typeName}: ${number}`
+    }).join('  |  ')
+
+    doc.text(docsText, MARGIN_LEFT + 85, currentY)
+    currentY += spacious ? 14 : 10
+  }
+
+  currentY += spacious ? 16 : 10
 
   // ========== 7. PIE DE PÁGINA - QR Y FIRMA ==========
 
