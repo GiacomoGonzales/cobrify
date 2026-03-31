@@ -579,7 +579,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (isOpen) {
       loadBranchOrBusinessAddress()
     }
-  }, [selectedBranchId, branches, isOpen, getBusinessId])
+  }, [selectedBranchId, branches, isOpen, getBusinessId, isPurchase])
 
   // Sincronizar ubigeo y dirección del destinatario con el punto correspondiente
   // En ventas: destinatario (cliente) → punto de LLEGADA
