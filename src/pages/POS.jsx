@@ -5864,7 +5864,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                         </p>
                                       )}
                                     </div>
-                                    {companySettings?.allowPriceEdit && !item.isCustom && (
+                                    {companySettings?.allowPriceEdit && (
                                       <button
                                         onClick={() => startEditingPrice(itemId, item.price)}
                                         className="text-primary-600 hover:text-primary-700 p-1.5"
