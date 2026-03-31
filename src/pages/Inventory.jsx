@@ -2223,15 +2223,25 @@ export default function Inventory() {
                                               : 'Sin fecha'
                                             return (
                                               <div key={batchId + bIdx} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
-                                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                                  <FlaskConical className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                                                  <span className="text-xs text-gray-700 font-medium truncate">{batchId}</span>
-                                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
-                                                    <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
-                                                      {expiryStr}
-                                                    </span>
+                                                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <FlaskConical className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                                    <span className="text-xs text-gray-700 font-medium truncate">{batchId}</span>
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                      <CalendarClock className={`w-3 h-3 ${isExpired ? 'text-red-500' : isNearExpiry ? 'text-yellow-500' : 'text-gray-400'}`} />
+                                                      <span className={`text-xs ${isExpired ? 'text-red-600 font-semibold' : isNearExpiry ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                                        {expiryStr}
+                                                      </span>
+                                                    </div>
                                                   </div>
+                                                  {batch.warehouseId && (
+                                                    <div className="flex items-center gap-1 ml-4">
+                                                      <Warehouse className="w-2.5 h-2.5 text-gray-400" />
+                                                      <span className="text-[10px] text-gray-500">
+                                                        {allWarehouses.find(w => w.id === batch.warehouseId)?.name || 'Almacén'}
+                                                      </span>
+                                                    </div>
+                                                  )}
                                                 </div>
                                                 <span className={`font-semibold text-xs flex-shrink-0 ml-2 ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                   {batch.quantity}
@@ -2646,6 +2656,14 @@ export default function Inventory() {
                                                       {isExpired ? 'Vencido' : isNearExpiry ? `Vence: ${expiryStr} (${daysUntilExpiry}d)` : expiryStr}
                                                     </span>
                                                   </div>
+                                                  {batch.warehouseId && (
+                                                    <div className="flex items-center gap-1 ml-5">
+                                                      <Warehouse className="w-3 h-3 text-gray-400" />
+                                                      <span className="text-xs text-gray-500">
+                                                        {allWarehouses.find(w => w.id === batch.warehouseId)?.name || 'Almacén'}
+                                                      </span>
+                                                    </div>
+                                                  )}
                                                 </div>
                                                 <div className="text-right">
                                                   <span className={`font-bold text-lg ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>

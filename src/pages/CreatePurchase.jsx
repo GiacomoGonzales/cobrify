@@ -1165,6 +1165,7 @@ export default function CreatePurchase() {
               purchaseId: resultId || null,
               purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
               costPrice: parseFloat(item.cost) || 0,
+              warehouseId: selectedWarehouse?.id || null,
               createdAt: Timestamp.fromDate(new Date())
             }))
 
