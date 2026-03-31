@@ -671,8 +671,9 @@ function BatchControl() {
                         </p>
                       ) : (
                         <div className="space-y-2">
-                          <div className="grid grid-cols-5 gap-4 text-xs font-medium text-gray-500 uppercase px-2">
+                          <div className="grid grid-cols-6 gap-3 text-xs font-medium text-gray-500 uppercase px-2">
                             <span>N° Lote</span>
+                            <span>Almacén</span>
                             <span>Vencimiento</span>
                             <span className="text-center">Stock</span>
                             <span className="text-center">Estado</span>
@@ -691,7 +692,7 @@ function BatchControl() {
                               return (
                                 <div
                                   key={batch.id}
-                                  className={`grid grid-cols-5 gap-4 items-center px-2 py-2 rounded-lg ${
+                                  className={`grid grid-cols-6 gap-3 items-center px-2 py-2 rounded-lg ${
                                     batch.quantity <= 0 ? 'bg-gray-100 opacity-50' : 'bg-white'
                                   } ${
                                     expStatus?.status === 'expired' ? 'border-l-4 border-red-500' :
@@ -701,6 +702,12 @@ function BatchControl() {
                                   }`}
                                 >
                                   <span className="font-medium text-gray-900">{batch.batchNumber || 'Sin número'}</span>
+                                  <span className="text-xs text-gray-600 truncate">
+                                    {batch.warehouseId
+                                      ? (warehouses.find(w => w.id === batch.warehouseId)?.name || 'Almacén')
+                                      : <span className="text-gray-400 italic">Sin asignar</span>
+                                    }
+                                  </span>
                                   <span className="text-gray-600">{formatDate(batch.expirationDate)}</span>
                                   <span className={`text-center font-medium ${batch.quantity <= 0 ? 'text-gray-400' : 'text-gray-900'}`}>
                                     {batch.quantity || 0}
