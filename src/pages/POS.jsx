@@ -5077,7 +5077,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             // Establecer fecha de vencimiento por defecto a 30 días
                             const defaultDueDate = new Date()
                             defaultDueDate.setDate(defaultDueDate.getDate() + 30)
-                            setPaymentDueDate(getLocalDateString(defaultDueDate))
+                            const dueDateStr = getLocalDateString(defaultDueDate)
+                            setPaymentDueDate(dueDateStr)
+                            // Crear automáticamente una cuota con el total
+                            setPaymentInstallments([{
+                              number: 1,
+                              amount: total.toFixed(2),
+                              dueDate: dueDateStr
+                            }])
                           }}
                           className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
                             paymentType === 'credito'
@@ -5097,7 +5104,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <input
                               type="date"
                               value={paymentDueDate}
-                              onChange={e => setPaymentDueDate(e.target.value)}
+                              onChange={e => {
+                                setPaymentDueDate(e.target.value)
+                                // Si hay una sola cuota, actualizar su fecha también
+                                if (paymentInstallments.length === 1) {
+                                  setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
+                                }
+                              }}
                               min={emissionDate}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                             />
@@ -5106,24 +5119,56 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {/* Cuotas */}
                           <div>
                             <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-gray-500">Cuotas (opcional)</label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newInstallment = {
-                                    number: paymentInstallments.length + 1,
-                                    amount: '',
-                                    dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
-                                  }
-                                  setPaymentInstallments([...paymentInstallments, newInstallment])
-                                }}
-                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                              >
-                                + Agregar cuota
-                              </button>
+                              <label className="text-xs text-gray-500">
+                                {paymentInstallments.length === 1 ? 'Monto de la cuota' : `Cuotas (${paymentInstallments.length})`}
+                              </label>
+                              {paymentInstallments.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newInstallment = {
+                                      number: paymentInstallments.length + 1,
+                                      amount: '',
+                                      dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+                                    }
+                                    setPaymentInstallments([...paymentInstallments, newInstallment])
+                                  }}
+                                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                  + Agregar cuota
+                                </button>
+                              )}
                             </div>
 
-                            {paymentInstallments.length > 0 && (
+                            {/* Una sola cuota - mostrar campo simple */}
+                            {paymentInstallments.length === 1 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">S/</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={paymentInstallments[0].amount}
+                                  onChange={e => {
+                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: e.target.value }])
+                                  }}
+                                  placeholder="Monto a pagar"
+                                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: total.toFixed(2) }])
+                                  }}
+                                  className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1 bg-primary-50 rounded"
+                                  title="Usar total"
+                                >
+                                  Total
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Múltiples cuotas - mostrar lista */}
+                            {paymentInstallments.length > 1 && (
                               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                                 {paymentInstallments.map((installment, index) => (
                                   <div key={index} className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded">
