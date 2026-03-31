@@ -1126,6 +1126,13 @@ function Sidebar() {
       menuId: 'purchase-orders',
     },
     {
+      path: '/ingredientes/historial',
+      icon: History,
+      label: 'Historial de Compras',
+      pageId: 'purchase-history',
+      menuId: 'purchase-history',
+    },
+    {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',

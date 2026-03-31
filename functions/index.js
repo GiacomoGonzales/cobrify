@@ -6,6 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
+import { randomUUID } from 'crypto'
 import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision, emitirGuiaRemisionTransportista } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
@@ -35,21 +36,26 @@ async function saveToStorage(businessId, invoiceId, fileName, content) {
     const filePath = `comprobantes/${businessId}/${invoiceId}/${fileName}`
     const file = bucket.file(filePath)
 
+    // Generar un token único para acceso
+    const downloadToken = randomUUID()
+
     await file.save(content, {
       contentType: 'application/xml',
       metadata: {
         cacheControl: 'public, max-age=31536000',
+        metadata: {
+          firebaseStorageDownloadTokens: downloadToken
+        }
       }
     })
 
-    // Generar URL firmada válida por 10 años (para acceso permanente)
-    const [signedUrl] = await file.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000 // 10 años
-    })
+    // Construir URL de descarga con token (formato Firebase Storage)
+    const bucketName = bucket.name
+    const encodedPath = encodeURIComponent(filePath)
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${downloadToken}`
 
     console.log(`📁 Archivo guardado en Storage: ${filePath}`)
-    return signedUrl
+    return downloadUrl
   } catch (error) {
     console.error(`❌ Error guardando archivo en Storage: ${error.message}`)
     // No fallar la emisión si falla el guardado en Storage
@@ -890,17 +896,49 @@ export const sendInvoiceToSunat = onRequest(
 
           // QPSE: Descargar XML y CDR desde URLs externas y guardar localmente
           if (emissionResult.method === 'qpse') {
+            // DEBUG: Ver qué campos tenemos disponibles
+            console.log('🔍 DEBUG QPse - Campos disponibles:', {
+              hasXmlUrl: !!emissionResult.xmlUrl,
+              hasXmlFirmado: !!emissionResult.xmlFirmado,
+              xmlFirmadoLength: emissionResult.xmlFirmado?.length || 0,
+              xmlFirmadoPreview: emissionResult.xmlFirmado?.substring(0, 50) || 'N/A'
+            })
+
             // Descargar y guardar XML
-            if (emissionResult.xmlUrl) {
-              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
-              if (xmlContent) {
-                xmlStorageUrl = await saveToStorage(
-                  userId,
-                  invoiceId,
-                  `${documentNumber}.xml`,
-                  xmlContent
-                )
+            // Prioridad: 1) XML firmado directo (base64) - SIEMPRE disponible, 2) URL externa
+            let xmlContent = null
+
+            // PRIMERO intentar usar el XML firmado directo (más confiable)
+            if (emissionResult.xmlFirmado) {
+              console.log('📄 Usando XML firmado directo de QPse')
+              // El XML firmado viene en base64, decodificarlo
+              try {
+                xmlContent = Buffer.from(emissionResult.xmlFirmado, 'base64').toString('utf-8')
+                console.log('✅ XML firmado decodificado de base64 exitosamente, longitud:', xmlContent.length)
+              } catch (decodeError) {
+                // Si no es base64, podría ser XML directo
+                xmlContent = emissionResult.xmlFirmado
+                console.log('📄 XML firmado usado directamente (no era base64)')
               }
+            }
+
+            // Solo si no tenemos xmlFirmado, intentar descargar de URL
+            if (!xmlContent && emissionResult.xmlUrl) {
+              console.log('📄 Intentando descargar XML desde URL:', emissionResult.xmlUrl)
+              xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
+            }
+
+            if (xmlContent) {
+              console.log('💾 Guardando XML en Storage...')
+              xmlStorageUrl = await saveToStorage(
+                userId,
+                invoiceId,
+                `${documentNumber}.xml`,
+                xmlContent
+              )
+              console.log('✅ XML guardado en Storage:', xmlStorageUrl ? 'OK' : 'FALLÓ')
+            } else {
+              console.error('❌ No se pudo obtener XML de ninguna fuente')
             }
             // CDR puede venir como URL o como contenido directo (base64/XML)
             if (emissionResult.cdrUrl) {

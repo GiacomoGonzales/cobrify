@@ -474,6 +474,11 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
       }
     }
 
+    // 9. IMPORTANTE: Incluir el XML firmado para guardarlo en Storage
+    // Esto permite tener el XML original firmado siempre disponible
+    resultado.xmlFirmado = xmlFirmado
+    resultado.nombreArchivo = nombreArchivo
+
     return resultado
 
   } catch (error) {

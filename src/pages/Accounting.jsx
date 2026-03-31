@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2 } from 'lucide-react'
+import { FileText, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -7,10 +7,27 @@ import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { prepareInvoiceXML } from '@/services/sunatService'
 import { getCompanySettings } from '@/services/firestoreService'
+
+// Nombres de meses en español
+const MONTHS = [
+  { value: 1, label: 'Enero' },
+  { value: 2, label: 'Febrero' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Abril' },
+  { value: 5, label: 'Mayo' },
+  { value: 6, label: 'Junio' },
+  { value: 7, label: 'Julio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Septiembre' },
+  { value: 10, label: 'Octubre' },
+  { value: 11, label: 'Noviembre' },
+  { value: 12, label: 'Diciembre' },
+]
 
 export default function Accounting() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
@@ -24,6 +41,16 @@ export default function Accounting() {
   const [filterCdr, setFilterCdr] = useState('all') // all, with, without
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Selector de mes rápido
+  const currentYear = new Date().getFullYear()
+  const currentMonth = new Date().getMonth() + 1
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedYear, setSelectedYear] = useState(currentYear)
+
+  // Estados para descargas masivas
+  const [downloadingAll, setDownloadingAll] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState('')
 
   useEffect(() => {
     loadInvoices()
@@ -138,6 +165,242 @@ export default function Accounting() {
     }
   }
 
+  // Manejar selección de mes
+  const handleMonthSelect = (month) => {
+    setSelectedMonth(month)
+    if (month) {
+      const year = selectedYear
+      const firstDay = new Date(year, month - 1, 1)
+      const lastDay = new Date(year, month, 0)
+      setDateFrom(format(firstDay, 'yyyy-MM-dd'))
+      setDateTo(format(lastDay, 'yyyy-MM-dd'))
+    } else {
+      setDateFrom('')
+      setDateTo('')
+    }
+  }
+
+  const handleYearChange = (year) => {
+    setSelectedYear(year)
+    if (selectedMonth) {
+      const firstDay = new Date(year, selectedMonth - 1, 1)
+      const lastDay = new Date(year, selectedMonth, 0)
+      setDateFrom(format(firstDay, 'yyyy-MM-dd'))
+      setDateTo(format(lastDay, 'yyyy-MM-dd'))
+    }
+  }
+
+  // Descargar todos los XMLs como ZIP
+  const handleDownloadAllXml = async () => {
+    const invoicesWithXml = filtered.filter(inv => hasXml(inv))
+    if (invoicesWithXml.length === 0) {
+      toast.error('No hay XMLs para descargar')
+      return
+    }
+
+    setDownloadingAll(true)
+    setDownloadProgress('Preparando XMLs...')
+
+    try {
+      const zip = new JSZip()
+      let downloaded = 0
+
+      for (const inv of invoicesWithXml) {
+        const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
+        if (url) {
+          try {
+            const response = await fetch(url)
+            const blob = await response.blob()
+            zip.file(`${inv.number || inv.id}.xml`, blob)
+            downloaded++
+            setDownloadProgress(`Descargando XMLs: ${downloaded}/${invoicesWithXml.length}`)
+          } catch (e) {
+            console.warn(`Error descargando XML de ${inv.number}:`, e)
+          }
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
+      const filename = `XMLs_${monthLabel}_${selectedYear}.zip`
+
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(content)
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(a.href)
+
+      toast.success(`${downloaded} XMLs descargados`)
+    } catch (error) {
+      console.error('Error descargando XMLs:', error)
+      toast.error('Error al descargar XMLs')
+    } finally {
+      setDownloadingAll(false)
+      setDownloadProgress('')
+    }
+  }
+
+  // Descargar todos los CDRs como ZIP
+  const handleDownloadAllCdr = async () => {
+    const invoicesWithCdr = filtered.filter(inv => hasCdr(inv))
+    if (invoicesWithCdr.length === 0) {
+      toast.error('No hay CDRs para descargar')
+      return
+    }
+
+    setDownloadingAll(true)
+    setDownloadProgress('Preparando CDRs...')
+
+    try {
+      const zip = new JSZip()
+      let downloaded = 0
+
+      for (const inv of invoicesWithCdr) {
+        const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+        if (url) {
+          try {
+            const response = await fetch(url)
+            const blob = await response.blob()
+            zip.file(`CDR-${inv.number || inv.id}.xml`, blob)
+            downloaded++
+            setDownloadProgress(`Descargando CDRs: ${downloaded}/${invoicesWithCdr.length}`)
+          } catch (e) {
+            console.warn(`Error descargando CDR de ${inv.number}:`, e)
+          }
+        } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
+          const data = inv.cdrData || inv.sunatResponse.cdrData
+          zip.file(`CDR-${inv.number || inv.id}.xml`, data)
+          downloaded++
+          setDownloadProgress(`Descargando CDRs: ${downloaded}/${invoicesWithCdr.length}`)
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
+      const filename = `CDRs_${monthLabel}_${selectedYear}.zip`
+
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(content)
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(a.href)
+
+      toast.success(`${downloaded} CDRs descargados`)
+    } catch (error) {
+      console.error('Error descargando CDRs:', error)
+      toast.error('Error al descargar CDRs')
+    } finally {
+      setDownloadingAll(false)
+      setDownloadProgress('')
+    }
+  }
+
+  // Descargar todo (XML + CDR + Excel) como ZIP
+  const handleDownloadAllZip = async () => {
+    if (filtered.length === 0) {
+      toast.error('No hay comprobantes para descargar')
+      return
+    }
+
+    setDownloadingAll(true)
+    setDownloadProgress('Preparando descarga completa...')
+
+    try {
+      const zip = new JSZip()
+      const xmlFolder = zip.folder('XMLs')
+      const cdrFolder = zip.folder('CDRs')
+      let xmlCount = 0
+      let cdrCount = 0
+
+      // Descargar XMLs
+      const invoicesWithXml = filtered.filter(inv => hasXml(inv))
+      for (const inv of invoicesWithXml) {
+        const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
+        if (url) {
+          try {
+            setDownloadProgress(`Descargando XML: ${inv.number}`)
+            const response = await fetch(url)
+            const blob = await response.blob()
+            xmlFolder.file(`${inv.number || inv.id}.xml`, blob)
+            xmlCount++
+          } catch (e) {
+            console.warn(`Error descargando XML de ${inv.number}:`, e)
+          }
+        }
+      }
+
+      // Descargar CDRs
+      const invoicesWithCdr = filtered.filter(inv => hasCdr(inv))
+      for (const inv of invoicesWithCdr) {
+        const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+        if (url) {
+          try {
+            setDownloadProgress(`Descargando CDR: ${inv.number}`)
+            const response = await fetch(url)
+            const blob = await response.blob()
+            cdrFolder.file(`CDR-${inv.number || inv.id}.xml`, blob)
+            cdrCount++
+          } catch (e) {
+            console.warn(`Error descargando CDR de ${inv.number}:`, e)
+          }
+        } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
+          const data = inv.cdrData || inv.sunatResponse.cdrData
+          cdrFolder.file(`CDR-${inv.number || inv.id}.xml`, data)
+          cdrCount++
+        }
+      }
+
+      // Agregar Excel
+      setDownloadProgress('Generando Excel...')
+      const rows = [
+        ['REPORTE CONTABLE'],
+        ['Fecha:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
+        ['Total:', filtered.length],
+        [''],
+        ['Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión', 'Total', 'Estado SUNAT', 'Tiene XML', 'Tiene CDR', 'Hash SUNAT']
+      ]
+      filtered.forEach(inv => {
+        rows.push([
+          inv.number || '-',
+          inv.documentType === 'factura' ? 'Factura' : 'Boleta',
+          inv.customer?.businessName || inv.customer?.name || '-',
+          inv.customer?.documentNumber || '-',
+          formatDate(inv.createdAt),
+          inv.total || 0,
+          getSunatStatus(inv) === 'accepted' ? 'Aceptado' : getSunatStatus(inv) === 'rejected' ? 'Rechazado' : getSunatStatus(inv) === 'voided' ? 'Anulado' : 'Pendiente',
+          hasXml(inv) ? 'Sí' : 'No',
+          hasCdr(inv) ? 'Sí' : 'No',
+          inv.sunatResponse?.hash || inv.sunatHash || '-'
+        ])
+      })
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      ws['!cols'] = [{ width: 20 }, { width: 10 }, { width: 35 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 10 }, { width: 40 }]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Contabilidad')
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      zip.file('Reporte_Contable.xlsx', excelBuffer)
+
+      setDownloadProgress('Comprimiendo archivos...')
+      const content = await zip.generateAsync({ type: 'blob' })
+      const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
+      const filename = `Contabilidad_${monthLabel}_${selectedYear}.zip`
+
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(content)
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(a.href)
+
+      toast.success(`Descarga completa: ${xmlCount} XMLs, ${cdrCount} CDRs, 1 Excel`)
+    } catch (error) {
+      console.error('Error en descarga completa:', error)
+      toast.error('Error al generar el ZIP')
+    } finally {
+      setDownloadingAll(false)
+      setDownloadProgress('')
+    }
+  }
+
   // Filtrado
   const filtered = invoices.filter(inv => {
     if (filterType !== 'all' && inv.documentType !== filterType) return false
@@ -239,11 +502,99 @@ export default function Accounting() {
           </h1>
           <p className="text-gray-600 mt-1">Control de comprobantes electrónicos enviados a SUNAT</p>
         </div>
-        <Button onClick={handleExportExcel} variant="outline" size="sm">
-          <Download className="w-4 h-4 mr-2" />
-          Exportar Excel
-        </Button>
       </div>
+
+      {/* Selector de Mes y Descargas Rápidas */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Selector de Mes */}
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Período:</span>
+              <select
+                value={selectedYear}
+                onChange={e => handleYearChange(parseInt(e.target.value))}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <select
+                value={selectedMonth}
+                onChange={e => handleMonthSelect(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Todos los meses</option>
+                {MONTHS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Botones de descarga rápida */}
+            <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+              <span className="text-sm text-gray-500 hidden sm:inline">Descargar:</span>
+              <Button
+                onClick={handleExportExcel}
+                variant="outline"
+                size="sm"
+                disabled={downloadingAll || filtered.length === 0}
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-1" />
+                Excel
+              </Button>
+              <Button
+                onClick={handleDownloadAllXml}
+                variant="outline"
+                size="sm"
+                disabled={downloadingAll || filtered.filter(i => hasXml(i)).length === 0}
+              >
+                <FileCode className="w-4 h-4 mr-1" />
+                XMLs ({filtered.filter(i => hasXml(i)).length})
+              </Button>
+              <Button
+                onClick={handleDownloadAllCdr}
+                variant="outline"
+                size="sm"
+                disabled={downloadingAll || filtered.filter(i => hasCdr(i)).length === 0}
+              >
+                <FileCheck className="w-4 h-4 mr-1" />
+                CDRs ({filtered.filter(i => hasCdr(i)).length})
+              </Button>
+              <Button
+                onClick={handleDownloadAllZip}
+                variant="primary"
+                size="sm"
+                disabled={downloadingAll || filtered.length === 0}
+              >
+                {downloadingAll ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    {downloadProgress || 'Procesando...'}
+                  </>
+                ) : (
+                  <>
+                    <Archive className="w-4 h-4 mr-1" />
+                    Descargar Todo (ZIP)
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Mostrar período seleccionado */}
+          {selectedMonth && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-sm text-gray-600">
+                Mostrando comprobantes de <span className="font-semibold text-primary-600">{MONTHS.find(m => m.value === parseInt(selectedMonth))?.label} {selectedYear}</span>
+                {' '}&bull; {filtered.length} comprobante(s)
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
@@ -314,10 +665,34 @@ export default function Accounting() {
               <option value="with">Con CDR</option>
               <option value="without">Sin CDR</option>
             </select>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+            {/* Fechas personalizadas (ocultas si hay mes seleccionado) */}
+            {!selectedMonth && (
+              <>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => { setDateFrom(e.target.value); setSelectedMonth('') }}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  title="Fecha desde"
+                />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => { setDateTo(e.target.value); setSelectedMonth('') }}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  title="Fecha hasta"
+                />
+              </>
+            )}
+            {/* Botón para limpiar filtros de fecha */}
+            {(dateFrom || dateTo || selectedMonth) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); setSelectedMonth('') }}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Limpiar fechas
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>
