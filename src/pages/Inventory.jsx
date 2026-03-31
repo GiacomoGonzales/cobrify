@@ -2177,7 +2177,7 @@ export default function Inventory() {
                                                 <div className="flex items-center gap-1.5">
                                                   <Warehouse className="w-3 h-3 text-gray-400" />
                                                   <span className="text-xs text-gray-700">{warehouse.name}</span>
-                                                  {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                  {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                 </div>
                                                 <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                   {stock}
@@ -2237,7 +2237,7 @@ export default function Inventory() {
                                                   <div className="flex items-center gap-1.5">
                                                     <Warehouse className="w-3 h-3 text-gray-400" />
                                                     <span className="text-xs text-gray-700">{warehouse.name}</span>
-                                                    {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                    {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                   </div>
                                                   <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                     {stock}
@@ -2601,7 +2601,7 @@ export default function Inventory() {
                                                   <div className="flex items-center space-x-2">
                                                     <Warehouse className="w-3.5 h-3.5 text-gray-400" />
                                                     <span className="text-sm text-gray-700">{warehouse.name}</span>
-                                                    {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                    {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                   </div>
                                                   <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                     {stock}
@@ -2676,7 +2676,7 @@ export default function Inventory() {
                                                     <div className="flex items-center space-x-2">
                                                       <Warehouse className="w-3.5 h-3.5 text-gray-400" />
                                                       <span className="text-sm text-gray-700">{warehouse.name}</span>
-                                                      {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                      {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                     </div>
                                                     <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                       {stock}
