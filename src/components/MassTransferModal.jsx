@@ -94,7 +94,7 @@ export default function MassTransferModal({
         batchExpiration: null,
         batchData: null,
         batches: product.batches || [],
-        hasBatches: (product.batches || []).filter(b => b.quantity > 0).length > 0,
+        hasBatches: (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).length > 0,
       }])
     }
     setSearchTerm('')
@@ -459,7 +459,7 @@ export default function MassTransferModal({
                                 className={`w-full px-2 py-1 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
                               >
                                 <option value="">Seleccionar lote...</option>
-                                {item.batches.filter(b => b.quantity > 0).map((b, bi) => {
+                                {item.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).map((b, bi) => {
                                   const bId = b.lotNumber || b.batchNumber || b.id
                                   const expDate = formatBatchDate(b.expirationDate || b.expiryDate)
                                   return (
@@ -516,7 +516,7 @@ export default function MassTransferModal({
                           className={`w-full px-2 py-1.5 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
                         >
                           <option value="">Seleccionar lote...</option>
-                          {item.batches.filter(b => b.quantity > 0).map((b, bi) => {
+                          {item.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).map((b, bi) => {
                             const bId = b.lotNumber || b.batchNumber || b.id
                             const expDate = formatBatchDate(b.expirationDate || b.expiryDate)
                             return (

@@ -1070,7 +1070,8 @@ export default function Inventory() {
     }
 
     // Verificar stock disponible en almacén origen (o en el lote seleccionado)
-    const hasBatches = transferProduct.batches && transferProduct.batches.length > 0
+    const batchesInOrigin = (transferProduct.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+    const hasBatches = batchesInOrigin.length > 0
     const selectedBatchData = hasBatches && transferData.selectedBatch
       ? transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
       : null
@@ -1113,12 +1114,43 @@ export default function Inventory() {
       const extraUpdates = {}
 
       if (selectedBatchData) {
-        const updatedBatches = (transferProduct.batches || []).map(b => {
-          if ((b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch) {
-            return { ...b, quantity: b.quantity - quantity }
+        const batchId = transferData.selectedBatch
+        let updatedBatches = (transferProduct.batches || []).map(b => {
+          const bId = b.lotNumber || b.batchNumber || b.id
+          if (bId === batchId && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)) {
+            return { ...b, quantity: b.quantity - quantity, warehouseId: b.warehouseId || transferData.fromWarehouse }
           }
           return b
         })
+
+        // Crear o actualizar lote en almacén destino
+        const existingDestBatch = updatedBatches.find(b => {
+          const bId = b.lotNumber || b.batchNumber || b.id
+          return bId === batchId && b.warehouseId === transferData.toWarehouse
+        })
+
+        if (existingDestBatch) {
+          // Ya existe lote con mismo ID en destino: sumar cantidad
+          updatedBatches = updatedBatches.map(b => {
+            const bId = b.lotNumber || b.batchNumber || b.id
+            if (bId === batchId && b.warehouseId === transferData.toWarehouse) {
+              return { ...b, quantity: b.quantity + quantity }
+            }
+            return b
+          })
+        } else {
+          // Crear nuevo lote en destino con los mismos datos
+          updatedBatches.push({
+            ...selectedBatchData,
+            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            quantity: quantity,
+            warehouseId: transferData.toWarehouse,
+          })
+        }
+
+        // Limpiar lotes con cantidad 0
+        updatedBatches = updatedBatches.filter(b => b.quantity > 0)
+
         extraUpdates.batches = updatedBatches
 
         // Actualizar fecha de vencimiento más próxima
@@ -3017,15 +3049,15 @@ export default function Inventory() {
             </select>
           </div>
 
-          {/* Selección de Lote (si el producto tiene lotes) */}
-          {transferProduct?.batches?.filter(b => b.quantity > 0).length > 0 && (
+          {/* Selección de Lote (si el producto tiene lotes en el almacén origen) */}
+          {transferProduct?.batches?.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)).length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Lote <span className="text-red-500">*</span>
               </label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {transferProduct.batches
-                  .filter(b => b.quantity > 0)
+                  .filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
                   .sort((a, b) => {
                     const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
                     const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')

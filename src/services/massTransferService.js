@@ -98,13 +98,41 @@ export const createMassTransfer = async (businessId, transferData) => {
       // Entrada al almacén destino (con actualización de lotes si aplica)
       const extraUpdates = {}
       if (item.batchData) {
-        const updatedBatches = (item.batches || []).map(b => {
-          const batchId = b.lotNumber || b.batchNumber || b.id
-          if (batchId === item.batchNumber) {
-            return { ...b, quantity: b.quantity - item.quantity }
+        const batchId = item.batchNumber
+        let updatedBatches = (item.batches || []).map(b => {
+          const bId = b.lotNumber || b.batchNumber || b.id
+          if (bId === batchId && (!b.warehouseId || b.warehouseId === transferData.fromWarehouseId)) {
+            return { ...b, quantity: b.quantity - item.quantity, warehouseId: b.warehouseId || transferData.fromWarehouseId }
           }
           return b
         })
+
+        // Crear o actualizar lote en almacén destino
+        const existingDestBatch = updatedBatches.find(b => {
+          const bId = b.lotNumber || b.batchNumber || b.id
+          return bId === batchId && b.warehouseId === transferData.toWarehouseId
+        })
+
+        if (existingDestBatch) {
+          updatedBatches = updatedBatches.map(b => {
+            const bId = b.lotNumber || b.batchNumber || b.id
+            if (bId === batchId && b.warehouseId === transferData.toWarehouseId) {
+              return { ...b, quantity: b.quantity + item.quantity }
+            }
+            return b
+          })
+        } else {
+          updatedBatches.push({
+            ...item.batchData,
+            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            quantity: item.quantity,
+            warehouseId: transferData.toWarehouseId,
+          })
+        }
+
+        // Limpiar lotes con cantidad 0
+        updatedBatches = updatedBatches.filter(b => b.quantity > 0)
+
         extraUpdates.batches = updatedBatches
 
         const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
