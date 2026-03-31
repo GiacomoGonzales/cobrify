@@ -62,6 +62,8 @@ import DemoPharmacy from './pages/DemoPharmacy'
 import DemoPharmacyLayout from './layouts/DemoPharmacyLayout'
 import DemoHotel from './pages/DemoHotel'
 import DemoHotelLayout from './layouts/DemoHotelLayout'
+import DemoVeterinary from './pages/DemoVeterinary'
+import DemoVeterinaryLayout from './layouts/DemoVeterinaryLayout'
 // Restaurant pages
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
@@ -325,6 +327,30 @@ function App() {
               <Route path="gastos" element={<Expenses />} />
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="usuarios" element={<UserManagement />} />
+              <Route path="configuracion" element={<Settings />} />
+            </Route>
+
+            {/* Rutas de demo veterinaria (sin autenticación, con datos de ejemplo de veterinaria) */}
+            <Route path="/demoveterinary" element={<DemoVeterinary />} />
+            <Route path="/demoveterinary" element={<DemoVeterinaryLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
+              <Route path="control-lotes" element={<BatchControl />} />
+              <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
+              <Route path="agenda-veterinaria" element={<VeterinaryAgenda />} />
+              <Route path="alertas-veterinaria" element={<VeterinaryAlerts />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
               <Route path="configuracion" element={<Settings />} />
             </Route>
 
