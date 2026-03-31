@@ -111,14 +111,15 @@ export default function InventoryCountModal({
     products.forEach(product => {
       if (product.stock !== null && product.stock !== undefined || (product.hasVariants && product.variants?.length > 0)) {
         const warehouseStock = getWarehouseStock(product, warehouseId)
-        const activeBatches = (product.batches || []).filter(b => b.quantity > 0)
+        // Filtrar lotes del almacén seleccionado (o legacy sin warehouseId)
+        const activeBatches = (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === warehouseId))
         const price = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
 
         if (activeBatches.length > 0) {
-          // Productos con lotes: una fila por lote
+          // Productos con lotes: una fila por lote del almacén seleccionado
           activeBatches.forEach(batch => {
             const batchId = batch.lotNumber || batch.batchNumber || batch.id
-            const key = `${product.id}_batch_${batchId}`
+            const key = `${product.id}_batch_${batchId}_${warehouseId}`
             initialCountData[key] = {
               productId: product.id,
               productName: product.name,
@@ -446,12 +447,13 @@ export default function InventoryCountModal({
             const diff = newQty - batchItem.systemStock
             totalDifference += diff
 
-            // Actualizar cantidad del lote
+            // Actualizar cantidad del lote (matchear por batchId + warehouseId)
             const batchIdx = allBatches.findIndex(b =>
-              (b.lotNumber || b.batchNumber || b.id) === batchItem.batchId
+              (b.lotNumber || b.batchNumber || b.id) === batchItem.batchId &&
+              (!b.warehouseId || b.warehouseId === selectedWarehouse.id)
             )
             if (batchIdx >= 0) {
-              allBatches[batchIdx] = { ...allBatches[batchIdx], quantity: newQty }
+              allBatches[batchIdx] = { ...allBatches[batchIdx], quantity: newQty, warehouseId: allBatches[batchIdx].warehouseId || selectedWarehouse.id }
             }
           }
 
@@ -860,7 +862,7 @@ export default function InventoryCountModal({
               ) : (
                 filteredProducts.map(item => {
                   const { diff, value, status } = getDifference(item)
-                  const mobileKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
+                  const mobileKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId)
                   return (
                     <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : ''}`}>
                       <div className="flex justify-between items-start mb-2">
