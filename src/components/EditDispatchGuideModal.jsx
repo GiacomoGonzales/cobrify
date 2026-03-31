@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { updateDispatchGuide, getCompanySettings, getCustomers } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
-import { consultarRUC } from '@/services/documentLookupService'
+import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -160,6 +160,9 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   const [carrierRuc, setCarrierRuc] = useState('')
   const [carrierName, setCarrierName] = useState('')
   const [isSearchingCarrier, setIsSearchingCarrier] = useState(false)
+
+  // Estado para búsqueda de destinatario
+  const [isSearchingRecipient, setIsSearchingRecipient] = useState(false)
 
   // Items (productos)
   const [items, setItems] = useState([])
@@ -416,6 +419,60 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     setItems(items.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ))
+  }
+
+  // Buscar datos del destinatario por RUC o DNI
+  const handleSearchRecipient = async () => {
+    const docNumber = recipientDocNumber.trim()
+
+    if (recipientDocType === '6') {
+      // RUC
+      if (docNumber.length !== 11) {
+        toast.error('Ingrese un RUC válido de 11 dígitos')
+        return
+      }
+      setIsSearchingRecipient(true)
+      try {
+        const result = await consultarRUC(docNumber)
+        if (result.success) {
+          setRecipientName(result.data.razonSocial || '')
+          if (result.data.direccion) setRecipientAddress(result.data.direccion)
+          toast.success('Datos encontrados')
+        } else {
+          toast.error(result.error || 'No se encontraron datos')
+        }
+      } catch (error) {
+        console.error('Error al buscar RUC:', error)
+        toast.error('Error al consultar')
+      } finally {
+        setIsSearchingRecipient(false)
+      }
+    } else if (recipientDocType === '1') {
+      // DNI
+      if (docNumber.length !== 8) {
+        toast.error('Ingrese un DNI válido de 8 dígitos')
+        return
+      }
+      setIsSearchingRecipient(true)
+      try {
+        const result = await consultarDNI(docNumber)
+        if (result.success) {
+          const fullName = [result.data.nombres, result.data.apellidoPaterno, result.data.apellidoMaterno]
+            .filter(Boolean).join(' ')
+          setRecipientName(fullName || result.data.nombreCompleto || '')
+          toast.success('Datos encontrados')
+        } else {
+          toast.error(result.error || 'No se encontraron datos')
+        }
+      } catch (error) {
+        console.error('Error al buscar DNI:', error)
+        toast.error('Error al consultar')
+      } finally {
+        setIsSearchingRecipient(false)
+      }
+    } else {
+      toast.error('La búsqueda solo está disponible para RUC y DNI')
+    }
   }
 
   // Buscar datos del transportista por RUC
@@ -714,14 +771,35 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 ))}
               </Select>
 
-              <Input
-                label="Nro. de Documento"
-                placeholder={recipientDocType === '6' ? '20123456789' : '12345678'}
-                required
-                value={recipientDocNumber}
-                onChange={(e) => setRecipientDocNumber(e.target.value)}
-                maxLength={recipientDocType === '6' ? 11 : 15}
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nro. de Documento <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={recipientDocType === '6' ? '20123456789' : '12345678'}
+                    required
+                    value={recipientDocNumber}
+                    onChange={(e) => setRecipientDocNumber(e.target.value)}
+                    maxLength={recipientDocType === '6' ? 11 : 15}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSearchRecipient}
+                    disabled={isSearchingRecipient || (recipientDocType === '6' ? recipientDocNumber.length !== 11 : recipientDocNumber.length !== 8)}
+                    className="px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    title="Buscar datos"
+                  >
+                    {isSearchingRecipient ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Search className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
 
               <div className="relative">
                 <Input
