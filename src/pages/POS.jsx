@@ -461,6 +461,7 @@ export default function POS() {
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
   const [editingPrice, setEditingPrice] = useState('')
+  const [editingPriceWithoutIgv, setEditingPriceWithoutIgv] = useState(false)
 
   // Venta por monto (granel): ingresa S/ y calcula el peso
   const [amountModeItemId, setAmountModeItemId] = useState(null)
@@ -2288,26 +2289,40 @@ export default function POS() {
     setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
   }
 
-  const startEditingPrice = (itemId, currentPrice) => {
+  const startEditingPrice = (itemId, currentPrice, withoutIgv = false) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
     setEditingPriceItemId(itemId)
-    setEditingPrice(currentPrice.toString())
+    setEditingPriceWithoutIgv(withoutIgv)
+    if (withoutIgv) {
+      // Calcular precio sin IGV
+      const igvRate = taxConfig?.igvRate || 18
+      setEditingPrice((currentPrice / (1 + igvRate / 100)).toFixed(2))
+    } else {
+      setEditingPrice(currentPrice.toString())
+    }
   }
 
   const cancelEditingPrice = () => {
     setEditingPriceItemId(null)
     setEditingPrice('')
+    setEditingPriceWithoutIgv(false)
   }
 
   const saveEditedPrice = (itemId) => {
-    const newPrice = parseFloat(editingPrice)
+    let newPrice = parseFloat(editingPrice)
 
     if (isNaN(newPrice) || newPrice <= 0) {
       toast.error('El precio debe ser mayor a 0')
       return
+    }
+
+    // Si editó sin IGV, calcular precio con IGV
+    if (editingPriceWithoutIgv) {
+      const igvRate = taxConfig?.igvRate || 18
+      newPrice = parseFloat((newPrice * (1 + igvRate / 100)).toFixed(2))
     }
 
     setCart(cart.map(item => {
@@ -2320,6 +2335,7 @@ export default function POS() {
 
     setEditingPriceItemId(null)
     setEditingPrice('')
+    setEditingPriceWithoutIgv(false)
     toast.success('Precio actualizado')
   }
 
@@ -5809,37 +5825,57 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               {/* Precio unitario editable */}
                               <div className="flex items-center gap-2">
                                 {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      value={editingPrice}
-                                      onChange={(e) => setEditingPrice(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          saveEditedPrice(itemId)
-                                        } else if (e.key === 'Escape') {
-                                          cancelEditingPrice()
-                                        }
-                                      }}
-                                      className="w-20 px-2 py-1.5 text-base font-bold text-right border border-primary-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                      autoFocus
-                                      step="0.01"
-                                      min="0.01"
-                                    />
-                                    <button
-                                      onClick={() => saveEditedPrice(itemId)}
-                                      className="text-green-600 hover:text-green-800 p-1.5"
-                                      title="Guardar"
-                                    >
-                                      <Check className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                      onClick={cancelEditingPrice}
-                                      className="text-gray-600 hover:text-gray-800 p-1.5"
-                                      title="Cancelar"
-                                    >
-                                      <X className="w-5 h-5" />
-                                    </button>
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="number"
+                                        value={editingPrice}
+                                        onChange={(e) => setEditingPrice(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            saveEditedPrice(itemId)
+                                          } else if (e.key === 'Escape') {
+                                            cancelEditingPrice()
+                                          }
+                                        }}
+                                        className="w-20 px-2 py-1.5 text-base font-bold text-right border border-primary-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        autoFocus
+                                        step="0.01"
+                                        min="0.01"
+                                      />
+                                      <button
+                                        onClick={() => saveEditedPrice(itemId)}
+                                        className="text-green-600 hover:text-green-800 p-1.5"
+                                        title="Guardar"
+                                      >
+                                        <Check className="w-5 h-5" />
+                                      </button>
+                                      <button
+                                        onClick={cancelEditingPrice}
+                                        className="text-gray-600 hover:text-gray-800 p-1.5"
+                                        title="Cancelar"
+                                      >
+                                        <X className="w-5 h-5" />
+                                      </button>
+                                    </div>
+                                    {!taxConfig?.igvExempt && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const current = parseFloat(editingPrice) || 0
+                                          const igvRate = taxConfig?.igvRate || 18
+                                          if (editingPriceWithoutIgv) {
+                                            setEditingPrice((current * (1 + igvRate / 100)).toFixed(2))
+                                          } else {
+                                            setEditingPrice((current / (1 + igvRate / 100)).toFixed(2))
+                                          }
+                                          setEditingPriceWithoutIgv(!editingPriceWithoutIgv)
+                                        }}
+                                        className={`text-[10px] px-1.5 py-0.5 rounded self-end ${editingPriceWithoutIgv ? 'bg-blue-100 text-blue-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                      >
+                                        {editingPriceWithoutIgv ? 'Sin IGV' : 'Con IGV'}
+                                      </button>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1">
