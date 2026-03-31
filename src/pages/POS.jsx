@@ -5117,11 +5117,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 type="button"
                                 onClick={() => {
                                   // Calcular el monto correcto (con detracción si aplica)
-                                  let montoInicial = total
+                                  let montoInicial = amounts.total
                                   if (hasDetraction && detractionType && paymentInstallments.length === 0) {
                                     const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                                    const detractionAmount = Math.round((total * detractionRate) / 100)
-                                    montoInicial = total - detractionAmount
+                                    const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
+                                    montoInicial = amounts.total - detractionAmt
                                   }
                                   const newInstallment = {
                                     number: paymentInstallments.length + 1,
@@ -5154,11 +5154,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   type="button"
                                   onClick={() => {
                                     // Calcular el neto a pagar (con detracción si aplica)
-                                    let montoNeto = total
+                                    let montoNeto = amounts.total
                                     if (hasDetraction && detractionType) {
                                       const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                                      const detractionAmount = Math.round((total * detractionRate) / 100)
-                                      montoNeto = total - detractionAmount
+                                      const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
+                                      montoNeto = amounts.total - detractionAmt
                                     }
                                     setPaymentInstallments([{ ...paymentInstallments[0], amount: montoNeto.toFixed(2) }])
                                   }}
