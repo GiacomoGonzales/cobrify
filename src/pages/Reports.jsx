@@ -125,6 +125,26 @@ const exportExcelFile = async (workbook, fileName) => {
   }
 }
 
+// Helper: usar emissionDate (fecha de emisión del POS) en vez de createdAt
+const getInvoiceDate = (invoice) => {
+  if (invoice?.emissionDate) {
+    if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
+    if (typeof invoice.emissionDate === 'string') {
+      const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
+      if (createdAt) {
+        const [year, month, day] = invoice.emissionDate.split('-').map(Number)
+        const combined = new Date(createdAt)
+        combined.setFullYear(year, month - 1, day)
+        return combined
+      }
+      return new Date(invoice.emissionDate + 'T12:00:00')
+    }
+    return new Date(invoice.emissionDate)
+  }
+  if (!invoice?.createdAt) return null
+  return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
+}
+
 export default function Reports() {
   const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess } = useAppContext()
 
@@ -368,10 +388,8 @@ export default function Reports() {
 
       return validInvoices
         .filter(invoice => {
-          if (!invoice.createdAt) return false
-          const invoiceDate = invoice.createdAt.toDate
-            ? invoice.createdAt.toDate()
-            : new Date(invoice.createdAt)
+          const invoiceDate = getInvoiceDate(invoice)
+          if (!invoiceDate) return false
           return invoiceDate >= startDate && invoiceDate <= endDate
         })
         .map(addCostCalculations)
@@ -401,10 +419,8 @@ export default function Reports() {
 
     return validInvoices
       .filter(invoice => {
-        if (!invoice.createdAt) return false
-        const invoiceDate = invoice.createdAt.toDate
-          ? invoice.createdAt.toDate()
-          : new Date(invoice.createdAt)
+        const invoiceDate = getInvoiceDate(invoice)
+        if (!invoiceDate) return false
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
@@ -449,13 +465,11 @@ export default function Reports() {
 
     return invoices
       .filter(invoice => {
-        if (!invoice.createdAt) return false
+        const invoiceDate = getInvoiceDate(invoice)
+        if (!invoiceDate) return false
         // Excluir anuladas y en proceso de anulación
         if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
         if (invoice.convertedTo) return false
-        const invoiceDate = invoice.createdAt.toDate
-          ? invoice.createdAt.toDate()
-          : new Date(invoice.createdAt)
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
       .reduce((sum, inv) => sum + (inv.total || 0), 0)
@@ -937,10 +951,8 @@ export default function Reports() {
       // 'all' - mostrar por mes
       groupBy = 'month'
       invoices.forEach(invoice => {
-        if (!invoice.createdAt) return
-        const invoiceDate = invoice.createdAt.toDate
-          ? invoice.createdAt.toDate()
-          : new Date(invoice.createdAt)
+        const invoiceDate = getInvoiceDate(invoice)
+        if (!invoiceDate) return
         const key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
 
         if (!periodsData[key]) {
@@ -955,10 +967,8 @@ export default function Reports() {
 
     // Procesar facturas filtradas
     filteredInvoices.forEach(invoice => {
-      if (!invoice.createdAt) return
-      const invoiceDate = invoice.createdAt.toDate
-        ? invoice.createdAt.toDate()
-        : new Date(invoice.createdAt)
+      const invoiceDate = getInvoiceDate(invoice)
+      if (!invoiceDate) return
 
       let key
       if (groupBy === 'day') {
@@ -2321,7 +2331,7 @@ export default function Reports() {
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <span className="text-gray-500">
-                          {invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-'}
+                          {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : '-'}
                         </span>
                         <div className="flex items-center gap-3">
                           <span className="text-green-600">+{formatCurrency(invoice.profit || 0)}</span>
@@ -2381,13 +2391,7 @@ export default function Reports() {
                           <TableCell className="font-medium">{invoice.number}</TableCell>
                           <TableCell>{invoice.customer?.name || 'Cliente General'}</TableCell>
                           <TableCell>
-                            {invoice.createdAt
-                              ? formatDate(
-                                  invoice.createdAt.toDate
-                                    ? invoice.createdAt.toDate()
-                                    : invoice.createdAt
-                                )
-                              : '-'}
+                            {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : '-'}
                           </TableCell>
                           <TableCell>
                             <Badge variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
