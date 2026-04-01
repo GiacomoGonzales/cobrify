@@ -38,6 +38,12 @@ import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import { getTables } from '@/services/tableService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import {
+  deleteAllProducts,
+  deleteAllCustomers,
+  deleteAllSuppliers,
+  countDocuments
+} from '@/services/bulkDeleteService'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -358,6 +364,14 @@ export default function Settings() {
   // Estado para cuentas bancarias estructuradas
   const [bankAccounts, setBankAccounts] = useState([])
   // Estructura: [{ bank: 'BCP', currency: 'PEN', accountNumber: '123-456789-0-12', cci: '00212345678901234567' }]
+
+  // Estados para eliminación masiva de datos
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [bulkDeleteType, setBulkDeleteType] = useState(null) // 'products' | 'customers' | 'suppliers'
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
+  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0 })
 
   const {
     register,
@@ -2014,6 +2028,80 @@ export default function Settings() {
       </div>
     )
   }
+
+  // Funciones para eliminación masiva
+  const bulkDeleteLabels = {
+    products: { name: 'Productos', collection: 'products' },
+    customers: { name: 'Clientes', collection: 'customers' },
+    suppliers: { name: 'Proveedores', collection: 'suppliers' },
+  }
+
+  const loadBulkDeleteCounts = async () => {
+    if (!hasFeature || !hasFeature('bulkDelete')) return
+    const businessId = getBusinessId()
+    const [products, customers, suppliers] = await Promise.all([
+      countDocuments(businessId, 'products'),
+      countDocuments(businessId, 'customers'),
+      countDocuments(businessId, 'suppliers'),
+    ])
+    setBulkDeleteCounts({ products, customers, suppliers })
+  }
+
+  const openBulkDeleteModal = (type) => {
+    setBulkDeleteType(type)
+    setBulkDeleteConfirmText('')
+    setBulkDeleteProgress({ deleted: 0, total: 0, percentage: 0 })
+    setShowBulkDeleteModal(true)
+  }
+
+  const executeBulkDelete = async () => {
+    if (bulkDeleteConfirmText !== 'ELIMINAR') {
+      toast.error('Debes escribir ELIMINAR para confirmar')
+      return
+    }
+
+    setIsBulkDeleting(true)
+    const businessId = getBusinessId()
+
+    try {
+      let result
+      const onProgress = (progress) => setBulkDeleteProgress(progress)
+
+      switch (bulkDeleteType) {
+        case 'products':
+          result = await deleteAllProducts(businessId, onProgress)
+          break
+        case 'customers':
+          result = await deleteAllCustomers(businessId, onProgress)
+          break
+        case 'suppliers':
+          result = await deleteAllSuppliers(businessId, onProgress)
+          break
+        default:
+          throw new Error('Tipo de eliminación no válido')
+      }
+
+      if (result.success) {
+        toast.success(`${result.deleted} ${bulkDeleteLabels[bulkDeleteType].name.toLowerCase()} eliminados correctamente`)
+        setShowBulkDeleteModal(false)
+        loadBulkDeleteCounts() // Recargar conteos
+      } else {
+        toast.error(`Error: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error en eliminación masiva:', error)
+      toast.error(`Error: ${error.message}`)
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }
+
+  // Cargar conteos cuando se abre la pestaña de limpieza
+  useEffect(() => {
+    if (activeTab === 'limpieza') {
+      loadBulkDeleteCounts()
+    }
+  }, [activeTab])
 
   // Check if user is on trial plan
   const isTrialUser = subscription?.plan === 'trial'
@@ -8198,13 +8286,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Productos</h4>
-                    <p className="text-sm text-gray-500">Eliminar todos los productos del catálogo</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los productos del catálogo
+                      {bulkDeleteCounts.products > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.products} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('products')}
+                    disabled={bulkDeleteCounts.products === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8215,13 +8309,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Clientes</h4>
-                    <p className="text-sm text-gray-500">Eliminar todos los clientes registrados</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los clientes registrados
+                      {bulkDeleteCounts.customers > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.customers} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('customers')}
+                    disabled={bulkDeleteCounts.customers === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8232,13 +8332,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Proveedores</h4>
-                    <p className="text-sm text-gray-500">Eliminar todos los proveedores</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los proveedores
+                      {bulkDeleteCounts.suppliers > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.suppliers} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('suppliers')}
+                    disabled={bulkDeleteCounts.suppliers === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8348,6 +8454,93 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Modal: Confirmación de Eliminación Masiva */}
+      <Modal
+        isOpen={showBulkDeleteModal}
+        onClose={() => !isBulkDeleting && setShowBulkDeleteModal(false)}
+        title={`Eliminar ${bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name : ''}`}
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {/* Advertencia */}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertTriangle className="w-6 h-6 text-red-600 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-red-900">Esta acción es IRREVERSIBLE</h4>
+                <p className="text-sm text-red-800 mt-1">
+                  Estás a punto de eliminar <strong>TODOS</strong> los {bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name.toLowerCase() : ''}.
+                  Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Confirmación */}
+          {!isBulkDeleting ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Para confirmar, escribe <strong className="text-red-600">ELIMINAR</strong> en el campo:
+              </label>
+              <Input
+                type="text"
+                value={bulkDeleteConfirmText}
+                onChange={(e) => setBulkDeleteConfirmText(e.target.value.toUpperCase())}
+                placeholder="Escribe ELIMINAR"
+                className="text-center font-mono text-lg"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span>Progreso:</span>
+                <span className="font-medium">{bulkDeleteProgress.deleted} / {bulkDeleteProgress.total}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className="bg-red-600 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${bulkDeleteProgress.percentage}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 text-center">
+                Eliminando... Por favor no cierres esta ventana.
+              </p>
+            </div>
+          )}
+
+          {/* Botones */}
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={isBulkDeleting}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={executeBulkDelete}
+              disabled={bulkDeleteConfirmText !== 'ELIMINAR' || isBulkDeleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar Todo
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
       <Modal
