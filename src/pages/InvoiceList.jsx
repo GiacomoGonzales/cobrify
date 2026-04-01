@@ -3873,7 +3873,7 @@ Gracias por tu preferencia.`
               <div>
                 <span className="text-sm font-medium text-amber-800">Evitar duplicados por conversión</span>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  Excluye las boletas generadas desde notas de venta y las notas ya convertidas para evitar contar ventas dobles.
+                  Excluye facturas y boletas generadas desde notas de venta, y las notas ya convertidas para evitar contar ventas dobles. Desmarca esta opción si quieres ver todos los documentos.
                 </p>
               </div>
             </label>
