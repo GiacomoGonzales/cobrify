@@ -53,6 +53,8 @@ export default function Orders() {
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
+  const [ultraCompactKitchen, setUltraCompactKitchen] = useState(false)
+  const [simplePrint, setSimplePrint] = useState(false)
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
@@ -75,6 +77,8 @@ export default function Orders() {
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
           setCompactPrint(printerConfigResult.config.compactPrint || false)
+          setUltraCompactKitchen(printerConfigResult.config.ultraCompactKitchen || false)
+          setSimplePrint(printerConfigResult.config.simplePrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1290,6 +1294,8 @@ export default function Orders() {
                     companySettings={companySettings}
                     webPrintLegible={webPrintLegible}
                     compactPrint={compactPrint}
+                    ultraCompactKitchen={ultraCompactKitchen}
+                    simplePrint={simplePrint}
                     stationName={ticket.name}
                   />
                 </div>
@@ -1300,6 +1306,8 @@ export default function Orders() {
                 companySettings={companySettings}
                 webPrintLegible={webPrintLegible}
                 compactPrint={compactPrint}
+                ultraCompactKitchen={ultraCompactKitchen}
+                simplePrint={simplePrint}
               />
             )}
           </div>

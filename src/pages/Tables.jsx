@@ -92,6 +92,7 @@ export default function Tables() {
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
   const [ultraCompactKitchen, setUltraCompactKitchen] = useState(false)
+  const [simplePrint, setSimplePrint] = useState(false)
   const kitchenTicketRef = useRef()
   const [kitchenStations, setKitchenStations] = useState([])
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
@@ -144,6 +145,7 @@ export default function Tables() {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setUltraCompactKitchen(printerConfigResult.config.ultraCompactKitchen || false)
+          setSimplePrint(printerConfigResult.config.simplePrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1790,6 +1792,7 @@ export default function Tables() {
                     webPrintLegible={webPrintLegible}
                     compactPrint={compactPrint}
                     ultraCompactKitchen={ultraCompactKitchen}
+                    simplePrint={simplePrint}
                     stationName={ticket.name}
                   />
                 </div>
@@ -1801,6 +1804,7 @@ export default function Tables() {
                 webPrintLegible={webPrintLegible}
                 compactPrint={compactPrint}
                 ultraCompactKitchen={ultraCompactKitchen}
+                simplePrint={simplePrint}
               />
             )}
           </div>

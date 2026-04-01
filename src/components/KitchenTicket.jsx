@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, stationName = null }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, simplePrint = false, stationName = null }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -519,6 +519,31 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           padding: 1px !important;
           margin-bottom: 1px !important;
           border-width: 1px !important;
+        }
+        ` : ''}
+
+        ${simplePrint ? `
+        /* === MODO SIMPLE (SIN FONDOS NEGROS) === */
+        .order-number-big {
+          background: #fff !important;
+          color: #000 !important;
+          border: 3px solid #000 !important;
+        }
+        .item-modifiers {
+          background: #f5f5f5 !important;
+          color: #000 !important;
+          border: 2px solid #000 !important;
+        }
+        .modifier-label {
+          color: #000 !important;
+        }
+        .modifier-option {
+          color: #000 !important;
+        }
+        .station-name {
+          background: #fff !important;
+          color: #000 !important;
+          border: 3px solid #000 !important;
         }
         ` : ''}
       `}</style>
