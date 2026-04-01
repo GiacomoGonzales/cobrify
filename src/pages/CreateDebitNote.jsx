@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, getDocumentSeries } from '@/services/firestoreService'
+import { getInvoices, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { getAuth } from 'firebase/auth'
 
@@ -37,6 +37,7 @@ export default function CreateDebitNote() {
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [series, setSeries] = useState(null)
   const [message, setMessage] = useState(null)
+  const [companySettings, setCompanySettings] = useState(null)
 
   // Form data
   const [formData, setFormData] = useState({
@@ -69,9 +70,10 @@ export default function CreateDebitNote() {
 
     setIsLoading(true)
     try {
-      const [invoicesResult, seriesResult] = await Promise.all([
+      const [invoicesResult, seriesResult, settingsResult] = await Promise.all([
         getInvoices(user.uid),
-        getDocumentSeries(user.uid)
+        getDocumentSeries(user.uid),
+        getCompanySettings(user.uid)
       ])
 
       if (invoicesResult.success) {
@@ -85,6 +87,10 @@ export default function CreateDebitNote() {
 
       if (seriesResult.success && seriesResult.data) {
         setSeries(seriesResult.data)
+      }
+
+      if (settingsResult.success && settingsResult.data) {
+        setCompanySettings(settingsResult.data)
       }
     } catch (error) {
       console.error('Error:', error)
@@ -218,49 +224,58 @@ export default function CreateDebitNote() {
 
       const debitNoteId = result.id
 
-      // 2. Enviar a SUNAT
-      setMessage({ type: 'info', text: 'Enviando a SUNAT...' })
+      // 2. Enviar a SUNAT solo si está configurado el envío automático
+      if (companySettings?.autoSendToSunat) {
+        setMessage({ type: 'info', text: 'Enviando a SUNAT...' })
 
-      const auth = getAuth()
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error('Usuario no autenticado')
-      }
+        const auth = getAuth()
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          throw new Error('Usuario no autenticado')
+        }
 
-      const idToken = await currentUser.getIdToken()
+        const idToken = await currentUser.getIdToken()
 
-      const sunatResponse = await fetch(SEND_DEBIT_NOTE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          userId: user.uid,
-          debitNoteId: debitNoteId
+        const sunatResponse = await fetch(SEND_DEBIT_NOTE_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            userId: user.uid,
+            debitNoteId: debitNoteId
+          })
         })
-      })
 
-      const sunatResult = await sunatResponse.json()
+        const sunatResult = await sunatResponse.json()
 
-      if (sunatResponse.ok && sunatResult.success) {
+        if (sunatResponse.ok && sunatResult.success) {
+          setMessage({
+            type: 'success',
+            text: `Nota de Débito ${debitNoteNumber} aceptada por SUNAT`
+          })
+          setTimeout(() => appNavigate('facturas'), 2000)
+        } else if (sunatResponse.ok && sunatResult.status === 'signed') {
+          setMessage({
+            type: 'warning',
+            text: `Nota de Débito ${debitNoteNumber} firmada pero pendiente de envío a SUNAT. ${sunatResult.message || ''}`
+          })
+          setTimeout(() => appNavigate('facturas'), 3000)
+        } else {
+          // El documento fue creado pero rechazado por SUNAT
+          setMessage({
+            type: 'error',
+            text: sunatResult.error || sunatResult.message || 'Error al enviar a SUNAT. La nota de débito fue creada pero no aceptada.'
+          })
+        }
+      } else {
+        // Sin envío automático - solo crear el documento
         setMessage({
           type: 'success',
-          text: `Nota de Débito ${debitNoteNumber} aceptada por SUNAT`
+          text: `Nota de Débito ${debitNoteNumber} creada. Envíala a SUNAT desde la lista de comprobantes.`
         })
         setTimeout(() => appNavigate('facturas'), 2000)
-      } else if (sunatResponse.ok && sunatResult.status === 'signed') {
-        setMessage({
-          type: 'warning',
-          text: `Nota de Débito ${debitNoteNumber} firmada pero pendiente de envío a SUNAT. ${sunatResult.message || ''}`
-        })
-        setTimeout(() => appNavigate('facturas'), 3000)
-      } else {
-        // El documento fue creado pero rechazado por SUNAT
-        setMessage({
-          type: 'error',
-          text: sunatResult.error || sunatResult.message || 'Error al enviar a SUNAT. La nota de débito fue creada pero no aceptada.'
-        })
       }
 
     } catch (error) {

@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction } from '@/services/firestoreService'
+import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
@@ -48,6 +48,7 @@ export default function CreateCreditNote() {
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [series, setSeries] = useState(null)
   const [message, setMessage] = useState(null)
+  const [companySettings, setCompanySettings] = useState(null)
 
   // Modo de nota de crédito (Cobrify o Externa)
   const [mode, setMode] = useState(invoiceIdParam ? CREDIT_NOTE_MODES.COBRIFY : CREDIT_NOTE_MODES.COBRIFY)
@@ -142,9 +143,10 @@ export default function CreateCreditNote() {
 
     setIsLoading(true)
     try {
-      const [invoicesResult, seriesResult] = await Promise.all([
+      const [invoicesResult, seriesResult, settingsResult] = await Promise.all([
         getInvoices(user.uid),
-        getDocumentSeries(user.uid)
+        getDocumentSeries(user.uid),
+        getCompanySettings(user.uid)
       ])
 
       if (invoicesResult.success) {
@@ -158,6 +160,10 @@ export default function CreateCreditNote() {
 
       if (seriesResult.success && seriesResult.data) {
         setSeries(seriesResult.data)
+      }
+
+      if (settingsResult.success && settingsResult.data) {
+        setCompanySettings(settingsResult.data)
       }
     } catch (error) {
       console.error('Error:', error)
@@ -394,6 +400,18 @@ export default function CreateCreditNote() {
         }
         await updateDocumentSeries(user.uid, updatedSeries)
 
+        // Envío automático a SUNAT si está configurado
+        if (companySettings?.autoSendToSunat) {
+          console.log('🚀 Enviando Nota de Crédito (externa) automáticamente a SUNAT...')
+          sendInvoiceToSunat(user.uid, result.id)
+            .then(() => {
+              console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+            })
+            .catch((sunatError) => {
+              console.error('❌ Error al enviar NC a SUNAT:', sunatError)
+            })
+        }
+
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente' })
         setTimeout(() => appNavigate('facturas'), 2000)
       } else {
@@ -602,6 +620,18 @@ export default function CreateCreditNote() {
             console.warn('Error al devolver stock:', stockError)
             // No fallar la operación si hay error de stock
           }
+        }
+
+        // Envío automático a SUNAT si está configurado
+        if (companySettings?.autoSendToSunat) {
+          console.log('🚀 Enviando Nota de Crédito automáticamente a SUNAT...')
+          sendInvoiceToSunat(user.uid, result.id)
+            .then(() => {
+              console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+            })
+            .catch((sunatError) => {
+              console.error('❌ Error al enviar NC a SUNAT:', sunatError)
+            })
         }
 
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente. Stock restaurado.' })
