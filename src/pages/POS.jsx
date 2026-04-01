@@ -1556,9 +1556,15 @@ export default function POS() {
           subcategoryIds.includes(p.category)
       }
 
+      // Filtro de stock: ocultar productos con stock 0 si está habilitado
+      if (businessSettings?.posCustomFields?.hideOutOfStockInPOS && p.trackStock !== false) {
+        const totalStock = p.stock || 0
+        if (totalStock <= 0) return false
+      }
+
       return matchesSearch && matchesCategory
     })
-  }, [products, searchTerm, selectedCategoryFilter, categories])
+  }, [products, searchTerm, selectedCategoryFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS])
 
   // Apply pagination only when there's no search term (optimizado con useMemo)
   const displayedProducts = React.useMemo(() => {

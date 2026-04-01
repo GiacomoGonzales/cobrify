@@ -310,6 +310,7 @@ export default function Settings() {
     showGoodsServiceCodeField: false, // Bien o Servicio (código SUNAT)
     // Control de lotes y vencimientos en compras
     showBatchExpiryInPurchase: false, // Mostrar campos de lote y fecha de vencimiento en Nueva Compra
+    hideOutOfStockInPOS: false, // Ocultar productos con stock 0 en el POS
   })
 
   // Estados para cambio de contraseña
@@ -2852,6 +2853,22 @@ export default function Settings() {
                       />
                     </label>
                   )}
+
+                  {/* Ocultar productos sin stock en POS */}
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.hideOutOfStockInPOS ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
+                      <span className="text-xs text-gray-500">No mostrar productos con stock 0 en el Punto de Venta</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.hideOutOfStockInPOS}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
 
                 </div>
               </div>
