@@ -42,6 +42,8 @@ import {
   deleteAllProducts,
   deleteAllCustomers,
   deleteAllSuppliers,
+  deleteAllInvoices,
+  deleteAllPurchases,
   countDocuments
 } from '@/services/bulkDeleteService'
 
@@ -371,7 +373,7 @@ export default function Settings() {
   const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
-  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0 })
+  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0 })
 
   const {
     register,
@@ -2034,17 +2036,21 @@ export default function Settings() {
     products: { name: 'Productos', collection: 'products' },
     customers: { name: 'Clientes', collection: 'customers' },
     suppliers: { name: 'Proveedores', collection: 'suppliers' },
+    invoices: { name: 'Ventas/Comprobantes', collection: 'invoices' },
+    purchases: { name: 'Compras', collection: 'purchases' },
   }
 
   const loadBulkDeleteCounts = async () => {
     if (!hasFeature || !hasFeature('bulkDelete')) return
     const businessId = getBusinessId()
-    const [products, customers, suppliers] = await Promise.all([
+    const [products, customers, suppliers, invoices, purchases] = await Promise.all([
       countDocuments(businessId, 'products'),
       countDocuments(businessId, 'customers'),
       countDocuments(businessId, 'suppliers'),
+      countDocuments(businessId, 'invoices'),
+      countDocuments(businessId, 'purchases'),
     ])
-    setBulkDeleteCounts({ products, customers, suppliers })
+    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases })
   }
 
   const openBulkDeleteModal = (type) => {
@@ -2076,6 +2082,12 @@ export default function Settings() {
           break
         case 'suppliers':
           result = await deleteAllSuppliers(businessId, onProgress)
+          break
+        case 'invoices':
+          result = await deleteAllInvoices(businessId, onProgress)
+          break
+        case 'purchases':
+          result = await deleteAllPurchases(businessId, onProgress)
           break
         default:
           throw new Error('Tipo de eliminación no válido')
@@ -8355,13 +8367,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Ventas / Comprobantes</h4>
-                    <p className="text-sm text-gray-500">Eliminar todas las facturas, boletas y notas de venta</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las facturas, boletas y notas de venta
+                      {bulkDeleteCounts.invoices > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.invoices} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 2')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('invoices')}
+                    disabled={bulkDeleteCounts.invoices === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8372,13 +8390,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Compras</h4>
-                    <p className="text-sm text-gray-500">Eliminar todas las compras registradas</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las compras registradas
+                      {bulkDeleteCounts.purchases > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.purchases} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 2')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('purchases')}
+                    disabled={bulkDeleteCounts.purchases === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
