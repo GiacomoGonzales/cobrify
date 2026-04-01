@@ -128,7 +128,7 @@ export default function Accounting() {
   const downloadCdr = async (inv) => {
     const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
     if (url) {
-      const cdrFilename = `CDR-${(inv.number || 'doc').replace(/\//g, '-')}.zip`
+      const cdrFilename = `CDR-${(inv.number || 'doc').replace(/\//g, '-')}.xml`
       await forceDownload(url, cdrFilename)
     } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
       const data = inv.cdrData || inv.sunatResponse.cdrData
