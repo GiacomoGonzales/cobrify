@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2 } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -43,7 +43,7 @@ import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId, refreshBusinessSettings } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -2029,6 +2029,8 @@ export default function Settings() {
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
     { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
+    // Solo mostrar si tiene el feature bulkDelete
+    ...(hasFeature && hasFeature('bulkDelete') ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
   ]
 
   return (
@@ -8160,6 +8162,192 @@ export default function Settings() {
           </div>
         </div>
       </>)}
+
+      {/* Tab: Limpieza de Datos */}
+      {activeTab === 'limpieza' && (
+        <div className="space-y-6">
+          {/* Advertencia */}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertTriangle className="w-6 h-6 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-base font-bold text-red-900">⚠️ ZONA DE PELIGRO</h4>
+                <p className="text-sm text-red-800 mt-1">
+                  Las acciones en esta sección son <strong>IRREVERSIBLES</strong>. Una vez eliminados los datos,
+                  no podrán ser recuperados. Asegúrate de tener respaldos antes de proceder.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Secciones de Limpieza */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                Limpieza de Datos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-6">
+                Selecciona qué datos deseas eliminar. Cada acción requiere confirmación.
+              </p>
+
+              <div className="space-y-4">
+                {/* Productos */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Productos</h4>
+                    <p className="text-sm text-gray-500">Eliminar todos los productos del catálogo</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Clientes */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Clientes</h4>
+                    <p className="text-sm text-gray-500">Eliminar todos los clientes registrados</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Proveedores */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Proveedores</h4>
+                    <p className="text-sm text-gray-500">Eliminar todos los proveedores</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 1')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Ventas/Facturas */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Ventas / Comprobantes</h4>
+                    <p className="text-sm text-gray-500">Eliminar todas las facturas, boletas y notas de venta</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 2')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Compras */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Compras</h4>
+                    <p className="text-sm text-gray-500">Eliminar todas las compras registradas</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 2')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Movimientos de Stock */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Movimientos de Stock</h4>
+                    <p className="text-sm text-gray-500">Eliminar historial de movimientos de inventario</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Guías de Remisión */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Guías de Remisión</h4>
+                    <p className="text-sm text-gray-500">Eliminar todas las guías de remisión</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Cotizaciones */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Cotizaciones</h4>
+                    <p className="text-sm text-gray-500">Eliminar todas las cotizaciones</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nota informativa */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-semibold text-blue-900">Próximamente</h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  Las funciones de limpieza se irán habilitando gradualmente.
+                  Cada una requerirá confirmación doble para evitar eliminaciones accidentales.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
       <Modal
