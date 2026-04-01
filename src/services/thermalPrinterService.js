@@ -498,6 +498,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
       simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
       cutFeedLines: printerConfig.cutFeedLines ?? 5, // Líneas de avance antes del corte
+      ultraCompactKitchen: printerConfig.ultraCompactKitchen || false, // Comandas ultracompactas
       updatedAt: new Date().toISOString()
     };
 
