@@ -67,6 +67,7 @@ const routeToPageId = {
   '/app/nota-debito': 'invoices',
   '/app/alertas-veterinaria': 'vet-alerts',
   '/app/agenda-veterinaria': 'vet-agenda',
+  '/app/contabilidad': 'accounting',
 }
 
 export default function MainLayout() {
@@ -527,6 +528,7 @@ export default function MainLayout() {
         'student-payment-control': '/app/control-pagos-alumnos',
         'vet-alerts': '/app/alertas-veterinaria',
         'vet-agenda': '/app/agenda-veterinaria',
+        'accounting': '/app/contabilidad',
       }
       const firstAllowedRoute = pageRouteMap[allowedPages[0]] || '/app/pos'
       return <Navigate to={firstAllowedRoute} replace />

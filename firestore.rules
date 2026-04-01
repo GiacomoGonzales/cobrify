@@ -531,6 +531,12 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Mass Transfers (Transferencias masivas entre almacenes)
+      match /massTransfers/{transferId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Motoristas (Repartidores)
       match /motoristas/{motoristaId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

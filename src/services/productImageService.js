@@ -1,5 +1,6 @@
 import { storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { uploadToCloudinary } from '@/utils/cloudinary'
 
 /**
  * Comprime y redimensiona una imagen antes de subirla
@@ -75,38 +76,12 @@ export const uploadProductImage = async (businessId, productId, file) => {
       throw new Error('La imagen es muy grande. Máximo 5MB.')
     }
 
-    // Comprimir imagen (con fallback si falla la compresión)
-    console.log('📸 Comprimiendo imagen...')
-    let compressedBlob
-    try {
-      compressedBlob = await compressImage(file)
-    } catch (compressError) {
-      console.warn('⚠️ Compresión falló, usando archivo original:', compressError)
-      compressedBlob = file
-    }
+    // Subir a Cloudinary (optimización automática en delivery)
+    console.log('☁️ Subiendo imagen a Cloudinary...')
+    const cloudinaryUrl = await uploadToCloudinary(file)
+    console.log('✅ Imagen subida exitosamente:', cloudinaryUrl)
 
-    // Generar nombre único
-    const timestamp = Date.now()
-    const storageFileName = `${productId}_${timestamp}.jpg`
-    const storagePath = `products/${businessId}/${storageFileName}`
-
-    // Subir a Storage
-    console.log('☁️ Subiendo imagen a Storage...')
-    const storageRef = ref(storage, storagePath)
-    await uploadBytes(storageRef, compressedBlob, {
-      contentType: 'image/jpeg',
-      customMetadata: {
-        productId,
-        businessId,
-        uploadedAt: new Date().toISOString()
-      }
-    })
-
-    // Obtener URL de descarga
-    const downloadURL = await getDownloadURL(storageRef)
-    console.log('✅ Imagen subida exitosamente:', downloadURL)
-
-    return downloadURL
+    return cloudinaryUrl
   } catch (error) {
     console.error('❌ Error al subir imagen:', error)
     throw error

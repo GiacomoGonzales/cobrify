@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { optimizeImageUrl } from '@/utils/cloudinary'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -500,7 +501,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
         <div className="relative bg-gray-100 aspect-square">
           {product.imageUrl ? (
             <img
-              src={product.imageUrl}
+              src={optimizeImageUrl(product.imageUrl, 'detail')}
               alt={product.name}
               className={`w-full h-full object-cover ${outOfStock ? 'opacity-50 grayscale' : ''}`}
             />
@@ -1490,7 +1491,7 @@ function CartDrawer({
                   <div key={item.cartItemId || item.id} className="flex gap-4 bg-gray-50 rounded-2xl p-4">
                     {item.imageUrl ? (
                       <img
-                        src={item.imageUrl}
+                        src={optimizeImageUrl(item.imageUrl, 'thumbnail')}
                         alt={item.name}
                         className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
                       />
@@ -2708,7 +2709,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <div className="relative bg-gray-100 overflow-hidden">
                     {product.imageUrl ? (
                       <img
-                        src={product.imageUrl}
+                        src={optimizeImageUrl(product.imageUrl, 'card')}
                         alt={product.name}
                         loading="lazy"
                         className={`w-full h-auto object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
@@ -2818,7 +2819,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
                     {product.imageUrl ? (
                       <img
-                        src={product.imageUrl}
+                        src={optimizeImageUrl(product.imageUrl, 'thumbnail')}
                         alt={product.name}
                         loading="lazy"
                         className={`w-full h-full object-cover ${outOfStock ? 'grayscale opacity-60' : ''}`}
