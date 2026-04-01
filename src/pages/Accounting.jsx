@@ -70,8 +70,8 @@ export default function Accounting() {
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(inv => inv.documentType === 'factura' || inv.documentType === 'boleta')
         .sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.() || new Date(0)
-          const dateB = b.createdAt?.toDate?.() || new Date(0)
+          const dateA = a.emissionDate ? new Date(a.emissionDate) : (a.createdAt?.toDate?.() || new Date(0))
+          const dateB = b.emissionDate ? new Date(b.emissionDate) : (b.createdAt?.toDate?.() || new Date(0))
           return dateB - dateA
         })
       setInvoices(data)
@@ -81,6 +81,26 @@ export default function Accounting() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helper: usar emissionDate (fecha de emisión del POS) en vez de createdAt
+  const getInvoiceDate = (invoice) => {
+    if (invoice?.emissionDate) {
+      if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
+      if (typeof invoice.emissionDate === 'string') {
+        const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
+        if (createdAt) {
+          const [year, month, day] = invoice.emissionDate.split('-').map(Number)
+          const combined = new Date(createdAt)
+          combined.setFullYear(year, month - 1, day)
+          return combined
+        }
+        return new Date(invoice.emissionDate + 'T12:00:00')
+      }
+      return new Date(invoice.emissionDate)
+    }
+    if (!invoice?.createdAt) return null
+    return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
   }
 
   const formatDate = (timestamp) => {
@@ -386,7 +406,7 @@ export default function Accounting() {
           inv.documentType === 'factura' ? 'Factura' : 'Boleta',
           inv.customer?.businessName || inv.customer?.name || '-',
           inv.customer?.documentNumber || '-',
-          formatDate(inv.createdAt),
+          formatDate(getInvoiceDate(inv)),
           inv.total || 0,
           getSunatStatus(inv) === 'accepted' ? 'Aceptado' : getSunatStatus(inv) === 'rejected' ? 'Rechazado' : getSunatStatus(inv) === 'voided' ? 'Anulado' : 'Pendiente',
           hasXml(inv) ? 'Sí' : 'No',
@@ -431,7 +451,7 @@ export default function Accounting() {
     if (filterCdr === 'without' && hasCdr(inv)) return false
 
     if (dateFrom || dateTo) {
-      const invDate = inv.createdAt?.toDate?.() || (inv.createdAt?.seconds ? new Date(inv.createdAt.seconds * 1000) : null)
+      const invDate = getInvoiceDate(inv)
       if (invDate) {
         if (dateFrom && invDate < new Date(dateFrom + 'T00:00:00')) return false
         if (dateTo && invDate > new Date(dateTo + 'T23:59:59')) return false
@@ -480,7 +500,7 @@ export default function Accounting() {
         inv.documentType === 'factura' ? 'Factura' : 'Boleta',
         inv.customer?.businessName || inv.customer?.name || '-',
         inv.customer?.documentNumber || '-',
-        formatDate(inv.createdAt),
+        formatDate(getInvoiceDate(inv)),
         inv.total || 0,
         getSunatStatus(inv) === 'accepted' ? 'Aceptado' : getSunatStatus(inv) === 'rejected' ? 'Rechazado' : getSunatStatus(inv) === 'voided' ? 'Anulado' : 'Pendiente',
         hasXml(inv) ? 'Sí' : 'No',
@@ -740,7 +760,7 @@ export default function Accounting() {
                   <p className="text-sm text-gray-700 truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</p>
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
                     <span>{inv.customer?.documentNumber || '-'}</span>
-                    <span>{formatDate(inv.createdAt)}</span>
+                    <span>{formatDate(getInvoiceDate(inv))}</span>
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
                     <div className="flex items-center gap-3">
@@ -810,7 +830,7 @@ export default function Accounting() {
                       </td>
                       <td className="py-3 px-4 max-w-[200px] truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</td>
                       <td className="py-3 px-4">{inv.customer?.documentNumber || '-'}</td>
-                      <td className="py-3 px-4">{formatDate(inv.createdAt)}</td>
+                      <td className="py-3 px-4">{formatDate(getInvoiceDate(inv))}</td>
                       <td className="py-3 px-4 text-right font-medium">S/ {(inv.total || 0).toFixed(2)}</td>
                       <td className="py-3 px-4 text-center"><StatusBadge inv={inv} /></td>
                       <td className="py-3 px-4 text-center">
