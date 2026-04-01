@@ -569,13 +569,14 @@ export default function CreateQuotation() {
   const totalAfterDiscount = Math.max(0, directTotal - discountAmount)
   const discountRatio = directTotal > 0 ? totalAfterDiscount / directTotal : 1
 
+  const discountedTotal = Number(totalAfterDiscount.toFixed(2))
   const discountedSubtotal = Number((baseAmounts.subtotal * discountRatio).toFixed(2))
 
-  // Calcular IGV y total con descuento aplicado
-  const finalIgv = hideIgv ? 0 : Number((discountedSubtotal * 0.18).toFixed(2))
+  // Calcular IGV como diferencia (igual que factura) para evitar diferencia de centavos por redondeo
+  const finalIgv = hideIgv ? 0 : Number((discountedTotal - discountedSubtotal).toFixed(2))
   const finalTotal = hideIgv
-    ? Number(totalAfterDiscount.toFixed(2))
-    : Number((discountedSubtotal + finalIgv).toFixed(2))
+    ? discountedTotal
+    : discountedTotal
 
   const handleCustomerChange = customerId => {
     const customer = customers.find(c => c.id === customerId)

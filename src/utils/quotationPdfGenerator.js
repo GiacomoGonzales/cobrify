@@ -463,8 +463,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   let totalLines = 1
   if (showBusinessName) totalLines += 1
-  if (fullAddress) totalLines += Math.ceil(fullAddress.length / 50)
-  if (phone || email) totalLines += 1
+  if (fullAddress) totalLines += Math.ceil(('DIRECCIÓN: ' + fullAddress.toUpperCase()).length / 50)
+  if (phone) totalLines += 1
+  if (email) totalLines += 1
   if (website) totalLines += 1
 
   const lineSpacing = 10
@@ -496,21 +497,27 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    const addrLines = doc.splitTextToSize(fullAddress, infoColumnWidth - 10)
-    addrLines.slice(0, 2).forEach(line => {
+    const addrLine = 'DIRECCIÓN: ' + fullAddress.toUpperCase()
+    const addrLines = doc.splitTextToSize(addrLine, infoColumnWidth - 10)
+    addrLines.slice(0, 3).forEach(line => {
       doc.text(line, infoCenterX, infoY, { align: 'center' })
       infoY += 9
     })
   }
 
-  if (phone || email) {
+  if (phone) {
     doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    let contactLine = ''
-    if (phone) contactLine += `Tel: ${phone}`
-    if (phone && email) contactLine += '  |  '
-    if (email) contactLine += `Email: ${email}`
-    doc.text(contactLine, infoCenterX, infoY, { align: 'center' })
+    doc.text('TELF: ' + phone.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+    infoY += 9
+  }
+
+  if (email) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(`EMAIL: ${email.toUpperCase()}`, infoCenterX, infoY, { align: 'center' })
     infoY += 9
   }
 
@@ -518,7 +525,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(website, infoCenterX, infoY, { align: 'center' })
+    doc.text(website.toUpperCase(), infoCenterX, infoY, { align: 'center' })
   }
 
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO =====

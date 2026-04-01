@@ -1338,9 +1338,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Límite inferior de página para ítems
   // A4 primera página: respetar espacio del footer (totales, QR, monto en letras, etc.)
   // A5 primera página: no reservar footer (se mueve a siguiente página si no cabe)
+  // Si los items NO caben en una sola página, no reservar footer en pág 1 (se pone en la última)
   // Páginas siguientes: usar casi todo el espacio disponible
   const PAGE_BOTTOM_LIMIT_NEXT = PAGE_HEIGHT - MARGIN_BOTTOM - 15
-  let currentPageBottomLimit = isA5 ? PAGE_BOTTOM_LIMIT_NEXT : FOOTER_AREA_START
+  const fitsOnOnePage = tableY + tableHeight <= FOOTER_AREA_START
+  let currentPageBottomLimit = (isA5 || !fitsOnOnePage) ? PAGE_BOTTOM_LIMIT_NEXT : FOOTER_AREA_START
 
   // Dibujar encabezado de tabla inicial
   let dataRowY = drawTableHeader(tableY)
