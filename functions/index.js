@@ -12,7 +12,7 @@ import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCo
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
-import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseService.js'
+import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
 
 // Initialize Firebase Admin
@@ -5089,7 +5089,38 @@ export const voidInvoice = onRequest(
 
       // Error en la baja
       const errorMsg = statusResult.error || statusResult.description || 'SUNAT rechazó la comunicación de baja'
-      const errorCode = statusResult.code || null
+      const errorCode = String(statusResult.code || '')
+
+      // Verificar si SUNAT dice que la baja ya fue procesada (reintento)
+      const voidErrLower = errorMsg.toLowerCase()
+      const isVoidAlreadyProcessed = (
+        errorCode === '1033' || errorCode.includes('1033') ||
+        voidErrLower.includes('ya fue comunicad') ||
+        voidErrLower.includes('ya existe') ||
+        voidErrLower.includes('registrad') && voidErrLower.includes('baja')
+      )
+
+      if (isVoidAlreadyProcessed) {
+        console.log(`📋 La baja ya fue procesada por SUNAT - tratando como ANULADO`)
+        await voidedDocsRef.doc(voidedDocRef.id).update({
+          status: 'accepted',
+          responseCode: errorCode,
+          processedAt: FieldValue.serverTimestamp()
+        })
+        await invoiceRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidedDocumentId: voidedDocRef.id,
+        })
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'La baja ya fue procesada por SUNAT previamente',
+          voidedDocumentId: voidedDocRef.id
+        })
+        return
+      }
 
       console.error(`❌ Baja rechazada por SUNAT: code=${errorCode}, msg=${errorMsg}`)
 
@@ -5185,64 +5216,119 @@ export const checkVoidStatus = onRequest(
       // Consultar estado en SUNAT
       const businessDoc = await db.collection('businesses').doc(userId).get()
       const businessData = businessDoc.data()
-
-      // Obtener configuración de emisión
-      const emissionConfig = businessData.emissionConfig || {}
-      const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
-
-      const statusResult = await getStatus(voidedData.ticket, {
-        ruc: businessData.ruc,
-        solUser: sunatConfig.solUser,
-        solPassword: sunatConfig.solPassword,
-        environment: sunatConfig.environment || 'beta'
-      })
-
-      if (statusResult.pending) {
-        res.status(200).json({
-          status: 'pending',
-          message: 'Aún en proceso'
-        })
-        return
-      }
-
-      // Actualizar estado
       const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(voidedData.invoiceId)
 
-      if (statusResult.success && statusResult.accepted) {
-        await voidedDocRef.update({
-          status: 'accepted',
-          cdrData: statusResult.cdrData || null,
-          responseCode: statusResult.code,
-          responseDescription: statusResult.description,
-          processedAt: FieldValue.serverTimestamp()
-        })
+      // Detectar si fue enviado por QPSe o SUNAT directo
+      const isQPse = voidedData.method === 'qpse'
 
-        await invoiceRef.update({
-          sunatStatus: 'voided',
-          voidedAt: FieldValue.serverTimestamp()
-        })
+      if (isQPse) {
+        // Consultar estado vía QPSe
+        const emissionConfig = businessData.emissionConfig || {}
+        let qpseConfig = null
+        if (emissionConfig.method === 'qpse' && emissionConfig.qpse) {
+          qpseConfig = emissionConfig.qpse
+        } else if (businessData.qpse?.enabled) {
+          qpseConfig = businessData.qpse
+        }
 
-        res.status(200).json({
-          status: 'voided',
-          message: 'Factura anulada exitosamente'
-        })
+        if (!qpseConfig?.usuario || !qpseConfig?.password) {
+          res.status(400).json({ error: 'QPSe no está configurado' })
+          return
+        }
+
+        const token = await obtenerToken(qpseConfig.usuario, qpseConfig.password, qpseConfig.environment || 'demo')
+        const nombreArchivo = `${businessData.ruc}-${voidedData.voidedDocId}`
+        const estadoQPse = await consultarEstado(nombreArchivo, token, qpseConfig.environment || 'demo')
+
+        const codigo = estadoQPse?.codigo || estadoQPse?.code || estadoQPse?.estado || ''
+        const accepted = codigo === '0' || codigo === '0000' || estadoQPse?.sunat_success === true
+
+        if (accepted) {
+          await voidedDocRef.update({
+            status: 'accepted',
+            responseCode: codigo,
+            responseDescription: estadoQPse?.descripcion || 'Anulación aceptada',
+            cdrUrl: estadoQPse?.url_cdr || null,
+            processedAt: FieldValue.serverTimestamp()
+          })
+          await invoiceRef.update({
+            sunatStatus: 'voided',
+            status: 'voided',
+            voidedAt: FieldValue.serverTimestamp()
+          })
+          res.status(200).json({ status: 'voided', message: 'Documento anulado exitosamente' })
+        } else if (codigo === '98' || codigo === '99' || codigo === 'PROCESANDO') {
+          res.status(200).json({ status: 'pending', message: 'Aún en proceso en SUNAT' })
+        } else {
+          const errorMsg = estadoQPse?.descripcion || estadoQPse?.errores?.join(' | ') || 'Error desconocido'
+          await voidedDocRef.update({
+            status: 'rejected',
+            error: errorMsg,
+            processedAt: FieldValue.serverTimestamp()
+          })
+          await invoiceRef.update({
+            sunatStatus: 'accepted',
+            voidingTicket: null,
+            voidError: errorMsg
+          })
+          res.status(200).json({ status: 'rejected', error: errorMsg })
+        }
       } else {
-        await voidedDocRef.update({
-          status: 'rejected',
-          error: statusResult.error,
-          processedAt: FieldValue.serverTimestamp()
+        // SUNAT directo: consultar con ticket
+        const emissionConfig = businessData.emissionConfig || {}
+        const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
+
+        const statusResult = await getStatus(voidedData.ticket, {
+          ruc: businessData.ruc,
+          solUser: sunatConfig.solUser,
+          solPassword: sunatConfig.solPassword,
+          environment: sunatConfig.environment || 'beta'
         })
 
-        await invoiceRef.update({
-          sunatStatus: 'accepted',
-          voidingTicket: null,
-          voidError: statusResult.error
-        })
+        if (statusResult.pending) {
+          res.status(200).json({
+            status: 'pending',
+            message: 'Aún en proceso'
+          })
+          return
+        }
 
-        res.status(200).json({
-          status: 'rejected',
-          error: statusResult.error
-        })
+        if (statusResult.success && statusResult.accepted) {
+          await voidedDocRef.update({
+            status: 'accepted',
+            cdrData: statusResult.cdrData || null,
+            responseCode: statusResult.code,
+            responseDescription: statusResult.description,
+            processedAt: FieldValue.serverTimestamp()
+          })
+
+          await invoiceRef.update({
+            sunatStatus: 'voided',
+            voidedAt: FieldValue.serverTimestamp()
+          })
+
+          res.status(200).json({
+            status: 'voided',
+            message: 'Factura anulada exitosamente'
+          })
+        } else {
+          await voidedDocRef.update({
+            status: 'rejected',
+            error: statusResult.error,
+            processedAt: FieldValue.serverTimestamp()
+          })
+
+          await invoiceRef.update({
+            sunatStatus: 'accepted',
+            voidingTicket: null,
+            voidError: statusResult.error
+          })
+
+          res.status(200).json({
+            status: 'rejected',
+            error: statusResult.error
+          })
+        }
       }
 
     } catch (error) {
@@ -5707,12 +5793,39 @@ export const voidBoleta = onRequest(
         return
       }
 
-      // Error en la anulación
-      const errorMsg = statusResult.error || 'SUNAT rechazó el resumen diario'
+      // Verificar si SUNAT dice que la baja ya fue procesada (reintento)
+      const boletaErrMsg = statusResult.error || 'SUNAT rechazó el resumen diario'
+      const boletaErrCode = String(statusResult.code || '')
+      const boletaErrLower = boletaErrMsg.toLowerCase()
+      const isBoletaVoidDone = (
+        boletaErrCode === '1033' || boletaErrCode.includes('1033') ||
+        boletaErrLower.includes('ya fue comunicad') ||
+        boletaErrLower.includes('ya existe') ||
+        boletaErrLower.includes('registrad') && boletaErrLower.includes('baja')
+      )
 
+      if (isBoletaVoidDone) {
+        console.log(`📋 La baja de boleta ya fue procesada por SUNAT - tratando como ANULADO`)
+        await summaryDocsRef.doc(summaryDocRef.id).update({ status: 'accepted', processedAt: FieldValue.serverTimestamp() })
+        await boletaRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          summaryDocumentId: summaryDocRef.id,
+        })
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'La baja ya fue procesada por SUNAT previamente',
+          summaryDocumentId: summaryDocRef.id
+        })
+        return
+      }
+
+      // Error en la anulación
       await summaryDocsRef.doc(summaryDocRef.id).update({
         status: 'rejected',
-        error: errorMsg,
+        error: boletaErrMsg,
         responseCode: statusResult.code || null,
         processedAt: FieldValue.serverTimestamp()
       })
@@ -5720,13 +5833,13 @@ export const voidBoleta = onRequest(
       await boletaRef.update({
         sunatStatus: 'accepted',
         voidingTicket: null,
-        voidError: errorMsg,
+        voidError: boletaErrMsg,
         updatedAt: FieldValue.serverTimestamp()
       })
 
       res.status(400).json({
         success: false,
-        error: errorMsg
+        error: boletaErrMsg
       })
 
     } catch (error) {
@@ -6124,6 +6237,36 @@ export const voidBoletaQPse = onRequest(
           ticket: qpseResult.ticket,
           summaryDocumentId: summaryDocRef.id,
           message: 'El resumen diario está siendo procesado por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      // Verificar si SUNAT dice que la baja ya fue procesada (reintento)
+      const boletaVoidDesc = (qpseResult.description || qpseResult.notes || '').toLowerCase()
+      const boletaVoidCode = String(qpseResult.responseCode || '')
+      const isBoletaAlreadyVoided = (
+        boletaVoidCode === '1033' || boletaVoidCode.includes('1033') ||
+        boletaVoidDesc.includes('ya fue comunicad') ||
+        boletaVoidDesc.includes('ya existe') ||
+        boletaVoidDesc.includes('already') ||
+        boletaVoidDesc.includes('registrad') && boletaVoidDesc.includes('baja')
+      )
+
+      if (isBoletaAlreadyVoided) {
+        console.log(`📋 [QPse] La baja de boleta ya fue procesada por SUNAT - tratando como ANULADO`)
+        await boletaRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          summaryDocumentId: summaryDocRef.id,
+        })
+        await summaryDocsRef.doc(summaryDocRef.id).update({ status: 'accepted' })
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'La baja ya fue procesada por SUNAT previamente',
+          summaryDocumentId: summaryDocRef.id
         })
         return
       }
@@ -6598,6 +6741,36 @@ export const voidInvoiceQPse = onRequest(
           ticket: qpseResult.ticket,
           voidedDocumentId: voidedDocRef.id,
           message: 'La comunicación de baja está siendo procesada por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      // Verificar si SUNAT dice que la baja ya fue procesada (reintento de anulación)
+      const voidDesc = (qpseResult.description || qpseResult.notes || '').toLowerCase()
+      const voidCode = String(qpseResult.responseCode || '')
+      const isAlreadyVoided = (
+        voidCode === '1033' || voidCode.includes('1033') ||
+        voidDesc.includes('ya fue comunicad') ||
+        voidDesc.includes('comunicación de baja') && voidDesc.includes('existe') ||
+        voidDesc.includes('already') ||
+        voidDesc.includes('registrad') && voidDesc.includes('baja')
+      )
+
+      if (isAlreadyVoided) {
+        console.log(`📋 [QPse] La baja ya fue procesada por SUNAT - tratando como ANULADO`)
+        await invoiceRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidedDocumentId: voidedDocRef.id,
+        })
+        await voidedDocsRef.doc(voidedDocRef.id).update({ status: 'accepted' })
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'La baja ya fue procesada por SUNAT previamente',
+          voidedDocumentId: voidedDocRef.id
         })
         return
       }

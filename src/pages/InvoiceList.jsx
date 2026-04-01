@@ -1005,6 +1005,107 @@ Gracias por tu preferencia.`
     }
   }
 
+  // Reintentar anulación: primero consulta estado, si no resuelve reenvía
+  const handleRetryVoid = async (invoice) => {
+    if (!invoice || !user?.uid) return
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    try {
+      const businessId = getBusinessId()
+      const { getAuth } = await import('firebase/auth')
+      const auth = getAuth()
+      const idToken = await auth.currentUser?.getIdToken()
+      if (!idToken) throw new Error('No se pudo obtener el token de autenticación')
+
+      const series = invoice.series || invoice.number?.split('-')[0] || ''
+      const isBoleta = series.toUpperCase().startsWith('B')
+      const docTypeName = isBoleta ? 'Boleta' : 'Factura'
+
+      // PASO 1: Si tiene voidedDocumentId, consultar estado primero
+      const voidDocId = invoice.voidedDocumentId
+      if (voidDocId) {
+        toast.info('Consultando estado de anulación en SUNAT...')
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            console.log(`🔍 checkVoidStatus intento ${attempt}/3, voidedDocumentId: ${voidDocId}`)
+            const statusResult = await checkVoidStatus(businessId, voidDocId, idToken)
+            console.log('📋 checkVoidStatus resultado:', JSON.stringify(statusResult))
+            if (statusResult.status === 'voided') {
+              toast.success(`${docTypeName} ya fue anulada en SUNAT. Estado actualizado.`)
+              loadInvoices()
+              return
+            } else if (statusResult.status === 'rejected') {
+              toast.error(statusResult.error || 'SUNAT rechazó la anulación.')
+              loadInvoices()
+              return
+            }
+            // Si pending, esperar y reintentar
+            if (attempt < 3) await new Promise(r => setTimeout(r, 8000))
+          } catch (e) {
+            console.warn('Error consultando estado:', e)
+          }
+        }
+      }
+
+      // PASO 2: Si no se resolvió con checkVoidStatus, reenviar la baja
+      toast.info('Reenviando anulación a SUNAT...')
+
+      let emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
+      if (emissionMethod === 'qpse') {
+        const qpseConfig = businessSettings?.emissionConfig?.qpse || businessSettings?.qpse
+        if (!qpseConfig?.usuario || !qpseConfig?.password) emissionMethod = null
+      }
+
+      const result = await voidDocument(
+        invoice,
+        businessId,
+        invoice.voidReason || 'ANULACION DE OPERACION',
+        idToken,
+        emissionMethod
+      )
+
+      console.log('📋 Resultado de reenviar anulación:', JSON.stringify(result))
+
+      if (result.status === 'voided') {
+        toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+        loadInvoices()
+      } else if (result.status === 'pending' && result.voidedDocumentId) {
+        // Polling con el nuevo voidedDocumentId
+        toast.info('SUNAT está procesando. Consultando estado...')
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          await new Promise(r => setTimeout(r, 10000))
+          try {
+            console.log(`🔍 Polling intento ${attempt}/4...`)
+            const statusResult = await checkVoidStatus(businessId, result.voidedDocumentId, idToken)
+            console.log('📋 Polling resultado:', JSON.stringify(statusResult))
+            if (statusResult.status === 'voided') {
+              toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+              loadInvoices()
+              return
+            } else if (statusResult.status === 'rejected') {
+              toast.error(statusResult.error || 'SUNAT rechazó la anulación.')
+              loadInvoices()
+              return
+            }
+          } catch (e) {
+            console.warn('Error en polling:', e)
+          }
+        }
+        toast.info('SUNAT aún no confirma. Reintente en unos minutos.')
+        loadInvoices()
+      } else {
+        toast.error(result.error || 'Error al anular. Reintente más tarde.')
+        loadInvoices()
+      }
+    } catch (error) {
+      console.error('Error al reintentar anulación:', error)
+      toast.error(error?.response?.data?.error || error.message || 'Error al reintentar la anulación.')
+    }
+  }
+
   // Función para convertir nota de venta navegando al POS con datos precargados
   const handleConvertInPOS = (invoice) => {
     if (isDemoMode) {
@@ -2940,6 +3041,24 @@ Gracias por tu preferencia.`
                       >
                         <Ban className="w-4 h-4" />
                         <span>Anular en SUNAT</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Reintentar anulación - Para documentos en "voiding" o con error de anulación previo */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
+                   (invoice.sunatStatus === 'voiding' || (invoice.sunatStatus === 'accepted' && invoice.voidedDocumentId)) && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          handleRetryVoid(invoice)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Reintentar anulación</span>
                       </button>
                     </>
                   )}

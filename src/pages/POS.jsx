@@ -3044,7 +3044,7 @@ export default function POS() {
           documentType: documentType,
           customer: customerData.documentNumber || customerData.name || customerData.businessName
             ? {
-                documentType: customerData.documentType || ID_TYPES.DNI,
+                documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
                 documentNumber: customerData.documentNumber || '00000000',
                 name: documentType === 'factura'
                   ? (customerData.businessName || customerData.name || 'Cliente')
@@ -3249,7 +3249,7 @@ export default function POS() {
         ...(selectedCustomer?.id && { customerId: selectedCustomer.id }),
         customer: customerData.documentNumber || customerData.name || customerData.businessName
           ? {
-              documentType: customerData.documentType || ID_TYPES.DNI,
+              documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
               documentNumber: customerData.documentNumber || '00000000',
               name: documentType === 'factura'
                 ? (customerData.businessName || customerData.name || 'Cliente')
