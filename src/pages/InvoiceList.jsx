@@ -98,6 +98,27 @@ export default function InvoiceList() {
     if (!invoice?.createdAt) return null
     return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
   }
+
+  // Helper para forzar descarga de archivos desde URL (XML, CDR)
+  const forceDownload = async (url, filename) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Error al descargar archivo:', error)
+      // Fallback: abrir en nueva pestaña si falla la descarga
+      window.open(url, '_blank')
+    }
+  }
+
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -2773,7 +2794,8 @@ Gracias por tu preferencia.`
                         try {
                           // Si tiene XML real guardado en Storage (firmado, enviado a SUNAT), usar ese
                           if (invoice.sunatResponse?.xmlStorageUrl) {
-                            window.open(invoice.sunatResponse.xmlStorageUrl, '_blank')
+                            const xmlFilename = `${invoice.number.replace(/\//g, '-')}_XML.xml`
+                            await forceDownload(invoice.sunatResponse.xmlStorageUrl, xmlFilename)
                             toast.success('XML descargado exitosamente')
                             return
                           }
@@ -2800,26 +2822,27 @@ Gracias por tu preferencia.`
                   {/* Descargar CDR - Solo si el comprobante fue aceptado por SUNAT y tiene CDR */}
                   {invoice.sunatStatus === 'accepted' && (invoice.sunatResponse?.cdrStorageUrl || invoice.sunatResponse?.cdrData || invoice.sunatResponse?.cdrUrl) && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenMenuId(null)
+                        const cdrFilename = `CDR-${invoice.number.replace(/\//g, '-')}.xml`
                         // Prioridad: Storage URL > CDR externo > CDR data
                         if (invoice.sunatResponse.cdrStorageUrl) {
-                          window.open(invoice.sunatResponse.cdrStorageUrl, '_blank')
+                          await forceDownload(invoice.sunatResponse.cdrStorageUrl, cdrFilename)
                         } else if (invoice.sunatResponse.cdrUrl) {
-                          window.open(invoice.sunatResponse.cdrUrl, '_blank')
+                          await forceDownload(invoice.sunatResponse.cdrUrl, cdrFilename)
                         } else if (invoice.sunatResponse.cdrData) {
                           // Descargar CDR desde data guardada en Firestore
                           const blob = new Blob([invoice.sunatResponse.cdrData], { type: 'application/xml' })
                           const url = URL.createObjectURL(blob)
                           const a = document.createElement('a')
                           a.href = url
-                          a.download = `CDR-${invoice.series}-${invoice.correlativeNumber}.xml`
+                          a.download = cdrFilename
                           document.body.appendChild(a)
                           a.click()
                           document.body.removeChild(a)
                           URL.revokeObjectURL(url)
                         }
-                        toast.success('Descargando CDR de SUNAT')
+                        toast.success('CDR descargado exitosamente')
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
@@ -2831,22 +2854,23 @@ Gracias por tu preferencia.`
                   {/* Descargar CDR de Baja - Solo si fue anulado en SUNAT y tiene CDR de baja */}
                   {invoice.sunatStatus === 'voided' && (invoice.voidCdrStorageUrl || invoice.voidCdrData) && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenMenuId(null)
+                        const cdrFilename = `CDR-BAJA-${invoice.number.replace(/\//g, '-')}.xml`
                         if (invoice.voidCdrStorageUrl) {
-                          window.open(invoice.voidCdrStorageUrl, '_blank')
+                          await forceDownload(invoice.voidCdrStorageUrl, cdrFilename)
                         } else if (invoice.voidCdrData) {
                           const blob = new Blob([invoice.voidCdrData], { type: 'application/xml' })
                           const url = URL.createObjectURL(blob)
                           const a = document.createElement('a')
                           a.href = url
-                          a.download = `CDR-BAJA-${invoice.series}-${invoice.correlativeNumber}.xml`
+                          a.download = cdrFilename
                           document.body.appendChild(a)
                           a.click()
                           document.body.removeChild(a)
                           URL.revokeObjectURL(url)
                         }
-                        toast.success('Descargando CDR de baja')
+                        toast.success('CDR de baja descargado exitosamente')
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
@@ -3285,20 +3309,26 @@ Gracias por tu preferencia.`
                 )}
                 <div className="flex flex-wrap gap-2">
                   {viewingInvoice.sunatResponse?.xmlStorageUrl && (
-                    <Button size="sm" variant="outline" onClick={() => window.open(viewingInvoice.sunatResponse.xmlStorageUrl, '_blank')}>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      const xmlFilename = `${viewingInvoice.number.replace(/\//g, '-')}_XML.xml`
+                      await forceDownload(viewingInvoice.sunatResponse.xmlStorageUrl, xmlFilename)
+                      toast.success('XML descargado exitosamente')
+                    }}>
                       <Code className="w-4 h-4 mr-2" />Descargar XML
                     </Button>
                   )}
                   {(viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData) && (
-                    <Button size="sm" variant="outline" onClick={() => {
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      const cdrFilename = `CDR-${viewingInvoice.number.replace(/\//g, '-')}.xml`
                       if (viewingInvoice.sunatResponse.cdrStorageUrl) {
-                        window.open(viewingInvoice.sunatResponse.cdrStorageUrl, '_blank')
+                        await forceDownload(viewingInvoice.sunatResponse.cdrStorageUrl, cdrFilename)
                       } else if (viewingInvoice.sunatResponse.cdrData) {
                         const blob = new Blob([viewingInvoice.sunatResponse.cdrData], { type: 'application/xml' })
                         const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a'); a.href = url; a.download = `CDR-${viewingInvoice.number}.xml`; a.click()
+                        const a = document.createElement('a'); a.href = url; a.download = cdrFilename; a.click()
                         URL.revokeObjectURL(url)
                       }
+                      toast.success('CDR descargado exitosamente')
                     }}>
                       <FileCheck className="w-4 h-4 mr-2" />Descargar CDR
                     </Button>
@@ -3316,20 +3346,26 @@ Gracias por tu preferencia.`
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {viewingInvoice.voidXmlStorageUrl && (
-                    <Button size="sm" variant="outline" onClick={() => window.open(viewingInvoice.voidXmlStorageUrl, '_blank')}>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      const xmlFilename = `BAJA-${viewingInvoice.number.replace(/\//g, '-')}_XML.xml`
+                      await forceDownload(viewingInvoice.voidXmlStorageUrl, xmlFilename)
+                      toast.success('XML de baja descargado exitosamente')
+                    }}>
                       <Code className="w-4 h-4 mr-2" />XML Comunicación de Baja
                     </Button>
                   )}
                   {(viewingInvoice.voidCdrStorageUrl || viewingInvoice.voidCdrData) && (
-                    <Button size="sm" variant="outline" onClick={() => {
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      const cdrFilename = `CDR-BAJA-${viewingInvoice.number.replace(/\//g, '-')}.xml`
                       if (viewingInvoice.voidCdrStorageUrl) {
-                        window.open(viewingInvoice.voidCdrStorageUrl, '_blank')
+                        await forceDownload(viewingInvoice.voidCdrStorageUrl, cdrFilename)
                       } else if (viewingInvoice.voidCdrData) {
                         const blob = new Blob([viewingInvoice.voidCdrData], { type: 'application/xml' })
                         const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a'); a.href = url; a.download = `CDR-BAJA-${viewingInvoice.number}.xml`; a.click()
+                        const a = document.createElement('a'); a.href = url; a.download = cdrFilename; a.click()
                         URL.revokeObjectURL(url)
                       }
+                      toast.success('CDR de baja descargado exitosamente')
                     }}>
                       <FileCheck className="w-4 h-4 mr-2" />CDR de Baja
                     </Button>

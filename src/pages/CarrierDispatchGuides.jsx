@@ -60,6 +60,25 @@ export default function CarrierDispatchGuides() {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
 
+  // Helper para forzar descarga de archivos desde URL (XML, CDR)
+  const forceDownload = async (url, filename) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Error al descargar archivo:', error)
+      window.open(url, '_blank')
+    }
+  }
+
   useEffect(() => {
     loadGuides()
     loadCompanySettings()
@@ -753,29 +772,30 @@ export default function CarrierDispatchGuides() {
                   {/* XML SUNAT - Solo si fue aceptada */}
                   {guide.sunatStatus === 'accepted' && (guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl || guide.xmlData || guide.sunatResponse?.xmlData) && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenMenuId(null)
+                        const xmlFilename = `${guide.number.replace(/\//g, '-')}_XML.xml`
                         if (guide.xmlStorageUrl) {
-                          window.open(guide.xmlStorageUrl, '_blank')
+                          await forceDownload(guide.xmlStorageUrl, xmlFilename)
                         } else if (guide.xmlUrl) {
-                          window.open(guide.xmlUrl, '_blank')
+                          await forceDownload(guide.xmlUrl, xmlFilename)
                         } else if (guide.sunatResponse?.xmlStorageUrl) {
-                          window.open(guide.sunatResponse.xmlStorageUrl, '_blank')
+                          await forceDownload(guide.sunatResponse.xmlStorageUrl, xmlFilename)
                         } else if (guide.sunatResponse?.xmlUrl) {
-                          window.open(guide.sunatResponse.xmlUrl, '_blank')
+                          await forceDownload(guide.sunatResponse.xmlUrl, xmlFilename)
                         } else if (guide.xmlData || guide.sunatResponse?.xmlData) {
                           const xmlData = guide.xmlData || guide.sunatResponse.xmlData
                           const blob = new Blob([xmlData], { type: 'application/xml' })
                           const url = URL.createObjectURL(blob)
                           const a = document.createElement('a')
                           a.href = url
-                          a.download = `${guide.number}.xml`
+                          a.download = xmlFilename
                           document.body.appendChild(a)
                           a.click()
                           document.body.removeChild(a)
                           URL.revokeObjectURL(url)
                         }
-                        toast.success('Descargando XML de SUNAT')
+                        toast.success('XML descargado exitosamente')
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
@@ -787,29 +807,30 @@ export default function CarrierDispatchGuides() {
                   {/* CDR SUNAT - Solo si fue aceptada */}
                   {guide.sunatStatus === 'accepted' && (guide.cdrStorageUrl || guide.cdrUrl || guide.sunatResponse?.cdrStorageUrl || guide.sunatResponse?.cdrUrl || guide.cdrData || guide.sunatResponse?.cdrData) && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenMenuId(null)
+                        const cdrFilename = `CDR-${guide.number.replace(/\//g, '-')}.xml`
                         if (guide.cdrStorageUrl) {
-                          window.open(guide.cdrStorageUrl, '_blank')
+                          await forceDownload(guide.cdrStorageUrl, cdrFilename)
                         } else if (guide.cdrUrl) {
-                          window.open(guide.cdrUrl, '_blank')
+                          await forceDownload(guide.cdrUrl, cdrFilename)
                         } else if (guide.sunatResponse?.cdrStorageUrl) {
-                          window.open(guide.sunatResponse.cdrStorageUrl, '_blank')
+                          await forceDownload(guide.sunatResponse.cdrStorageUrl, cdrFilename)
                         } else if (guide.sunatResponse?.cdrUrl) {
-                          window.open(guide.sunatResponse.cdrUrl, '_blank')
+                          await forceDownload(guide.sunatResponse.cdrUrl, cdrFilename)
                         } else if (guide.cdrData || guide.sunatResponse?.cdrData) {
                           const cdrData = guide.cdrData || guide.sunatResponse.cdrData
                           const blob = new Blob([cdrData], { type: 'application/xml' })
                           const url = URL.createObjectURL(blob)
                           const a = document.createElement('a')
                           a.href = url
-                          a.download = `CDR-${guide.number}.xml`
+                          a.download = cdrFilename
                           document.body.appendChild(a)
                           a.click()
                           document.body.removeChild(a)
                           URL.revokeObjectURL(url)
                         }
-                        toast.success('Descargando CDR de SUNAT')
+                        toast.success('CDR descargado exitosamente')
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
@@ -1254,27 +1275,29 @@ export default function CarrierDispatchGuides() {
               {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl || selectedGuide.xmlData || selectedGuide.sunatResponse?.xmlData) && (
                 <Button
                   variant="outline"
-                  onClick={() => {
+                  onClick={async () => {
+                    const xmlFilename = `${selectedGuide.number.replace(/\//g, '-')}_XML.xml`
                     if (selectedGuide.xmlStorageUrl) {
-                      window.open(selectedGuide.xmlStorageUrl, '_blank')
+                      await forceDownload(selectedGuide.xmlStorageUrl, xmlFilename)
                     } else if (selectedGuide.xmlUrl) {
-                      window.open(selectedGuide.xmlUrl, '_blank')
+                      await forceDownload(selectedGuide.xmlUrl, xmlFilename)
                     } else if (selectedGuide.sunatResponse?.xmlStorageUrl) {
-                      window.open(selectedGuide.sunatResponse.xmlStorageUrl, '_blank')
+                      await forceDownload(selectedGuide.sunatResponse.xmlStorageUrl, xmlFilename)
                     } else if (selectedGuide.sunatResponse?.xmlUrl) {
-                      window.open(selectedGuide.sunatResponse.xmlUrl, '_blank')
+                      await forceDownload(selectedGuide.sunatResponse.xmlUrl, xmlFilename)
                     } else if (selectedGuide.xmlData || selectedGuide.sunatResponse?.xmlData) {
                       const xmlData = selectedGuide.xmlData || selectedGuide.sunatResponse.xmlData
                       const blob = new Blob([xmlData], { type: 'application/xml' })
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
-                      a.download = `${selectedGuide.number}.xml`
+                      a.download = xmlFilename
                       document.body.appendChild(a)
                       a.click()
                       document.body.removeChild(a)
                       URL.revokeObjectURL(url)
                     }
+                    toast.success('XML descargado exitosamente')
                   }}
                 >
                   <Code className="w-4 h-4 mr-2" />
@@ -1286,27 +1309,29 @@ export default function CarrierDispatchGuides() {
               {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.cdrStorageUrl || selectedGuide.cdrUrl || selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) && (
                 <Button
                   variant="outline"
-                  onClick={() => {
+                  onClick={async () => {
+                    const cdrFilename = `CDR-${selectedGuide.number.replace(/\//g, '-')}.xml`
                     if (selectedGuide.cdrStorageUrl) {
-                      window.open(selectedGuide.cdrStorageUrl, '_blank')
+                      await forceDownload(selectedGuide.cdrStorageUrl, cdrFilename)
                     } else if (selectedGuide.cdrUrl) {
-                      window.open(selectedGuide.cdrUrl, '_blank')
+                      await forceDownload(selectedGuide.cdrUrl, cdrFilename)
                     } else if (selectedGuide.sunatResponse?.cdrStorageUrl) {
-                      window.open(selectedGuide.sunatResponse.cdrStorageUrl, '_blank')
+                      await forceDownload(selectedGuide.sunatResponse.cdrStorageUrl, cdrFilename)
                     } else if (selectedGuide.sunatResponse?.cdrUrl) {
-                      window.open(selectedGuide.sunatResponse.cdrUrl, '_blank')
+                      await forceDownload(selectedGuide.sunatResponse.cdrUrl, cdrFilename)
                     } else if (selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) {
                       const cdrData = selectedGuide.cdrData || selectedGuide.sunatResponse.cdrData
                       const blob = new Blob([cdrData], { type: 'application/xml' })
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
-                      a.download = `CDR-${selectedGuide.number}.xml`
+                      a.download = cdrFilename
                       document.body.appendChild(a)
                       a.click()
                       document.body.removeChild(a)
                       URL.revokeObjectURL(url)
                     }
+                    toast.success('CDR descargado exitosamente')
                   }}
                 >
                   <FileText className="w-4 h-4 mr-2" />
