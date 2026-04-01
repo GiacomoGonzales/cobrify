@@ -44,6 +44,9 @@ import {
   deleteAllSuppliers,
   deleteAllInvoices,
   deleteAllPurchases,
+  deleteAllStockMovements,
+  deleteAllDispatchGuides,
+  deleteAllQuotations,
   countDocuments
 } from '@/services/bulkDeleteService'
 
@@ -373,7 +376,7 @@ export default function Settings() {
   const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
-  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0 })
+  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0, stockMovements: 0, dispatchGuides: 0, quotations: 0 })
 
   const {
     register,
@@ -2038,19 +2041,25 @@ export default function Settings() {
     suppliers: { name: 'Proveedores', collection: 'suppliers' },
     invoices: { name: 'Ventas/Comprobantes', collection: 'invoices' },
     purchases: { name: 'Compras', collection: 'purchases' },
+    stockMovements: { name: 'Movimientos de Stock', collection: 'stockMovements' },
+    dispatchGuides: { name: 'Guías de Remisión', collection: 'dispatchGuides' },
+    quotations: { name: 'Cotizaciones', collection: 'quotations' },
   }
 
   const loadBulkDeleteCounts = async () => {
     if (!hasFeature || !hasFeature('bulkDelete')) return
     const businessId = getBusinessId()
-    const [products, customers, suppliers, invoices, purchases] = await Promise.all([
+    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
       countDocuments(businessId, 'products'),
       countDocuments(businessId, 'customers'),
       countDocuments(businessId, 'suppliers'),
       countDocuments(businessId, 'invoices'),
       countDocuments(businessId, 'purchases'),
+      countDocuments(businessId, 'stockMovements'),
+      countDocuments(businessId, 'dispatchGuides'),
+      countDocuments(businessId, 'quotations'),
     ])
-    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases })
+    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations })
   }
 
   const openBulkDeleteModal = (type) => {
@@ -2088,6 +2097,15 @@ export default function Settings() {
           break
         case 'purchases':
           result = await deleteAllPurchases(businessId, onProgress)
+          break
+        case 'stockMovements':
+          result = await deleteAllStockMovements(businessId, onProgress)
+          break
+        case 'dispatchGuides':
+          result = await deleteAllDispatchGuides(businessId, onProgress)
+          break
+        case 'quotations':
+          result = await deleteAllQuotations(businessId, onProgress)
           break
         default:
           throw new Error('Tipo de eliminación no válido')
@@ -8413,13 +8431,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Movimientos de Stock</h4>
-                    <p className="text-sm text-gray-500">Eliminar historial de movimientos de inventario</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar historial de movimientos de inventario
+                      {bulkDeleteCounts.stockMovements > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.stockMovements} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('stockMovements')}
+                    disabled={bulkDeleteCounts.stockMovements === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8430,13 +8454,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Guías de Remisión</h4>
-                    <p className="text-sm text-gray-500">Eliminar todas las guías de remisión</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las guías de remisión
+                      {bulkDeleteCounts.dispatchGuides > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.dispatchGuides} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('dispatchGuides')}
+                    disabled={bulkDeleteCounts.dispatchGuides === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
@@ -8447,13 +8477,19 @@ export default function Settings() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
                     <h4 className="font-medium text-gray-900">Cotizaciones</h4>
-                    <p className="text-sm text-gray-500">Eliminar todas las cotizaciones</p>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las cotizaciones
+                      {bulkDeleteCounts.quotations > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.quotations} registros)</span>
+                      )}
+                    </p>
                   </div>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => toast.info('Función en desarrollo - Fase 3')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => openBulkDeleteModal('quotations')}
+                    disabled={bulkDeleteCounts.quotations === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Limpiar
