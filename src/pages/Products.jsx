@@ -4119,22 +4119,6 @@ export default function Products() {
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
-                  checked={trackExpiration}
-                  onChange={e => {
-                    setTrackExpiration(e.target.checked)
-                    if (!e.target.checked) setValue('expirationDate', '')
-                  }}
-                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Control de vencimiento</span>
-                  <p className="text-xs text-gray-500 mt-0.5">Registrar fecha de caducidad</p>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                <input
-                  type="checkbox"
                   checked={catalogVisible}
                   onChange={e => setCatalogVisible(e.target.checked)}
                   className="w-4 h-4 mt-0.5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
@@ -4208,15 +4192,7 @@ export default function Products() {
               </label>
             </div>
 
-            {/* Fecha de Vencimiento (aparece al activar control de vencimiento) */}
-            {trackExpiration && (
-              <Input
-                label="Fecha de Vencimiento"
-                type="date"
-                error={errors.expirationDate?.message}
-                {...register('expirationDate')}
-              />
-            )}
+            {/* Fecha de Vencimiento se maneja desde Compras (lotes) */}
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
