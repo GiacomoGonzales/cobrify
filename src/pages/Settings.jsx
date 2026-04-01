@@ -2023,6 +2023,28 @@ export default function Settings() {
     }
   }
 
+  // Cargar conteos cuando se abre la pestaña de limpieza
+  useEffect(() => {
+    const loadCounts = async () => {
+      if (!hasFeature || !hasFeature('bulkDelete')) return
+      const businessId = getBusinessId()
+      const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
+        countDocuments(businessId, 'products'),
+        countDocuments(businessId, 'customers'),
+        countDocuments(businessId, 'suppliers'),
+        countDocuments(businessId, 'invoices'),
+        countDocuments(businessId, 'purchases'),
+        countDocuments(businessId, 'stockMovements'),
+        countDocuments(businessId, 'dispatchGuides'),
+        countDocuments(businessId, 'quotations'),
+      ])
+      setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations })
+    }
+    if (activeTab === 'limpieza') {
+      loadCounts()
+    }
+  }, [activeTab, hasFeature])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -2125,13 +2147,6 @@ export default function Settings() {
       setIsBulkDeleting(false)
     }
   }
-
-  // Cargar conteos cuando se abre la pestaña de limpieza
-  useEffect(() => {
-    if (activeTab === 'limpieza') {
-      loadBulkDeleteCounts()
-    }
-  }, [activeTab])
 
   // Check if user is on trial plan
   const isTrialUser = subscription?.plan === 'trial'
