@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -1770,6 +1770,75 @@ export default function CashRegister() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Lista de Comprobantes de la Sesión */}
+          <Card className="mt-6">
+            <CardContent>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Comprobantes de esta sesión ({todayInvoices.length})
+              </h3>
+              {todayInvoices.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">No hay comprobantes en esta sesión</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+                        <th className="pb-2 pr-3">Número</th>
+                        <th className="pb-2 pr-3">Tipo</th>
+                        <th className="pb-2 pr-3">Cliente</th>
+                        <th className="pb-2 pr-3">Método</th>
+                        <th className="pb-2 pr-3 text-right">Total</th>
+                        <th className="pb-2 pr-3">Estado</th>
+                        <th className="pb-2 text-right">Hora</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todayInvoices
+                        .sort((a, b) => {
+                          const dA = a.createdAt?.toDate?.() || new Date(0)
+                          const dB = b.createdAt?.toDate?.() || new Date(0)
+                          return dB - dA
+                        })
+                        .map(inv => {
+                          const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+                          const payMethod = inv.payments?.length > 0
+                            ? inv.payments.map(p => p.method).join(', ')
+                            : inv.paymentMethod || '-'
+                          const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
+                          const isPending = inv.paymentStatus === 'pending'
+                          const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+                          const timeStr = createdAt ? createdAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
+
+                          return (
+                            <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${isVoided ? 'opacity-50 line-through' : ''}`}>
+                              <td className="py-2 pr-3 font-medium text-primary-600">{inv.number || '-'}</td>
+                              <td className="py-2 pr-3">{docTypeLabels[inv.documentType] || inv.documentType}</td>
+                              <td className="py-2 pr-3 truncate max-w-[150px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
+                              <td className="py-2 pr-3 text-gray-600">{payMethod}</td>
+                              <td className="py-2 pr-3 text-right font-medium">{formatCurrency(inv.total || 0)}</td>
+                              <td className="py-2 pr-3">
+                                {isVoided ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
+                                ) : isPending ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
+                                )}
+                              </td>
+                              <td className="py-2 text-right text-gray-500">{timeStr}</td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       ) : (
         <Card>

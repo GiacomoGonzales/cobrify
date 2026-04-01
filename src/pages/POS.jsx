@@ -4608,6 +4608,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <p className="hidden sm:block text-xs text-gray-500 mt-1 truncate">
                       {product.sku || product.code || product.barcode || ''}{product.location ? ` | ${product.location}` : ''}
                     </p>
+                    {/* Marca */}
+                    {product.marca && (
+                      <p className="text-[10px] sm:text-xs text-purple-600 font-medium mt-0.5 truncate">{product.marca}</p>
+                    )}
                     {/* Pharmacy info */}
                     {product.genericName && (
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
