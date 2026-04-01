@@ -2842,7 +2842,7 @@ export default function Settings() {
                     }`}>
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 block">Control de Lotes y Vencimientos</span>
-                        <span className="text-xs text-gray-500">Habilita campos de número de lote y fecha de vencimiento en el registro de compras</span>
+                        <span className="text-xs text-gray-500">Habilita control de lotes, fechas de vencimiento, alertas y selección de lotes en ventas, compras e inventario</span>
                       </div>
                       <input
                         type="checkbox"

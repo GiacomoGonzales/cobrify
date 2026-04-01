@@ -206,6 +206,22 @@ function Sidebar() {
       menuId: 'stock-movements',
     },
     {
+      path: '/control-lotes',
+      icon: Package,
+      label: 'Control de Lotes',
+      pageId: 'batch-control',
+      menuId: 'batch-control',
+      requiresBatchControl: true,
+    },
+    {
+      path: '/alertas-vencimiento',
+      icon: AlertTriangle,
+      label: 'Alertas de Vencimiento',
+      pageId: 'expiry-alerts',
+      menuId: 'expiry-alerts',
+      requiresBatchControl: true,
+    },
+    {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
@@ -1269,6 +1285,12 @@ function Sidebar() {
     if (item.requiresStudentField) {
       const studentFieldEnabled = businessSettings?.posCustomFields?.showStudentField
       if (!studentFieldEnabled && !isDemoMode) return false
+    }
+
+    // Si requiere control de lotes habilitado (para retail), verificar
+    if (item.requiresBatchControl) {
+      const batchEnabled = businessSettings?.posCustomFields?.showBatchExpiryInPurchase
+      if (!batchEnabled && !isDemoMode) return false
     }
 
     // Si es solo para business owner y el usuario no lo es, no mostrar

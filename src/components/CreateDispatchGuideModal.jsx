@@ -91,8 +91,9 @@ const getTomorrowDateString = () => {
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
+  const hasBatchControl = isPharmacy || businessSettings?.posCustomFields?.showBatchExpiryInPurchase
 
   // Sucursales y almacenes disponibles
   const [branches, setBranches] = useState([])
@@ -343,9 +344,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           // En farmacia, auto-seleccionar el lote FEFO (primer vencimiento)
           let batchNumber = ''
           let batchExpiryDate = ''
-          if (isPharmacy && product?.batches && Array.isArray(product.batches)) {
+          if (hasBatchControl && product?.batches && Array.isArray(product.batches)) {
             const availableBatches = product.batches
-              .filter(b => b.quantity > 0 && !b.isExpired)
+              .filter(b => b.quantity > 0 && !b.isExpired && (!selectedWarehouseId || !b.warehouseId || b.warehouseId === selectedWarehouseId))
               .sort((a, b) => {
                 const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
                 const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
@@ -688,9 +689,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     // Auto-seleccionar lote FEFO en farmacia
     let batchNumber = ''
     let batchExpiryDate = ''
-    if (isPharmacy && product.batches && Array.isArray(product.batches)) {
+    if (hasBatchControl && product.batches && Array.isArray(product.batches)) {
       const available = product.batches
-        .filter(b => b.quantity > 0 && !b.isExpired)
+        .filter(b => b.quantity > 0 && !b.isExpired && (!selectedWarehouseId || !b.warehouseId || b.warehouseId === selectedWarehouseId))
         .sort((a, b) => {
           const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
           const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
@@ -728,12 +729,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }))
   }
 
-  // Helper: obtener lotes disponibles de un producto ordenados por FEFO
+  // Helper: obtener lotes disponibles de un producto ordenados por FEFO (filtrado por almacén)
   const getAvailableBatches = (productId) => {
     const product = productsMap[productId]
     if (!product?.batches || !Array.isArray(product.batches)) return []
     return product.batches
-      .filter(b => b.quantity > 0 && !b.isExpired)
+      .filter(b => b.quantity > 0 && !b.isExpired && (!selectedWarehouseId || !b.warehouseId || b.warehouseId === selectedWarehouseId))
       .map(b => ({
         ...b,
         lotNumber: b.lotNumber || b.batchNumber || 'S/N',
@@ -2041,8 +2042,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       />
                     </div>
 
-                    {/* Lote en farmacia */}
-                    {isPharmacy && (
+                    {/* Selección de lote */}
+                    {hasBatchControl && (
                       <div className="col-span-2">
                         <label className="block text-xs text-gray-500 mb-0.5">Lote / Vencimiento</label>
                         {(() => {

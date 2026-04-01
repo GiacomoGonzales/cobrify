@@ -1176,6 +1176,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Detectar modo farmacia para mostrar columna LABORATORIO
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
+  const hasBatchControl = isPharmacy || companySettings?.posCustomFields?.showBatchExpiryInPurchase
 
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
   // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
@@ -1252,9 +1253,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
 
-    // Líneas de detalle farmacéutico (solo farmacia)
+    // Líneas de detalle farmacéutico/lotes (farmacia o retail con batch control)
     let pharmaLines = []
-    if (isPharmacy) {
+    if (hasBatchControl) {
       const parts = []
       if (item.presentation) parts.push(`Pres: ${item.presentation}`)
       if (item.concentration) parts.push(`Conc: ${item.concentration}`)
