@@ -38,7 +38,7 @@ import {
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder } from '@/services/orderService'
 import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
-import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
@@ -1068,6 +1068,8 @@ export default function Tables() {
     }
 
     const tableIdToClose = selectedTable.id
+    const tableNumber = selectedTable.number
+    const closedOrder = selectedOrder
 
     // Cerrar modales y limpiar selección PRIMERO
     setIsCloseTableModalOpen(false)
@@ -1091,10 +1093,24 @@ export default function Tables() {
 
     toast.success('Mesa cerrada exitosamente')
 
+    // Si fue cierre sin comprobante, registrar en auditoría
+    if (closeData?.generateReceipt === 'none' && closeData?.reason) {
+      addDoc(collection(db, 'businesses', getBusinessId(), 'tableCloseWithoutReceipt'), {
+        tableId: tableIdToClose,
+        tableNumber,
+        orderId: closedOrder?.id || null,
+        amount: closeData.amount || 0,
+        items: (closeData.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        reason: closeData.reason,
+        closedBy: user.uid,
+        closedByName: user.displayName || user.email || 'Usuario',
+        createdAt: serverTimestamp(),
+      }).catch(err => console.error('Error al registrar cierre sin comprobante:', err))
+    }
+
     // Ejecutar la operación en Firestore en background
     releaseTable(getBusinessId(), tableIdToClose).catch(error => {
       console.error('Error al cerrar mesa en Firestore:', error)
-      // Si falla, el listener de Firestore corregirá el estado
     })
   }
 

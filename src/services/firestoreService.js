@@ -1762,6 +1762,30 @@ export const getCashMovements = async (userId, sessionId) => {
 }
 
 /**
+ * Obtener registros de mesas cerradas sin comprobante en un rango de fechas
+ */
+export const getClosedWithoutReceipt = async (businessId, startDate, endDate) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', businessId, 'tableCloseWithoutReceipt'),
+      where('createdAt', '>=', startDate),
+      ...(endDate ? [where('createdAt', '<=', endDate)] : [])
+    )
+    const snapshot = await getDocs(q)
+    const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const dA = a.createdAt?.toDate?.() || new Date(0)
+        const dB = b.createdAt?.toDate?.() || new Date(0)
+        return dB - dA
+      })
+    return { success: true, data: records }
+  } catch (error) {
+    console.error('Error al obtener cierres sin comprobante:', error)
+    return { success: false, data: [] }
+  }
+}
+
+/**
  * Obtener todos los movimientos de caja (para Flujo de Caja)
  */
 export const getAllCashMovements = async (userId) => {

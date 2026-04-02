@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -22,6 +22,7 @@ import {
   getCashRegisterHistory,
   updateCashSession, // TEMPORAL: Para editar historial
   getOpenCashSessions,
+  getClosedWithoutReceipt,
 } from '@/services/firestoreService'
 import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
@@ -53,6 +54,7 @@ export default function CashRegister() {
   const [selectedHistorySession, setSelectedHistorySession] = useState(null)
   const [historyMovements, setHistoryMovements] = useState([])
   const [historyInvoices, setHistoryInvoices] = useState([])
+  const [historyClosedWithoutReceipt, setHistoryClosedWithoutReceipt] = useState([])
 
   // TEMPORAL: Estados para edición de historial
   const [isEditingHistory, setIsEditingHistory] = useState(false)
@@ -560,8 +562,9 @@ export default function CashRegister() {
     setSelectedHistorySession(session)
     setShowHistoryDetailModal(true)
     setHistoryInvoices([])
+    setHistoryClosedWithoutReceipt([])
 
-    // Cargar movimientos y facturas de esa sesión
+    // Cargar movimientos, facturas y cierres sin comprobante de esa sesión
     if (!isDemoMode) {
       try {
         const movementsResult = await getCashMovements(getBusinessId(), session.id)
@@ -577,6 +580,15 @@ export default function CashRegister() {
         const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
         if (invoicesResult.success) {
           setHistoryInvoices(invoicesResult.data || [])
+        }
+
+        // Cargar cierres de mesa sin comprobante durante la sesión
+        const sessionClosedAt = session.closedAt?.toDate
+          ? session.closedAt.toDate()
+          : session.closedAt ? new Date(session.closedAt) : new Date()
+        const closedResult = await getClosedWithoutReceipt(getBusinessId(), sessionOpenedAt, sessionClosedAt)
+        if (closedResult.success) {
+          setHistoryClosedWithoutReceipt(closedResult.data || [])
         }
       } catch (error) {
         console.error('Error al cargar movimientos:', error)
@@ -2388,6 +2400,39 @@ export default function CashRegister() {
               </div>
             )}
 
+            {/* Mesas cerradas sin comprobante (alerta) */}
+            {historyClosedWithoutReceipt.length > 0 && (
+              <div className="border-t border-red-200 pt-4">
+                <h4 className="font-semibold text-red-700 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Mesas cerradas sin comprobante ({historyClosedWithoutReceipt.length})
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {historyClosedWithoutReceipt.map(record => {
+                    const ts = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null)
+                    const timeStr = ts ? ts.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
+                    return (
+                      <div key={record.id} className="p-2 bg-red-50 border border-red-100 rounded text-xs">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-semibold text-red-800">Mesa {record.tableNumber}</span>
+                            <span className="text-red-600 ml-2">{formatCurrency(record.amount)}</span>
+                          </div>
+                          <span className="text-red-400">{timeStr}</span>
+                        </div>
+                        <div className="text-red-600 mt-1">
+                          <span className="font-medium">Motivo:</span> {record.reason}
+                        </div>
+                        <div className="text-red-400 mt-0.5">
+                          Por: {record.closedByName || 'Desconocido'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Comprobantes de la Sesión */}
             {historyInvoices.length > 0 && (
               <div className="border-t border-gray-200 pt-4">
@@ -2470,7 +2515,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData, historyClosedWithoutReceipt)
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')

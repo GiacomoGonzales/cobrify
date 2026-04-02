@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { FileText, ShoppingCart, Loader2, CheckCircle, X, UserMinus } from 'lucide-react'
+import { FileText, ShoppingCart, Loader2, CheckCircle, X, UserMinus, AlertTriangle } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 
 export default function CloseTableModal({
   isOpen,
@@ -16,6 +17,8 @@ export default function CloseTableModal({
   const navigate = useNavigate()
   const location = useLocation()
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showCloseWithoutReceipt, setShowCloseWithoutReceipt] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
 
   // Detectar si estamos en demo mode basado en la ruta actual
   const isDemoMode = location.pathname.startsWith('/demo')
@@ -31,6 +34,8 @@ export default function CloseTableModal({
   const displayTax = taxConfig.igvExempt ? 0 : currentTotal - displaySubtotal
 
   const handleClose = () => {
+    setShowCloseWithoutReceipt(false)
+    setCloseReason('')
     onClose()
   }
 
@@ -64,10 +69,14 @@ export default function CloseTableModal({
   }
 
   const handleCloseWithoutReceipt = async () => {
+    if (!closeReason.trim()) return
     setIsProcessing(true)
     try {
       await onConfirm({
         generateReceipt: 'none',
+        reason: closeReason.trim(),
+        amount: order.total || 0,
+        items: order.items || [],
       })
     } catch (error) {
       console.error('Error al cerrar mesa:', error)
@@ -158,50 +167,82 @@ export default function CloseTableModal({
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 ¿Cómo desea cerrar la cuenta?
               </label>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
                 <button
                   onClick={handleCreateReceipt}
-                  className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
+                  className="w-full flex items-center gap-3 p-3 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
                 >
-                  <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-primary-600" />
-                  <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
-                  <div className="text-xs text-gray-600">
-                    Ir al POS para generar Boleta, Factura o Nota de Venta
+                  <ShoppingCart className="w-8 h-8 flex-shrink-0 text-primary-600" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900 text-sm">Crear Comprobante</div>
+                    <div className="text-xs text-gray-500">Ir al POS para generar Boleta, Factura o Nota de Venta</div>
                   </div>
                 </button>
                 <button
                   onClick={() => { if (onIndividualPayment) onIndividualPayment() }}
-                  className="p-6 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors text-center"
+                  className="w-full flex items-center gap-3 p-3 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors text-left"
                 >
-                  <UserMinus className="w-10 h-10 mx-auto mb-3 text-orange-600" />
-                  <div className="font-semibold text-gray-900 mb-1">Cobro Individual</div>
-                  <div className="text-xs text-gray-600">
-                    Cobrar items parciales, mesa sigue abierta
-                  </div>
-                </button>
-                <button
-                  onClick={handleCloseWithoutReceipt}
-                  disabled={isProcessing}
-                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <X className="w-10 h-10 mx-auto mb-3 text-gray-600" />
-                  <div className="font-semibold text-gray-900 mb-1">
-                    {isProcessing ? 'Cerrando...' : 'Cerrar sin Comprobante'}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Liberar la mesa sin generar comprobante
+                  <UserMinus className="w-8 h-8 flex-shrink-0 text-orange-600" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900 text-sm">Cobro Individual</div>
+                    <div className="text-xs text-gray-500">Cobrar items parciales, mesa sigue abierta</div>
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* Botón cancelar */}
-            <div className="flex gap-3 pt-4 border-t">
+            {/* Confirmación de cerrar sin comprobante */}
+            {showCloseWithoutReceipt && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Cerrar sin comprobante</p>
+                    <p className="text-xs text-red-600 mt-0.5">Esta acción quedará registrada. Ingrese el motivo:</p>
+                  </div>
+                </div>
+                <Input
+                  placeholder="Ej: Cortesía, error en pedido, cliente se fue..."
+                  value={closeReason}
+                  onChange={e => setCloseReason(e.target.value)}
+                  required
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setShowCloseWithoutReceipt(false); setCloseReason('') }}
+                    className="flex-1"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleCloseWithoutReceipt}
+                    disabled={isProcessing || !closeReason.trim()}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {isProcessing ? 'Cerrando...' : 'Confirmar'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Footer: Cancelar + link sutil */}
+            <div className="flex items-center justify-between pt-4 border-t">
+              <button
+                type="button"
+                onClick={() => setShowCloseWithoutReceipt(!showCloseWithoutReceipt)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                disabled={isProcessing}
+              >
+                Cerrar sin comprobante
+              </button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleClose}
-                className="w-full"
+                size="sm"
                 disabled={isProcessing}
               >
                 Cancelar

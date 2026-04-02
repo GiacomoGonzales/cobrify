@@ -252,7 +252,7 @@ const hexToRgb = (hex) => {
 /**
  * Generar reporte de cierre de caja en PDF (estilo profesional compacto)
  */
-export const generateCashReportPDF = async (sessionData, movements, invoices, businessData) => {
+export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = []) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
@@ -556,6 +556,39 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       doc.setFontSize(5); doc.setTextColor(...st.color);
       doc.text(st.label, ML + 148, y + 3.3);
       y += 5;
+    });
+    y += 3;
+  }
+
+  // ===== MESAS CERRADAS SIN COMPROBANTE (alerta) =====
+  if (closedWithoutReceipt.length > 0) {
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    // Header rojo de alerta
+    doc.setFillColor(220, 38, 38);
+    doc.rect(ML, y, CW, 0.6, 'F');
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(220, 38, 38);
+    doc.text(`⚠ MESAS CERRADAS SIN COMPROBANTE (${closedWithoutReceipt.length})`, ML, y);
+    y += 5;
+
+    closedWithoutReceipt.forEach((record, i) => {
+      if (y > PH - 15) { doc.addPage(); y = 10; }
+      doc.setFillColor(255, 245, 245);
+      doc.rect(ML, y, CW, 10, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(180, 30, 30);
+      doc.text(`Mesa ${record.tableNumber || '-'}`, ML + 2, y + 3.5);
+      doc.text(fmt(record.amount), ML + 35, y + 3.5);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(140, 40, 40);
+      const reason = (record.reason || '-').substring(0, 50);
+      doc.text(`Motivo: ${reason}`, ML + 2, y + 8);
+      doc.text(`Por: ${(record.closedByName || '-').substring(0, 20)}`, ML + 120, y + 8);
+      const ts = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null);
+      if (ts) {
+        doc.text(ts.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }), RX - 2, y + 3.5, { align: 'right' });
+      }
+      y += 11;
     });
     y += 3;
   }
