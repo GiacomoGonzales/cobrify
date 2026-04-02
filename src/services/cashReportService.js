@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { preloadLogo } from '@/utils/pdfGenerator';
 
 /**
  * Helper para guardar y compartir archivos en móvil
@@ -134,8 +135,8 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     [''],
     ['CIERRE'],
     ['Efectivo Esperado:', sessionData.expectedAmount || 0],
-    ['Efectivo Contado:', sessionData.closingAmount || 0],
-    ['Diferencia:', (sessionData.closingAmount || 0) - (sessionData.expectedAmount || 0)],
+    ['Efectivo Contado:', sessionData.closingCash || 0],
+    ['Diferencia en Efectivo:', (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0)],
     [''],
     ['DETALLE DEL CONTEO'],
     ['Efectivo:', sessionData.closingCash || 0],
@@ -237,174 +238,345 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
 };
 
 /**
- * Generar reporte de cierre de caja en PDF
+ * Helper para convertir hex a RGB
+ */
+const hexToRgb = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+  ] : [70, 70, 70];
+};
+
+/**
+ * Generar reporte de cierre de caja en PDF (estilo profesional compacto)
  */
 export const generateCashReportPDF = async (sessionData, movements, invoices, businessData) => {
-  const doc = new jsPDF();
-  let yPosition = 20;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-  // Convertir fechas
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
   const closedAtDate = getDateFromTimestamp(sessionData.closedAt);
 
-  // Título
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('REPORTE DE CIERRE DE CAJA', 105, yPosition, { align: 'center' });
-  yPosition += 15;
+  const ACCENT = hexToRgb(businessData?.pdfAccentColor || '#464646');
+  const DARK = [50, 50, 50];
+  const MED = [110, 110, 110];
+  const LIGHT = [245, 245, 245];
 
-  // Información del Negocio
-  doc.setFontSize(10);
+  const ML = 15;
+  const PW = 210;
+  const PH = 297;
+  const CW = PW - ML * 2;
+  const RX = PW - ML; // right x
+  const fmt = (n) => `S/ ${(n || 0).toFixed(2)}`;
+
+  let y = 0;
+
+  // ===== HEADER (barra de acento) =====
+  doc.setFillColor(...ACCENT);
+  doc.rect(0, 0, PW, 32, 'F');
+
+  // Logo
+  let textX = ML;
+  if (businessData?.logoUrl) {
+    try {
+      const imgData = await preloadLogo(businessData.logoUrl);
+      if (imgData) {
+        const imgFmt = businessData.logoUrl.toLowerCase().includes('.jp') ? 'JPEG' : 'PNG';
+        const img = new Image();
+        img.src = imgData;
+        await new Promise(r => { img.onload = r; img.onerror = r; });
+        const ar = img.width / img.height;
+        const lh = 18;
+        const lw = Math.min(lh * ar, 50);
+        doc.addImage(imgData, imgFmt, ML, 7, lw, lw / ar, undefined, 'FAST');
+        textX = ML + lw + 5;
+      }
+    } catch (e) { /* sin logo */ }
+  }
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(businessData?.name || 'NEGOCIO', textX, 13);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Negocio: ${businessData?.name || 'N/A'}`, 20, yPosition);
-  yPosition += 6;
-  doc.text(`RUC: ${businessData?.ruc || 'N/A'}`, 20, yPosition);
-  yPosition += 6;
-  doc.text(`Apertura: ${openedAtDate ? format(openedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
-  yPosition += 6;
-  doc.text(`Cierre: ${closedAtDate ? format(closedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
-  yPosition += 12;
-
-  // Resumen Financiero
-  doc.setFontSize(12);
+  doc.setFontSize(7);
+  if (businessData?.ruc) doc.text(`RUC: ${businessData.ruc}`, textX, 18);
   doc.setFont('helvetica', 'bold');
-  doc.text('RESUMEN FINANCIERO', 20, yPosition);
-  yPosition += 8;
+  doc.setFontSize(8);
+  doc.text('CIERRE DE CAJA', textX, 24);
 
-  autoTable(doc, {
-    startY: yPosition,
-    head: [['Concepto', 'Monto']],
-    body: [
-      ['Monto Inicial', `S/ ${(sessionData.openingAmount || 0).toFixed(2)}`],
-      ['Ventas de la Sesión', `S/ ${(sessionData.totalSales || 0).toFixed(2)}`],
-      ['Otros Ingresos', `S/ ${(sessionData.totalIncome || 0).toFixed(2)}`],
-      ['Egresos', `S/ ${(sessionData.totalExpense || 0).toFixed(2)}`],
-      ['Efectivo Esperado', `S/ ${(sessionData.expectedAmount || 0).toFixed(2)}`],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [37, 99, 235] },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 'auto', halign: 'right' }
-    }
-  });
-
-  yPosition = doc.lastAutoTable.finalY + 10;
-
-  // Cierre y Diferencia
-  autoTable(doc, {
-    startY: yPosition,
-    head: [['Detalle de Cierre', 'Monto']],
-    body: [
-      ['Efectivo', `S/ ${(sessionData.closingCash || 0).toFixed(2)}`],
-      ['Tarjetas', `S/ ${(sessionData.closingCard || 0).toFixed(2)}`],
-      ['Transferencias', `S/ ${(sessionData.closingTransfer || 0).toFixed(2)}`],
-      ...(sessionData.closingYape ? [['Yape', `S/ ${sessionData.closingYape.toFixed(2)}`]] : []),
-      ...(sessionData.closingPlin ? [['Plin', `S/ ${sessionData.closingPlin.toFixed(2)}`]] : []),
-      ...(sessionData.closingRappi ? [['Rappi', `S/ ${sessionData.closingRappi.toFixed(2)}`]] : []),
-      ...(sessionData.closingPedidosYa ? [['PedidosYa', `S/ ${sessionData.closingPedidosYa.toFixed(2)}`]] : []),
-      ...(sessionData.closingDiDiFood ? [['DiDiFood', `S/ ${sessionData.closingDiDiFood.toFixed(2)}`]] : []),
-      ['Total Contado', `S/ ${(sessionData.closingAmount || 0).toFixed(2)}`],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [16, 185, 129] },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 'auto', halign: 'right' }
-    }
-  });
-
-  yPosition = doc.lastAutoTable.finalY + 5;
-
-  const difference = (sessionData.closingAmount || 0) - (sessionData.expectedAmount || 0);
-  const differenceColor = difference >= 0 ? [16, 185, 129] : [239, 68, 68];
-
-  autoTable(doc, {
-    startY: yPosition,
-    body: [
-      ['DIFERENCIA', `S/ ${difference.toFixed(2)}`],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 11, fontStyle: 'bold' },
-    bodyStyles: { fillColor: differenceColor, textColor: 255 },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 'auto', halign: 'right' }
-    }
-  });
-
-  // Nueva página para comprobantes si hay muchos
-  if (invoices.length > 0) {
-    doc.addPage();
-    yPosition = 20;
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`COMPROBANTES DE LA SESIÓN (${invoices.length})`, 20, yPosition);
-    yPosition += 8;
-
-    const invoiceRows = invoices.map(invoice => [
-      invoice.number || 'N/A',
-      invoice.type || 'N/A',
-      invoice.customerName || 'Cliente General',
-      formatPaymentMethods(invoice),
-      `S/ ${(invoice.total || 0).toFixed(2)}`,
-    ]);
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Número', 'Tipo', 'Cliente', 'Pago', 'Total']],
-      body: invoiceRows,
-      theme: 'striped',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [37, 99, 235] },
-      columnStyles: {
-        4: { halign: 'right' }
-      }
-    });
+  // Fechas derecha
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(210, 210, 210);
+  const aStr = openedAtDate ? format(openedAtDate, "dd/MM/yyyy HH:mm", { locale: es }) : '-';
+  const cStr = closedAtDate ? format(closedAtDate, "dd/MM/yyyy HH:mm", { locale: es }) : '-';
+  doc.text(`Apertura: ${aStr}`, RX, 11, { align: 'right' });
+  doc.text(`Cierre: ${cStr}`, RX, 16, { align: 'right' });
+  if (sessionData.closedByName) {
+    doc.text(`Cajero: ${sessionData.closedByName}`, RX, 21, { align: 'right' });
   }
 
-  // Movimientos adicionales
+  y = 37;
+
+  // ===== RESUMEN (4 mini-cards en fila) =====
+  const cw4 = (CW - 4.5) / 4; // ancho de cada card
+  const ch = 14;
+  const cards = [
+    { lbl: 'Monto Inicial', val: fmt(sessionData.openingAmount), bg: [230, 242, 255], tc: [30, 80, 180] },
+    { lbl: 'Ventas del Día', val: fmt(sessionData.totalSales), bg: [230, 250, 240], tc: [5, 120, 80] },
+    { lbl: 'Otros Ingresos', val: fmt(sessionData.totalIncome), bg: [240, 238, 255], tc: [100, 40, 200] },
+    { lbl: 'Egresos', val: fmt(sessionData.totalExpense), bg: [255, 238, 238], tc: [180, 30, 30] },
+  ];
+  cards.forEach((c, i) => {
+    const cx = ML + i * (cw4 + 1.5);
+    doc.setFillColor(...c.bg);
+    doc.roundedRect(cx, y, cw4, ch, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...MED);
+    doc.text(c.lbl, cx + 3, y + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...c.tc);
+    doc.text(c.val, cx + 3, y + 11);
+  });
+  y += ch + 6;
+
+  // ===== Helper: section title =====
+  const section = (title) => {
+    doc.setFillColor(...ACCENT);
+    doc.rect(ML, y, CW, 0.6, 'F');
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...DARK);
+    doc.text(title, ML, y);
+    y += 4;
+  };
+
+  // ===== Helper: row =====
+  const row = (label, value, idx, bold) => {
+    if (idx % 2 === 0) {
+      doc.setFillColor(...LIGHT);
+      doc.rect(ML, y, CW, 5.5, 'F');
+    }
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...DARK);
+    doc.text(label, ML + 2, y + 3.8);
+    doc.text(value, RX - 2, y + 3.8, { align: 'right' });
+    y += 5.5;
+  };
+
+  // ===== Helper: total row =====
+  const totalRow = (label, value) => {
+    doc.setFillColor(...ACCENT);
+    doc.rect(ML, y, CW, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(255, 255, 255);
+    doc.text(label, ML + 2, y + 4);
+    doc.text(value, RX - 2, y + 4, { align: 'right' });
+    y += 8;
+  };
+
+  // ===== VENTAS POR MÉTODO DE PAGO (izq) + ARQUEO DE CIERRE (der) - lado a lado =====
+  const colW = (CW - 5) / 2;
+  const colL = ML;
+  const colR = ML + colW + 5;
+  const startY = y;
+
+  // -- Columna izquierda: Ventas por método --
+  let yL = startY;
+  doc.setFillColor(...ACCENT);
+  doc.rect(colL, yL, colW, 0.6, 'F');
+  yL += 4;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...DARK);
+  doc.text('VENTAS POR MÉTODO DE PAGO', colL, yL);
+  yL += 4;
+
+  const salesItems = [
+    ['Efectivo', sessionData.salesCash || 0],
+    ['Tarjetas', sessionData.salesCard || 0],
+    ['Transferencias', sessionData.salesTransfer || 0],
+    ...(sessionData.salesYape ? [['Yape', sessionData.salesYape]] : []),
+    ...(sessionData.salesPlin ? [['Plin', sessionData.salesPlin]] : []),
+    ...(sessionData.salesRappi ? [['Rappi', sessionData.salesRappi]] : []),
+    ...(sessionData.salesPedidosYa ? [['PedidosYa', sessionData.salesPedidosYa]] : []),
+    ...(sessionData.salesDiDiFood ? [['DiDiFood', sessionData.salesDiDiFood]] : []),
+  ];
+
+  salesItems.forEach(([lbl, val], i) => {
+    if (i % 2 === 0) { doc.setFillColor(...LIGHT); doc.rect(colL, yL, colW, 5, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...DARK);
+    doc.text(lbl, colL + 2, yL + 3.5);
+    doc.text(fmt(val), colL + colW - 2, yL + 3.5, { align: 'right' });
+    yL += 5;
+  });
+  doc.setFillColor(...ACCENT); doc.rect(colL, yL, colW, 5.5, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL VENTAS', colL + 2, yL + 3.8);
+  doc.text(fmt(sessionData.totalSales), colL + colW - 2, yL + 3.8, { align: 'right' });
+  yL += 5.5;
+
+  // -- Columna derecha: Arqueo de cierre --
+  let yR = startY;
+  doc.setFillColor(...ACCENT);
+  doc.rect(colR, yR, colW, 0.6, 'F');
+  yR += 4;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...DARK);
+  doc.text('ARQUEO DE CIERRE', colR, yR);
+  yR += 4;
+
+  const closingItems = [
+    ['Efectivo Contado', sessionData.closingCash || 0],
+    ['Tarjetas', sessionData.closingCard || 0],
+    ['Transferencias', sessionData.closingTransfer || 0],
+    ...(sessionData.closingYape ? [['Yape', sessionData.closingYape]] : []),
+    ...(sessionData.closingPlin ? [['Plin', sessionData.closingPlin]] : []),
+    ...(sessionData.closingRappi ? [['Rappi', sessionData.closingRappi]] : []),
+    ...(sessionData.closingPedidosYa ? [['PedidosYa', sessionData.closingPedidosYa]] : []),
+    ...(sessionData.closingDiDiFood ? [['DiDiFood', sessionData.closingDiDiFood]] : []),
+  ];
+
+  closingItems.forEach(([lbl, val], i) => {
+    if (i % 2 === 0) { doc.setFillColor(...LIGHT); doc.rect(colR, yR, colW, 5, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...DARK);
+    doc.text(lbl, colR + 2, yR + 3.5);
+    doc.text(fmt(val), colR + colW - 2, yR + 3.5, { align: 'right' });
+    yR += 5;
+  });
+  doc.setFillColor(...ACCENT); doc.rect(colR, yR, colW, 5.5, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL CONTADO', colR + 2, yR + 3.8);
+  doc.text(fmt(sessionData.closingAmount), colR + colW - 2, yR + 3.8, { align: 'right' });
+  yR += 5.5;
+
+  y = Math.max(yL, yR) + 5;
+
+  // ===== EFECTIVO ESPERADO + DIFERENCIA =====
+  doc.setFillColor(240, 240, 240);
+  doc.roundedRect(ML, y, CW, 7, 1, 1, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(...MED);
+  doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...DARK);
+  doc.text(fmt(sessionData.expectedAmount), RX - 2, y + 4.8, { align: 'right' });
+  y += 9;
+
+  const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0);
+  const diffOk = difference >= 0;
+  const diffBg = diffOk ? [230, 250, 240] : [255, 235, 235];
+  const diffTc = diffOk ? [5, 120, 80] : [180, 30, 30];
+  const diffLbl = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante');
+
+  doc.setFillColor(...diffBg);
+  doc.roundedRect(ML, y, CW, 9, 1, 1, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...diffTc);
+  doc.text(`DIFERENCIA EN EFECTIVO — ${diffLbl}`, ML + 2, y + 5.5);
+  doc.setFontSize(10);
+  doc.text(fmt(difference), RX - 2, y + 6, { align: 'right' });
+  y += 13;
+
+  // ===== MOVIMIENTOS ADICIONALES =====
   if (movements.length > 0) {
-    if (doc.lastAutoTable && doc.lastAutoTable.finalY > 200) {
-      doc.addPage();
-      yPosition = 20;
-    } else {
-      yPosition = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : yPosition + 15;
-    }
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`MOVIMIENTOS ADICIONALES (${movements.length})`, 20, yPosition);
-    yPosition += 8;
-
-    const movementRows = movements.map(movement => [
-      movement.type === 'income' ? 'Ingreso' : 'Egreso',
-      movement.category || 'N/A',
-      movement.description || 'N/A',
-      `S/ ${(movement.amount || 0).toFixed(2)}`,
-    ]);
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Tipo', 'Categoría', 'Descripción', 'Monto']],
-      body: movementRows,
-      theme: 'striped',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [37, 99, 235] },
-      columnStyles: {
-        3: { halign: 'right' }
-      }
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    section(`MOVIMIENTOS ADICIONALES (${movements.length})`);
+    movements.forEach((m, i) => {
+      row(
+        `${m.type === 'income' ? '+ Ingreso' : '- Egreso'}: ${m.description || '-'} (${m.category || '-'})`,
+        fmt(m.amount), i, false
+      );
     });
+    y += 4;
   }
 
-  // Guardar PDF
-  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
+  // ===== COMPROBANTES DE LA SESIÓN =====
+  if (invoices.length > 0) {
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    section(`COMPROBANTES DE LA SESIÓN (${invoices.length})`);
 
-  const isNativePlatform = Capacitor.isNativePlatform();
-  if (isNativePlatform) {
+    // Header de tabla
+    doc.setFillColor(...LIGHT);
+    doc.rect(ML, y, CW, 5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...MED);
+    doc.text('NÚMERO', ML + 2, y + 3.3);
+    doc.text('TIPO', ML + 33, y + 3.3);
+    doc.text('CLIENTE', ML + 55, y + 3.3);
+    doc.text('PAGO', ML + 105, y + 3.3);
+    doc.text('TOTAL', ML + 143, y + 3.3, { align: 'right' });
+    doc.text('ESTADO', ML + 148, y + 3.3);
+    y += 5;
+
+    const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'N. Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' };
+
+    const getInvoiceStatus = (inv) => {
+      const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided';
+      if (isVoided) return { label: 'Anulado', color: [220, 38, 38], excluded: true };
+      if (inv.documentType === 'nota_credito') return { label: 'NC', color: [234, 88, 12], excluded: true };
+      if (inv.documentType === 'nota_venta' && inv.convertedTo) return { label: 'Convertida', color: [37, 99, 235], excluded: true };
+      if (inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') return { label: 'Pend. Anul.', color: [220, 38, 38], excluded: true };
+      if (inv.paymentStatus === 'pending') return { label: 'Crédito', color: [161, 98, 7], excluded: false };
+      if (inv.paymentStatus === 'partial') return { label: 'Parcial', color: [180, 83, 9], excluded: false };
+      if (inv.documentType === 'nota_debito') return { label: 'N. Débito', color: [100, 100, 100], excluded: false };
+      return { label: 'Pagado', color: [22, 163, 74], excluded: false };
+    };
+
+    invoices.forEach((inv, i) => {
+      if (y > PH - 15) { doc.addPage(); y = 10; }
+      const st = getInvoiceStatus(inv);
+      if (i % 2 === 0) { doc.setFillColor(250, 250, 250); doc.rect(ML, y, CW, 5, 'F'); }
+
+      const textColor = st.excluded ? [160, 160, 160] : DARK;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...textColor);
+      doc.text((inv.number || '-').substring(0, 16), ML + 2, y + 3.3);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5);
+      doc.text((docTypeLabels[inv.documentType] || inv.type || '-').substring(0, 10), ML + 33, y + 3.3);
+      const clientName = inv.customer?.name || inv.customer?.businessName || inv.customerName || 'Cliente General';
+      doc.text(clientName.substring(0, 26), ML + 55, y + 3.3);
+      const payStr = formatPaymentMethods(inv);
+      doc.text(payStr.substring(0, 22), ML + 105, y + 3.3);
+      doc.setFont('helvetica', 'bold');
+      const isNC = inv.documentType === 'nota_credito';
+      doc.text(`${isNC ? '-' : ''}S/ ${(inv.total || 0).toFixed(2)}`, ML + 143, y + 3.3, { align: 'right' });
+      // Estado badge
+      doc.setFontSize(5); doc.setTextColor(...st.color);
+      doc.text(st.label, ML + 148, y + 3.3);
+      y += 5;
+    });
+    y += 3;
+  }
+
+  // ===== PIE DE PÁGINA =====
+  const pages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.15);
+    doc.line(ML, PH - 10, RX, PH - 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`${businessData?.name || ''} — Cierre de Caja`, ML, PH - 6.5);
+    doc.text(`Pág. ${i}/${pages}`, RX, PH - 6.5, { align: 'right' });
+  }
+
+  // Guardar
+  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
+  if (Capacitor.isNativePlatform()) {
     const pdfBase64 = doc.output('datauristring').split(',')[1];
     await saveAndShareFile(pdfBase64, fileName);
   } else {

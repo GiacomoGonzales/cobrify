@@ -101,7 +101,7 @@ const CashClosureTicket = forwardRef(({
   const closingPedidosYa = sessionData?.closingPedidosYa || 0
   const closingDiDiFood = sessionData?.closingDiDiFood || 0
   const closingAmount = sessionData?.closingAmount || 0
-  const difference = sessionData?.difference || (closingAmount - expectedAmount)
+  const difference = sessionData?.difference ?? (closingCash - expectedAmount)
 
   return (
     <div ref={ref} className="ticket-container">

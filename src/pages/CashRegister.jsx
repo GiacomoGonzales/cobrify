@@ -52,6 +52,7 @@ export default function CashRegister() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [selectedHistorySession, setSelectedHistorySession] = useState(null)
   const [historyMovements, setHistoryMovements] = useState([])
+  const [historyInvoices, setHistoryInvoices] = useState([])
 
   // TEMPORAL: Estados para edición de historial
   const [isEditingHistory, setIsEditingHistory] = useState(false)
@@ -60,6 +61,11 @@ export default function CashRegister() {
     closingCash: 0,
     closingCard: 0,
     closingTransfer: 0,
+    closingYape: 0,
+    closingPlin: 0,
+    closingRappi: 0,
+    closingPedidosYa: 0,
+    closingDiDiFood: 0,
   })
   const [editMovementValues, setEditMovementValues] = useState({ description: '', amount: 0 })
 
@@ -453,7 +459,13 @@ export default function CashRegister() {
         closingCash: editValues.closingCash,
         closingCard: editValues.closingCard,
         closingTransfer: editValues.closingTransfer,
+        closingYape: editValues.closingYape,
+        closingPlin: editValues.closingPlin,
+        closingRappi: editValues.closingRappi,
+        closingPedidosYa: editValues.closingPedidosYa,
+        closingDiDiFood: editValues.closingDiDiFood,
         totalSales: selectedHistorySession.totalSales || 0,
+        salesCash: selectedHistorySession.salesCash || 0,
         totalIncome: selectedHistorySession.totalIncome || 0,
         totalExpense: selectedHistorySession.totalExpense || 0,
       })
@@ -481,6 +493,11 @@ export default function CashRegister() {
       closingCash: selectedHistorySession.closingCash || 0,
       closingCard: selectedHistorySession.closingCard || 0,
       closingTransfer: selectedHistorySession.closingTransfer || 0,
+      closingYape: selectedHistorySession.closingYape || 0,
+      closingPlin: selectedHistorySession.closingPlin || 0,
+      closingRappi: selectedHistorySession.closingRappi || 0,
+      closingPedidosYa: selectedHistorySession.closingPedidosYa || 0,
+      closingDiDiFood: selectedHistorySession.closingDiDiFood || 0,
     })
     setIsEditingHistory(true)
   }
@@ -538,13 +555,24 @@ export default function CashRegister() {
   const handleViewHistoryDetail = async (session) => {
     setSelectedHistorySession(session)
     setShowHistoryDetailModal(true)
+    setHistoryInvoices([])
 
-    // Cargar movimientos de esa sesión
+    // Cargar movimientos y facturas de esa sesión
     if (!isDemoMode) {
       try {
         const movementsResult = await getCashMovements(getBusinessId(), session.id)
         if (movementsResult.success) {
           setHistoryMovements(movementsResult.data || [])
+        }
+
+        // Cargar facturas de la sesión
+        const sessionOpenedAt = session.openedAt?.toDate
+          ? session.openedAt.toDate()
+          : new Date(session.openedAt)
+        const branchId = session.branchId || selectedBranch?.id || null
+        const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
+        if (invoicesResult.success) {
+          setHistoryInvoices(invoicesResult.data || [])
         }
       } catch (error) {
         console.error('Error al cargar movimientos:', error)
@@ -1809,26 +1837,41 @@ export default function CashRegister() {
                             ? inv.payments.map(p => p.method).join(', ')
                             : inv.paymentMethod || '-'
                           const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
+                          const isNC = inv.documentType === 'nota_credito'
+                          const isND = inv.documentType === 'nota_debito'
+                          const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
                           const isPending = inv.paymentStatus === 'pending'
+                          const isPartial = inv.paymentStatus === 'partial'
                           const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
                           const timeStr = createdAt ? createdAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
 
+                          let statusBadge
+                          if (isVoided) {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
+                          } else if (isNC) {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                          } else if (isConverted) {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
+                          } else if (isPending) {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
+                          } else if (isPartial) {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
+                          } else {
+                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
+                          }
+
+                          const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+
                           return (
-                            <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${isVoided ? 'opacity-50 line-through' : ''}`}>
+                            <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${rowClass}`}>
                               <td className="py-2 pr-3 font-medium text-primary-600">{inv.number || '-'}</td>
                               <td className="py-2 pr-3">{docTypeLabels[inv.documentType] || inv.documentType}</td>
                               <td className="py-2 pr-3 truncate max-w-[150px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
                               <td className="py-2 pr-3 text-gray-600">{payMethod}</td>
-                              <td className="py-2 pr-3 text-right font-medium">{formatCurrency(inv.total || 0)}</td>
-                              <td className="py-2 pr-3">
-                                {isVoided ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
-                                ) : isPending ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
-                                ) : (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
-                                )}
+                              <td className={`py-2 pr-3 text-right font-medium ${isNC ? 'text-red-600' : ''}`}>
+                                {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
                               </td>
+                              <td className="py-2 pr-3">{statusBadge}</td>
                               <td className="py-2 text-right text-gray-500">{timeStr}</td>
                             </tr>
                           )
@@ -2033,6 +2076,7 @@ export default function CashRegister() {
           setShowHistoryDetailModal(false)
           setSelectedHistorySession(null)
           setHistoryMovements([])
+          setHistoryInvoices([])
           setIsEditingHistory(false) // TEMPORAL: Resetear estado de edición
         }}
         title="Detalle de Sesión"
@@ -2142,34 +2186,84 @@ export default function CashRegister() {
                     <span className="font-semibold">{formatCurrency(selectedHistorySession.closingTransfer || 0)}</span>
                   )}
                 </div>
-                {(selectedHistorySession.closingYape > 0 || selectedHistorySession.salesYape > 0) && (
+                {(selectedHistorySession.closingYape > 0 || selectedHistorySession.salesYape > 0 || (isEditingHistory && editValues.closingYape > 0)) && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Yape:</span>
-                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingYape || 0)}</span>
+                    {isEditingHistory ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues.closingYape}
+                        onChange={e => setEditValues({ ...editValues, closingYape: parseFloat(e.target.value) || 0 })}
+                        className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                      />
+                    ) : (
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.closingYape || 0)}</span>
+                    )}
                   </div>
                 )}
-                {(selectedHistorySession.closingPlin > 0 || selectedHistorySession.salesPlin > 0) && (
+                {(selectedHistorySession.closingPlin > 0 || selectedHistorySession.salesPlin > 0 || (isEditingHistory && editValues.closingPlin > 0)) && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Plin:</span>
-                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPlin || 0)}</span>
+                    {isEditingHistory ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues.closingPlin}
+                        onChange={e => setEditValues({ ...editValues, closingPlin: parseFloat(e.target.value) || 0 })}
+                        className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                      />
+                    ) : (
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPlin || 0)}</span>
+                    )}
                   </div>
                 )}
-                {(selectedHistorySession.closingRappi > 0 || selectedHistorySession.salesRappi > 0) && (
+                {(selectedHistorySession.closingRappi > 0 || selectedHistorySession.salesRappi > 0 || (isEditingHistory && editValues.closingRappi > 0)) && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Rappi:</span>
-                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingRappi || 0)}</span>
+                    {isEditingHistory ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues.closingRappi}
+                        onChange={e => setEditValues({ ...editValues, closingRappi: parseFloat(e.target.value) || 0 })}
+                        className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                      />
+                    ) : (
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.closingRappi || 0)}</span>
+                    )}
                   </div>
                 )}
-                {(selectedHistorySession.closingPedidosYa > 0 || selectedHistorySession.salesPedidosYa > 0) && (
+                {(selectedHistorySession.closingPedidosYa > 0 || selectedHistorySession.salesPedidosYa > 0 || (isEditingHistory && editValues.closingPedidosYa > 0)) && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">PedidosYa:</span>
-                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPedidosYa || 0)}</span>
+                    {isEditingHistory ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues.closingPedidosYa}
+                        onChange={e => setEditValues({ ...editValues, closingPedidosYa: parseFloat(e.target.value) || 0 })}
+                        className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                      />
+                    ) : (
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPedidosYa || 0)}</span>
+                    )}
                   </div>
                 )}
-                {(selectedHistorySession.closingDiDiFood > 0 || selectedHistorySession.salesDiDiFood > 0) && (
+                {(selectedHistorySession.closingDiDiFood > 0 || selectedHistorySession.salesDiDiFood > 0 || (isEditingHistory && editValues.closingDiDiFood > 0)) && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">DiDiFood:</span>
-                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingDiDiFood || 0)}</span>
+                    {isEditingHistory ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues.closingDiDiFood}
+                        onChange={e => setEditValues({ ...editValues, closingDiDiFood: parseFloat(e.target.value) || 0 })}
+                        className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                      />
+                    ) : (
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.closingDiDiFood || 0)}</span>
+                    )}
                   </div>
                 )}
                 <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
@@ -2288,6 +2382,80 @@ export default function CashRegister() {
               </div>
             )}
 
+            {/* Comprobantes de la Sesión */}
+            {historyInvoices.length > 0 && (
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Comprobantes de la Sesión ({historyInvoices.length})
+                </h4>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+                        <th className="pb-2 pr-2">Número</th>
+                        <th className="pb-2 pr-2">Tipo</th>
+                        <th className="pb-2 pr-2">Cliente</th>
+                        <th className="pb-2 pr-2">Método</th>
+                        <th className="pb-2 pr-2 text-right">Total</th>
+                        <th className="pb-2">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyInvoices
+                        .sort((a, b) => {
+                          const dA = a.createdAt?.toDate?.() || new Date(0)
+                          const dB = b.createdAt?.toDate?.() || new Date(0)
+                          return dB - dA
+                        })
+                        .map(inv => {
+                          const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'N. Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+                          const payMethod = inv.payments?.length > 0
+                            ? inv.payments.map(p => p.method).join(', ')
+                            : inv.paymentMethod || '-'
+                          const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
+                          const isNC = inv.documentType === 'nota_credito'
+                          const isND = inv.documentType === 'nota_debito'
+                          const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
+                          const isPending = inv.paymentStatus === 'pending'
+                          const isPartial = inv.paymentStatus === 'partial'
+
+                          let statusBadge
+                          if (isVoided) {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
+                          } else if (isNC) {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                          } else if (isConverted) {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
+                          } else if (isPending) {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
+                          } else if (isPartial) {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
+                          } else {
+                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
+                          }
+
+                          const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+
+                          return (
+                            <tr key={inv.id} className={`border-b border-gray-100 ${rowClass}`}>
+                              <td className="py-1.5 pr-2 font-medium text-primary-600 text-xs">{inv.number || '-'}</td>
+                              <td className="py-1.5 pr-2 text-xs">{docTypeLabels[inv.documentType] || inv.documentType}</td>
+                              <td className="py-1.5 pr-2 text-xs truncate max-w-[100px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
+                              <td className="py-1.5 pr-2 text-xs text-gray-600">{payMethod}</td>
+                              <td className={`py-1.5 pr-2 text-right text-xs font-medium ${isNC ? 'text-red-600' : ''}`}>
+                                {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
+                              </td>
+                              <td className="py-1.5">{statusBadge}</td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Botones */}
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
               <Button
@@ -2296,7 +2464,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportPDF(selectedHistorySession, historyMovements, [], businessData)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData)
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')
@@ -2314,7 +2482,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportExcel(selectedHistorySession, historyMovements, [], businessData)
+                    await generateCashReportExcel(selectedHistorySession, historyMovements, historyInvoices, businessData)
                     toast.success('Excel descargado')
                   } catch (error) {
                     toast.error('Error al generar Excel')

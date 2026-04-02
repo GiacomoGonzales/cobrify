@@ -1672,18 +1672,23 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
  */
 export const updateCashSession = async (userId, sessionId, updateData) => {
   try {
-    const { closingCash, closingCard, closingTransfer, openingAmount } = updateData
-    const closingAmount = (closingCash || 0) + (closingCard || 0) + (closingTransfer || 0)
+    const { closingCash, closingCard, closingTransfer, closingYape, closingPlin, closingRappi, closingPedidosYa, closingDiDiFood, openingAmount } = updateData
+    const closingAmount = (closingCash || 0) + (closingCard || 0) + (closingTransfer || 0) + (closingYape || 0) + (closingPlin || 0) + (closingRappi || 0) + (closingPedidosYa || 0) + (closingDiDiFood || 0)
 
-    // Recalcular diferencia
-    const expectedAmount = (openingAmount || 0) + (updateData.totalSales || 0) + (updateData.totalIncome || 0) - (updateData.totalExpense || 0)
-    const difference = closingAmount - expectedAmount
+    // Recalcular diferencia - Efectivo esperado = apertura + ventas en efectivo + ingresos - egresos
+    const expectedAmount = (openingAmount || 0) + (updateData.salesCash || 0) + (updateData.totalIncome || 0) - (updateData.totalExpense || 0)
+    const difference = (closingCash || 0) - expectedAmount
 
     await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
       closingAmount,
       closingCash: closingCash || 0,
       closingCard: closingCard || 0,
       closingTransfer: closingTransfer || 0,
+      closingYape: closingYape || 0,
+      closingPlin: closingPlin || 0,
+      closingRappi: closingRappi || 0,
+      closingPedidosYa: closingPedidosYa || 0,
+      closingDiDiFood: closingDiDiFood || 0,
       openingAmount: openingAmount || 0,
       expectedAmount,
       difference,
