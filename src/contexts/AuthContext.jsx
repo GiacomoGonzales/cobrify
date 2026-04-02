@@ -203,10 +203,9 @@ export const AuthProvider = ({ children }) => {
 
           // Obtener suscripción con timeout
           try {
-            // Primero verificar si es sub-usuario (tiene ownerId)
-            const userDataForSub = await getUserData(firebaseUser.uid)
-            const isSubUser = userDataForSub.success && userDataForSub.data?.ownerId
-            const ownerIdForSubscription = isSubUser ? userDataForSub.data.ownerId : firebaseUser.uid
+            // Usar subUserOwnerId ya cargado arriba (más confiable que segunda llamada a getUserData)
+            const isSubUser = !!subUserOwnerId
+            const ownerIdForSubscription = isSubUser ? subUserOwnerId : firebaseUser.uid
 
             console.log(`📋 Usuario: ${isSubUser ? 'Sub-usuario (owner: ' + ownerIdForSubscription + ')' : 'Principal'}`)
 

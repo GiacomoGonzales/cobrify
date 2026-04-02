@@ -316,9 +316,11 @@ export default function AdminUsers() {
       subscriptionsSnapshot.forEach(doc => {
         const data = doc.data()
 
-        // Excluir sub-usuarios (verificar en subscriptions y en users collection)
+        // Excluir sub-usuarios (verificar en subscriptions, users collection y businesses)
         if (data.ownerId) return
         if (usersMap[doc.id]?.ownerId) return
+        // Si tiene documento en users pero no es business owner y no tiene negocio, es sub-usuario huérfano
+        if (usersMap[doc.id] && !usersMap[doc.id]?.isBusinessOwner && !businessesMap[doc.id]) return
 
         // Obtener datos del negocio
         const business = businessesMap[doc.id] || {}
