@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   getAppointmentsByDate,
+  getAppointmentsByDateRange,
   updateAppointment,
   cancelAppointment,
   completeAppointment,
@@ -52,7 +53,9 @@ export default function VeterinaryAgenda() {
   const toast = useToast()
 
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [currentMonth, setCurrentMonth] = useState(new Date())
   const [appointments, setAppointments] = useState([])
+  const [monthAppointments, setMonthAppointments] = useState([])
   const [stats, setStats] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
@@ -64,30 +67,92 @@ export default function VeterinaryAgenda() {
   // Modal de acciones
   const [actionMenu, setActionMenu] = useState(null)
 
+  // Cargar citas del mes para el calendario
   useEffect(() => {
-    loadAppointments()
-  }, [user, selectedDate])
+    loadMonthAppointments()
+  }, [user, currentMonth])
 
-  const loadAppointments = async () => {
+  const loadMonthAppointments = async () => {
     if (!user?.uid || isDemoMode) {
       setIsLoading(false)
       return
     }
-
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const [appts, dayStats] = await Promise.all([
-        getAppointmentsByDate(businessId, selectedDate),
-        getDayStats(businessId, selectedDate),
-      ])
-      setAppointments(appts)
-      setStats(dayStats)
+      const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 0, 0, 0)
+      const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59)
+      const appts = await getAppointmentsByDateRange(businessId, start, end)
+      setMonthAppointments(appts)
     } catch (error) {
-      console.error('Error al cargar citas:', error)
+      console.error('Error al cargar citas del mes:', error)
       toast.error('Error al cargar las citas')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadAppointments = () => {
+    loadMonthAppointments()
+  }
+
+  // Agrupar citas por día del mes
+  const appointmentsByDay = {}
+  monthAppointments.forEach(appt => {
+    const d = appt.scheduledDate?.toDate ? appt.scheduledDate.toDate() : new Date(appt.scheduledDate)
+    const key = d.getDate()
+    if (!appointmentsByDay[key]) appointmentsByDay[key] = []
+    appointmentsByDay[key].push(appt)
+  })
+
+  // Filtrar citas del día seleccionado desde los datos del mes (sin query extra)
+  const dayAppointments = monthAppointments.filter(appt => {
+    const d = appt.scheduledDate?.toDate ? appt.scheduledDate.toDate() : new Date(appt.scheduledDate)
+    return d.getDate() === selectedDate.getDate() &&
+      d.getMonth() === selectedDate.getMonth() &&
+      d.getFullYear() === selectedDate.getFullYear()
+  }).sort((a, b) => {
+    const dA = a.scheduledDate?.toDate ? a.scheduledDate.toDate() : new Date(a.scheduledDate)
+    const dB = b.scheduledDate?.toDate ? b.scheduledDate.toDate() : new Date(b.scheduledDate)
+    return dA - dB
+  })
+
+  // Stats del día calculadas localmente
+  const dayStats = {
+    total: dayAppointments.length,
+    scheduled: dayAppointments.filter(a => a.status === 'scheduled').length,
+    confirmed: dayAppointments.filter(a => a.status === 'confirmed').length,
+    inProgress: dayAppointments.filter(a => a.status === 'in_progress').length,
+    completed: dayAppointments.filter(a => a.status === 'completed').length,
+  }
+
+  // Generar días del calendario
+  const getCalendarDays = () => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
+    const firstDay = new Date(year, month, 1).getDay() // 0=Dom
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const days = []
+    // Días vacíos al inicio
+    for (let i = 0; i < firstDay; i++) days.push(null)
+    // Días del mes
+    for (let d = 1; d <= daysInMonth; d++) days.push(d)
+    return days
+  }
+
+  const changeMonth = (delta) => {
+    const newMonth = new Date(currentMonth)
+    newMonth.setMonth(newMonth.getMonth() + delta)
+    setCurrentMonth(newMonth)
+  }
+
+  const selectDay = (day) => {
+    if (!day) return
+    const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
+    setSelectedDate(newDate)
+    // Sync month if needed
+    if (newDate.getMonth() !== currentMonth.getMonth()) {
+      setCurrentMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1))
     }
   }
 
@@ -95,6 +160,9 @@ export default function VeterinaryAgenda() {
     const newDate = new Date(selectedDate)
     newDate.setDate(newDate.getDate() + days)
     setSelectedDate(newDate)
+    if (newDate.getMonth() !== currentMonth.getMonth()) {
+      setCurrentMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1))
+    }
   }
 
   const goToToday = () => {
@@ -268,72 +336,102 @@ export default function VeterinaryAgenda() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header con navegación de fecha */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Agenda de Citas</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1 capitalize">{formatDate(selectedDate)}</p>
         </div>
-
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-white rounded-lg border shadow-sm">
-            <button
-              onClick={() => changeDate(-1)}
-              className="p-2 hover:bg-gray-50 rounded-l-lg transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              onClick={goToToday}
-              className={`px-3 py-2 text-sm font-medium transition-colors ${
-                isToday ? 'text-primary-600 bg-primary-50' : 'hover:bg-gray-50'
-              }`}
-            >
-              Hoy
-            </button>
-            <button
-              onClick={() => changeDate(1)}
-              className="p-2 hover:bg-gray-50 rounded-r-lg transition-colors"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-
-          <input
-            type="date"
-            value={selectedDate.toISOString().split('T')[0]}
-            onChange={(e) => setSelectedDate(new Date(e.target.value))}
-            className="px-3 py-2 border rounded-lg text-sm"
-          />
-
-          <Button variant="outline" onClick={loadAppointments}>
+          <Button variant="outline" size="sm" onClick={goToToday}>Hoy</Button>
+          <Button variant="outline" size="sm" onClick={loadAppointments}>
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Stats del día */}
+      {/* Calendario mensual */}
+      <Card>
+        <CardContent className="p-4">
+          {/* Navegación del mes */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900 capitalize">
+              {currentMonth.toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })}
+            </h2>
+            <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Días de la semana */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(d => (
+              <div key={d} className="text-center text-xs font-medium text-gray-500 py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Días del mes */}
+          <div className="grid grid-cols-7 gap-1">
+            {getCalendarDays().map((day, i) => {
+              if (!day) return <div key={`empty-${i}`} />
+              const isSelected = day === selectedDate.getDate() && currentMonth.getMonth() === selectedDate.getMonth() && currentMonth.getFullYear() === selectedDate.getFullYear()
+              const isTodayDay = day === new Date().getDate() && currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear()
+              const dayAppts = appointmentsByDay[day] || []
+              const hasPending = dayAppts.some(a => a.status === 'scheduled' || a.status === 'confirmed')
+              const hasCompleted = dayAppts.some(a => a.status === 'completed')
+
+              return (
+                <button
+                  key={day}
+                  onClick={() => selectDay(day)}
+                  className={`relative p-1.5 sm:p-2 rounded-lg text-sm transition-colors ${
+                    isSelected
+                      ? 'bg-primary-600 text-white font-bold'
+                      : isTodayDay
+                        ? 'bg-primary-50 text-primary-700 font-semibold ring-1 ring-primary-300'
+                        : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <span>{day}</span>
+                  {dayAppts.length > 0 && (
+                    <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                      {hasPending && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-blue-500'}`} />}
+                      {hasCompleted && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-green-300' : 'bg-green-500'}`} />}
+                      <span className={`text-[10px] ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>{dayAppts.length}</span>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Stats del día seleccionado */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg border p-3">
           <p className="text-xs text-gray-500">Total</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.total || 0}</p>
+          <p className="text-2xl font-bold text-gray-900">{dayStats.total || 0}</p>
         </div>
         <div className="bg-blue-50 rounded-lg border border-blue-100 p-3">
           <p className="text-xs text-blue-600">Pendientes</p>
-          <p className="text-2xl font-bold text-blue-700">{(stats.scheduled || 0) + (stats.confirmed || 0)}</p>
+          <p className="text-2xl font-bold text-blue-700">{(dayStats.scheduled || 0) + (dayStats.confirmed || 0)}</p>
         </div>
         <div className="bg-yellow-50 rounded-lg border border-yellow-100 p-3">
           <p className="text-xs text-yellow-600">En Atención</p>
-          <p className="text-2xl font-bold text-yellow-700">{stats.inProgress || 0}</p>
+          <p className="text-2xl font-bold text-yellow-700">{dayStats.inProgress || 0}</p>
         </div>
         <div className="bg-green-50 rounded-lg border border-green-100 p-3">
           <p className="text-xs text-green-600">Completadas</p>
-          <p className="text-2xl font-bold text-green-700">{stats.completed || 0}</p>
+          <p className="text-2xl font-bold text-green-700">{dayStats.completed || 0}</p>
         </div>
       </div>
 
       {/* Lista de citas */}
-      {appointments.length === 0 ? (
+      {dayAppointments.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -347,7 +445,7 @@ export default function VeterinaryAgenda() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {appointments.map((appointment) => (
+          {dayAppointments.map((appointment) => (
             <Card key={appointment.id} className="overflow-hidden">
               <CardContent className="p-0">
                 <div className="flex flex-col sm:flex-row">

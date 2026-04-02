@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Loader2, PawPrint, Check, Clock, CalendarPlus, History, Search, Syringe, Stethoscope } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, PawPrint, Check, Clock, CalendarPlus, History, Search, Syringe, Stethoscope, ShoppingCart } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { db } from '@/lib/firebase'
@@ -36,12 +36,14 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
 
   // Datos
   const [allRecords, setAllRecords] = useState([])
+  const [customerInvoices, setCustomerInvoices] = useState([])
   const [recurringServices, setRecurringServices] = useState([])
   const [products, setProducts] = useState([]) // Productos/servicios del usuario
 
   // Búsqueda y selección
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [selectedServices, setSelectedServices] = useState([]) // Múltiples servicios
 
   // Formulario
   const [formData, setFormData] = useState({
@@ -66,11 +68,38 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
     try {
       const businessId = getBusinessId()
 
+      const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+
       const [history, vaccines, recurring] = await Promise.all([
         getMedicalHistory(businessId, customer.id),
         getVaccinations(businessId, customer.id),
         getRecurringServices(businessId, customer.id),
       ])
+
+      // Cargar ventas del cliente
+      try {
+        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+        const q = query(invoicesRef, where('customerId', '==', customer.id), orderBy('createdAt', 'desc'))
+        const snapshot = await getDocs(q)
+        setCustomerInvoices(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) {
+        // Fallback: buscar por documentNumber si customerId no tiene resultados
+        try {
+          const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+          const q = query(invoicesRef, where('customer.documentNumber', '==', customer.documentNumber))
+          const snapshot = await getDocs(q)
+          const invs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+          invs.sort((a, b) => {
+            const dA = a.createdAt?.toDate?.() || new Date(0)
+            const dB = b.createdAt?.toDate?.() || new Date(0)
+            return dB - dA
+          })
+          setCustomerInvoices(invs)
+        } catch (e2) {
+          console.warn('Error cargando ventas del cliente:', e2)
+        }
+      }
 
       // Unificar historial
       const unified = [
@@ -133,6 +162,17 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
     setSearchQuery(product.name)
   }
 
+  // Agregar servicio a la lista de la cita
+  const handleAddService = (product) => {
+    if (selectedServices.some(s => s.id === product.id)) return // ya está agregado
+    setSelectedServices([...selectedServices, { id: product.id, name: product.name, price: product.price || 0 }])
+    setSearchQuery('')
+  }
+
+  const handleRemoveService = (productId) => {
+    setSelectedServices(selectedServices.filter(s => s.id !== productId))
+  }
+
   // Guardar recordatorio
   const saveRecurring = async () => {
     if (!selectedProduct) {
@@ -171,14 +211,15 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
 
   // Guardar cita
   const saveAppointment = async () => {
-    if (!selectedProduct) {
-      toast.error('Selecciona un producto o servicio')
+    if (selectedServices.length === 0) {
+      toast.error('Agrega al menos un servicio')
       return
     }
 
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
+      const totalPrice = selectedServices.reduce((sum, s) => sum + (s.price || 0), 0)
 
       await createAppointment(businessId, {
         customerId: customer.id,
@@ -186,8 +227,11 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
         petName: customer.petName,
         petSpecies: customer.petSpecies,
         phone: customer.phone,
-        serviceName: selectedProduct.name,
-        servicePrice: selectedProduct.price || 0,
+        // Compatibilidad: primer servicio como principal
+        serviceName: selectedServices.map(s => s.name).join(', '),
+        servicePrice: totalPrice,
+        // Array de servicios
+        services: selectedServices,
         scheduledDate: formData.date,
         scheduledTime: formData.time,
         notes: formData.notes,
@@ -196,7 +240,7 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
       toast.success('Cita agendada')
       await loadAllData()
       setView('main')
-      setSelectedProduct(null)
+      setSelectedServices([])
       setSearchQuery('')
     } catch (error) {
       console.error('Error:', error)
@@ -252,7 +296,7 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-t-xl">
           <div className="flex items-center gap-3">
@@ -386,6 +430,50 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                       </div>
                     )}
                   </div>
+
+                  {/* Historial de Ventas */}
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4" />
+                      Ventas ({customerInvoices.length})
+                    </h3>
+
+                    {customerInvoices.length === 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-4">Sin ventas registradas</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                        {customerInvoices.map(inv => {
+                          const date = inv.emissionDate
+                            ? (typeof inv.emissionDate === 'string' ? new Date(inv.emissionDate + 'T12:00:00') : inv.emissionDate?.toDate?.() || new Date(inv.emissionDate))
+                            : inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+                          const items = inv.items || []
+                          const isVoided = inv.status === 'cancelled' || inv.status === 'voided'
+
+                          return (
+                            <div key={inv.id} className={`p-2.5 bg-gray-50 rounded-lg border border-gray-100 ${isVoided ? 'opacity-50' : ''}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-primary-600">{inv.number || '-'}</span>
+                                <span className="text-xs text-gray-400">{date ? date.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</span>
+                              </div>
+                              <div className="space-y-0.5">
+                                {items.slice(0, 5).map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-700 truncate flex-1">{item.quantity}x {item.name || item.description || 'Producto'}</span>
+                                    <span className="text-gray-500 ml-2 flex-shrink-0">S/{((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                                {items.length > 5 && <p className="text-xs text-gray-400">+{items.length - 5} más</p>}
+                              </div>
+                              <div className="flex items-center justify-between mt-1 pt-1 border-t border-gray-200">
+                                <span className="text-xs text-gray-500">{inv.paymentMethod || inv.payments?.map(p => p.method).join(', ') || '-'}</span>
+                                <span className="text-xs font-bold text-gray-900">S/{(inv.total || 0).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -506,48 +594,60 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                     <h3 className="font-medium">Agendar Cita</h3>
                   </div>
 
-                  {/* Barra de búsqueda */}
+                  {/* Servicios seleccionados */}
+                  {selectedServices.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Servicios ({selectedServices.length})</p>
+                      {selectedServices.map(service => (
+                        <div key={service.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-2.5">
+                          <div>
+                            <p className="font-medium text-green-800 text-sm">{service.name}</p>
+                            {service.price > 0 && <p className="text-xs text-green-600">S/{service.price.toFixed(2)}</p>}
+                          </div>
+                          <button onClick={() => handleRemoveService(service.id)} className="text-red-400 hover:text-red-600 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="text-right text-sm font-medium text-gray-700">
+                        Total: S/{selectedServices.reduce((sum, s) => sum + (s.price || 0), 0).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Barra de búsqueda para agregar servicio */}
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Buscar producto o servicio..."
+                      placeholder="Buscar y agregar servicio..."
                       value={searchQuery}
-                      onChange={e => {
-                        setSearchQuery(e.target.value)
-                        setSelectedProduct(null)
-                      }}
+                      onChange={e => setSearchQuery(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
 
                   {/* Resultados de búsqueda */}
-                  {searchQuery && !selectedProduct && (
+                  {searchQuery && (
                     <div className="border rounded-xl max-h-48 overflow-y-auto">
                       {filteredProducts.length === 0 ? (
                         <p className="p-3 text-sm text-gray-500">No se encontraron productos</p>
                       ) : (
-                        filteredProducts.map(product => (
+                        filteredProducts
+                          .filter(p => !selectedServices.some(s => s.id === p.id))
+                          .map(product => (
                           <button
                             key={product.id}
-                            onClick={() => handleSelectProduct(product)}
-                            className="w-full flex items-center justify-between p-3 hover:bg-gray-50 border-b last:border-b-0 text-left"
+                            onClick={() => handleAddService(product)}
+                            className="w-full flex items-center justify-between p-3 hover:bg-green-50 border-b last:border-b-0 text-left"
                           >
                             <span className="font-medium text-gray-900">{product.name}</span>
-                            {product.price > 0 && <span className="text-sm text-gray-500">S/{product.price}</span>}
+                            <div className="flex items-center gap-2">
+                              {product.price > 0 && <span className="text-sm text-gray-500">S/{product.price}</span>}
+                              <Plus className="w-4 h-4 text-green-500" />
+                            </div>
                           </button>
                         ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* Producto seleccionado */}
-                  {selectedProduct && (
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-                      <p className="text-sm text-green-600">Seleccionado:</p>
-                      <p className="font-medium text-green-800">{selectedProduct.name}</p>
-                      {selectedProduct.price > 0 && (
-                        <p className="text-sm text-green-600">Precio: S/{selectedProduct.price}</p>
                       )}
                     </div>
                   )}
@@ -587,10 +687,10 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                   </div>
 
                   {/* Resumen */}
-                  {selectedProduct && formData.date && (
+                  {selectedServices.length > 0 && formData.date && (
                     <div className="bg-gray-50 rounded-xl p-3 text-sm">
                       <p className="text-gray-600">
-                        Cita: <strong>{selectedProduct.name}</strong> para {customer?.petName}
+                        Cita: <strong>{selectedServices.map(s => s.name).join(', ')}</strong> para {customer?.petName}
                       </p>
                       <p className="text-gray-600">
                         {new Date(formData.date + 'T12:00:00').toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })} a las {formData.time}
@@ -601,7 +701,7 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                   {/* Botón guardar */}
                   <button
                     onClick={saveAppointment}
-                    disabled={isSaving || !selectedProduct}
+                    disabled={isSaving || selectedServices.length === 0}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 transition-colors font-medium"
                   >
                     {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}

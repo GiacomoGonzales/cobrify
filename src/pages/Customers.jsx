@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -31,6 +31,8 @@ export default function Customers() {
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
+  const hiddenAmount = '••••••'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
@@ -360,6 +362,11 @@ export default function Customers() {
         customer.documentNumber?.includes(search) ||
         customer.businessName?.toLowerCase().includes(search) ||
         customer.email?.toLowerCase().includes(search) ||
+        customer.phone?.toLowerCase().includes(search) ||
+        customer.address?.toLowerCase().includes(search) ||
+        customer.petName?.toLowerCase().includes(search) ||
+        customer.petSpecies?.toLowerCase().includes(search) ||
+        customer.petBreed?.toLowerCase().includes(search) ||
         customer.studentName?.toLowerCase().includes(search) ||
         customer.studentSchedule?.toLowerCase().includes(search) ||
         customer.vehiclePlate?.toLowerCase().includes(search) ||
@@ -555,12 +562,16 @@ export default function Customers() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Total Pedidos</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
-                  {customers.reduce((sum, c) => sum + (c.ordersCount || 0), 0)}
+                  {showAmounts ? customers.reduce((sum, c) => sum + (c.ordersCount || 0), 0) : hiddenAmount}
                 </p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg flex-shrink-0">
-                <ShoppingCart className="w-6 h-6 text-blue-600" />
-              </div>
+              <button
+                onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
+                className="p-3 bg-blue-100 rounded-lg flex-shrink-0 hover:bg-blue-200 transition-colors"
+                title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+              >
+                {showAmounts ? <Eye className="w-6 h-6 text-blue-600" /> : <EyeOff className="w-6 h-6 text-blue-600" />}
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -570,12 +581,16 @@ export default function Customers() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
                 <p className="text-xl font-bold text-gray-900 mt-2">
-                  {formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0))}
+                  {showAmounts ? formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)) : hiddenAmount}
                 </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg flex-shrink-0">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
+              <button
+                onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
+                className="p-3 bg-green-100 rounded-lg flex-shrink-0 hover:bg-green-200 transition-colors"
+                title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+              >
+                {showAmounts ? <Eye className="w-6 h-6 text-green-600" /> : <EyeOff className="w-6 h-6 text-green-600" />}
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -585,16 +600,20 @@ export default function Customers() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Promedio por Cliente</p>
                 <p className="text-xl font-bold text-gray-900 mt-2">
-                  {formatCurrency(
+                  {showAmounts ? formatCurrency(
                     customers.length > 0
                       ? customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0) / customers.length
                       : 0
-                  )}
+                  ) : hiddenAmount}
                 </p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-lg flex-shrink-0">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
-              </div>
+              <button
+                onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
+                className="p-3 bg-purple-100 rounded-lg flex-shrink-0 hover:bg-purple-200 transition-colors"
+                title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+              >
+                {showAmounts ? <Eye className="w-6 h-6 text-purple-600" /> : <EyeOff className="w-6 h-6 text-purple-600" />}
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -758,9 +777,9 @@ export default function Customers() {
                     )}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                        {customer.ordersCount || 0}
+                        {showAmounts ? (customer.ordersCount || 0) : '•'}
                       </span>
-                      <span className="text-xs font-semibold text-gray-900">{formatCurrency(customer.totalSpent || 0)}</span>
+                      <span className="text-xs font-semibold text-gray-900">{showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}</span>
                     </div>
                   </div>
                 </div>
@@ -958,14 +977,14 @@ export default function Customers() {
                     {visibleColumns.orders && (
                       <TableCell className="py-1.5 text-center">
                         <span className="inline-flex items-center justify-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                          {customer.ordersCount || 0}
+                          {showAmounts ? (customer.ordersCount || 0) : '•'}
                         </span>
                       </TableCell>
                     )}
                     {visibleColumns.spent && (
                       <TableCell className="py-1.5 text-right">
                         <span className="text-xs font-semibold text-gray-900">
-                          {formatCurrency(customer.totalSpent || 0)}
+                          {showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}
                         </span>
                       </TableCell>
                     )}
