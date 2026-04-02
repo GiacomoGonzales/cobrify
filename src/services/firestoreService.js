@@ -1487,14 +1487,21 @@ export const getCashRegisterSession = async (userId, branchId = null, userUid = 
       })
     }
 
-    // Filtrar por usuario si se proporciona userUid
+    // Filtrar por usuario
     if (userUid) {
+      // Buscar sesión de un usuario específico (sub-usuario independiente)
       filteredDocs = filteredDocs.filter(doc => {
         const data = doc.data()
-        // Si la sesión tiene openedByUserId, debe coincidir exactamente
         if (data.openedByUserId) return data.openedByUserId === userUid
-        // Sesiones antiguas sin openedByUserId pertenecen al owner (userId)
+        // Sesiones antiguas sin openedByUserId pertenecen al owner
         return userUid === userId
+      })
+    } else {
+      // userUid = null → buscar sesión global (sin openedByUserId o del owner)
+      // Excluir sesiones de sub-usuarios independientes
+      filteredDocs = filteredDocs.filter(doc => {
+        const data = doc.data()
+        return !data.openedByUserId || data.openedByUserId === userId
       })
     }
 
@@ -1919,8 +1926,12 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
         } else {
           if (session.branchId) return false
         }
-        // Filtrar por usuario si se proporciona
-        if (userUid) {
+        // Filtrar por usuario
+        if (userUid === 'global') {
+          // Sesiones globales: sin openedByUserId O del owner (sesiones antiguas)
+          if (session.openedByUserId && session.openedByUserId !== userId) return false
+        } else if (userUid) {
+          // Sesiones de un sub-usuario independiente específico
           if (session.openedByUserId) {
             if (session.openedByUserId !== userUid) return false
           } else {

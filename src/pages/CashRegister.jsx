@@ -271,13 +271,17 @@ export default function CashRegister() {
       const isSharedCashUser = isSubUser && !independentCashRegister
 
       // Determinar el usuario objetivo para la sesión de caja
+      // Owner y sub-usuarios compartidos usan la misma caja global (userUid = null)
+      // Solo sub-usuarios con caja independiente tienen su propia sesión
       let targetUserUid
-      if (isSharedCashUser) {
-        // Sub-usuario compartido: buscar sesión sin filtro de usuario (caja general)
+      if (isSharedCashUser || (!isSubUser && (!selectedCashUser || selectedCashUser === 'all'))) {
+        // Owner "Mi Caja" o sub-usuario compartido: caja global
         targetUserUid = null
       } else if (selectedCashUser && selectedCashUser !== 'all') {
+        // Owner viendo caja de sub-usuario independiente
         targetUserUid = selectedCashUser
       } else {
+        // Sub-usuario con caja independiente
         targetUserUid = user.uid
       }
       const isViewingAll = selectedCashUser === 'all'
@@ -417,6 +421,7 @@ export default function CashRegister() {
 
       const branchId = selectedBranch?.id || null
       // Determinar filtro de usuario para historial
+      // Owner y sub-usuarios compartidos usan la misma caja global
       const isSubUser = userPermissions && userPermissions.ownerId
       const isSharedCashUser = isSubUser && !independentCashRegister
       let historyUserUid = null
@@ -424,15 +429,14 @@ export default function CashRegister() {
         // Sub-usuario con caja independiente: ve solo sus propias sesiones
         historyUserUid = user.uid
       } else if (isSharedCashUser) {
-        // Sub-usuario con caja compartida: ve las sesiones generales (sin filtro de usuario)
-        historyUserUid = null
+        // Sub-usuario con caja compartida: ve las sesiones globales
+        historyUserUid = 'global'
       } else if (selectedCashUser && selectedCashUser !== 'all') {
-        // Owner viendo caja de un sub-usuario específico
+        // Owner viendo caja de un sub-usuario independiente específico
         historyUserUid = selectedCashUser
-      }
-      // Si selectedCashUser es null (Mi Caja) y es owner, mostrar solo las del owner
-      if (!isSubUser && !selectedCashUser) {
-        historyUserUid = user.uid
+      } else if (!selectedCashUser) {
+        // Owner "Mi Caja": ve sesiones globales (las que comparte con sub-usuarios)
+        historyUserUid = 'global'
       }
       // Si selectedCashUser es 'all', historyUserUid queda null -> muestra todas
       const result = await getCashRegisterHistory(getBusinessId(), { branchId, userUid: historyUserUid })
@@ -623,11 +627,13 @@ export default function CashRegister() {
       }
 
       const branchId = selectedBranch?.id || null
-      // Sub-usuario sin caja independiente: abrir caja general (sin userUid)
+      // Owner y sub-usuarios compartidos abren la caja global (sin userUid)
+      // Solo sub-usuarios con caja independiente abren su propia caja
       const isSubUser = userPermissions && userPermissions.ownerId
       const isSharedCashUser = isSubUser && !independentCashRegister
-      const openUserUid = isSharedCashUser ? null : user.uid
-      const openUserName = isSharedCashUser ? null : (user.displayName || user.email || 'Usuario')
+      const isIndependentSubUser = isSubUser && independentCashRegister
+      const openUserUid = isIndependentSubUser ? user.uid : null
+      const openUserName = user.displayName || user.email || 'Usuario'
       const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName)
       if (result.success) {
         toast.success('Caja abierta correctamente')
