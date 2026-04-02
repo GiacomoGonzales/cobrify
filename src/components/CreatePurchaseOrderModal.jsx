@@ -114,6 +114,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
             unitPrice: item.unitPrice || 0,
             unit: item.unit || 'NIU',
             searchTerm: item.name || '',
+            igvType: item.igvType || 'gravado',
           })))
         }
       } else {
@@ -276,6 +277,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         searchTerm: product.name,
         laboratoryName: product.laboratoryName || '',
         marca: product.marca || '',
+        igvType: product.igvType || 'gravado',
       } : item
     ))
     setShowProductSearch(null)
@@ -311,11 +313,27 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
 
   const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0)
 
-  // Si los precios incluyen IGV, extraemos el IGV del total
-  // Si no incluyen IGV, calculamos el IGV sobre el subtotal
-  const subtotal = pricesIncludeIgv ? itemsTotal / 1.18 : itemsTotal
-  const igv = pricesIncludeIgv ? itemsTotal - subtotal : itemsTotal * 0.18
-  const total = pricesIncludeIgv ? itemsTotal : itemsTotal + igv
+  // Separar items gravados vs exonerados/inafectos
+  const gravadoTotal = items
+    .filter(item => !item.igvType || item.igvType === 'gravado')
+    .reduce((sum, item) => sum + calculateItemTotal(item), 0)
+  const exoneradoTotal = items
+    .filter(item => item.igvType === 'exonerado' || item.igvType === 'inafecto')
+    .reduce((sum, item) => sum + calculateItemTotal(item), 0)
+
+  // IGV solo aplica a items gravados
+  let subtotal, igv, total
+  if (pricesIncludeIgv) {
+    const gravadoSubtotal = gravadoTotal / 1.18
+    const gravadoIgv = gravadoTotal - gravadoSubtotal
+    subtotal = gravadoSubtotal + exoneradoTotal
+    igv = gravadoIgv
+    total = itemsTotal
+  } else {
+    subtotal = itemsTotal
+    igv = gravadoTotal * 0.18
+    total = itemsTotal + igv
+  }
 
   // Obtener datos del proveedor
   const getSupplierData = () => {
@@ -402,6 +420,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),
         unit: item.unit,
+        igvType: item.igvType || 'gravado',
         subtotal: calculateItemTotal(item),
       }))
 
@@ -925,6 +944,12 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
                 <span className="text-gray-600">Subtotal:</span>
                 <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
               </div>
+              {exoneradoTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 text-xs">Op. Exonerada/Inafecta:</span>
+                  <span className="text-gray-500 text-xs">{formatCurrency(exoneradoTotal, currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">IGV (18%):</span>
                 <span className="font-medium">{formatCurrency(igv, currency)}</span>
