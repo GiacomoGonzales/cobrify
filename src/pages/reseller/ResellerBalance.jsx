@@ -85,6 +85,8 @@ export default function ResellerBalance() {
         return <ArrowUpRight className="w-5 h-5 text-red-600" />
       case 'renewal':
         return <RefreshCw className="w-5 h-5 text-blue-600" />
+      case 'addon':
+        return <ArrowUpRight className="w-5 h-5 text-purple-600" />
       default:
         return <CreditCard className="w-5 h-5 text-gray-600" />
     }
@@ -98,6 +100,8 @@ export default function ResellerBalance() {
         return 'bg-red-100'
       case 'renewal':
         return 'bg-blue-100'
+      case 'addon':
+        return 'bg-purple-100'
       default:
         return 'bg-gray-100'
     }
@@ -182,6 +186,7 @@ export default function ResellerBalance() {
               <option value="deposit">Recargas</option>
               <option value="client_creation">Creación de clientes</option>
               <option value="renewal">Renovaciones</option>
+              <option value="addon">Comprobantes extra</option>
             </select>
             <button
               onClick={loadTransactions}
@@ -221,7 +226,8 @@ export default function ResellerBalance() {
                   <p className="text-xs text-gray-400 capitalize">
                     {tx.type === 'deposit' ? 'Recarga' :
                      tx.type === 'client_creation' ? 'Nuevo cliente' :
-                     tx.type === 'renewal' ? 'Renovación' : tx.type}
+                     tx.type === 'renewal' ? 'Renovación' :
+                     tx.type === 'addon' ? 'Comprobantes extra' : tx.type}
                   </p>
                 </div>
               </div>

@@ -170,8 +170,8 @@ export const exportGeneralReport = async (data) => {
       'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
     }
     const invoicesData = [...filteredInvoices].sort((a, b) => {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+      const dateA = getInvoiceDate(a) || new Date(0)
+      const dateB = getInvoiceDate(b) || new Date(0)
       return dateB - dateA
     }).slice(0, 1000).map(invoice => {
       // Obtener método(s) de pago
@@ -201,9 +201,10 @@ export const exportGeneralReport = async (data) => {
         ? 'N/A'
         : sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
 
+      const invoiceDate = getInvoiceDate(invoice)
       return [
         invoice.number,
-        invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
+        invoiceDate ? formatDate(invoiceDate) : '-',
         invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
         invoice.customer?.name || 'Cliente General',
         invoice.customer?.documentNumber || '-',
@@ -327,8 +328,8 @@ export const exportSalesReport = async (data) => {
     'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
   }
   const sortedInvoices = [...filteredInvoices].sort((a, b) => {
-    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
-    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+    const dateA = getInvoiceDate(a) || new Date(0)
+    const dateB = getInvoiceDate(b) || new Date(0)
     return dateB - dateA
   })
   const detailData = sortedInvoices.map(invoice => {
@@ -359,9 +360,10 @@ export const exportSalesReport = async (data) => {
       ? 'N/A'
       : sunatLabels[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
 
+    const invoiceDate = getInvoiceDate(invoice)
     return [
       invoice.number,
-      invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
+      invoiceDate ? formatDate(invoiceDate) : '-',
       invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
       invoice.customer?.name || 'Cliente General',
       `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
@@ -654,6 +656,29 @@ export const exportCustomersReport = async (data) => {
   const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
   const fileName = `Reporte_Clientes_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
+}
+
+/**
+ * Helper para obtener la fecha de emisión de un comprobante
+ * Prioriza emissionDate sobre createdAt
+ */
+const getInvoiceDate = (invoice) => {
+  if (invoice?.emissionDate) {
+    if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
+    if (typeof invoice.emissionDate === 'string') {
+      const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
+      if (createdAt) {
+        const [year, month, day] = invoice.emissionDate.split('-').map(Number)
+        const combined = new Date(createdAt)
+        combined.setFullYear(year, month - 1, day)
+        return combined
+      }
+      return new Date(invoice.emissionDate + 'T12:00:00')
+    }
+    return new Date(invoice.emissionDate)
+  }
+  if (!invoice?.createdAt) return null
+  return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
 }
 
 /**

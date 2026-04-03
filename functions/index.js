@@ -8174,6 +8174,136 @@ export const resellerRenewClient = onCall(
 )
 
 /**
+ * Cloud Function: Reseller compra +500 comprobantes para un cliente
+ * Precio fijo: S/ 10 (sin descuento de tier)
+ * Incrementa limits.maxInvoicesPerMonth del cliente
+ */
+export const resellerAddInvoices = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesión')
+    }
+
+    const { clientId } = request.data
+    if (!clientId) {
+      throw new HttpsError('invalid-argument', 'clientId es requerido')
+    }
+
+    const ADDON_PRICE = 10
+    const ADDON_AMOUNT = 500
+    const callerUid = request.auth.uid
+    const callerEmail = request.auth.token.email
+
+    try {
+      const result = await db.runTransaction(async (transaction) => {
+        // 1. Verificar que el caller es un reseller activo
+        let resellerRef = db.collection('resellers').doc(callerUid)
+        let resellerDoc = await transaction.get(resellerRef)
+
+        if (!resellerDoc.exists) {
+          const resellersQuery = await db.collection('resellers')
+            .where('email', '==', callerEmail)
+            .limit(1)
+            .get()
+
+          if (resellersQuery.empty) {
+            throw new HttpsError('permission-denied', 'No eres un reseller registrado')
+          }
+
+          resellerRef = resellersQuery.docs[0].ref
+          resellerDoc = await transaction.get(resellerRef)
+        }
+
+        const resellerData = resellerDoc.data()
+        if (resellerData.isActive === false) {
+          throw new HttpsError('permission-denied', 'Tu cuenta de reseller está inactiva')
+        }
+
+        const resellerId = resellerDoc.id
+
+        // 2. Verificar que el cliente pertenece al reseller
+        const clientRef = db.collection('subscriptions').doc(clientId)
+        const clientDoc = await transaction.get(clientRef)
+
+        if (!clientDoc.exists) {
+          throw new HttpsError('not-found', 'Cliente no encontrado')
+        }
+
+        const clientData = clientDoc.data()
+        if (clientData.resellerId !== resellerId) {
+          throw new HttpsError('permission-denied', 'Este cliente no pertenece a tu red')
+        }
+
+        // 3. Verificar que el cliente tiene un plan QPse (no SUNAT directo que ya es ilimitado)
+        const currentLimit = clientData.limits?.maxInvoicesPerMonth
+        if (currentLimit === -1) {
+          throw new HttpsError('failed-precondition',
+            'Este cliente ya tiene comprobantes ilimitados (plan SUNAT Directo)')
+        }
+
+        // 4. Verificar saldo suficiente
+        const currentBalance = resellerData.balance || 0
+        if (currentBalance < ADDON_PRICE) {
+          throw new HttpsError('failed-precondition',
+            `Saldo insuficiente. Necesitas S/ ${ADDON_PRICE} pero tienes S/ ${currentBalance.toFixed(2)}`)
+        }
+
+        // 5. Aumentar límite de comprobantes del cliente
+        const newLimit = (currentLimit || 200) + ADDON_AMOUNT
+
+        transaction.update(clientRef, {
+          'limits.maxInvoicesPerMonth': newLimit,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        // 6. Deducir saldo del reseller
+        const newBalance = currentBalance - ADDON_PRICE
+        transaction.update(resellerRef, {
+          balance: newBalance,
+          totalSpent: (resellerData.totalSpent || 0) + ADDON_PRICE,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        // 7. Registrar transacción
+        const transactionRef = db.collection('resellerTransactions').doc()
+        transaction.set(transactionRef, {
+          resellerId: resellerId,
+          type: 'addon',
+          amount: -ADDON_PRICE,
+          description: `+${ADDON_AMOUNT} comprobantes - ${clientData.businessName || clientData.email}`,
+          clientId: clientId,
+          clientEmail: clientData.email,
+          addonType: 'invoices',
+          addonAmount: ADDON_AMOUNT,
+          balanceBefore: currentBalance,
+          balanceAfter: newBalance,
+          createdAt: FieldValue.serverTimestamp(),
+        })
+
+        return {
+          success: true,
+          newLimit,
+          amountCharged: ADDON_PRICE,
+          newBalance,
+        }
+      })
+
+      console.log(`✅ [ResellerAddon] Reseller ${callerUid} agregó ${ADDON_AMOUNT} comprobantes a cliente ${clientId}`)
+      return result
+
+    } catch (error) {
+      if (error instanceof HttpsError) throw error
+      console.error('❌ [ResellerAddon] Error:', error)
+      throw new HttpsError('internal', 'Error al procesar la compra de comprobantes')
+    }
+  }
+)
+
+/**
  * Scheduled Function: Verifica vencimientos de suscripciones diariamente
  * - 7 días antes: notificación de advertencia
  * - 3 días antes: notificación de urgencia

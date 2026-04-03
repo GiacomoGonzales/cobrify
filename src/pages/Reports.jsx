@@ -348,8 +348,8 @@ export default function Reports() {
       if (invoice.convertedTo) {
         return false
       }
-      // Si el documento está anulado o en proceso de anulación SUNAT, no contar
-      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
+      // Si el documento está anulado, rechazado o en proceso de anulación SUNAT, no contar
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided' || invoice.sunatStatus === 'rejected') {
         return false
       }
       // Filtrar por sucursal
@@ -467,8 +467,8 @@ export default function Reports() {
       .filter(invoice => {
         const invoiceDate = getInvoiceDate(invoice)
         if (!invoiceDate) return false
-        // Excluir anuladas y en proceso de anulación
-        if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
+        // Excluir anuladas, rechazadas y en proceso de anulación
+        if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided' || invoice.sunatStatus === 'rejected') return false
         if (invoice.convertedTo) return false
         return invoiceDate >= startDate && invoiceDate <= endDate
       })

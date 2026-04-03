@@ -14,6 +14,7 @@ import {
   Eye,
   RotateCcw,
   Ban,
+  FileText,
   CheckCircle,
   Clock,
   AlertTriangle,
@@ -60,6 +61,11 @@ export default function ResellerClients() {
   const [renewalPlan, setRenewalPlan] = useState('qpse_1_month')
   const [renewalLoading, setRenewalLoading] = useState(false)
   const [tierInfo, setTierInfo] = useState(null)
+
+  // Estados para add-on de comprobantes
+  const [showAddonModal, setShowAddonModal] = useState(false)
+  const [addonClient, setAddonClient] = useState(null)
+  const [addonLoading, setAddonLoading] = useState(false)
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
@@ -228,6 +234,44 @@ export default function ResellerClients() {
       alert(message)
     } finally {
       setRenewalLoading(false)
+    }
+  }
+
+  // Abrir modal de add-on de comprobantes
+  function openAddonModal(client) {
+    setAddonClient(client)
+    setShowAddonModal(true)
+    setSelectedClient(null)
+  }
+
+  // Procesar compra de comprobantes adicionales
+  async function handleAddon() {
+    if (!addonClient) return
+
+    if (currentBalance < 10) {
+      alert('Saldo insuficiente. Necesitas S/ 10.00')
+      return
+    }
+
+    setAddonLoading(true)
+
+    try {
+      const functions = getFunctions()
+      const addonFn = httpsCallable(functions, 'resellerAddInvoices')
+      const result = await addonFn({ clientId: addonClient.id })
+
+      if (result.data.success) {
+        await refreshResellerData()
+        await loadClients()
+        setShowAddonModal(false)
+        setAddonClient(null)
+        alert(`¡Listo! Se agregaron 500 comprobantes. Nuevo límite: ${result.data.newLimit}`)
+      }
+    } catch (error) {
+      console.error('Error al agregar comprobantes:', error)
+      alert(error.message || 'Error al procesar la compra')
+    } finally {
+      setAddonLoading(false)
     }
   }
 
@@ -411,14 +455,14 @@ export default function ResellerClients() {
                             style={{
                               width: `${Math.min(
                                 ((client.usage?.invoicesThisMonth || 0) /
-                                  (PLANS[client.plan]?.limits?.maxInvoicesPerMonth || 500)) * 100,
+                                  (client.limits?.maxInvoicesPerMonth || PLANS[client.plan]?.limits?.maxInvoicesPerMonth || 500)) * 100,
                                 100
                               )}%`
                             }}
                           />
                         </div>
                         <span className="text-xs text-gray-500">
-                          {client.usage?.invoicesThisMonth || 0}
+                          {client.usage?.invoicesThisMonth || 0}/{client.limits?.maxInvoicesPerMonth === -1 ? '∞' : (client.limits?.maxInvoicesPerMonth || 200)}
                         </span>
                       </div>
                     </td>
@@ -500,34 +544,47 @@ export default function ResellerClients() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3">
-                {selectedClient.displayStatus === 'expired' || selectedClient.displayStatus === 'expiring' ? (
+              <div className="space-y-3">
+                {/* Add-on de comprobantes (solo para planes QPse, no ilimitados) */}
+                {selectedClient.limits?.maxInvoicesPerMonth !== -1 && selectedClient.displayStatus === 'active' && (
                   <button
-                    onClick={() => openRenewalModal(selectedClient)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    onClick={() => openAddonModal(selectedClient)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
-                    <RotateCcw className="w-5 h-5" />
-                    Renovar
-                  </button>
-                ) : null}
-
-                {selectedClient.displayStatus !== 'suspended' ? (
-                  <button
-                    onClick={() => toggleClientAccess(selectedClient.id, true)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                  >
-                    <Ban className="w-5 h-5" />
-                    Suspender
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => toggleClientAccess(selectedClient.id, false)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    Reactivar
+                    <FileText className="w-5 h-5" />
+                    +500 Comprobantes (S/ 10.00)
                   </button>
                 )}
+
+                <div className="flex gap-3">
+                  {selectedClient.displayStatus === 'expired' || selectedClient.displayStatus === 'expiring' ? (
+                    <button
+                      onClick={() => openRenewalModal(selectedClient)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    >
+                      <RotateCcw className="w-5 h-5" />
+                      Renovar
+                    </button>
+                  ) : null}
+
+                  {selectedClient.displayStatus !== 'suspended' ? (
+                    <button
+                      onClick={() => toggleClientAccess(selectedClient.id, true)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                    >
+                      <Ban className="w-5 h-5" />
+                      Suspender
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => toggleClientAccess(selectedClient.id, false)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      Reactivar
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -653,6 +710,124 @@ export default function ResellerClients() {
                     <>
                       <CheckCircle className="w-5 h-5" />
                       Confirmar Renovación
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Add-on Comprobantes */}
+      {showAddonModal && addonClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Agregar Comprobantes</h2>
+              <button
+                onClick={() => {
+                  setShowAddonModal(false)
+                  setAddonClient(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+                disabled={addonLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Info del cliente */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">{addonClient.businessName || 'Sin nombre'}</p>
+                    <p className="text-sm text-gray-500">{addonClient.email}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-200 text-sm">
+                  <p className="text-gray-600">
+                    <span className="font-medium">Límite actual:</span> {addonClient.limits?.maxInvoicesPerMonth || 200} comprobantes/mes
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Usados este mes:</span> {addonClient.usage?.invoicesThisMonth || 0}
+                  </p>
+                </div>
+              </div>
+
+              {/* Detalle del add-on */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-blue-900">+500 Comprobantes</p>
+                    <p className="text-sm text-blue-700">Se suman al límite mensual actual</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-blue-800">Nuevo límite:</span>
+                    <span className="font-bold text-blue-900">
+                      {(addonClient.limits?.maxInvoicesPerMonth || 200) + 500} comprobantes/mes
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Saldo disponible */}
+              <div className="flex items-center gap-3 bg-emerald-50 rounded-lg p-4">
+                <Wallet className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <p className="text-sm text-emerald-700">Tu saldo disponible</p>
+                  <p className="text-xl font-bold text-emerald-700">S/ {currentBalance.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Costo */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Costo:</span>
+                  <span className="text-xl font-bold text-gray-900">S/ 10.00</span>
+                </div>
+                {currentBalance < 10 && (
+                  <div className="mt-3 p-2 bg-red-50 rounded text-sm text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Saldo insuficiente
+                  </div>
+                )}
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowAddonModal(false)
+                    setAddonClient(null)
+                  }}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  disabled={addonLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddon}
+                  disabled={addonLoading || currentBalance < 10}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {addonLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Confirmar Compra
                     </>
                   )}
                 </button>
