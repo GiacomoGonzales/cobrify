@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -29,6 +29,7 @@ export default function TableActionModal({
   const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer', 'move'
 
   // Form states
+  const [showOrderPreview, setShowOrderPreview] = useState(false)
   const [selectedWaiter, setSelectedWaiter] = useState('')
   const [selectedDestinationTable, setSelectedDestinationTable] = useState('')
   const [reservationTime, setReservationTime] = useState('')
@@ -48,6 +49,7 @@ export default function TableActionModal({
   useEffect(() => {
     if (!isOpen) {
       setAction(null)
+      setShowOrderPreview(false)
       setSelectedWaiter('')
       setSelectedDestinationTable('')
       setReservationTime('')
@@ -266,6 +268,39 @@ export default function TableActionModal({
                     </span>
                   </div>
                 </div>
+
+                {/* Vista previa del pedido */}
+                {table.order?.items?.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowOrderPreview(!showOrderPreview)}
+                      className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
+                    >
+                      <span className="text-gray-600 font-medium">
+                        Pedido ({table.order.items.length} {table.order.items.length === 1 ? 'item' : 'items'})
+                      </span>
+                      {showOrderPreview
+                        ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                        : <ChevronDown className="w-4 h-4 text-gray-400" />
+                      }
+                    </button>
+                    {showOrderPreview && (
+                      <div className="px-3 py-2 max-h-40 overflow-y-auto divide-y divide-gray-100">
+                        {table.order.items.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between py-1.5 text-sm">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-gray-400 font-medium shrink-0">{item.quantity}x</span>
+                              <span className="text-gray-700 truncate">{item.name}</span>
+                            </div>
+                            <span className="text-gray-600 shrink-0 ml-2">
+                              S/ {((item.quantity || 1) * (item.price || item.unitPrice || 0)).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button
