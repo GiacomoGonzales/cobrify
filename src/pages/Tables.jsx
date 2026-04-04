@@ -670,14 +670,29 @@ export default function Tables() {
   }
 
   const handlePrintPreBill = async (itemFilter = null, personLabel = null, overrideTotal = null) => {
-    if (!selectedTable || !selectedOrder) {
+    if (!selectedTable) {
       toast.error('No se puede imprimir: datos incompletos')
       return
     }
 
     try {
-      // Obtener información del negocio desde Firestore
+      // Leer la orden fresca de Firestore para evitar datos stale en el estado
       const businessId = getBusinessId()
+      let freshOrder = selectedOrder
+
+      if (selectedTable.currentOrder && !itemFilter && !overrideTotal) {
+        const orderResult = await getOrder(businessId, selectedTable.currentOrder)
+        if (orderResult.success) {
+          freshOrder = orderResult.data
+        }
+      }
+
+      if (!freshOrder) {
+        toast.error('No se puede imprimir: orden no encontrada')
+        return
+      }
+
+      // Obtener información del negocio desde Firestore
       const businessRef = doc(db, 'businesses', businessId)
       const businessSnap = await getDoc(businessRef)
 
@@ -743,7 +758,7 @@ export default function Tables() {
             await connectPrinter(printerConfigResult.config.address)
 
             // Imprimir en impresora térmica
-            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig, printerConfigResult.config?.paperWidth || 58, recargoConsumoConfig)
+            const result = await printPreBillThermal(freshOrder, selectedTable, businessInfo, taxConfig, printerConfigResult.config?.paperWidth || 58, recargoConsumoConfig)
 
             if (result.success) {
               toast.success('Precuenta impresa en ticketera')
@@ -766,7 +781,7 @@ export default function Tables() {
       console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
       const compactPrintValue = printerConfigResult.config?.compactPrint || false
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal)
+      printPreBill(selectedTable, freshOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)
