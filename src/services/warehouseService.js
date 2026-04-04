@@ -530,6 +530,44 @@ export const updateWarehouseStock = (product, warehouseId, quantity) => {
 }
 
 /**
+ * Actualiza el stock de una VARIANTE específica en un almacén
+ * Similar a updateWarehouseStock pero opera a nivel de variant.warehouseStocks
+ * @param {Object} product - Producto completo con variants[]
+ * @param {number} variantIndex - Índice de la variante a actualizar
+ * @param {string} warehouseId - ID del almacén
+ * @param {number} quantity - Cantidad a sumar (positivo) o restar (negativo)
+ * @returns {Object} Producto actualizado con variant.warehouseStocks y variant.stock recalculados
+ */
+export const updateVariantWarehouseStock = (product, variantIndex, warehouseId, quantity) => {
+  if (!product.variants || variantIndex >= product.variants.length) return product
+
+  const variants = product.variants.map((v, i) => {
+    if (i !== variantIndex) return v
+
+    const warehouseStocks = [...(v.warehouseStocks || [])]
+    const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+    if (existingIndex >= 0) {
+      const newStock = (warehouseStocks[existingIndex].stock || 0) + quantity
+      warehouseStocks[existingIndex] = {
+        ...warehouseStocks[existingIndex],
+        stock: Math.max(0, newStock)
+      }
+    } else if (quantity > 0) {
+      warehouseStocks.push({ warehouseId, stock: quantity, minStock: 0 })
+    }
+
+    return {
+      ...v,
+      warehouseStocks,
+      stock: calculateTotalStock(warehouseStocks)
+    }
+  })
+
+  return { ...product, variants }
+}
+
+/**
  * Obtener stock de un producto en un almacén específico
  */
 export const getStockInWarehouse = (product, warehouseId) => {

@@ -2047,7 +2047,8 @@ export default function Inventory() {
                   const isExpanded = expandedProduct === item.id
                   const hasWarehouseStocks = item.warehouseStocks && item.warehouseStocks.length > 0
                   const hasBatches = item.batches && item.batches.filter(b => b.quantity > 0).length > 0
-                  const canExpand = (warehouses.length > 0 || hasBatches) && realStock !== null && isProduct
+                  const hasVariantsWithStock = item.hasVariants && item.variants?.length > 0
+                  const canExpand = (warehouses.length > 0 || hasBatches || hasVariantsWithStock) && realStock !== null && isProduct
 
                   return (
                     <div key={`card-${item.itemType}-${item.id}`}>
@@ -2134,8 +2135,49 @@ export default function Inventory() {
                         </div>
                       </div>
 
-                      {/* Expandible: Stock por almacén/sucursal */}
-                      {isExpanded && canExpand && (filteredWarehouses.length > 0 || hasBatches) && (
+                      {/* Expandible: Variantes con stock por almacén */}
+                      {isExpanded && canExpand && hasVariantsWithStock && (
+                        <div className="px-4 pb-3 bg-gray-50">
+                          <div className="space-y-2">
+                            {item.variants.filter(v => (v.stock || 0) > 0 || (v.warehouseStocks?.length > 0)).map((variant, vIdx) => {
+                              const variantLabel = Object.values(variant.attributes || {}).join(' / ')
+                              const variantWS = variant.warehouseStocks || []
+                              return (
+                                <div key={variant.sku || vIdx} className="border border-gray-200 rounded-lg overflow-hidden">
+                                  <div className="bg-purple-50 px-3 py-1.5 flex items-center justify-between border-b border-gray-200">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-xs font-medium text-purple-700 truncate">{variant.sku || `Var ${vIdx + 1}`}</span>
+                                      <span className="text-xs text-purple-500 truncate">{variantLabel}</span>
+                                    </div>
+                                    <span className="text-xs font-semibold text-purple-600 shrink-0 ml-2">{variant.stock || 0}</span>
+                                  </div>
+                                  <div className="p-2 space-y-1">
+                                    {variantWS.length > 0 ? variantWS.map(ws => {
+                                      const wh = warehouses.find(w => w.id === ws.warehouseId)
+                                      return (
+                                        <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-2 py-1.5">
+                                          <div className="flex items-center gap-1.5">
+                                            <Warehouse className="w-3 h-3 text-gray-400" />
+                                            <span className="text-xs text-gray-700">{wh?.name || 'Almacén'}</span>
+                                          </div>
+                                          <span className={`font-semibold text-xs ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                            {ws.stock || 0}
+                                          </span>
+                                        </div>
+                                      )
+                                    }) : (
+                                      <p className="text-xs text-gray-400 px-2 py-1">Sin asignación por almacén</p>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Expandible: Stock por almacén/sucursal (productos sin variantes) */}
+                      {isExpanded && canExpand && !hasVariantsWithStock && (filteredWarehouses.length > 0 || hasBatches) && (
                         <div className="px-4 pb-3 bg-gray-50">
                           <div className="space-y-2">
                             {(() => {
@@ -2456,7 +2498,7 @@ export default function Inventory() {
                             return (
                               <div className="flex items-center justify-end space-x-1">
                                 {/* Botón de expandir/contraer si hay almacenes o lotes */}
-                                {(warehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0)) && realStock !== null && isProduct && (
+                                {(warehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0) || (item.hasVariants && item.variants?.length > 0)) && realStock !== null && isProduct && (
                                   <button
                                     onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
                                     className="p-0.5 hover:bg-gray-100 rounded transition-colors"
@@ -2542,8 +2584,57 @@ export default function Inventory() {
                         )}
                       </TableRow>
 
-                      {/* Fila expandible con detalle por sucursal y almacén - solo para productos */}
-                      {isExpanded && (filteredWarehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0)) && getRealStock(item) !== null && isProduct && (
+                      {/* Fila expandible: Variantes con stock por almacén (desktop) */}
+                      {isExpanded && item.hasVariants && item.variants?.length > 0 && getRealStock(item) !== null && isProduct && (
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={8} className="py-3">
+                            <div className="pl-8 space-y-3">
+                              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                                <Package className="w-4 h-4" />
+                                <span className="font-medium">Stock por Variante:</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                                {item.variants.filter(v => (v.stock || 0) > 0 || (v.warehouseStocks?.length > 0)).map((variant, vIdx) => {
+                                  const variantLabel = Object.values(variant.attributes || {}).join(' / ')
+                                  const variantWS = variant.warehouseStocks || []
+                                  return (
+                                    <div key={variant.sku || vIdx} className="border border-gray-200 rounded-lg overflow-hidden">
+                                      <div className="bg-purple-50 px-3 py-1.5 flex items-center justify-between border-b border-gray-200">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-xs font-medium text-purple-700">{variant.sku || `Var ${vIdx + 1}`}</span>
+                                          <span className="text-xs text-purple-500 truncate">{variantLabel}</span>
+                                        </div>
+                                        <span className="text-xs font-semibold text-purple-600 ml-2">{variant.stock || 0}</span>
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        {variantWS.length > 0 ? variantWS.map(ws => {
+                                          const wh = warehouses.find(w => w.id === ws.warehouseId)
+                                          return (
+                                            <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-2 py-1">
+                                              <div className="flex items-center gap-1.5">
+                                                <Warehouse className="w-3 h-3 text-gray-400" />
+                                                <span className="text-xs text-gray-600">{wh?.name || 'Almacén'}</span>
+                                              </div>
+                                              <span className={`font-semibold text-xs ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {ws.stock || 0}
+                                              </span>
+                                            </div>
+                                          )
+                                        }) : (
+                                          <p className="text-xs text-gray-400 px-2 py-1">Sin asignación por almacén</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {/* Fila expandible con detalle por sucursal y almacén - solo para productos sin variantes */}
+                      {isExpanded && !item.hasVariants && (filteredWarehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0)) && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
                             <div className="pl-8 space-y-4">

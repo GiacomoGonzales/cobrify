@@ -16,7 +16,7 @@ import {
 import { db } from '@/lib/firebase'
 import { getRecipeByProductId, checkRecipeStock, calculateRecipeCost } from './recipeService'
 import { deductIngredients } from './ingredientService'
-import { updateWarehouseStock, createStockMovement } from './warehouseService'
+import { updateWarehouseStock, updateVariantWarehouseStock, createStockMovement } from './warehouseService'
 // updateProduct ya no se usa - producción usa transacciones para evitar datos stale
 
 /**
@@ -78,12 +78,8 @@ export const executeRecipeProduction = async (businessId, params) => {
       let updateData
 
       if (variantIndex != null && freshProduct.variants?.length > 0) {
-        const variants = [...freshProduct.variants]
-        variants[variantIndex] = {
-          ...variants[variantIndex],
-          stock: (variants[variantIndex].stock || 0) + quantity
-        }
-        updateData = { variants }
+        const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
+        updateData = { variants: updatedProduct.variants }
       } else {
         const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
         updateData = {
@@ -158,13 +154,8 @@ export const executeManualProduction = async (businessId, params) => {
       let updateData
 
       if (variantIndex != null && freshProduct.variants?.length > 0) {
-        // Producto con variantes: actualizar stock de la variante
-        const variants = [...freshProduct.variants]
-        variants[variantIndex] = {
-          ...variants[variantIndex],
-          stock: (variants[variantIndex].stock || 0) + quantity
-        }
-        updateData = { variants }
+        const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
+        updateData = { variants: updatedProduct.variants }
       } else {
         const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
         updateData = {
