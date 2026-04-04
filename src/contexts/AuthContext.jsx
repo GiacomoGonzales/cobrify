@@ -218,14 +218,25 @@ export const AuthProvider = ({ children }) => {
             // Si no tiene suscripción, crear una de prueba SOLO si es usuario principal (no sub-usuario)
             if (!userSubscription && !superAdminStatus && !isSubUser) {
               try {
-                await createSubscription(
-                  firebaseUser.uid,
-                  firebaseUser.email,
-                  firebaseUser.displayName || 'Mi Negocio',
-                  'trial'
-                )
-                // Obtener la suscripción recién creada
-                userSubscription = await getSubscription(firebaseUser.uid)
+                // Verificación extra: re-leer el doc de usuario para confirmar que NO es sub-usuario
+                // (protección contra fallo de getUserData por red/timeout)
+                const userDocSnap = await getDoc(doc(db, 'users', firebaseUser.uid))
+                const userDocData = userDocSnap.exists() ? userDocSnap.data() : null
+
+                if (userDocData?.ownerId) {
+                  // Es un sub-usuario, usar la suscripción del owner
+                  console.log('🔒 Sub-usuario detectado en verificación extra, usando suscripción del owner')
+                  userSubscription = await getSubscription(userDocData.ownerId)
+                } else {
+                  await createSubscription(
+                    firebaseUser.uid,
+                    firebaseUser.email,
+                    firebaseUser.displayName || 'Mi Negocio',
+                    'trial'
+                  )
+                  // Obtener la suscripción recién creada
+                  userSubscription = await getSubscription(firebaseUser.uid)
+                }
               } catch (createError) {
                 console.error('Error al crear suscripción de prueba:', createError)
               }
