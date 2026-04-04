@@ -158,9 +158,35 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
         subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
         trackStock: trackStock,
-        hasVariants: false,
-        variantAttributes: [],
-        variants: [],
+        // Variantes (hasta 5)
+        ...(() => {
+          const variants = []
+          const attributeNames = new Set()
+          for (let vi = 1; vi <= 5; vi++) {
+            const atributo = String(row[`variante${vi}_atributo`] || row[`Variante${vi}_Atributo`] || row[`VARIANTE${vi}_ATRIBUTO`] || '').trim()
+            const valor = String(row[`variante${vi}_valor`] || row[`Variante${vi}_Valor`] || row[`VARIANTE${vi}_VALOR`] || '').trim()
+            const sku = String(row[`variante${vi}_sku`] || row[`Variante${vi}_Sku`] || row[`VARIANTE${vi}_SKU`] || '').trim()
+            const precio = parseFloat(row[`variante${vi}_precio`] || row[`Variante${vi}_Precio`] || row[`VARIANTE${vi}_PRECIO`] || 0)
+            const stock = row[`variante${vi}_stock`] || row[`Variante${vi}_Stock`] || row[`VARIANTE${vi}_STOCK`]
+            if (atributo && valor && sku && precio > 0) {
+              attributeNames.add(atributo.toLowerCase())
+              variants.push({
+                sku,
+                attributes: { [atributo.toLowerCase()]: valor },
+                price: precio,
+                stock: stock !== undefined && stock !== '' ? parseInt(stock) : null,
+              })
+            }
+          }
+          if (variants.length > 0) {
+            return {
+              hasVariants: true,
+              variantAttributes: [...attributeNames],
+              variants,
+            }
+          }
+          return { hasVariants: false, variantAttributes: [], variants: [] }
+        })(),
         // Campos de farmacia
         genericName: String(row.nombre_generico || row.Nombre_Generico || row.NOMBRE_GENERICO || row.nombreGenerico || row.NombreGenerico || row.generic_name || '').trim() || null,
         concentration: String(row.concentracion || row.Concentracion || row.CONCENTRACION || row.concentration || '').trim() || null,
@@ -452,6 +478,21 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          variante1_atributo: '',
+          variante1_valor: '',
+          variante1_sku: '',
+          variante1_precio: '',
+          variante1_stock: '',
+          variante2_atributo: '',
+          variante2_valor: '',
+          variante2_sku: '',
+          variante2_precio: '',
+          variante2_stock: '',
+          variante3_atributo: '',
+          variante3_valor: '',
+          variante3_sku: '',
+          variante3_precio: '',
+          variante3_stock: '',
         },
         {
           sku: 'SKU-002',
@@ -480,6 +521,21 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          variante1_atributo: '',
+          variante1_valor: '',
+          variante1_sku: '',
+          variante1_precio: '',
+          variante1_stock: '',
+          variante2_atributo: '',
+          variante2_valor: '',
+          variante2_sku: '',
+          variante2_precio: '',
+          variante2_stock: '',
+          variante3_atributo: '',
+          variante3_valor: '',
+          variante3_sku: '',
+          variante3_precio: '',
+          variante3_stock: '',
         },
         {
           sku: '',
@@ -508,6 +564,64 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          variante1_atributo: '',
+          variante1_valor: '',
+          variante1_sku: '',
+          variante1_precio: '',
+          variante1_stock: '',
+          variante2_atributo: '',
+          variante2_valor: '',
+          variante2_sku: '',
+          variante2_precio: '',
+          variante2_stock: '',
+          variante3_atributo: '',
+          variante3_valor: '',
+          variante3_sku: '',
+          variante3_precio: '',
+          variante3_stock: '',
+        },
+        {
+          sku: '',
+          codigo_barras: '',
+          nombre: 'Polo con Variantes',
+          descripcion: 'Producto con tallas',
+          marca: 'Mi Marca',
+          ubicacion: '',
+          costo: 20.00,
+          precio: '',
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: '',
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Ropa',
+          subcategoria: '',
+          afectacion_igv: 'GRAVADO',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
+          variante1_atributo: 'talla',
+          variante1_valor: 'S',
+          variante1_sku: 'POLO-S',
+          variante1_precio: 35.00,
+          variante1_stock: 10,
+          variante2_atributo: 'talla',
+          variante2_valor: 'M',
+          variante2_sku: 'POLO-M',
+          variante2_precio: 35.00,
+          variante2_stock: 15,
+          variante3_atributo: 'talla',
+          variante3_valor: 'L',
+          variante3_sku: 'POLO-L',
+          variante3_precio: 40.00,
+          variante3_stock: 20,
         }
       ]
     }
