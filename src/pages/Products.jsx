@@ -366,15 +366,6 @@ export default function Products() {
     }
   }, [user, businessMode])
 
-  // Recargar productos cuando la ventana gana foco (ej: vuelves del POS)
-  useEffect(() => {
-    const handleFocus = () => {
-      if (user) loadProducts()
-    }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [user])
-
   const loadProducts = async () => {
     if (!user?.uid) return
 
@@ -980,6 +971,50 @@ export default function Products() {
       if (editingProduct) {
         // Update
         result = await updateProduct(getBusinessId(), editingProduct.id, productData)
+
+        // Si es producto con variantes y se seleccionó un almacén, asignar warehouseStocks a variantes que no lo tienen
+        if (result.success && productData.hasVariants && productData.variants?.length > 0 && variantWarehouseId) {
+          const businessId = getBusinessId()
+          const variantsNeedUpdate = productData.variants.some(v =>
+            (v.stock > 0 || v.stock === 0) && (!v.warehouseStocks || v.warehouseStocks.length === 0)
+          )
+
+          if (variantsNeedUpdate) {
+            const updatedVariants = productData.variants.map(v => {
+              if (v.warehouseStocks && v.warehouseStocks.length > 0) return v
+              const stockVal = v.stock || 0
+              return {
+                ...v,
+                warehouseStocks: stockVal > 0 ? [{ warehouseId: variantWarehouseId, stock: stockVal, minStock: 0 }] : []
+              }
+            })
+
+            await updateProduct(businessId, editingProduct.id, { variants: updatedVariants })
+
+            // Crear movimientos de stock para las variantes que se asignaron
+            for (let i = 0; i < updatedVariants.length; i++) {
+              const v = updatedVariants[i]
+              if (v.warehouseStocks?.length > 0 && !productData.variants[i].warehouseStocks?.length) {
+                const variantLabel = Object.values(v.attributes || {}).join(' / ')
+                await createStockMovement(businessId, {
+                  productId: editingProduct.id,
+                  variantIndex: i,
+                  warehouseId: variantWarehouseId,
+                  type: 'entry',
+                  quantity: v.stock,
+                  reason: 'Asignación de almacén',
+                  referenceType: 'warehouse_assignment',
+                  referenceId: editingProduct.id,
+                  userId: user?.uid,
+                  variantSku: v.sku,
+                  notes: `Asignación de variante ${v.sku} (${variantLabel}) a almacén`
+                }).catch(err => console.error('Error movimiento:', err))
+              }
+            }
+
+            toast.success('Variantes asignadas al almacén seleccionado')
+          }
+        }
       } else {
         // Create
         result = await createProduct(getBusinessId(), productData)
@@ -4807,10 +4842,10 @@ export default function Products() {
               </h3>
 
               {/* Selector de almacén destino para todas las variantes */}
-              {!noStock && warehouses.length > 0 && !editingProduct && (
+              {!noStock && warehouses.length > 0 && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Almacén destino del stock inicial
+                    {editingProduct ? 'Asignar stock de variantes a almacén' : 'Almacén destino del stock inicial'}
                   </label>
                   <select
                     value={variantWarehouseId}

@@ -46,11 +46,18 @@ export default function MassTransferModal({
     return groups
   }, [warehouseList, branches])
 
-  // Productos con stock en almacén origen
+  // Productos con stock en almacén origen (incluye variantes)
   const availableProducts = useMemo(() => {
     if (!fromWarehouse) return []
     return products.filter(p => {
       if (p.trackStock === false) return false
+      // Productos con variantes: verificar si alguna variante tiene stock en este almacén
+      if (p.hasVariants && p.variants?.length > 0) {
+        return p.variants.some(v => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+          return ws && ws.stock > 0
+        })
+      }
       const ws = p.warehouseStocks?.find(s => s.warehouseId === fromWarehouse)
       return ws && ws.stock > 0
     })
@@ -69,15 +76,59 @@ export default function MassTransferModal({
   if (!isOpen) return null
 
   const getWarehouseStock = (product) => {
+    if (product.hasVariants && product.variants?.length > 0) {
+      return product.variants.reduce((sum, v) => {
+        const ws = (v.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+        return sum + (ws?.stock || 0)
+      }, 0)
+    }
     const ws = product.warehouseStocks?.find(s => s.warehouseId === fromWarehouse)
     return ws?.stock || 0
   }
 
   const addProduct = (product) => {
-    const existing = items.find(i => i.productId === product.id && !i.batchNumber)
+    // Productos con variantes: agregar una fila por cada variante con stock
+    if (product.hasVariants && product.variants?.length > 0) {
+      const variantRows = product.variants
+        .filter(v => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+          return ws && ws.stock > 0
+        })
+        .filter(v => !items.some(i => i.productId === product.id && i.variantSku === v.sku))
+        .map(v => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+          const variantLabel = Object.values(v.attributes || {}).join(' / ')
+          return {
+            productId: product.id,
+            productName: product.name,
+            productCode: product.code || '',
+            unit: product.unit || 'und',
+            quantity: 1,
+            availableStock: ws?.stock || 0,
+            variantSku: v.sku,
+            variantLabel,
+            isVariant: true,
+            batchNumber: '',
+            batchExpiration: null,
+            batchData: null,
+            batches: [],
+            hasBatches: false,
+          }
+        })
+
+      if (variantRows.length > 0) {
+        setItems([...items, ...variantRows])
+      }
+      setSearchTerm('')
+      setShowDropdown(false)
+      searchRef.current?.focus()
+      return
+    }
+
+    const existing = items.find(i => i.productId === product.id && !i.batchNumber && !i.variantSku)
     if (existing && !(product.batches?.length > 0)) {
       setItems(items.map(i =>
-        i.productId === product.id && !i.batchNumber
+        i.productId === product.id && !i.batchNumber && !i.variantSku
           ? { ...i, quantity: Math.min(i.quantity + 1, getWarehouseStock(product)) }
           : i
       ))
@@ -170,6 +221,8 @@ export default function MassTransferModal({
           batchExpiration: i.batchExpiration || null,
           batchData: i.batchData || null,
           batches: i.batches || [],
+          variantSku: i.variantSku || null,
+          variantLabel: i.variantLabel || null,
         })),
         notes,
         userId,
@@ -285,6 +338,7 @@ export default function MassTransferModal({
                   <tr key={idx} className="border-t">
                     <td className="p-2">
                       <div className="font-medium">{item.productName}</div>
+                      {item.variantSku && <div className="text-xs text-purple-600">{item.variantSku} — {item.variantLabel}</div>}
                       {item.batchNumber && <div className="text-xs text-gray-500">Lote: {item.batchNumber}</div>}
                     </td>
                     <td className="text-center p-2 font-bold">{item.quantity}</td>
@@ -446,10 +500,15 @@ export default function MassTransferModal({
                     </thead>
                     <tbody>
                       {items.map((item, idx) => (
-                        <tr key={idx} className="border-t hover:bg-gray-50">
+                        <tr key={idx} className={`border-t hover:bg-gray-50 ${item.isVariant ? 'bg-purple-50/30' : ''}`}>
                           <td className="p-2 pl-3">
                             <div className="font-medium">{item.productName}</div>
-                            <div className="text-xs text-gray-400">{item.productCode || ''}</div>
+                            {item.isVariant && (
+                              <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                                {item.variantSku} — {item.variantLabel}
+                              </span>
+                            )}
+                            {!item.isVariant && <div className="text-xs text-gray-400">{item.productCode || ''}</div>}
                           </td>
                           <td className="p-2">
                             {item.hasBatches ? (
@@ -503,6 +562,11 @@ export default function MassTransferModal({
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="font-medium text-sm">{item.productName}</div>
+                          {item.isVariant && (
+                            <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                              {item.variantSku} — {item.variantLabel}
+                            </span>
+                          )}
                           <div className="text-xs text-gray-400">{item.productCode} | Stock: {item.batchData ? item.batchData.quantity : item.availableStock}</div>
                         </div>
                         <button onClick={() => removeItem(idx)} className="p-1 hover:bg-red-50 rounded text-red-500">

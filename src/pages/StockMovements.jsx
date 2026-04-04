@@ -135,10 +135,18 @@ export default function StockMovements() {
           const isCrossBranchTransfer = fromWarehouse && toWarehouse &&
             (fromWarehouse.branchId || null) !== (toWarehouse.branchId || null)
 
+          // Info de variante
+          let variantLabel = null
+          if (mov.variantSku && product?.hasVariants && product.variants?.length > 0) {
+            const vr = product.variants.find(v => v.sku === mov.variantSku)
+            if (vr) variantLabel = Object.values(vr.attributes || {}).join(' / ')
+          }
+
           return {
             ...mov,
             productName: product?.name || mov.productName || 'Producto desconocido',
             productCode: product?.code || '-',
+            variantLabel,
             warehouseName: warehouse?.name || 'Almacén desconocido',
             warehouseBranchId: warehouse?.branchId || null,
             warehouseBranchName: getBranchName(warehouse?.branchId),
@@ -201,10 +209,16 @@ export default function StockMovements() {
           }
           const isCrossBranchTransfer = fromWarehouse && toWarehouse &&
             (fromWarehouse.branchId || null) !== (toWarehouse.branchId || null)
+          let variantLabel = null
+          if (mov.variantSku && product?.hasVariants && product.variants?.length > 0) {
+            const vr = product.variants.find(v => v.sku === mov.variantSku)
+            if (vr) variantLabel = Object.values(vr.attributes || {}).join(' / ')
+          }
           return {
             ...mov,
             productName: product?.name || mov.productName || 'Producto desconocido',
             productCode: product?.code || '-',
+            variantLabel,
             warehouseName: warehouse?.name || 'Almacén desconocido',
             warehouseBranchId: warehouse?.branchId || null,
             warehouseBranchName: getBranchName(warehouse?.branchId),
@@ -459,7 +473,9 @@ export default function StockMovements() {
     const balanceMap = {}
 
     sortedMovements.forEach(mov => {
-      const key = `${mov.productId}_${mov.warehouseId}`
+      const key = mov.variantSku
+        ? `${mov.productId}_${mov.variantSku}_${mov.warehouseId}`
+        : `${mov.productId}_${mov.warehouseId}`
       if (runningBalance[key] === undefined) runningBalance[key] = 0
       runningBalance[key] += (mov.quantity || 0)
       balanceMap[mov.id] = runningBalance[key]
@@ -766,6 +782,11 @@ export default function StockMovements() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{movement.productName}</p>
+                        {movement.variantSku && (
+                          <p className="text-xs text-purple-600 truncate">
+                            {movement.variantSku}{movement.variantLabel ? ` — ${movement.variantLabel}` : ''}
+                          </p>
+                        )}
                         {movement.batchNumber && (
                           <p className="text-xs text-amber-600 truncate">Lote: {movement.batchNumber}</p>
                         )}

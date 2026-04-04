@@ -88,7 +88,9 @@ export const createMassTransfer = async (businessId, transferData) => {
         businessId,
         item.productId,
         transferData.fromWarehouseId,
-        -item.quantity
+        -item.quantity,
+        {},
+        item.variantSku || null
       )
       if (!exitResult.success) {
         console.error(`Error al descontar stock de ${item.productName}:`, exitResult.error)
@@ -155,8 +157,11 @@ export const createMassTransfer = async (businessId, transferData) => {
         item.productId,
         transferData.toWarehouseId,
         item.quantity,
-        extraUpdates
+        extraUpdates,
+        item.variantSku || null
       )
+
+      const variantNote = item.variantSku ? ` (${item.variantSku}${item.variantLabel ? ': ' + item.variantLabel : ''})` : ''
 
       // Movimiento de salida
       await createStockMovement(businessId, {
@@ -170,7 +175,8 @@ export const createMassTransfer = async (businessId, transferData) => {
         toWarehouse: transferData.toWarehouseId,
         userId: transferData.userId,
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
-        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`,
+        ...(item.variantSku && { variantSku: item.variantSku }),
+        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
       })
 
       // Movimiento de entrada
@@ -185,7 +191,8 @@ export const createMassTransfer = async (businessId, transferData) => {
         fromWarehouse: transferData.fromWarehouseId,
         userId: transferData.userId,
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
-        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`,
+        ...(item.variantSku && { variantSku: item.variantSku }),
+        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
       })
     }
 

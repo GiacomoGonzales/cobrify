@@ -241,15 +241,6 @@ export default function Inventory() {
     loadCompanySettings()
   }, [user])
 
-  // Recargar productos cuando la ventana gana foco (ej: vuelves del POS)
-  useEffect(() => {
-    const handleFocus = () => {
-      if (user) loadProducts()
-    }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [user])
-
   // Resetear página cuando cambia el filtro de tipo (productos/insumos)
   useEffect(() => {
     console.log(`🔄 [Inventory] filterType cambió a: "${filterType}"`)

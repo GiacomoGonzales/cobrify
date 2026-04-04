@@ -158,8 +158,33 @@ export default function InventoryCountModal({
               allBatches: product.batches || [],
             }
           }
+        } else if (product.hasVariants && product.variants?.length > 0) {
+          // Productos con variantes: una fila por variante
+          product.variants.forEach(variant => {
+            const variantLabel = Object.values(variant.attributes || {}).join(' / ')
+            const variantWS = (variant.warehouseStocks || []).find(ws => ws.warehouseId === warehouseId)
+            const variantStock = variantWS?.stock || 0
+            const key = `${product.id}_variant_${variant.sku}`
+            initialCountData[key] = {
+              productId: product.id,
+              productName: product.name,
+              productCode: product.code || '-',
+              category: product.category,
+              systemStock: variantStock,
+              physicalCount: '',
+              price: variant.price || price,
+              isIngredient: false,
+              warehouseStocks: product.warehouseStocks || [],
+              // Datos de variante
+              isVariantRow: true,
+              variantSku: variant.sku,
+              variantLabel,
+              variantIndex: product.variants.indexOf(variant),
+              allVariants: product.variants,
+            }
+          })
         } else {
-          // Productos sin lotes: fila normal
+          // Productos sin lotes ni variantes: fila normal
           initialCountData[product.id] = {
             productId: product.id,
             productName: product.name,
@@ -244,7 +269,10 @@ export default function InventoryCountModal({
       const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
       const searchableText = [
         item.productName || '',
-        item.productCode || ''
+        item.productCode || '',
+        item.variantSku || '',
+        item.variantLabel || '',
+        item.batchId || ''
       ].join(' ').toLowerCase()
       const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
 
@@ -447,12 +475,16 @@ export default function InventoryCountModal({
       const normalItems = []
       const unassignedItems = []
 
+      const variantItems = []
+
       for (const item of itemsToUpdate) {
         if (item.isUnassignedStock) {
           unassignedItems.push(item)
         } else if (item.isBatchRow) {
           if (!batchItemsByProduct[item.productId]) batchItemsByProduct[item.productId] = []
           batchItemsByProduct[item.productId].push(item)
+        } else if (item.isVariantRow) {
+          variantItems.push(item)
         } else {
           normalItems.push(item)
         }
@@ -595,7 +627,74 @@ export default function InventoryCountModal({
         }
       }
 
-      // Procesar items normales (sin lotes)
+      // Procesar items de variantes (ajustar variant.warehouseStocks)
+      // Agrupar variantes por producto para actualizar todas las variantes de un producto en una sola escritura
+      const variantsByProduct = {}
+      for (const item of variantItems) {
+        if (!variantsByProduct[item.productId]) variantsByProduct[item.productId] = []
+        variantsByProduct[item.productId].push(item)
+      }
+
+      for (const [productId, vItems] of Object.entries(variantsByProduct)) {
+        try {
+          const firstItem = vItems[0]
+          const updatedVariants = [...(firstItem.allVariants || [])]
+
+          for (const vItem of vItems) {
+            const newStock = parseFloat(vItem.physicalCount)
+            const diff = newStock - vItem.systemStock
+            const vIdx = updatedVariants.findIndex(v => v.sku === vItem.variantSku)
+            if (vIdx === -1) continue
+
+            const variant = { ...updatedVariants[vIdx] }
+            const ws = [...(variant.warehouseStocks || [])]
+            const wsIdx = ws.findIndex(w => w.warehouseId === selectedWarehouse.id)
+
+            if (wsIdx >= 0) {
+              ws[wsIdx] = { ...ws[wsIdx], stock: newStock }
+            } else if (newStock > 0) {
+              ws.push({ warehouseId: selectedWarehouse.id, stock: newStock, minStock: 0 })
+            }
+
+            variant.warehouseStocks = ws
+            variant.stock = ws.reduce((sum, w) => sum + (w.stock || 0), 0)
+            updatedVariants[vIdx] = variant
+          }
+
+          const result = await updateProduct(businessId, productId, { variants: updatedVariants })
+
+          if (result.success) {
+            for (const vItem of vItems) {
+              const newStock = parseFloat(vItem.physicalCount)
+              const diff = newStock - vItem.systemStock
+              if (diff !== 0) {
+                await createStockMovement(businessId, {
+                  productId,
+                  type: 'adjustment',
+                  quantity: diff,
+                  reason: 'Ajuste por recuento de inventario',
+                  referenceType: 'inventory_count',
+                  previousStock: vItem.systemStock,
+                  newStock,
+                  userId,
+                  warehouseId: selectedWarehouse?.id || null,
+                  warehouseName: selectedWarehouse?.name || 'General',
+                  variantSku: vItem.variantSku,
+                  notes: `Recuento variante ${vItem.variantSku} (${vItem.variantLabel}): ${newStock}, Sistema: ${vItem.systemStock}, Dif: ${diff > 0 ? '+' : ''}${diff} (${selectedWarehouse?.name || 'General'})`,
+                })
+              }
+            }
+            successCount += vItems.length
+          } else {
+            errorCount += vItems.length
+          }
+        } catch (error) {
+          console.error('Error al actualizar variantes:', error)
+          errorCount += vItems.length
+        }
+      }
+
+      // Procesar items normales (sin lotes ni variantes)
       for (const item of normalItems) {
         try {
           const newStock = parseFloat(item.physicalCount)
@@ -931,13 +1030,18 @@ export default function InventoryCountModal({
               ) : (
                 filteredProducts.map(item => {
                   const { diff, value, status } = getDifference(item)
-                  const mobileKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId)
+                  const mobileKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.isVariantRow ? `${item.productId}_variant_${item.variantSku}` : item.productId)
                   return (
-                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : ''}`}>
+                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : item.isVariantRow ? 'bg-purple-50/30' : ''}`}>
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{item.productName}</p>
                           <p className="text-xs text-gray-500">{item.productCode}</p>
+                          {item.isVariantRow && (
+                            <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              {item.variantSku} — {item.variantLabel}
+                            </span>
+                          )}
                           {item.isBatchRow && (
                             <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                               Lote: {item.batchId}
@@ -1019,14 +1123,19 @@ export default function InventoryCountModal({
                 ) : (
                   filteredProducts.map(item => {
                     const { diff, value, status } = getDifference(item)
-                    const itemKey = item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.productId
+                    const itemKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.isVariantRow ? `${item.productId}_variant_${item.variantSku}` : item.productId)
                     return (
-                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : ''}`}>
+                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : item.isVariantRow ? 'bg-purple-50/30' : ''}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm">{item.productCode}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="font-medium text-sm">{item.productName}</span>
+                          {item.isVariantRow && (
+                            <span className="ml-2 text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                              {item.variantSku} — {item.variantLabel}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {item.isBatchRow ? (

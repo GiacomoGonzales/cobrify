@@ -482,6 +482,45 @@ export default function CreatePurchase() {
 
   // Seleccionar producto o ingrediente
   const selectProduct = (index, item) => {
+    // Si el producto tiene variantes, expandir en múltiples filas (una por variante)
+    if (item.hasVariants && item.variants?.length > 0) {
+      const newItems = [...purchaseItems]
+      // Reemplazar la fila actual con las variantes
+      const variantRows = item.variants.map(v => {
+        const variantLabel = Object.values(v.attributes || {}).join(' / ')
+        const costValue = item.cost && item.cost > 0 ? item.cost : 0
+        return {
+          productId: item.id,
+          productName: `${item.name} — ${variantLabel}`,
+          variantSku: v.sku,
+          variantLabel,
+          quantity: '',
+          unitPrice: 0,
+          cost: costValue,
+          costWithoutIGV: costValue > 0 ? costValue / 1.18 : 0,
+          batchNumber: '',
+          expirationDate: '',
+          itemType: 'product',
+          unit: item.unit || 'NIU',
+          isVariant: true,
+        }
+      })
+
+      newItems.splice(index, 1, ...variantRows)
+      setPurchaseItems(newItems)
+
+      // Actualizar búsquedas para cada fila nueva
+      const newSearches = { ...productSearches }
+      const newDropdowns = { ...showProductDropdowns }
+      variantRows.forEach((_, i) => {
+        newSearches[index + i] = variantRows[i].productName
+        newDropdowns[index + i] = false
+      })
+      setProductSearches(newSearches)
+      setShowProductDropdowns(newDropdowns)
+      return
+    }
+
     const newItems = [...purchaseItems]
     newItems[index].productId = item.id
     newItems[index].productName = item.name
@@ -800,6 +839,12 @@ export default function CreatePurchase() {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
+
+      // Filas de variante sin cantidad: ignorar (no se compró de esa variante)
+      if (item.isVariant && (!item.quantity || Number(item.quantity) <= 0)) {
+        continue
+      }
+
       // Validar campos obligatorios (cost puede ser 0 para bonificaciones)
       if (!item.productId || !item.productName) {
         setMessage({
@@ -878,17 +923,19 @@ export default function CreatePurchase() {
         // Almacén donde ingresa la mercadería
         warehouseId: selectedWarehouse?.id || null,
         warehouseName: selectedWarehouse?.name || null,
-        items: purchaseItems.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          itemType: item.itemType || 'product', // 'product' o 'ingredient'
-          unit: item.unit || 'NIU',
-          quantity: parseFloat(item.quantity) || 0,
-          unitPrice: parseFloat(item.cost) || 0, // Precio unitario de compra (costo)
-          // Campos de farmacia (lote y vencimiento)
-          ...(item.batchNumber && { batchNumber: item.batchNumber }),
-          ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
-        })),
+        items: purchaseItems
+          .filter(item => !item.isVariant || (item.quantity && Number(item.quantity) > 0))
+          .map(item => ({
+            productId: item.productId,
+            productName: item.productName,
+            itemType: item.itemType || 'product',
+            unit: item.unit || 'NIU',
+            quantity: parseFloat(item.quantity) || 0,
+            unitPrice: parseFloat(item.cost) || 0,
+            ...(item.variantSku && { variantSku: item.variantSku }),
+            ...(item.batchNumber && { batchNumber: item.batchNumber }),
+            ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
+          })),
         subtotal: amounts.subtotal,
         igv: amounts.igv,
         total: amounts.total,
@@ -905,8 +952,10 @@ export default function CreatePurchase() {
       }
 
       // Separar items por tipo
-      const productItems = purchaseItems.filter(item => item.itemType !== 'ingredient')
-      const ingredientItems = purchaseItems.filter(item => item.itemType === 'ingredient')
+      // Filtrar filas de variantes sin cantidad (no se compró de esa variante)
+      const activeItems = purchaseItems.filter(item => !item.isVariant || (item.quantity && Number(item.quantity) > 0))
+      const productItems = activeItems.filter(item => item.itemType !== 'ingredient')
+      const ingredientItems = activeItems.filter(item => item.itemType === 'ingredient')
 
       let resultId = purchaseId // Para modo edición
 
@@ -1074,10 +1123,12 @@ export default function CreatePurchase() {
       // (ej: 2 unidades @ S/3 + 1 unidad gratis @ S/0 = 3 unidades con costo promedio correcto)
       const groupedProducts = {}
       productItems.forEach(item => {
-        const productId = item.productId
-        if (!groupedProducts[productId]) {
-          groupedProducts[productId] = {
-            productId,
+        // Para variantes, agrupar por productId + variantSku
+        const groupKey = item.variantSku ? `${item.productId}__${item.variantSku}` : item.productId
+        if (!groupedProducts[groupKey]) {
+          groupedProducts[groupKey] = {
+            productId: item.productId,
+            variantSku: item.variantSku || null,
             totalQuantity: 0,
             totalCost: 0, // Suma de (cantidad * costo) para calcular promedio ponderado
             items: [] // Guardar items originales para lotes
@@ -1085,9 +1136,9 @@ export default function CreatePurchase() {
         }
         const qty = parseFloat(item.quantity) || 0
         const cost = parseFloat(item.cost) || 0
-        groupedProducts[productId].totalQuantity += qty
-        groupedProducts[productId].totalCost += qty * cost
-        groupedProducts[productId].items.push(item)
+        groupedProducts[groupKey].totalQuantity += qty
+        groupedProducts[groupKey].totalCost += qty * cost
+        groupedProducts[groupKey].items.push(item)
       })
 
       const productUpdates = Object.values(groupedProducts).map(async grouped => {
@@ -1194,7 +1245,8 @@ export default function CreatePurchase() {
               grouped.productId,
               selectedWarehouse?.id || '',
               newQuantity,
-              cleanUndefined(extraUpdates)
+              cleanUndefined(extraUpdates),
+              grouped.variantSku
             )
           } else {
             // Solo actualizar datos extra (sin cambio de stock)
@@ -1221,16 +1273,20 @@ export default function CreatePurchase() {
           if (!product) return
           if (product.trackStock === false) return
 
+          const qty = parseFloat(item.quantity) || 0
+          if (qty <= 0) return
+
           return createStockMovement(businessId, {
             productId: item.productId,
             warehouseId: selectedWarehouse?.id || '',
             type: 'entry',
-            quantity: parseFloat(item.quantity) || 0,
+            quantity: qty,
             reason: warehouseChangedInEdit ? 'Compra editada (nuevo almacén)' : 'Compra',
             referenceType: 'purchase',
             referenceId: resultId || '',
             userId: user?.uid,
-            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
+            ...(item.variantSku && { variantSku: item.variantSku }),
+            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}${item.variantSku ? ` (${item.variantLabel || item.variantSku})` : ''}`
           })
         })
 
