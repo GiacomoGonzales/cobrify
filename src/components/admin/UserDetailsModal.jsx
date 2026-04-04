@@ -27,10 +27,11 @@ import { db } from '@/lib/firebase';
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast, onUserUpdated, customPlans = {} }) {
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [addingBonus, setAddingBonus] = useState(false);
+  const [savingLimit, setSavingLimit] = useState(false);
+  const [editingLimit, setEditingLimit] = useState(false);
+  const [newLimit, setNewLimit] = useState(user.limits?.maxInvoicesPerMonth || 500);
   const [migratingImages, setMigratingImages] = useState(false);
   const [migrationProgress, setMigrationProgress] = useState(null);
-  const [currentBonusInvoices, setCurrentBonusInvoices] = useState(user.bonusInvoices || 0);
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
   const [paymentAmount, setPaymentAmount] = useState(PLANS['qpse_1_month']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
@@ -47,8 +48,6 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
       usuario: '',
       password: '',
       environment: 'demo',
-      firmasDisponibles: 0,
-      firmasUsadas: 0
     },
     sunat: {
       enabled: false,
@@ -162,8 +161,6 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
             usuario: data?.qpse?.usuario || '',
             password: data?.qpse?.password || '',
             environment: data?.qpse?.environment || 'demo',
-            firmasDisponibles: data?.qpse?.firmasDisponibles || 0,
-            firmasUsadas: data?.qpse?.firmasUsadas || 0
           },
           sunat: {
             enabled: data?.sunat?.enabled || false,
@@ -227,34 +224,34 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     }
   };
 
-  // Función para agregar 500 comprobantes de bono
-  const handleAddBonusInvoices = async (amount = 500) => {
-    setAddingBonus(true);
+  // Función para guardar el límite de comprobantes manualmente
+  const handleSaveLimit = async () => {
+    setSavingLimit(true);
     try {
       const subscriptionRef = doc(db, 'subscriptions', user.userId);
+      const limitValue = newLimit === -1 ? -1 : parseInt(newLimit) || 500;
 
       await updateDoc(subscriptionRef, {
-        bonusInvoices: increment(amount),
+        'limits.maxInvoicesPerMonth': limitValue,
         updatedAt: new Date()
       });
 
-      setCurrentBonusInvoices(prev => prev + amount);
+      setEditingLimit(false);
 
       if (toast) {
-        toast.success(`Se agregaron ${amount} comprobantes extra al usuario`);
+        toast.success(`Límite actualizado a ${limitValue === -1 ? 'ilimitado' : limitValue} comprobantes/mes`);
       }
 
-      // Notificar al componente padre para refrescar la lista
       if (onUserUpdated) {
         onUserUpdated();
       }
     } catch (error) {
-      console.error('Error al agregar comprobantes de bono:', error);
+      console.error('Error al actualizar límite:', error);
       if (toast) {
-        toast.error('Error al agregar comprobantes extra');
+        toast.error('Error al actualizar límite');
       }
     } finally {
-      setAddingBonus(false);
+      setSavingLimit(false);
     }
   };
 
@@ -342,10 +339,9 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
 
                   {/* Contador Oficial de Documentos del Período */}
                   {user.usage?.invoicesThisMonth !== undefined && (() => {
-                    const planLimit = user.limits?.maxInvoicesPerMonth || -1;
-                    const totalLimit = planLimit === -1 ? -1 : planLimit + currentBonusInvoices;
-                    const availableInvoices = totalLimit === -1 ? Infinity : Math.max(0, totalLimit - user.usage.invoicesThisMonth);
-                    const usagePercentage = totalLimit === -1 ? 0 : (user.usage.invoicesThisMonth / totalLimit) * 100;
+                    const currentLimit = user.limits?.maxInvoicesPerMonth ?? -1;
+                    const availableInvoices = currentLimit === -1 ? Infinity : Math.max(0, currentLimit - user.usage.invoicesThisMonth);
+                    const usagePercentage = currentLimit === -1 ? 0 : (user.usage.invoicesThisMonth / currentLimit) * 100;
 
                     return (
                       <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg">
@@ -355,22 +351,15 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                               <FileText className="w-8 h-8" />
                             </div>
                             <div>
-                              <p className="text-sm opacity-90">Comprobantes Emitidos (SUNAT Aceptados)</p>
+                              <p className="text-sm opacity-90">Comprobantes Emitidos</p>
                               <div className="flex items-baseline gap-2">
                                 <p className="text-4xl font-bold">{user.usage.invoicesThisMonth}</p>
                                 <p className="text-lg opacity-90">
-                                  / {totalLimit === -1 ? '∞' : totalLimit}
+                                  / {currentLimit === -1 ? '∞' : currentLimit}
                                 </p>
                               </div>
-                              {totalLimit !== -1 && (
-                                <div className="text-sm mt-1 opacity-90">
-                                  <p>Disponibles: {availableInvoices}</p>
-                                  {currentBonusInvoices > 0 && (
-                                    <p className="text-xs text-yellow-200">
-                                      (Plan: {planLimit} + Bonus: {currentBonusInvoices})
-                                    </p>
-                                  )}
-                                </div>
+                              {currentLimit !== -1 && (
+                                <p className="text-sm mt-1 opacity-90">Disponibles: {availableInvoices}</p>
                               )}
                             </div>
                           </div>
@@ -394,7 +383,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                             )}
                           </div>
                         </div>
-                        {totalLimit !== -1 && (
+                        {currentLimit !== -1 && (
                           <div className="mt-3">
                             <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
                               <div
@@ -416,29 +405,42 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                           </div>
                         )}
 
-                        {/* Botón para agregar comprobantes de bono */}
-                        {planLimit !== -1 && (
-                          <div className="mt-4 pt-3 border-t border-white border-opacity-30">
+                        {/* Editar límite de comprobantes */}
+                        <div className="mt-4 pt-3 border-t border-white border-opacity-30">
+                          {editingLimit ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={newLimit === -1 ? '' : newLimit}
+                                onChange={(e) => setNewLimit(e.target.value === '' ? -1 : parseInt(e.target.value) || 0)}
+                                placeholder="∞ ilimitado"
+                                className="flex-1 px-3 py-2 rounded-lg text-gray-900 text-sm"
+                              />
+                              <button
+                                onClick={handleSaveLimit}
+                                disabled={savingLimit}
+                                className="px-3 py-2 bg-white bg-opacity-30 hover:bg-opacity-40 rounded-lg text-sm font-medium"
+                              >
+                                {savingLimit ? '...' : 'Guardar'}
+                              </button>
+                              <button
+                                onClick={() => { setEditingLimit(false); setNewLimit(currentLimit); }}
+                                className="px-3 py-2 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-lg text-sm"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => handleAddBonusInvoices(500)}
-                              disabled={addingBonus}
-                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all disabled:opacity-50"
+                              onClick={() => { setNewLimit(currentLimit); setEditingLimit(true); }}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all text-sm"
                             >
-                              {addingBonus ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  Agregando...
-                                </>
-                              ) : (
-                                <>
-                                  <PlusCircle className="w-5 h-5" />
-                                  Agregar +500 comprobantes
-                                </>
-                              )}
+                              <Settings className="w-4 h-4" />
+                              Cambiar límite ({currentLimit === -1 ? '∞' : currentLimit} comprobantes/mes)
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })()}
@@ -1396,39 +1398,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     <p className="text-xs text-gray-500 mt-1">Password de tu cuenta QPse</p>
                   </div>
 
-                  {/* Firmas Disponibles/Usadas */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Firmas Disponibles
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={emissionConfig.qpse.firmasDisponibles}
-                        onChange={(e) => setEmissionConfig({
-                          ...emissionConfig,
-                          qpse: { ...emissionConfig.qpse, firmasDisponibles: parseInt(e.target.value) || 0 }
-                        })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Firmas Usadas
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={emissionConfig.qpse.firmasUsadas}
-                        onChange={(e) => setEmissionConfig({
-                          ...emissionConfig,
-                          qpse: { ...emissionConfig.qpse, firmasUsadas: parseInt(e.target.value) || 0 }
-                        })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                  </div>
+                  {/* Nota: El límite de comprobantes se gestiona desde la sección de estadísticas arriba */}
 
                   {/* Warning para producción */}
                   {emissionConfig.qpse.environment === 'production' && (
