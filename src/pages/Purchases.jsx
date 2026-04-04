@@ -304,11 +304,14 @@ export default function Purchases() {
             if (quantityToDeduct <= 0) continue
 
             // Descontar stock usando transacción atómica
+            const variantSku = item.variantSku || null
             await updateProductStockTransaction(
               businessId,
               item.productId,
               warehouseId,
-              -quantityToDeduct
+              -quantityToDeduct,
+              {},
+              variantSku
             )
 
             // Registrar movimiento de stock
@@ -322,7 +325,8 @@ export default function Purchases() {
               referenceId: deletingPurchase.id,
               referenceNumber: deletingPurchase.invoiceNumber || 'S/N',
               userId: user.uid,
-              notes: `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'}`
+              ...(variantSku && { variantSku }),
+              notes: `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'}${variantSku ? ` (${variantSku})` : ''}`
             })
 
             console.log(`✅ Stock revertido para ${item.productName}: -${quantityToDeduct}`)
