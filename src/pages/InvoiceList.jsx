@@ -661,12 +661,14 @@ Gracias por tu preferencia.`
                 }
 
                 // Actualizar stock usando transacción atómica
+                const variantSku = item.variantSku || item.variantName || null
                 await updateProductStockTransaction(
                   businessId,
                   item.productId,
                   warehouseId,
                   quantityToRestore,
-                  batchExtraUpdates
+                  batchExtraUpdates,
+                  variantSku
                 )
 
                 // Registrar movimiento de stock
@@ -856,12 +858,14 @@ Gracias por tu preferencia.`
                   }
                 }
 
+                const variantSku = item.variantSku || item.variantName || null
                 await updateProductStockTransaction(
                   businessId,
                   item.productId,
                   warehouseId,
                   quantityToRestore,
-                  batchExtraUpdates
+                  batchExtraUpdates,
+                  variantSku
                 )
 
                 await createStockMovement(businessId, {

@@ -492,7 +492,7 @@ export const updateProduct = async (userId, productId, updates) => {
  * Actualizar stock de un producto usando transacción de Firestore (atómico)
  * Evita race conditions cuando dos ventas simultáneas descuentan stock del mismo producto
  */
-export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}) => {
+export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null) => {
   try {
     const docRef = doc(db, 'businesses', userId, 'products', productId)
     await runTransaction(db, async (transaction) => {
@@ -502,6 +502,38 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
       const product = productDoc.data()
       if (product.trackStock === false) return
 
+      // Producto con variantes: actualizar stock a nivel de variante
+      if (product.hasVariants && variantSku && product.variants?.length > 0) {
+        const variants = [...product.variants]
+        const variantIndex = variants.findIndex(v => v.sku === variantSku)
+        if (variantIndex === -1) {
+          console.warn(`Variante ${variantSku} no encontrada en producto ${productId}`)
+          return
+        }
+
+        const variant = { ...variants[variantIndex] }
+        const variantWS = [...(variant.warehouseStocks || [])]
+        const existingIdx = variantWS.findIndex(ws => ws.warehouseId === warehouseId)
+
+        if (existingIdx >= 0) {
+          variantWS[existingIdx] = { ...variantWS[existingIdx], stock: Math.max(0, (variantWS[existingIdx].stock || 0) + quantity) }
+        } else if (quantity > 0) {
+          variantWS.push({ warehouseId, stock: quantity, minStock: 0 })
+        }
+
+        variant.warehouseStocks = variantWS
+        variant.stock = variantWS.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        variants[variantIndex] = variant
+
+        transaction.update(docRef, {
+          variants,
+          ...extraUpdates,
+          updatedAt: serverTimestamp(),
+        })
+        return
+      }
+
+      // Producto normal: actualizar stock a nivel de producto
       const warehouseStocks = [...(product.warehouseStocks || [])]
       const currentGeneralStock = product.stock || 0
 

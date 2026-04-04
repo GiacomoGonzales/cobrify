@@ -243,7 +243,8 @@ export default function Products() {
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
-  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', warehouseId: '' })
+  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+  const [variantWarehouseId, setVariantWarehouseId] = useState('') // almacén destino para todas las variantes
   const [editingVariantIndex, setEditingVariantIndex] = useState(null)
   const [editingVariant, setEditingVariant] = useState(null)
 
@@ -365,6 +366,15 @@ export default function Products() {
     }
   }, [user, businessMode])
 
+  // Recargar productos cuando la ventana gana foco (ej: vuelves del POS)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user) loadProducts()
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [user])
+
   const loadProducts = async () => {
     if (!user?.uid) return
 
@@ -422,6 +432,11 @@ export default function Products() {
 
       if (result.success) {
         setWarehouses(result.data || [])
+        // Preseleccionar almacén principal para variantes
+        const defaultWh = (result.data || []).find(w => w.isDefault)
+        if (defaultWh && !variantWarehouseId) {
+          setVariantWarehouseId(defaultWh.id)
+        }
       } else {
         console.error('Error al cargar almacenes:', result.error)
       }
@@ -480,6 +495,7 @@ export default function Products() {
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
+    setVariantWarehouseId('')
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
     // Resetear stocks iniciales por almacén
@@ -857,7 +873,6 @@ export default function Products() {
           price3: v.price3 || null,
           price4: v.price4 || null,
           stock: v.stock === '' || v.stock === null ? null : (typeof v.stock === 'string' ? parseInt(v.stock) : v.stock),
-          warehouseId: v.warehouseId || '',
         }))
         // Calculate base price as average of variant prices
         const avgPrice = productData.variants.reduce((sum, v) => sum + v.price, 0) / productData.variants.length
@@ -975,22 +990,22 @@ export default function Products() {
 
           if (productData.hasVariants && productData.variants?.length > 0) {
             // Productos con variantes: crear movimiento por cada variante con stock
-            const defaultWarehouse = await getDefaultWarehouse(businessId)
-            const defaultWarehouseId = defaultWarehouse?.id || ''
+            // Usar el almacén seleccionado o el por defecto
+            let targetWarehouseId = variantWarehouseId
+            if (!targetWarehouseId) {
+              const defaultWarehouse = await getDefaultWarehouse(businessId)
+              targetWarehouseId = defaultWarehouse?.id || ''
+            }
 
             for (let i = 0; i < productData.variants.length; i++) {
               const variant = productData.variants[i]
               if (variant.stock && variant.stock > 0) {
-                const targetWarehouseId = variant.warehouseId || defaultWarehouseId
-
                 // Asignar warehouseStocks a la variante
                 productData.variants[i].warehouseStocks = [{
                   warehouseId: targetWarehouseId,
                   stock: variant.stock,
                   minStock: 0
                 }]
-                // Limpiar warehouseId temporal
-                delete productData.variants[i].warehouseId
 
                 const variantLabel = Object.values(variant.attributes || {}).join(' / ')
                 await createStockMovement(businessId, {
@@ -1005,9 +1020,6 @@ export default function Products() {
                   userId: user?.uid,
                   notes: `Stock inicial variante: ${variantLabel}`
                 }).catch(err => console.error('Error al registrar movimiento de stock variante:', err))
-              } else {
-                // Limpiar warehouseId temporal aunque no tenga stock
-                delete productData.variants[i].warehouseId
               }
             }
 
@@ -2271,9 +2283,6 @@ export default function Products() {
       return
     }
 
-    const stockVal = newVariant.stock === '' ? null : parseInt(newVariant.stock)
-    const whId = newVariant.warehouseId || ''
-
     setVariants([...variants, {
       sku: newVariant.sku.trim(),
       attributes: { ...newVariant.attributes },
@@ -2281,8 +2290,7 @@ export default function Products() {
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
       price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
       price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
-      stock: stockVal,
-      warehouseId: whId,
+      stock: newVariant.stock === '' ? null : parseInt(newVariant.stock),
     }])
 
     // Reset new variant form
@@ -2294,7 +2302,6 @@ export default function Products() {
       price3: '',
       price4: '',
       stock: '',
-      warehouseId: whId, // mantener el almacén seleccionado para la siguiente variante
     })
   }
 
@@ -3348,7 +3355,7 @@ export default function Products() {
                         <TableCell className="max-w-[80px]">
                           <div className="flex items-center space-x-1">
                             {/* Botón de expandir/contraer solo si hay almacenes */}
-                            {warehouses.length > 0 && !product.hasVariants && (
+                            {warehouses.length > 0 && (
                               <button
                                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
                                 className="p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
@@ -3364,11 +3371,16 @@ export default function Products() {
 
                             {/* Stock total */}
                             <div>
-                              {product.hasVariants ? (
-                                <span className="text-xs text-gray-500">
-                                  {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0}
-                                </span>
-                              ) : (() => {
+                              {product.hasVariants ? (() => {
+                                const variantStock = product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
+                                return (
+                                  <span className={`font-medium text-sm ${
+                                    variantStock >= 4 ? 'text-green-600' : variantStock > 0 ? 'text-yellow-600' : 'text-red-600'
+                                  }`}>
+                                    {variantStock}
+                                  </span>
+                                )
+                              })() : (() => {
                                 const realStock = getRealStockValue(product)
                                 return realStock !== null ? (
                                   <span
@@ -3505,7 +3517,115 @@ export default function Products() {
                         </TableCell>
                       </TableRow>
 
-                      {/* Fila expandible con detalle por sucursal y almacén */}
+                      {/* Fila expandible: variantes agrupadas por sucursal → almacén */}
+                      {isExpanded && warehouses.length > 0 && product.hasVariants && product.variants?.length > 0 && (
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={8} className="py-3">
+                            <div className="pl-8 space-y-4">
+                              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                                <Store className="w-4 h-4" />
+                                <span className="font-medium">Stock por Sucursal y Almacén:</span>
+                              </div>
+                              {(() => {
+                                // Construir mapa: warehouseId → [{ sku, label, stock }]
+                                const warehouseVariantMap = {}
+                                product.variants.forEach((variant, vIdx) => {
+                                  const variantLabel = Object.values(variant.attributes || {}).join(' / ')
+                                  const variantWS = variant.warehouseStocks || []
+                                  if (variantWS.length > 0) {
+                                    variantWS.forEach(ws => {
+                                      if (!warehouseVariantMap[ws.warehouseId]) warehouseVariantMap[ws.warehouseId] = []
+                                      warehouseVariantMap[ws.warehouseId].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: ws.stock || 0 })
+                                    })
+                                  } else if ((variant.stock || 0) > 0) {
+                                    if (!warehouseVariantMap['_unassigned']) warehouseVariantMap['_unassigned'] = []
+                                    warehouseVariantMap['_unassigned'].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: variant.stock || 0 })
+                                  }
+                                })
+
+                                const mainWarehouses = warehouses.filter(w => !w.branchId)
+                                const branchGroups = warehouses.filter(w => w.branchId).reduce((acc, w) => {
+                                  if (!acc[w.branchId]) acc[w.branchId] = []
+                                  acc[w.branchId].push(w)
+                                  return acc
+                                }, {})
+
+                                const renderWarehouse = (wh, variants) => (
+                                  <div key={wh.id} className="p-2 space-y-1">
+                                    <div className="flex items-center justify-between px-2 py-1">
+                                      <div className="flex items-center gap-2">
+                                        <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                        <span className="text-sm text-gray-700">{wh.name}</span>
+                                        {wh.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                                      </div>
+                                      <span className="text-xs font-semibold text-gray-600">{variants.reduce((s, v) => s + v.stock, 0)} total</span>
+                                    </div>
+                                    {variants.map((v, idx) => (
+                                      <div key={idx} className="flex items-center justify-between bg-white rounded px-3 py-1.5 ml-4">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-xs font-mono text-purple-600">{v.sku}</span>
+                                          <span className="text-xs text-gray-500 truncate">{v.label}</span>
+                                        </div>
+                                        <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock >= 4 ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+
+                                return (
+                                  <div className="space-y-4">
+                                    {mainWarehouses.length > 0 && (
+                                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-4 h-4 text-primary-600" />
+                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                        </div>
+                                        {mainWarehouses.map(wh => {
+                                          const variants = warehouseVariantMap[wh.id] || []
+                                          return variants.length > 0 ? renderWarehouse(wh, variants) : (
+                                            <div key={wh.id} className="px-4 py-2 flex items-center justify-between">
+                                              <div className="flex items-center gap-2">
+                                                <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                <span className="text-sm text-gray-700">{wh.name}</span>
+                                              </div>
+                                              <span className="text-xs text-gray-400">0</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                    {Object.entries(branchGroups).map(([branchId, branchWhs]) => {
+                                      const branch = branches.find(b => b.id === branchId)
+                                      return (
+                                        <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-4 h-4 text-primary-600" />
+                                            <span className="font-medium text-primary-700">{branch?.name || 'Sucursal'}</span>
+                                          </div>
+                                          {branchWhs.map(wh => {
+                                            const variants = warehouseVariantMap[wh.id] || []
+                                            return variants.length > 0 ? renderWarehouse(wh, variants) : (
+                                              <div key={wh.id} className="px-4 py-2 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                  <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                  <span className="text-sm text-gray-700">{wh.name}</span>
+                                                </div>
+                                                <span className="text-xs text-gray-400">0</span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {/* Fila expandible con detalle por sucursal y almacén (productos sin variantes) */}
                       {isExpanded && warehouses.length > 0 && !product.hasVariants && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
@@ -4685,6 +4805,54 @@ export default function Products() {
               <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
                 Variantes
               </h3>
+
+              {/* Selector de almacén destino para todas las variantes */}
+              {!noStock && warehouses.length > 0 && !editingProduct && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Almacén destino del stock inicial
+                  </label>
+                  <select
+                    value={variantWarehouseId}
+                    onChange={e => setVariantWarehouseId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {(() => {
+                      const mainWarehouses = warehouses.filter(w => (w.isActive || w.status === 'active') && !w.branchId)
+                      const branchWarehouses = warehouses.filter(w => (w.isActive || w.status === 'active') && w.branchId)
+                      const branchGroups = branchWarehouses.reduce((acc, w) => {
+                        if (!acc[w.branchId]) acc[w.branchId] = []
+                        acc[w.branchId].push(w)
+                        return acc
+                      }, {})
+
+                      return (
+                        <>
+                          {mainWarehouses.length > 0 && (
+                            <optgroup label="Sucursal Principal">
+                              {mainWarehouses.map(w => (
+                                <option key={w.id} value={w.id}>{w.name}{w.isDefault ? ' (Principal)' : ''}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {Object.entries(branchGroups).map(([branchId, whs]) => {
+                            const branch = branches.find(b => b.id === branchId)
+                            return (
+                              <optgroup key={branchId} label={branch?.name || 'Sucursal'}>
+                                {whs.map(w => (
+                                  <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                              </optgroup>
+                            )
+                          })}
+                        </>
+                      )
+                    })()}
+                  </select>
+                  <p className="text-xs text-blue-600 mt-1">El stock de todas las variantes se asignará a este almacén</p>
+                </div>
+              )}
+
               <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                 {/* Variant Attributes Section */}
                 <div>
@@ -4825,36 +4993,17 @@ export default function Products() {
                             />
                           </div>
                         ))}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Stock (Opcional)
-                            </label>
-                            <input
-                              type="number"
-                              value={newVariant.stock}
-                              onChange={e => handleNewVariantChange('stock', e.target.value)}
-                              placeholder="0"
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            />
-                          </div>
-                          {warehouses.length > 0 && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Almacén
-                              </label>
-                              <select
-                                value={newVariant.warehouseId}
-                                onChange={e => handleNewVariantChange('warehouseId', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              >
-                                <option value="">Por defecto</option>
-                                {warehouses.filter(w => w.status === 'active').map(w => (
-                                  <option key={w.id} value={w.id}>{w.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Stock (Opcional)
+                          </label>
+                          <input
+                            type="number"
+                            value={newVariant.stock}
+                            onChange={e => handleNewVariantChange('stock', e.target.value)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
                         </div>
                       </div>
                       <div className="mt-3">
@@ -4888,7 +5037,6 @@ export default function Products() {
                                 </>
                               )}
                               <th className="px-2 py-2 text-left">Stock</th>
-                              {warehouses.length > 0 && <th className="px-2 py-2 text-left">Almacén</th>}
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
@@ -4923,16 +5071,6 @@ export default function Products() {
                                   <td className="px-2 py-1">
                                     <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
                                   </td>
-                                  {warehouses.length > 0 && (
-                                    <td className="px-2 py-1">
-                                      <select value={editingVariant.warehouseId || ''} onChange={e => setEditingVariant({ ...editingVariant, warehouseId: e.target.value })} className="w-24 px-1 py-1 text-xs border border-gray-300 rounded">
-                                        <option value="">Por defecto</option>
-                                        {warehouses.filter(w => w.status === 'active').map(w => (
-                                          <option key={w.id} value={w.id}>{w.name}</option>
-                                        ))}
-                                      </select>
-                                    </td>
-                                  )}
                                   <td className="px-2 py-1">
                                     <div className="flex gap-1">
                                       <button type="button" onClick={handleSaveEditVariant} className="text-green-600 hover:text-green-800">
@@ -4959,15 +5097,6 @@ export default function Products() {
                                     </>
                                   )}
                                   <td className="px-2 py-2">{variant.stock ?? 'N/A'}</td>
-                                  {warehouses.length > 0 && (
-                                    <td className="px-2 py-2 text-xs text-gray-500">
-                                      {variant.warehouseId
-                                        ? (warehouses.find(w => w.id === variant.warehouseId)?.name || 'Almacén')
-                                        : variant.warehouseStocks?.[0]?.warehouseId
-                                          ? (warehouses.find(w => w.id === variant.warehouseStocks[0].warehouseId)?.name || 'Almacén')
-                                          : 'Por defecto'}
-                                    </td>
-                                  )}
                                   <td className="px-2 py-2">
                                     <div className="flex gap-1">
                                       <button

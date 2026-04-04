@@ -1558,13 +1558,27 @@ export default function POS() {
 
       // Filtro de stock: ocultar productos con stock 0 si está habilitado
       if (businessSettings?.posCustomFields?.hideOutOfStockInPOS && p.trackStock !== false) {
-        const totalStock = p.stock || 0
+        let totalStock = 0
+        if (p.hasVariants && p.variants?.length > 0) {
+          if (selectedWarehouse) {
+            totalStock = p.variants.reduce((sum, v) => {
+              const ws = (v.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
+              return sum + (ws?.stock || 0)
+            }, 0)
+          } else {
+            totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+          }
+        } else {
+          totalStock = selectedWarehouse
+            ? getStockInWarehouse(p, selectedWarehouse.id)
+            : (p.stock || 0)
+        }
         if (totalStock <= 0) return false
       }
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchTerm, selectedCategoryFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS])
+  }, [products, searchTerm, selectedCategoryFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
 
   // Apply pagination only when there's no search term (optimizado con useMemo)
   const displayedProducts = React.useMemo(() => {
@@ -3516,24 +3530,32 @@ export default function POS() {
 
         // INMEDIATO: Actualizar stock localmente (sin esperar Firestore)
         setProducts(prev => prev.map(product => {
-          const cartItem = cart.find(ci => ci.id === product.id || ci.productId === product.id)
-          if (!cartItem) return product
-          const quantityToDeduct = cartItem.quantity * (cartItem.presentationFactor || 1)
+          // Buscar TODOS los items del carrito que correspondan a este producto
+          const cartItems = cart.filter(ci => ci.id === product.id || ci.productId === product.id)
+          if (cartItems.length === 0) return product
+
           if (product.hasVariants && product.variants?.length > 0) {
-            const updatedVariants = product.variants.map(v => {
-              if (v.sku === cartItem.variantSku || v.name === cartItem.variantName) {
-                const newStock = Math.max(0, (v.stock || 0) - quantityToDeduct)
-                const updatedWs = (v.warehouseStocks || []).map(ws =>
-                  ws.warehouseId === selectedWarehouse?.id
-                    ? { ...ws, stock: Math.max(0, (ws.stock || 0) - quantityToDeduct) }
-                    : ws
-                )
-                return { ...v, stock: newStock, warehouseStocks: updatedWs }
-              }
-              return v
-            })
+            let updatedVariants = [...product.variants]
+            for (const cartItem of cartItems) {
+              const quantityToDeduct = cartItem.quantity * (cartItem.presentationFactor || 1)
+              updatedVariants = updatedVariants.map(v => {
+                if (cartItem.variantSku && v.sku === cartItem.variantSku) {
+                  const newStock = Math.max(0, (v.stock || 0) - quantityToDeduct)
+                  const updatedWs = (v.warehouseStocks || []).map(ws =>
+                    ws.warehouseId === selectedWarehouse?.id
+                      ? { ...ws, stock: Math.max(0, (ws.stock || 0) - quantityToDeduct) }
+                      : ws
+                  )
+                  return { ...v, stock: newStock, warehouseStocks: updatedWs }
+                }
+                return v
+              })
+            }
             return { ...product, variants: updatedVariants }
           }
+
+          const cartItem = cartItems[0]
+          const quantityToDeduct = cartItem.quantity * (cartItem.presentationFactor || 1)
           if (product.stock != null) {
             const newStock = Math.max(0, product.stock - quantityToDeduct)
             const updatedWarehouseStocks = (product.warehouseStocks || []).map(ws =>
@@ -3772,7 +3794,8 @@ export default function POS() {
                     businessId, item.id,
                     bgSelectedWarehouse?.id || '',
                     -quantityToDeduct,
-                    extraUpdates
+                    extraUpdates,
+                    item.variantSku || null
                   )
                 })
 
@@ -4279,6 +4302,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
   // Obtener stock del almacén seleccionado (incluyendo stock huérfano)
   const getCurrentWarehouseStock = (product) => {
+    // Productos con variantes: sumar stock de variantes (filtrado por almacén si aplica)
+    if (product.hasVariants && product.variants?.length > 0) {
+      if (!selectedWarehouse) return product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+      return product.variants.reduce((sum, v) => {
+        const ws = (v.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
+        return sum + (ws?.stock || 0)
+      }, 0)
+    }
     if (!selectedWarehouse) return product.stock || 0
     // Usar getTotalAvailableStock que incluye stock del almacén + stock huérfano
     return getTotalAvailableStock(product, selectedWarehouse.id)
@@ -4288,7 +4319,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     // Obtener stock del almacén seleccionado
     const warehouseStock = getCurrentWarehouseStock(product)
 
-    if (product.stock === null) {
+    if (product.stock === null && !product.hasVariants) {
       return <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Sin control</span>
     }
 
@@ -4635,8 +4666,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </span>
                           )}
                         </p>
-                        {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
-                        {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
+                        {!hideStockInPOS && getStockBadge(product)}
+                        {product.hasVariants && <span className="text-[10px] text-gray-500">Variantes</span>}
                       </div>
                       {/* Tablet/Desktop: precio arriba, stock abajo */}
                       <div className="hidden sm:block overflow-hidden">
@@ -4644,7 +4675,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                         </p>
                         <div className="mt-0.5">
-                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                          {!hideStockInPOS && getStockBadge(product)}
                           {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
                         </div>
                       </div>
@@ -6908,52 +6939,58 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
             {/* Variants Grid */}
             <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
-              {selectedProductForVariant.variants?.map((variant, index) => (
-                <button
-                  key={index}
-                  onClick={() => addVariantToCart(selectedProductForVariant, variant)}
-                  disabled={variant.stock !== null && variant.stock <= 0}
-                  className={`p-4 border-2 rounded-lg text-left transition-all ${
-                    variant.stock !== null && variant.stock <= 0
-                      ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
-                      : 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {Object.entries(variant.attributes).map(([key, value]) => (
-                          <Badge key={key} variant="default" className="text-xs">
-                            {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <p className="text-lg font-bold text-primary-600">
-                          {formatCurrency(variant.price)}
-                        </p>
-                        {variant.stock !== null && (
+              {selectedProductForVariant.variants?.map((variant, index) => {
+                // Calcular stock según almacén seleccionado
+                const variantStock = selectedWarehouse
+                  ? ((variant.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)?.stock || 0)
+                  : (variant.stock || 0)
+                const noStock = variantStock <= 0 && !companySettings?.allowNegativeStock
+
+                return (
+                  <button
+                    key={index}
+                    onClick={() => addVariantToCart(selectedProductForVariant, variant)}
+                    disabled={noStock}
+                    className={`p-4 border-2 rounded-lg text-left transition-all ${
+                      noStock
+                        ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {Object.entries(variant.attributes).map(([key, value]) => (
+                            <Badge key={key} variant="default" className="text-xs">
+                              {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <p className="text-lg font-bold text-primary-600">
+                            {formatCurrency(variant.price)}
+                          </p>
                           <span
                             className={`text-xs font-semibold ${
-                              variant.stock >= 4
+                              variantStock >= 4
                                 ? 'text-green-600'
-                                : variant.stock > 0
+                                : variantStock > 0
                                 ? 'text-yellow-600'
                                 : 'text-red-600'
                             }`}
                           >
-                            {variant.stock > 0 ? `Stock: ${Number.isInteger(variant.stock) ? variant.stock : parseFloat(variant.stock.toFixed(2))}` : 'Sin stock'}
+                            {variantStock > 0 ? `Stock: ${Number.isInteger(variantStock) ? variantStock : parseFloat(variantStock.toFixed(2))}` : 'Sin stock'}
                           </span>
-                        )}
+                        </div>
                       </div>
+                      {!noStock && (
+                        <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
+                      )}
                     </div>
-                    {variant.stock === null || variant.stock > 0 ? (
-                      <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
-                    ) : null}
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
 
             {selectedProductForVariant.variants?.length === 0 && (

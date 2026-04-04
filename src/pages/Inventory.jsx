@@ -167,7 +167,8 @@ export default function Inventory() {
     toWarehouse: '',
     quantity: '',
     notes: '',
-    selectedBatch: '' // Lote seleccionado para transferencia (farmacia)
+    selectedBatch: '', // Lote seleccionado para transferencia (farmacia)
+    selectedVariantSku: '' // Variante seleccionada para transferencia
   })
   const [isTransferring, setIsTransferring] = useState(false)
 
@@ -238,6 +239,15 @@ export default function Inventory() {
     loadWarehouses()
     loadBranches()
     loadCompanySettings()
+  }, [user])
+
+  // Recargar productos cuando la ventana gana foco (ej: vuelves del POS)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user) loadProducts()
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
   }, [user])
 
   // Resetear página cuando cambia el filtro de tipo (productos/insumos)
@@ -590,7 +600,8 @@ export default function Inventory() {
       toWarehouse: '',
       quantity: '',
       notes: '',
-      selectedBatch: ''
+      selectedBatch: '',
+      selectedVariantSku: ''
     })
   }
 
@@ -1081,10 +1092,24 @@ export default function Inventory() {
       return
     }
 
-    const warehouseStock = transferProduct.warehouseStocks?.find(
-      ws => ws.warehouseId === transferData.fromWarehouse
-    )
-    const availableStock = selectedBatchData ? selectedBatchData.quantity : (warehouseStock?.stock || 0)
+    // Para variantes: buscar stock en la variante seleccionada
+    let availableStock = 0
+    const isVariantTransfer = transferProduct.hasVariants && transferData.selectedVariantSku
+
+    if (isVariantTransfer) {
+      if (!transferData.selectedVariantSku) {
+        toast.error('Debes seleccionar una variante')
+        return
+      }
+      const selectedVariant = transferProduct.variants?.find(v => v.sku === transferData.selectedVariantSku)
+      const variantWS = selectedVariant?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
+      availableStock = variantWS?.stock || 0
+    } else if (selectedBatchData) {
+      availableStock = selectedBatchData.quantity
+    } else {
+      const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
+      availableStock = warehouseStock?.stock || 0
+    }
 
     if (quantity > availableStock) {
       const stockSource = selectedBatchData ? `lote ${transferData.selectedBatch}` : 'almacén origen'
@@ -1098,11 +1123,14 @@ export default function Inventory() {
       const businessId = getBusinessId()
 
       // 1. Actualizar stock - Salida del almacén origen (transacción atómica)
+      const variantSku = isVariantTransfer ? transferData.selectedVariantSku : null
       const exitResult = await updateProductStockTransaction(
         businessId,
         transferProduct.id,
         transferData.fromWarehouse,
-        -quantity
+        -quantity,
+        {},
+        variantSku
       )
 
       if (!exitResult.success) {
@@ -1174,7 +1202,8 @@ export default function Inventory() {
         transferProduct.id,
         transferData.toWarehouse,
         quantity,
-        extraUpdates
+        extraUpdates,
+        variantSku
       )
 
       if (!entryResult.success) {
@@ -1182,6 +1211,8 @@ export default function Inventory() {
       }
 
       const batchNote = selectedBatchData ? ` (Lote: ${transferData.selectedBatch})` : ''
+
+      const variantNote = variantSku ? ` (Variante: ${variantSku})` : ''
 
       // 4. Registrar movimiento de salida
       await createStockMovement(businessId, {
@@ -1194,7 +1225,8 @@ export default function Inventory() {
         toWarehouse: transferData.toWarehouse,
         userId: user.uid,
         ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
-        notes: transferData.notes || `Transferencia a ${allWarehouses.find(w => w.id === transferData.toWarehouse)?.name}${batchNote}`
+        ...(variantSku && { variantSku }),
+        notes: transferData.notes || `Transferencia a ${allWarehouses.find(w => w.id === transferData.toWarehouse)?.name}${batchNote}${variantNote}`
       })
 
       // 5. Registrar movimiento de entrada
@@ -1208,7 +1240,8 @@ export default function Inventory() {
         fromWarehouse: transferData.fromWarehouse,
         userId: user.uid,
         ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
-        notes: transferData.notes || `Transferencia desde ${allWarehouses.find(w => w.id === transferData.fromWarehouse)?.name}${batchNote}`
+        ...(variantSku && { variantSku }),
+        notes: transferData.notes || `Transferencia desde ${allWarehouses.find(w => w.id === transferData.fromWarehouse)?.name}${batchNote}${variantNote}`
       })
 
       toast.success('Transferencia realizada exitosamente')
@@ -1305,12 +1338,13 @@ export default function Inventory() {
 
       // Filtro por control de stock
       let matchesStockTracking = true
+      const hasVariantStock = item.hasVariants && item.variants?.length > 0
       if (filterStockTracking === 'tracked') {
-        // Solo items que manejan stock (trackStock !== false y stock no es null)
-        matchesStockTracking = item.trackStock !== false && item.stock !== null && item.stock !== undefined
+        // Solo items que manejan stock (trackStock !== false y stock no es null, o tiene variantes con stock)
+        matchesStockTracking = item.trackStock !== false && (item.stock !== null && item.stock !== undefined || hasVariantStock)
       } else if (filterStockTracking === 'untracked') {
         // Solo items que NO manejan stock
-        matchesStockTracking = item.trackStock === false || item.stock === null || item.stock === undefined
+        matchesStockTracking = item.trackStock === false || (item.stock === null && item.stock === undefined && !hasVariantStock)
       }
 
       return matchesSearch && matchesCategory && matchesStatus && matchesStockTracking
@@ -2135,43 +2169,96 @@ export default function Inventory() {
                         </div>
                       </div>
 
-                      {/* Expandible: Variantes con stock por almacén */}
+                      {/* Expandible: Variantes agrupadas por sucursal → almacén */}
                       {isExpanded && canExpand && hasVariantsWithStock && (
                         <div className="px-4 pb-3 bg-gray-50">
                           <div className="space-y-2">
-                            {item.variants.filter(v => (v.stock || 0) > 0 || (v.warehouseStocks?.length > 0)).map((variant, vIdx) => {
-                              const variantLabel = Object.values(variant.attributes || {}).join(' / ')
-                              const variantWS = variant.warehouseStocks || []
-                              return (
-                                <div key={variant.sku || vIdx} className="border border-gray-200 rounded-lg overflow-hidden">
-                                  <div className="bg-purple-50 px-3 py-1.5 flex items-center justify-between border-b border-gray-200">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="text-xs font-medium text-purple-700 truncate">{variant.sku || `Var ${vIdx + 1}`}</span>
-                                      <span className="text-xs text-purple-500 truncate">{variantLabel}</span>
+                            {(() => {
+                              // Construir mapa: warehouseId → [{ sku, label, stock }]
+                              const warehouseVariantMap = {}
+                              item.variants.forEach((variant, vIdx) => {
+                                const variantLabel = Object.values(variant.attributes || {}).join(' / ')
+                                const variantWS = variant.warehouseStocks || []
+                                if (variantWS.length > 0) {
+                                  variantWS.forEach(ws => {
+                                    if (!warehouseVariantMap[ws.warehouseId]) warehouseVariantMap[ws.warehouseId] = []
+                                    warehouseVariantMap[ws.warehouseId].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: ws.stock || 0 })
+                                  })
+                                } else if ((variant.stock || 0) > 0) {
+                                  if (!warehouseVariantMap['_unassigned']) warehouseVariantMap['_unassigned'] = []
+                                  warehouseVariantMap['_unassigned'].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: variant.stock || 0 })
+                                }
+                              })
+
+                              const mainWhs = filteredWarehouses.filter(w => !w.branchId)
+                              const branchGroups = filteredWarehouses.filter(w => w.branchId).reduce((acc, w) => {
+                                if (!acc[w.branchId]) acc[w.branchId] = []
+                                acc[w.branchId].push(w)
+                                return acc
+                              }, {})
+
+                              const renderWarehouse = (wh) => {
+                                const variants = warehouseVariantMap[wh.id] || []
+                                const total = variants.reduce((s, v) => s + v.stock, 0)
+                                return (
+                                  <div key={wh.id} className="bg-white rounded px-2 py-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <Warehouse className="w-3 h-3 text-gray-400" />
+                                        <span className="text-xs text-gray-700">{wh.name}</span>
+                                        {wh.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                                      </div>
+                                      <span className={`font-semibold text-xs ${total >= 4 ? 'text-green-600' : total > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{total}</span>
                                     </div>
-                                    <span className="text-xs font-semibold text-purple-600 shrink-0 ml-2">{variant.stock || 0}</span>
-                                  </div>
-                                  <div className="p-2 space-y-1">
-                                    {variantWS.length > 0 ? variantWS.map(ws => {
-                                      const wh = warehouses.find(w => w.id === ws.warehouseId)
-                                      return (
-                                        <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-2 py-1.5">
-                                          <div className="flex items-center gap-1.5">
-                                            <Warehouse className="w-3 h-3 text-gray-400" />
-                                            <span className="text-xs text-gray-700">{wh?.name || 'Almacén'}</span>
+                                    {variants.length > 0 && (
+                                      <div className="mt-1 ml-4 space-y-0.5">
+                                        {variants.map((v, idx) => (
+                                          <div key={idx} className="flex items-center justify-between text-[10px] bg-purple-50/50 px-1.5 py-0.5 rounded">
+                                            <div className="flex items-center gap-1">
+                                              <span className="font-mono font-medium text-purple-600">{v.sku}</span>
+                                              <span className="text-gray-500">{v.label}</span>
+                                            </div>
+                                            <span className="font-semibold text-gray-600">{v.stock}</span>
                                           </div>
-                                          <span className={`font-semibold text-xs ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {ws.stock || 0}
-                                          </span>
-                                        </div>
-                                      )
-                                    }) : (
-                                      <p className="text-xs text-gray-400 px-2 py-1">Sin asignación por almacén</p>
+                                        ))}
+                                      </div>
                                     )}
                                   </div>
+                                )
+                              }
+
+                              return (
+                                <div className="space-y-2">
+                                  {mainWhs.length > 0 && (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                      {filterBranch === 'all' && (
+                                        <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-3 h-3 text-primary-600" />
+                                          <span className="text-xs font-medium text-primary-700">Sucursal Principal</span>
+                                        </div>
+                                      )}
+                                      <div className="p-2 space-y-1">
+                                        {mainWhs.map(renderWarehouse)}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {Object.entries(branchGroups).map(([branchId, branchWhs]) => {
+                                    const branch = branches.find(b => b.id === branchId)
+                                    return (
+                                      <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                        <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-3 h-3 text-primary-600" />
+                                          <span className="text-xs font-medium text-primary-700">{branch?.name || 'Sucursal'}</span>
+                                        </div>
+                                        <div className="p-2 space-y-1">
+                                          {branchWhs.map(renderWarehouse)}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               )
-                            })}
+                            })()}
                           </div>
                         </div>
                       )}
@@ -2584,50 +2671,94 @@ export default function Inventory() {
                         )}
                       </TableRow>
 
-                      {/* Fila expandible: Variantes con stock por almacén (desktop) */}
+                      {/* Fila expandible: Variantes agrupadas por sucursal → almacén (desktop) */}
                       {isExpanded && item.hasVariants && item.variants?.length > 0 && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
-                            <div className="pl-8 space-y-3">
+                            <div className="pl-8 space-y-4">
                               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
-                                <Package className="w-4 h-4" />
-                                <span className="font-medium">Stock por Variante:</span>
+                                <Store className="w-4 h-4" />
+                                <span className="font-medium">Stock por Sucursal y Almacén:</span>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                                {item.variants.filter(v => (v.stock || 0) > 0 || (v.warehouseStocks?.length > 0)).map((variant, vIdx) => {
+                              {(() => {
+                                const warehouseVariantMap = {}
+                                item.variants.forEach((variant, vIdx) => {
                                   const variantLabel = Object.values(variant.attributes || {}).join(' / ')
                                   const variantWS = variant.warehouseStocks || []
+                                  if (variantWS.length > 0) {
+                                    variantWS.forEach(ws => {
+                                      if (!warehouseVariantMap[ws.warehouseId]) warehouseVariantMap[ws.warehouseId] = []
+                                      warehouseVariantMap[ws.warehouseId].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: ws.stock || 0 })
+                                    })
+                                  } else if ((variant.stock || 0) > 0) {
+                                    if (!warehouseVariantMap['_unassigned']) warehouseVariantMap['_unassigned'] = []
+                                    warehouseVariantMap['_unassigned'].push({ sku: variant.sku || `Var ${vIdx + 1}`, label: variantLabel, stock: variant.stock || 0 })
+                                  }
+                                })
+
+                                const mainWhs = filteredWarehouses.filter(w => !w.branchId)
+                                const branchGroups = filteredWarehouses.filter(w => w.branchId).reduce((acc, w) => {
+                                  if (!acc[w.branchId]) acc[w.branchId] = []
+                                  acc[w.branchId].push(w)
+                                  return acc
+                                }, {})
+
+                                const renderWarehouse = (wh) => {
+                                  const variants = warehouseVariantMap[wh.id] || []
+                                  const total = variants.reduce((s, v) => s + v.stock, 0)
                                   return (
-                                    <div key={variant.sku || vIdx} className="border border-gray-200 rounded-lg overflow-hidden">
-                                      <div className="bg-purple-50 px-3 py-1.5 flex items-center justify-between border-b border-gray-200">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                          <span className="text-xs font-medium text-purple-700">{variant.sku || `Var ${vIdx + 1}`}</span>
-                                          <span className="text-xs text-purple-500 truncate">{variantLabel}</span>
+                                    <div key={wh.id} className="p-2 space-y-1">
+                                      <div className="flex items-center justify-between px-2 py-1">
+                                        <div className="flex items-center gap-2">
+                                          <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                          <span className="text-sm text-gray-700">{wh.name}</span>
+                                          {wh.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                         </div>
-                                        <span className="text-xs font-semibold text-purple-600 ml-2">{variant.stock || 0}</span>
+                                        <span className="text-xs font-semibold text-gray-600">{total} total</span>
                                       </div>
-                                      <div className="p-2 space-y-1">
-                                        {variantWS.length > 0 ? variantWS.map(ws => {
-                                          const wh = warehouses.find(w => w.id === ws.warehouseId)
-                                          return (
-                                            <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-2 py-1">
-                                              <div className="flex items-center gap-1.5">
-                                                <Warehouse className="w-3 h-3 text-gray-400" />
-                                                <span className="text-xs text-gray-600">{wh?.name || 'Almacén'}</span>
+                                      {variants.length > 0 && (
+                                        <div className="ml-4 space-y-0.5">
+                                          {variants.map((v, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-white rounded px-2 py-1">
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs font-mono text-purple-600">{v.sku}</span>
+                                                <span className="text-xs text-gray-500 truncate">{v.label}</span>
                                               </div>
-                                              <span className={`font-semibold text-xs ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                                {ws.stock || 0}
-                                              </span>
+                                              <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock >= 4 ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
                                             </div>
-                                          )
-                                        }) : (
-                                          <p className="text-xs text-gray-400 px-2 py-1">Sin asignación por almacén</p>
-                                        )}
-                                      </div>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   )
-                                })}
-                              </div>
+                                }
+
+                                return (
+                                  <div className="space-y-4">
+                                    {mainWhs.length > 0 && (
+                                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-4 h-4 text-primary-600" />
+                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                        </div>
+                                        {mainWhs.map(renderWarehouse)}
+                                      </div>
+                                    )}
+                                    {Object.entries(branchGroups).map(([branchId, branchWhs]) => {
+                                      const branch = branches.find(b => b.id === branchId)
+                                      return (
+                                        <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-4 h-4 text-primary-600" />
+                                            <span className="font-medium text-primary-700">{branch?.name || 'Sucursal'}</span>
+                                          </div>
+                                          {branchWhs.map(renderWarehouse)}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -3130,24 +3261,31 @@ export default function Inventory() {
             return null
           })()}
 
+          {/* 1. Almacén de Origen */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Almacén de Origen <span className="text-red-500">*</span>
             </label>
             <select
               value={transferData.fromWarehouse}
-              onChange={(e) => setTransferData({ ...transferData, fromWarehouse: e.target.value })}
+              onChange={(e) => setTransferData({ ...transferData, fromWarehouse: e.target.value, selectedVariantSku: '' })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Selecciona almacén origen</option>
-              {/* Almacenes de Sucursal Principal */}
               {allWarehouses.filter(w => w.isActive && !w.branchId).length > 0 && (
                 <optgroup label="📍 Sucursal Principal">
                   {allWarehouses.filter(w => w.isActive && !w.branchId).map(warehouse => {
-                    const warehouseStock = transferProduct?.warehouseStocks?.find(
-                      ws => ws.warehouseId === warehouse.id
-                    )
-                    const stock = warehouseStock?.stock || 0
+                    // Para variantes: sumar stock de todas las variantes en este almacén
+                    let stock = 0
+                    if (transferProduct?.hasVariants && transferProduct.variants?.length > 0) {
+                      stock = transferProduct.variants.reduce((sum, v) => {
+                        const ws = (v.warehouseStocks || []).find(ws => ws.warehouseId === warehouse.id)
+                        return sum + (ws?.stock || 0)
+                      }, 0)
+                    } else {
+                      const ws = transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === warehouse.id)
+                      stock = ws?.stock || 0
+                    }
                     return (
                       <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
                         {warehouse.name} - Stock: {stock}
@@ -3156,17 +3294,22 @@ export default function Inventory() {
                   })}
                 </optgroup>
               )}
-              {/* Almacenes agrupados por sucursal */}
               {branches.map(branch => {
                 const branchWarehouses = allWarehouses.filter(w => w.isActive && w.branchId === branch.id)
                 if (branchWarehouses.length === 0) return null
                 return (
                   <optgroup key={branch.id} label={`📍 ${branch.name}`}>
                     {branchWarehouses.map(warehouse => {
-                      const warehouseStock = transferProduct?.warehouseStocks?.find(
-                        ws => ws.warehouseId === warehouse.id
-                      )
-                      const stock = warehouseStock?.stock || 0
+                      let stock = 0
+                      if (transferProduct?.hasVariants && transferProduct.variants?.length > 0) {
+                        stock = transferProduct.variants.reduce((sum, v) => {
+                          const ws = (v.warehouseStocks || []).find(ws => ws.warehouseId === warehouse.id)
+                          return sum + (ws?.stock || 0)
+                        }, 0)
+                      } else {
+                        const ws = transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === warehouse.id)
+                        stock = ws?.stock || 0
+                      }
                       return (
                         <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
                           {warehouse.name} - Stock: {stock}
@@ -3178,6 +3321,31 @@ export default function Inventory() {
               })}
             </select>
           </div>
+
+          {/* 2. Selector de variante (solo después de elegir almacén origen) */}
+          {transferProduct?.hasVariants && transferProduct.variants?.length > 0 && transferData.fromWarehouse && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Variante <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={transferData.selectedVariantSku}
+                onChange={(e) => setTransferData({ ...transferData, selectedVariantSku: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Selecciona variante</option>
+                {transferProduct.variants.map(v => {
+                  const label = Object.values(v.attributes || {}).join(' / ')
+                  const wsStock = (v.warehouseStocks || []).find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+                  return wsStock > 0 ? (
+                    <option key={v.sku} value={v.sku}>
+                      {v.sku} - {label} (Stock: {wsStock})
+                    </option>
+                  ) : null
+                })}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3769,7 +3937,9 @@ export default function Inventory() {
           {/* Resumen de movimientos */}
           {!isLoadingHistory && productMovements.length > 0 && (() => {
             const stockFromMovements = productMovements.reduce((sum, m) => sum + (m.quantity || 0), 0)
-            const currentStock = historyProduct?.stock || 0
+            const currentStock = historyProduct?.hasVariants && historyProduct.variants?.length > 0
+              ? historyProduct.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+              : (historyProduct?.stock || 0)
             const hasDiscrepancy = Math.abs(stockFromMovements - currentStock) >= 1
 
             return (
