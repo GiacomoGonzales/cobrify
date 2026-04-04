@@ -969,40 +969,79 @@ export default function Products() {
         result = await createProduct(getBusinessId(), productData)
 
         // Si el producto tiene stock inicial, registrar movimiento de entrada
-        if (result.success && productData.trackStock && productData.initialStock > 0) {
+        if (result.success && productData.trackStock) {
           const businessId = getBusinessId()
 
-          // Si hay stocks por almacén, crear un movimiento por cada almacén
-          if (productData.warehouseStocks && productData.warehouseStocks.length > 0) {
-            for (const ws of productData.warehouseStocks) {
-              if (ws.stock > 0) {
+          if (productData.hasVariants && productData.variants?.length > 0) {
+            // Productos con variantes: crear movimiento por cada variante con stock
+            const defaultWarehouse = await getDefaultWarehouse(businessId)
+            const defaultWarehouseId = defaultWarehouse?.id || ''
+
+            for (let i = 0; i < productData.variants.length; i++) {
+              const variant = productData.variants[i]
+              if (variant.stock && variant.stock > 0) {
+                // Asignar warehouseStocks a la variante
+                productData.variants[i].warehouseStocks = [{
+                  warehouseId: defaultWarehouseId,
+                  stock: variant.stock,
+                  minStock: 0
+                }]
+
+                const variantLabel = Object.values(variant.attributes || {}).join(' / ')
                 await createStockMovement(businessId, {
                   productId: result.id,
-                  warehouseId: ws.warehouseId,
+                  variantIndex: i,
+                  warehouseId: defaultWarehouseId,
                   type: 'entry',
-                  quantity: ws.stock,
+                  quantity: variant.stock,
                   reason: 'Stock inicial',
                   referenceType: 'initial_stock',
                   referenceId: result.id,
                   userId: user?.uid,
-                  notes: 'Ingreso de stock inicial al crear producto'
-                }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+                  notes: `Stock inicial variante: ${variantLabel}`
+                }).catch(err => console.error('Error al registrar movimiento de stock variante:', err))
               }
             }
-          } else {
-            // Stock sin almacén específico - usar almacén por defecto
-            const defaultWarehouse = await getDefaultWarehouse(businessId)
-            await createStockMovement(businessId, {
-              productId: result.id,
-              warehouseId: defaultWarehouse?.id || '',
-              type: 'entry',
-              quantity: productData.initialStock,
-              reason: 'Stock inicial',
-              referenceType: 'initial_stock',
-              referenceId: result.id,
-              userId: user?.uid,
-              notes: 'Ingreso de stock inicial al crear producto'
-            }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+
+            // Actualizar el producto con los warehouseStocks de cada variante
+            await updateProduct(businessId, result.id, {
+              variants: productData.variants
+            }).catch(err => console.error('Error al actualizar warehouseStocks de variantes:', err))
+
+          } else if (productData.initialStock > 0) {
+            // Producto sin variantes
+            // Si hay stocks por almacén, crear un movimiento por cada almacén
+            if (productData.warehouseStocks && productData.warehouseStocks.length > 0) {
+              for (const ws of productData.warehouseStocks) {
+                if (ws.stock > 0) {
+                  await createStockMovement(businessId, {
+                    productId: result.id,
+                    warehouseId: ws.warehouseId,
+                    type: 'entry',
+                    quantity: ws.stock,
+                    reason: 'Stock inicial',
+                    referenceType: 'initial_stock',
+                    referenceId: result.id,
+                    userId: user?.uid,
+                    notes: 'Ingreso de stock inicial al crear producto'
+                  }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+                }
+              }
+            } else {
+              // Stock sin almacén específico - usar almacén por defecto
+              const defaultWarehouse = await getDefaultWarehouse(businessId)
+              await createStockMovement(businessId, {
+                productId: result.id,
+                warehouseId: defaultWarehouse?.id || '',
+                type: 'entry',
+                quantity: productData.initialStock,
+                reason: 'Stock inicial',
+                referenceType: 'initial_stock',
+                referenceId: result.id,
+                userId: user?.uid,
+                notes: 'Ingreso de stock inicial al crear producto'
+              }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+            }
           }
         }
       }
