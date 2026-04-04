@@ -4320,7 +4320,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     const warehouseStock = getCurrentWarehouseStock(product)
 
     if (product.stock === null && !product.hasVariants) {
-      return <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Sin control</span>
+      return <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">Sin control</span>
     }
 
     if (warehouseStock === 0) {
@@ -4328,12 +4328,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     }
 
     const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
+    const color = warehouseStock >= 4 ? 'text-green-600' : 'text-yellow-600'
 
-    if (warehouseStock < 4) {
-      return <span className="text-[10px] sm:text-xs text-yellow-600 whitespace-nowrap">{displayStock}</span>
-    }
-
-    return <span className="text-[10px] sm:text-xs text-green-600 whitespace-nowrap">{displayStock}</span>
+    return (
+      <span className={`text-[10px] sm:text-xs ${color} whitespace-nowrap`}>
+        Stock: <span className="font-semibold">{displayStock}</span>
+      </span>
+    )
   }
 
   if (isLoading) {
@@ -4622,11 +4623,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </p>
                     {/* Variants badge */}
                     {product.hasVariants && (
-                      <div className="mt-0.5 sm:mt-1">
-                        <Badge variant="secondary" className="text-[10px] sm:text-xs px-1.5 py-0.5">
-                          {product.variants?.length || 0} vars
-                        </Badge>
-                      </div>
+                      <p className="text-[10px] text-purple-600 font-medium mt-0.5">
+                        {product.variants?.length || 0} variantes
+                      </p>
                     )}
                     {/* Codes - más compactos en móvil, ocultos en tablet */}
                     <div className="mt-0.5 space-y-0 text-[10px] text-gray-500 sm:hidden">
@@ -4666,17 +4665,30 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </span>
                           )}
                         </p>
-                        {!hideStockInPOS && getStockBadge(product)}
-                        {product.hasVariants && <span className="text-[10px] text-gray-500">Variantes</span>}
+                        {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                        {product.hasVariants && !hideStockInPOS && (
+                          <span className="text-[10px] text-gray-500">
+                            Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span>
+                          </span>
+                        )}
                       </div>
                       {/* Tablet/Desktop: precio arriba, stock abajo */}
                       <div className="hidden sm:block overflow-hidden">
                         <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                         </p>
-                        <div className="mt-0.5">
-                          {!hideStockInPOS && getStockBadge(product)}
-                          {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                        <div className="flex items-center justify-between mt-1">
+                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                          {product.hasVariants && (
+                            <>
+                              {!hideStockInPOS && (
+                                <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) >= 4 ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  Stock: {getCurrentWarehouseStock(product)}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-purple-500 font-medium">Ver opciones</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
