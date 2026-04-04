@@ -72,6 +72,8 @@ export default function ResellerSettings() {
     primaryColor: resellerData?.branding?.primaryColor || '#10B981',
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
     whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
+    supportEmail: resellerData?.branding?.supportEmail || resellerData?.email || '',
+    websiteUrl: resellerData?.branding?.websiteUrl || resellerData?.customDomain || '',
     description: resellerData?.branding?.description || '',
     // Precios de la landing page
     priceMonthly: resellerData?.branding?.priceMonthly ?? 29.90,
@@ -100,6 +102,8 @@ export default function ResellerSettings() {
         primaryColor: resellerData.branding?.primaryColor || '#10B981',
         secondaryColor: resellerData.branding?.secondaryColor || '#059669',
         whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
+        supportEmail: resellerData.branding?.supportEmail || resellerData.email || '',
+        websiteUrl: resellerData.branding?.websiteUrl || resellerData.customDomain || '',
         description: resellerData.branding?.description || '',
         // Precios de la landing page
         priceMonthly: resellerData.branding?.priceMonthly ?? 29.90,
@@ -877,6 +881,41 @@ export default function ResellerSettings() {
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-1">Número que aparecerá en el botón de WhatsApp de tu landing</p>
+                    </div>
+
+                    {/* Email de Soporte */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email de Contacto
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="email"
+                          name="supportEmail"
+                          value={brandingData.supportEmail}
+                          onChange={handleBrandingChange}
+                          placeholder="soporte@tuempresa.com"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Aparecerá en Términos y Condiciones y páginas legales</p>
+                    </div>
+
+                    {/* Sitio Web */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Sitio Web
+                      </label>
+                      <input
+                        type="text"
+                        name="websiteUrl"
+                        value={brandingData.websiteUrl}
+                        onChange={handleBrandingChange}
+                        placeholder="tuempresa.com"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Aparecerá en Términos y Condiciones</p>
                     </div>
 
                     {/* Brand Colors */}

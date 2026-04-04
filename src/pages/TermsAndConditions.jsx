@@ -9,6 +9,10 @@ export default function TermsAndConditions() {
   const logoUrl = branding.logoUrl || '/logo.png'
   const primaryColor = branding.primaryColor || '#10B981'
 
+  // Contacto dinámico: usar datos del branding o fallbacks
+  const contactEmail = branding.supportEmail || branding.contactEmail || 'soporte@cobrify.com'
+  const contactWebsite = branding.websiteUrl || (window.location.hostname !== 'localhost' ? window.location.hostname : 'cobrifyperu.com')
+
   // Precios dinámicos
   const priceMonthly = branding.priceMonthly ?? 29.90
   const priceSemester = branding.priceSemester ?? 149.90
@@ -335,11 +339,11 @@ export default function TermsAndConditions() {
             <ul className="space-y-2 text-gray-700">
               <li className="flex items-start">
                 <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                <span><strong>Por correo electrónico:</strong> soporte@cobrify.com</span>
+                <span><strong>Por correo electrónico:</strong> <a href={`mailto:${contactEmail}`} className="text-primary-600 hover:underline">{contactEmail}</a></span>
               </li>
               <li className="flex items-start">
                 <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                <span><strong>A través del sitio web:</strong> cobrifyperu.com</span>
+                <span><strong>A través del sitio web:</strong> <a href={`https://${contactWebsite}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">{contactWebsite}</a></span>
               </li>
             </ul>
           </section>

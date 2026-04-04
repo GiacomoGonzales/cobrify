@@ -10,6 +10,8 @@ export const DEFAULT_BRANDING = {
   secondaryColor: '#1d4ed8',  // primary-700 (blue)
   accentColor: '#3b82f6',     // primary-500 (blue)
   whatsapp: '',               // Número de WhatsApp para la landing
+  supportEmail: '',            // Email de contacto para términos/soporte
+  websiteUrl: '',              // URL del sitio web
 }
 
 /**
@@ -30,6 +32,8 @@ export async function getResellerBranding(resellerId) {
         secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
         accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
         whatsapp: data.branding?.whatsapp || data.phone || '',
+        supportEmail: data.branding?.supportEmail || data.email || '',
+        websiteUrl: data.branding?.websiteUrl || '',
       }
     }
   } catch (error) {
@@ -106,6 +110,8 @@ export async function updateResellerBranding(resellerId, branding) {
         secondaryColor: branding.secondaryColor || DEFAULT_BRANDING.secondaryColor,
         accentColor: branding.accentColor || DEFAULT_BRANDING.accentColor,
         whatsapp: branding.whatsapp || '',
+        supportEmail: branding.supportEmail || '',
+        websiteUrl: branding.websiteUrl || '',
         description: branding.description || '',
         // Precios de la landing page
         priceMonthly: branding.priceMonthly ?? 29.90,
@@ -254,6 +260,8 @@ export async function getResellerByHostname(hostname) {
           secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
           accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
           whatsapp: data.branding?.whatsapp || data.phone || '',
+          supportEmail: data.branding?.supportEmail || data.email || '',
+          websiteUrl: data.branding?.websiteUrl || normalizedHostname || '',
           // Precios de la landing page
           priceMonthly: data.branding?.priceMonthly ?? 29.90,
           priceSemester: data.branding?.priceSemester ?? 149.90,
