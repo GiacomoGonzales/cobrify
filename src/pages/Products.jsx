@@ -243,7 +243,7 @@ export default function Products() {
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
-  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', warehouseId: '' })
   const [editingVariantIndex, setEditingVariantIndex] = useState(null)
   const [editingVariant, setEditingVariant] = useState(null)
 
@@ -857,6 +857,7 @@ export default function Products() {
           price3: v.price3 || null,
           price4: v.price4 || null,
           stock: v.stock === '' || v.stock === null ? null : (typeof v.stock === 'string' ? parseInt(v.stock) : v.stock),
+          warehouseId: v.warehouseId || '',
         }))
         // Calculate base price as average of variant prices
         const avgPrice = productData.variants.reduce((sum, v) => sum + v.price, 0) / productData.variants.length
@@ -980,18 +981,22 @@ export default function Products() {
             for (let i = 0; i < productData.variants.length; i++) {
               const variant = productData.variants[i]
               if (variant.stock && variant.stock > 0) {
+                const targetWarehouseId = variant.warehouseId || defaultWarehouseId
+
                 // Asignar warehouseStocks a la variante
                 productData.variants[i].warehouseStocks = [{
-                  warehouseId: defaultWarehouseId,
+                  warehouseId: targetWarehouseId,
                   stock: variant.stock,
                   minStock: 0
                 }]
+                // Limpiar warehouseId temporal
+                delete productData.variants[i].warehouseId
 
                 const variantLabel = Object.values(variant.attributes || {}).join(' / ')
                 await createStockMovement(businessId, {
                   productId: result.id,
                   variantIndex: i,
-                  warehouseId: defaultWarehouseId,
+                  warehouseId: targetWarehouseId,
                   type: 'entry',
                   quantity: variant.stock,
                   reason: 'Stock inicial',
@@ -1000,6 +1005,9 @@ export default function Products() {
                   userId: user?.uid,
                   notes: `Stock inicial variante: ${variantLabel}`
                 }).catch(err => console.error('Error al registrar movimiento de stock variante:', err))
+              } else {
+                // Limpiar warehouseId temporal aunque no tenga stock
+                delete productData.variants[i].warehouseId
               }
             }
 
@@ -2263,6 +2271,9 @@ export default function Products() {
       return
     }
 
+    const stockVal = newVariant.stock === '' ? null : parseInt(newVariant.stock)
+    const whId = newVariant.warehouseId || ''
+
     setVariants([...variants, {
       sku: newVariant.sku.trim(),
       attributes: { ...newVariant.attributes },
@@ -2270,7 +2281,8 @@ export default function Products() {
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
       price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
       price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
-      stock: newVariant.stock === '' ? null : parseInt(newVariant.stock),
+      stock: stockVal,
+      warehouseId: whId,
     }])
 
     // Reset new variant form
@@ -2282,6 +2294,7 @@ export default function Products() {
       price3: '',
       price4: '',
       stock: '',
+      warehouseId: whId, // mantener el almacén seleccionado para la siguiente variante
     })
   }
 
@@ -4812,17 +4825,36 @@ export default function Products() {
                             />
                           </div>
                         ))}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Stock (Opcional)
-                          </label>
-                          <input
-                            type="number"
-                            value={newVariant.stock}
-                            onChange={e => handleNewVariantChange('stock', e.target.value)}
-                            placeholder="0"
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Stock (Opcional)
+                            </label>
+                            <input
+                              type="number"
+                              value={newVariant.stock}
+                              onChange={e => handleNewVariantChange('stock', e.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          {warehouses.length > 0 && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Almacén
+                              </label>
+                              <select
+                                value={newVariant.warehouseId}
+                                onChange={e => handleNewVariantChange('warehouseId', e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              >
+                                <option value="">Por defecto</option>
+                                {warehouses.filter(w => w.status === 'active').map(w => (
+                                  <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="mt-3">
@@ -4856,6 +4888,7 @@ export default function Products() {
                                 </>
                               )}
                               <th className="px-2 py-2 text-left">Stock</th>
+                              {warehouses.length > 0 && <th className="px-2 py-2 text-left">Almacén</th>}
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
@@ -4890,6 +4923,16 @@ export default function Products() {
                                   <td className="px-2 py-1">
                                     <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
                                   </td>
+                                  {warehouses.length > 0 && (
+                                    <td className="px-2 py-1">
+                                      <select value={editingVariant.warehouseId || ''} onChange={e => setEditingVariant({ ...editingVariant, warehouseId: e.target.value })} className="w-24 px-1 py-1 text-xs border border-gray-300 rounded">
+                                        <option value="">Por defecto</option>
+                                        {warehouses.filter(w => w.status === 'active').map(w => (
+                                          <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  )}
                                   <td className="px-2 py-1">
                                     <div className="flex gap-1">
                                       <button type="button" onClick={handleSaveEditVariant} className="text-green-600 hover:text-green-800">
@@ -4916,6 +4959,15 @@ export default function Products() {
                                     </>
                                   )}
                                   <td className="px-2 py-2">{variant.stock ?? 'N/A'}</td>
+                                  {warehouses.length > 0 && (
+                                    <td className="px-2 py-2 text-xs text-gray-500">
+                                      {variant.warehouseId
+                                        ? (warehouses.find(w => w.id === variant.warehouseId)?.name || 'Almacén')
+                                        : variant.warehouseStocks?.[0]?.warehouseId
+                                          ? (warehouses.find(w => w.id === variant.warehouseStocks[0].warehouseId)?.name || 'Almacén')
+                                          : 'Por defecto'}
+                                    </td>
+                                  )}
                                   <td className="px-2 py-2">
                                     <div className="flex gap-1">
                                       <button
