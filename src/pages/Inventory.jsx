@@ -578,7 +578,8 @@ export default function Inventory() {
       toWarehouse: '',
       quantity: '',
       notes: '',
-      selectedBatch: ''
+      selectedBatch: '',
+      selectedSerials: [],
     })
     setShowTransferModal(true)
   }
@@ -592,6 +593,7 @@ export default function Inventory() {
       quantity: '',
       notes: '',
       selectedBatch: '',
+      selectedSerials: [],
       selectedVariantSku: ''
     })
   }
@@ -606,7 +608,8 @@ export default function Inventory() {
       warehouseId: defaultWarehouseId,
       quantity: '',
       reason: 'damaged',
-      notes: ''
+      notes: '',
+      selectedSerials: [],
     })
     setShowDamageModal(true)
   }
@@ -618,7 +621,8 @@ export default function Inventory() {
       warehouseId: '',
       quantity: '',
       reason: 'damaged',
-      notes: ''
+      notes: '',
+      selectedSerials: [],
     })
   }
 
@@ -629,6 +633,14 @@ export default function Inventory() {
     if (!damageData.warehouseId) {
       toast.error('Debes seleccionar un almacén')
       return
+    }
+
+    // Validar seriales
+    if (damageProduct.trackSerials && damageProduct.serials?.length > 0) {
+      if (!damageData.selectedSerials || damageData.selectedSerials.length === 0) {
+        toast.error('Debes seleccionar al menos una serie')
+        return
+      }
     }
 
     const quantity = parseFloat(damageData.quantity)
@@ -675,12 +687,25 @@ export default function Inventory() {
         notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}`
       })
 
+      // Actualizar seriales a 'lost' si aplica
+      const extraDamageUpdates = {}
+      if (damageData.selectedSerials?.length > 0 && damageProduct.serials?.length > 0) {
+        const updatedSerials = damageProduct.serials.map(s => {
+          if (damageData.selectedSerials.includes(s.serialNumber) && s.status === 'available') {
+            return { ...s, status: 'lost', lostReason: reasonLabel, lostDate: new Date() }
+          }
+          return s
+        })
+        extraDamageUpdates.serials = updatedSerials
+      }
+
       // Actualizar stock del producto en el almacén (transacción atómica)
       const updateResult = await updateProductStockTransaction(
         businessId,
         damageProduct.id,
         damageData.warehouseId,
-        -quantity
+        -quantity,
+        extraDamageUpdates
       )
 
       if (!updateResult.success) {
@@ -1083,6 +1108,14 @@ export default function Inventory() {
       return
     }
 
+    // Validar seriales
+    if (transferProduct.trackSerials && (transferProduct.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === transferData.fromWarehouse)).length > 0) {
+      if (!transferData.selectedSerials || transferData.selectedSerials.length === 0) {
+        toast.error('Debes seleccionar al menos un número de serie para transferir')
+        return
+      }
+    }
+
     // Para variantes: buscar stock en la variante seleccionada
     let availableStock = 0
     const isVariantTransfer = transferProduct.hasVariants && transferData.selectedVariantSku
@@ -1188,6 +1221,17 @@ export default function Inventory() {
         }
       }
 
+      // Transferir números de serie si aplica
+      if (transferData.selectedSerials?.length > 0 && transferProduct.serials?.length > 0) {
+        const updatedSerials = transferProduct.serials.map(s => {
+          if (transferData.selectedSerials.includes(s.serialNumber) && s.status === 'available') {
+            return { ...s, warehouseId: transferData.toWarehouse }
+          }
+          return s
+        })
+        extraUpdates.serials = updatedSerials
+      }
+
       const entryResult = await updateProductStockTransaction(
         businessId,
         transferProduct.id,
@@ -1217,6 +1261,7 @@ export default function Inventory() {
         userId: user.uid,
         ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
         ...(variantSku && { variantSku }),
+        ...(transferData.selectedSerials?.length > 0 && { serialNumbers: transferData.selectedSerials }),
         notes: transferData.notes || `Transferencia a ${allWarehouses.find(w => w.id === transferData.toWarehouse)?.name}${batchNote}${variantNote}`
       })
 
@@ -1232,6 +1277,7 @@ export default function Inventory() {
         userId: user.uid,
         ...(selectedBatchData && { batchNumber: transferData.selectedBatch }),
         ...(variantSku && { variantSku }),
+        ...(transferData.selectedSerials?.length > 0 && { serialNumbers: transferData.selectedSerials }),
         notes: transferData.notes || `Transferencia desde ${allWarehouses.find(w => w.id === transferData.fromWarehouse)?.name}${batchNote}${variantNote}`
       })
 
@@ -3424,6 +3470,49 @@ export default function Inventory() {
             </div>
           )}
 
+          {/* Selección de números de serie */}
+          {transferProduct?.trackSerials && transferData.fromWarehouse && (() => {
+            const availableSerials = (transferProduct.serials || []).filter(s =>
+              s.status === 'available' && (!s.warehouseId || s.warehouseId === transferData.fromWarehouse)
+            )
+            if (availableSerials.length === 0) return null
+            return (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Números de Serie a Transferir <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg max-h-48 overflow-y-auto">
+                  {availableSerials.map((s) => {
+                    const isSelected = (transferData.selectedSerials || []).includes(s.serialNumber)
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          const current = transferData.selectedSerials || []
+                          const newSelected = isSelected
+                            ? current.filter(sn => sn !== s.serialNumber)
+                            : [...current, s.serialNumber]
+                          setTransferData({ ...transferData, selectedSerials: newSelected, quantity: newSelected.length || '' })
+                        }}
+                        className={`px-3 py-1.5 text-sm rounded-lg border-2 transition-colors ${
+                          isSelected
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
+                        }`}
+                      >
+                        {s.serialNumber}
+                      </button>
+                    )
+                  })}
+                </div>
+                {(transferData.selectedSerials || []).length > 0 && (
+                  <p className="text-xs text-amber-700 mt-1">{transferData.selectedSerials.length} serie(s) seleccionada(s)</p>
+                )}
+              </div>
+            )
+          })()}
+
           <Input
             label="Cantidad a Transferir"
             type="number"
@@ -3550,16 +3639,63 @@ export default function Inventory() {
             <option value="other">Otro</option>
           </Select>
 
-          <Input
-            label="Cantidad a descontar"
-            type="number"
-            min="1"
-            step="1"
-            required
-            value={damageData.quantity}
-            onChange={(e) => setDamageData({ ...damageData, quantity: e.target.value })}
-            placeholder="Ej: 5"
-          />
+          {/* Selección de series o cantidad */}
+          {damageProduct?.trackSerials && damageData.warehouseId ? (() => {
+            const availableSerials = (damageProduct.serials || []).filter(s =>
+              s.status === 'available' && (!s.warehouseId || s.warehouseId === damageData.warehouseId)
+            )
+            if (availableSerials.length === 0) return (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                No hay series disponibles en este almacén.
+              </div>
+            )
+            return (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seleccionar series afectadas <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg max-h-48 overflow-y-auto">
+                  {availableSerials.map((s) => {
+                    const isSelected = (damageData.selectedSerials || []).includes(s.serialNumber)
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          const current = damageData.selectedSerials || []
+                          const newSelected = isSelected
+                            ? current.filter(sn => sn !== s.serialNumber)
+                            : [...current, s.serialNumber]
+                          setDamageData({ ...damageData, selectedSerials: newSelected, quantity: newSelected.length.toString() })
+                        }}
+                        className={`px-3 py-1.5 text-sm rounded-lg border-2 transition-colors ${
+                          isSelected
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-red-400'
+                        }`}
+                      >
+                        {s.serialNumber}
+                      </button>
+                    )
+                  })}
+                </div>
+                {(damageData.selectedSerials || []).length > 0 && (
+                  <p className="text-xs text-red-600 mt-1">{damageData.selectedSerials.length} serie(s) seleccionada(s) para merma</p>
+                )}
+              </div>
+            )
+          })() : (
+            <Input
+              label="Cantidad a descontar"
+              type="number"
+              min="1"
+              step="1"
+              required
+              value={damageData.quantity}
+              onChange={(e) => setDamageData({ ...damageData, quantity: e.target.value })}
+              placeholder="Ej: 5"
+            />
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

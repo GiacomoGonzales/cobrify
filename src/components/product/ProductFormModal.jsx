@@ -196,6 +196,7 @@ const ProductFormModal = ({
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false)
   const [trackExpiration, setTrackExpiration] = useState(false)
+  const [trackSerials, setTrackSerials] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
   const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (isIgvExempt ? 'exempt' : 'standard')
@@ -267,6 +268,7 @@ const ProductFormModal = ({
       setNoStock(initialData.noStock || false)
       setAllowDecimalQuantity(initialData.allowDecimalQuantity || false)
       setTrackExpiration(initialData.trackExpiration || false)
+      setTrackSerials(initialData.trackSerials || false)
       setCatalogVisible(initialData.catalogVisible || false)
       setTaxAffectation(initialData.taxAffectation || '10')
       setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
@@ -469,6 +471,7 @@ const ProductFormModal = ({
       noStock,
       allowDecimalQuantity,
       trackExpiration,
+      trackSerials,
       catalogVisible,
       taxAffectation,
       ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }),
@@ -1269,6 +1272,18 @@ const ProductFormModal = ({
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Control de vencimiento</span>
+              </label>
+            )}
+
+            {!noStock && (
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={trackSerials}
+                  onChange={e => setTrackSerials(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Control de N° de serie</span>
               </label>
             )}
 

@@ -761,6 +761,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `${batchLine}\n`;
         }
 
+        if (item.serialNumber) {
+          itemsText += `S/N: ${item.serialNumber}\n`;
+        }
+
         // Línea 5: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
@@ -803,6 +807,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
             batchLine += ` V:${expiryStr}`;
           }
           itemsText += `${batchLine}\n`;
+        }
+
+        if (item.serialNumber) {
+          itemsText += `S/N: ${item.serialNumber}\n`;
         }
 
         // Línea 5: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
@@ -2315,6 +2323,10 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
           batchLine += ` Venc: ${expiryStr}`;
         }
         builder.text(batchLine).newLine();
+      }
+
+      if (item.serialNumber) {
+        builder.text(`S/N: ${item.serialNumber}`).newLine();
       }
 
       // Observaciones adicionales si existen (IMEI, placa, serie, etc.)

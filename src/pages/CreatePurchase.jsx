@@ -120,7 +120,7 @@ export default function CreatePurchase() {
   const [creditType, setCreditType] = useState('unico')
   const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '' },
+    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '', trackSerials: false, serialNumbers: [] },
   ])
 
   // Warehouses y Branches
@@ -410,7 +410,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '' },
+      { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '', trackSerials: false, serialNumbers: [] },
     ])
   }
 
@@ -423,6 +423,24 @@ export default function CreatePurchase() {
   const updateItem = (index, field, value) => {
     const newItems = [...purchaseItems]
     newItems[index][field] = value
+    // Ajustar array de seriales cuando cambia la cantidad
+    if (field === 'quantity' && newItems[index].trackSerials) {
+      const qty = parseInt(value) || 0
+      const current = newItems[index].serialNumbers || []
+      if (qty > current.length) {
+        newItems[index].serialNumbers = [...current, ...Array(qty - current.length).fill('')]
+      } else {
+        newItems[index].serialNumbers = current.slice(0, qty)
+      }
+    }
+    setPurchaseItems(newItems)
+  }
+
+  const updateSerialNumber = (itemIndex, serialIndex, value) => {
+    const newItems = [...purchaseItems]
+    const serials = [...(newItems[itemIndex].serialNumbers || [])]
+    serials[serialIndex] = value
+    newItems[itemIndex].serialNumbers = serials
     setPurchaseItems(newItems)
   }
 
@@ -532,6 +550,8 @@ export default function CreatePurchase() {
           salePrice3: v.price3 || '',
           salePrice4: v.price4 || '',
           hasVariants: true,
+          trackSerials: item.trackSerials || false,
+          serialNumbers: [],
         }
       })
 
@@ -555,6 +575,8 @@ export default function CreatePurchase() {
     newItems[index].productName = item.name
     newItems[index].itemType = item.itemType || 'product'
     newItems[index].taxAffectation = item.taxAffectation || '10'
+    newItems[index].trackSerials = item.trackSerials || false
+    newItems[index].serialNumbers = []
 
     const isExempt = item.taxAffectation === '20' || item.taxAffectation === '30'
 
@@ -923,6 +945,27 @@ export default function CreatePurchase() {
         })
         return false
       }
+
+      // Validar números de serie completos
+      if (item.trackSerials && item.serialNumbers?.length > 0) {
+        const emptySerials = item.serialNumbers.filter(sn => !sn.trim())
+        if (emptySerials.length > 0) {
+          setMessage({
+            type: 'error',
+            text: `Complete todos los números de serie del producto "${item.productName}" (${emptySerials.length} pendientes)`,
+          })
+          return false
+        }
+        // Validar duplicados
+        const uniqueSerials = new Set(item.serialNumbers.map(sn => sn.trim().toUpperCase()))
+        if (uniqueSerials.size !== item.serialNumbers.length) {
+          setMessage({
+            type: 'error',
+            text: `Hay números de serie duplicados en el producto "${item.productName}"`,
+          })
+          return false
+        }
+      }
     }
 
     return true
@@ -1286,6 +1329,32 @@ export default function CreatePurchase() {
               extraUpdates.expirationDate = nearestBatch.expirationDate
               extraUpdates.batchNumber = nearestBatch.batchNumber
             }
+          }
+
+          // Sistema de números de serie
+          const itemsWithSerials = grouped.items.filter(item => item.trackSerials && item.serialNumbers?.some(sn => sn.trim()))
+          if (itemsWithSerials.length > 0) {
+            const currentSerials = product.serials || []
+            const newSerials = []
+            itemsWithSerials.forEach(item => {
+              item.serialNumbers.forEach(sn => {
+                if (sn.trim()) {
+                  newSerials.push({
+                    id: `serial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    serialNumber: sn.trim(),
+                    status: 'available',
+                    warehouseId: selectedWarehouse?.id || null,
+                    purchaseId: resultId || null,
+                    purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                    saleId: null,
+                    variantSku: item.variantSku || null,
+                    createdAt: Timestamp.fromDate(new Date())
+                  })
+                }
+              })
+            })
+            extraUpdates.serials = [...currentSerials, ...newSerials]
+            extraUpdates.trackSerials = true
           }
 
           let result
@@ -2089,6 +2158,28 @@ export default function CreatePurchase() {
                       )}
                     </tr>
                   )}
+                  {/* Fila de números de serie */}
+                  {item.trackSerials && item.serialNumbers?.length > 0 && (
+                    <tr className="bg-amber-50/40 border-b border-gray-200">
+                      <td colSpan={99} className="px-4 py-2">
+                        <div className="flex items-start gap-2">
+                          <span className="text-xs font-medium text-amber-700 mt-1.5 whitespace-nowrap">N° de Serie:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {item.serialNumbers.map((sn, snIdx) => (
+                              <input
+                                key={snIdx}
+                                type="text"
+                                placeholder={`Serie ${snIdx + 1}`}
+                                value={sn}
+                                onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
+                                className="w-36 px-2 py-1 text-sm border border-amber-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   </React.Fragment>
                 ))}
               </tbody>
@@ -2332,6 +2423,25 @@ export default function CreatePurchase() {
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* Números de serie - móvil */}
+                {item.trackSerials && item.serialNumbers?.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-amber-700 font-medium mb-1">N° de Serie</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {item.serialNumbers.map((sn, snIdx) => (
+                        <input
+                          key={snIdx}
+                          type="text"
+                          placeholder={`Serie ${snIdx + 1}`}
+                          value={sn}
+                          onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-amber-300 bg-amber-50/30 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
 

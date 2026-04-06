@@ -152,6 +152,17 @@ export const createMassTransfer = async (businessId, transferData) => {
         }
       }
 
+      // Transferir números de serie si aplica
+      if (item.serialNumbers && item.serialNumbers.length > 0 && item.serials) {
+        const updatedSerials = (item.serials || []).map(s => {
+          if (item.serialNumbers.includes(s.serialNumber) && s.status === 'available') {
+            return { ...s, warehouseId: transferData.toWarehouseId }
+          }
+          return s
+        })
+        extraUpdates.serials = updatedSerials
+      }
+
       await updateProductStockTransaction(
         businessId,
         item.productId,

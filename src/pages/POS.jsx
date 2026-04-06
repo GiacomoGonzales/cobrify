@@ -48,7 +48,7 @@ import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo }
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
-import { getDoc, doc } from 'firebase/firestore'
+import { getDoc, doc, Timestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge } from '@/services/hotelService'
@@ -425,6 +425,11 @@ export default function POS() {
   const [pendingBatchForPresentation, setPendingBatchForPresentation] = useState(null) // Lote seleccionado antes de elegir presentación
   const [pendingBatchForPrice, setPendingBatchForPrice] = useState(null) // Lote seleccionado antes de elegir precio (desde presentación base)
   const [priceFromBaseUnit, setPriceFromBaseUnit] = useState(false) // Viene del flujo presentación → unidad base → precios
+
+  // Modal de selección de número de serie
+  const [showSerialModal, setShowSerialModal] = useState(false)
+  const [productForSerialSelection, setProductForSerialSelection] = useState(null)
+  const [pendingSerialData, setPendingSerialData] = useState(null) // { price, batch, presentation } datos pendientes del flujo
 
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
@@ -1844,6 +1849,25 @@ export default function POS() {
       }
     }
 
+    // Verificar si tiene números de serie
+    if (product.trackSerials && product.serials?.length > 0) {
+      const availableSerials = product.serials.filter(s =>
+        s.status === 'available' && (!s.warehouseId || s.warehouseId === selectedWarehouse?.id)
+      )
+      // Excluir los que ya están en el carrito
+      const serialsInCart = cart.filter(item => item.productId === product.id && item.serialNumber).map(item => item.serialNumber)
+      const filteredSerials = availableSerials.filter(s => !serialsInCart.includes(s.serialNumber))
+
+      if (filteredSerials.length === 0) {
+        toast.error('No hay números de serie disponibles para este producto')
+        return
+      }
+      setProductForSerialSelection(product)
+      setPendingSerialData({ batch: batchToUse })
+      setShowSerialModal(true)
+      return
+    }
+
     // ID único para el item en carrito (diferente por lote + presentación)
     const presKey = product.presentationName ? `-pres-${product.presentationName}` : ''
     const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}${presKey}` : (product.presentationName ? `${product.id}${presKey}` : product.id)
@@ -1874,6 +1898,33 @@ export default function POS() {
       }
       setCart([...cart, cartItem])
     }
+  }
+
+  // Manejar selección de número de serie desde el modal
+  const handleSerialSelection = (serial) => {
+    if (!productForSerialSelection) return
+    const product = productForSerialSelection
+    const batchToUse = pendingSerialData?.batch || null
+
+    const cartItemId = `${product.id}-serial-${serial.serialNumber}`
+
+    const cartItem = {
+      ...product,
+      quantity: 1,
+      cartId: cartItemId,
+      serialNumber: serial.serialNumber,
+      serialId: serial.id,
+      ...(batchToUse && {
+        batchNumber: batchToUse.lotNumber,
+        batchExpiryDate: batchToUse.expiryDate,
+        batchQuantity: batchToUse.quantity
+      })
+    }
+    setCart([...cart, cartItem])
+
+    setShowSerialModal(false)
+    setProductForSerialSelection(null)
+    setPendingSerialData(null)
   }
 
   // Manejar selección de lote desde el modal
@@ -3041,6 +3092,7 @@ export default function POS() {
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+          ...(item.serialNumber && { serialNumber: item.serialNumber }),
           ...(item.modifiers && { modifiers: item.modifiers }),
           ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
           ...(item.marca && { marca: item.marca }),
@@ -3226,6 +3278,7 @@ export default function POS() {
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
         ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+        ...(item.serialNumber && { serialNumber: item.serialNumber }),
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
         ...(item.marca && { marca: item.marca }),
@@ -3790,6 +3843,16 @@ export default function POS() {
                     batchBreakdownByItemId[item.cartId || item.id] = batchBreakdown
                   }
 
+                  // Actualizar serial a 'sold' si el item tiene serialNumber
+                  if (item.serialNumber && productData.serials?.length > 0) {
+                    const updatedSerials = productData.serials.map(s =>
+                      s.serialNumber === item.serialNumber
+                        ? { ...s, status: 'sold', saleId: bgInvoiceId || null, saleDate: Timestamp.fromDate(new Date()) }
+                        : s
+                    )
+                    extraUpdates.serials = updatedSerials
+                  }
+
                   // Usar transacción para evitar race conditions entre ventas simultáneas
                   return updateProductStockTransaction(
                     businessId, item.id,
@@ -3854,6 +3917,7 @@ export default function POS() {
                   referenceNumber: bgNumberResult?.number || '',
                   userId: bgUserUid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  ...(item.serialNumber && { serialNumber: item.serialNumber }),
                   notes: noteParts.join(' - ')
                 }
                 // Reintentar hasta 3 veces si falla para evitar movimientos perdidos
@@ -7161,6 +7225,60 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal de Selección de Número de Serie */}
+      <Modal
+        isOpen={showSerialModal}
+        onClose={() => {
+          setShowSerialModal(false)
+          setProductForSerialSelection(null)
+          setPendingSerialData(null)
+        }}
+        title={`Seleccionar N° de Serie - ${productForSerialSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForSerialSelection && (() => {
+          const availableSerials = (productForSerialSelection.serials || []).filter(s =>
+            s.status === 'available' && (!s.warehouseId || s.warehouseId === selectedWarehouse?.id)
+          )
+          const serialsInCart = cart.filter(item => item.productId === productForSerialSelection.id && item.serialNumber).map(item => item.serialNumber)
+          const filteredSerials = availableSerials.filter(s => !serialsInCart.includes(s.serialNumber))
+
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Selecciona el número de serie a vender ({filteredSerials.length} disponibles):
+              </p>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {filteredSerials.map((serial, idx) => (
+                  <button
+                    key={serial.id}
+                    onClick={() => handleSerialSelection(serial)}
+                    className="w-full p-3 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{serial.serialNumber}</p>
+                        {serial.variantSku && (
+                          <p className="text-xs text-gray-500">Variante: {serial.variantSku}</p>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                        Disponible
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {filteredSerials.length === 0 && (
+                <div className="p-3 bg-amber-50 rounded-lg">
+                  <p className="text-sm text-amber-700">No hay series disponibles en este almacén.</p>
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Modal de Selección de Presentación */}

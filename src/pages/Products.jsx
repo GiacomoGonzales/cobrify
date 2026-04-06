@@ -224,6 +224,7 @@ export default function Products() {
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
+  const [trackSerials, setTrackSerials] = useState(false) // Control de N° de serie
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [expandedProduct, setExpandedProduct] = useState(null)
@@ -351,6 +352,7 @@ export default function Products() {
       noStock: false,
       hasVariants: false,
       trackExpiration: false,
+      trackSerials: false,
       expirationDate: '',
     },
   })
@@ -506,8 +508,10 @@ export default function Products() {
       noStock: false,
       hasVariants: false,
       trackExpiration: false,
+      trackSerials: false,
       expirationDate: '',
     })
+    setTrackSerials(false)
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
@@ -549,6 +553,9 @@ export default function Products() {
     // Set expiration tracking state
     const hasExpiration = product.trackExpiration || false
     setTrackExpiration(hasExpiration)
+
+    // Set serial tracking state
+    setTrackSerials(product.trackSerials || false)
 
     // Load variant data if product has variants
     const productHasVariants = product.hasVariants || false
@@ -647,6 +654,7 @@ export default function Products() {
 
     const hasExpiration = product.trackExpiration || false
     setTrackExpiration(hasExpiration)
+    setTrackSerials(product.trackSerials || false)
 
     const productHasVariants = product.hasVariants || false
     setHasVariants(productHasVariants)
@@ -822,6 +830,7 @@ export default function Products() {
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
         trackExpiration: trackExpiration,
+        trackSerials: trackSerials,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
@@ -4322,6 +4331,21 @@ export default function Products() {
                   <p className="text-xs text-gray-500 mt-0.5">Vender por kg, litros, etc.</p>
                 </div>
               </label>
+
+              {!noStock && (
+                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={trackSerials}
+                    onChange={e => setTrackSerials(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Control de N° de serie</span>
+                    <p className="text-xs text-gray-500 mt-0.5">Registrar serie por unidad (IMEI, S/N, etc.)</p>
+                  </div>
+                </label>
+              )}
 
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input

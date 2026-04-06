@@ -113,6 +113,9 @@ export default function MassTransferModal({
             batchData: null,
             batches: [],
             hasBatches: false,
+            serials: (product.serials || []).filter(s => s.status === 'available' && s.variantSku === v.sku && (!s.warehouseId || s.warehouseId === fromWarehouse)),
+            hasSerials: product.trackSerials && (product.serials || []).filter(s => s.status === 'available' && s.variantSku === v.sku && (!s.warehouseId || s.warehouseId === fromWarehouse)).length > 0,
+            selectedSerials: [],
           }
         })
 
@@ -146,6 +149,9 @@ export default function MassTransferModal({
         batchData: null,
         batches: product.batches || [],
         hasBatches: (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).length > 0,
+        serials: (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)),
+        hasSerials: product.trackSerials && (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)).length > 0,
+        selectedSerials: [],
       }])
     }
     setSearchTerm('')
@@ -176,6 +182,22 @@ export default function MassTransferModal({
     }))
   }
 
+  const toggleSerial = (itemIndex, serialNumber) => {
+    setItems(items.map((item, i) => {
+      if (i !== itemIndex) return item
+      const current = item.selectedSerials || []
+      const isSelected = current.includes(serialNumber)
+      const newSelected = isSelected
+        ? current.filter(sn => sn !== serialNumber)
+        : [...current, serialNumber]
+      return {
+        ...item,
+        selectedSerials: newSelected,
+        quantity: newSelected.length || 1,
+      }
+    }))
+  }
+
   const removeItem = (index) => {
     setItems(items.filter((_, i) => i !== index))
   }
@@ -196,7 +218,7 @@ export default function MassTransferModal({
   }
 
   const canTransfer = fromWarehouse && toWarehouse && fromWarehouse !== toWarehouse && items.length > 0 &&
-    items.every(i => i.quantity > 0 && (!i.hasBatches || i.batchNumber))
+    items.every(i => i.quantity > 0 && (!i.hasBatches || i.batchNumber) && (!i.hasSerials || i.selectedSerials?.length > 0))
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0)
 
@@ -223,6 +245,8 @@ export default function MassTransferModal({
           batches: i.batches || [],
           variantSku: i.variantSku || null,
           variantLabel: i.variantLabel || null,
+          serialNumbers: i.selectedSerials || [],
+          serials: i.hasSerials ? products.find(p => p.id === i.productId)?.serials || [] : [],
         })),
         notes,
         userId,
@@ -500,7 +524,8 @@ export default function MassTransferModal({
                     </thead>
                     <tbody>
                       {items.map((item, idx) => (
-                        <tr key={idx} className={`border-t hover:bg-gray-50 ${item.isVariant ? 'bg-purple-50/30' : ''}`}>
+                        <React.Fragment key={idx}>
+                        <tr className={`border-t hover:bg-gray-50 ${item.isVariant ? 'bg-purple-50/30' : ''}`}>
                           <td className="p-2 pl-3">
                             <div className="font-medium">{item.productName}</div>
                             {item.isVariant && (
@@ -542,7 +567,8 @@ export default function MassTransferModal({
                               max={item.batchData ? item.batchData.quantity : item.availableStock}
                               value={item.quantity}
                               onChange={e => updateItemQuantity(idx, e.target.value)}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-primary-500"
+                              disabled={item.hasSerials}
+                              className={`w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-primary-500 ${item.hasSerials ? 'bg-gray-100' : ''}`}
                             />
                           </td>
                           <td className="text-center p-2">
@@ -551,6 +577,38 @@ export default function MassTransferModal({
                             </button>
                           </td>
                         </tr>
+                        {item.hasSerials && (
+                          <tr className="bg-amber-50/50 border-t border-amber-200">
+                            <td colSpan={5} className="px-3 py-2">
+                              <div className="flex items-start gap-2">
+                                <span className="text-xs font-medium text-amber-700 mt-0.5 whitespace-nowrap">Series:</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {item.serials.map((s) => {
+                                    const isSelected = (item.selectedSerials || []).includes(s.serialNumber)
+                                    return (
+                                      <button
+                                        key={s.id}
+                                        type="button"
+                                        onClick={() => toggleSerial(idx, s.serialNumber)}
+                                        className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                                          isSelected
+                                            ? 'bg-amber-600 text-white border-amber-600'
+                                            : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
+                                        }`}
+                                      >
+                                        {s.serialNumber}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                {(item.selectedSerials || []).length > 0 && (
+                                  <span className="text-xs text-amber-600 whitespace-nowrap">({item.selectedSerials.length} sel.)</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -591,6 +649,30 @@ export default function MassTransferModal({
                           })}
                         </select>
                       )}
+                      {item.hasSerials && (
+                        <div>
+                          <span className="text-xs font-medium text-amber-700 mb-1 block">Series a transferir:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {item.serials.map((s) => {
+                              const isSelected = (item.selectedSerials || []).includes(s.serialNumber)
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => toggleSerial(idx, s.serialNumber)}
+                                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                                    isSelected
+                                      ? 'bg-amber-600 text-white border-amber-600'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
+                                  }`}
+                                >
+                                  {s.serialNumber}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500">Cantidad:</span>
                         <input
@@ -600,6 +682,7 @@ export default function MassTransferModal({
                           value={item.quantity}
                           onChange={e => updateItemQuantity(idx, e.target.value)}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                          disabled={item.hasSerials}
                         />
                       </div>
                     </div>

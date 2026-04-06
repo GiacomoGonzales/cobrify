@@ -132,6 +132,7 @@ export default function InventoryCountModal({
               price,
               isIngredient: false,
               warehouseStocks: product.warehouseStocks || [],
+              trackSerials: product.trackSerials || false,
               // Datos del lote
               isBatchRow: true,
               batchId,
@@ -154,6 +155,7 @@ export default function InventoryCountModal({
               price,
               isIngredient: false,
               warehouseStocks: product.warehouseStocks || [],
+              trackSerials: product.trackSerials || false,
               isUnassignedStock: true,
               allBatches: product.batches || [],
             }
@@ -175,6 +177,7 @@ export default function InventoryCountModal({
               price: variant.price || price,
               isIngredient: false,
               warehouseStocks: product.warehouseStocks || [],
+              trackSerials: product.trackSerials || false,
               // Datos de variante
               isVariantRow: true,
               variantSku: variant.sku,
@@ -195,6 +198,7 @@ export default function InventoryCountModal({
             price,
             isIngredient: product.isIngredient || false,
             warehouseStocks: product.warehouseStocks || [],
+            trackSerials: product.trackSerials || false,
           }
         }
       }
@@ -1059,6 +1063,12 @@ export default function InventoryCountModal({
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {item.trackSerials ? (
+                          <div className="flex-1 px-3 py-2 text-center text-sm text-amber-700 bg-amber-50 border border-amber-300 rounded-lg">
+                            Gestionar desde merma por serie
+                          </div>
+                        ) : (
+                        <>
                         <div className="flex-1">
                           <input
                             type="number"
@@ -1089,6 +1099,8 @@ export default function InventoryCountModal({
                           }`}>
                             <p className="font-bold">{diff > 0 ? '+' : ''}{diff}</p>
                           </div>
+                        )}
+                        </>
                         )}
                       </div>
                     </div>
@@ -1167,6 +1179,11 @@ export default function InventoryCountModal({
                           <span className="font-semibold text-gray-700">{item.systemStock}</span>
                         </td>
                         <td className="px-4 py-3">
+                          {item.trackSerials ? (
+                            <div className="text-center text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded-lg px-2 py-2">
+                              Gestionar por serie
+                            </div>
+                          ) : (
                           <div className="flex items-center justify-center gap-2">
                             <input
                               type="number"
@@ -1190,9 +1207,12 @@ export default function InventoryCountModal({
                               <RefreshCw className="w-4 h-4" />
                             </button>
                           </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {diff !== null ? (
+                          {item.trackSerials ? (
+                            <span className="text-gray-400">-</span>
+                          ) : diff !== null ? (
                             <div className="flex items-center justify-center gap-1">
                               {status === 'missing' && <MinusCircle className="w-4 h-4 text-red-500" />}
                               {status === 'surplus' && <PlusCircle className="w-4 h-4 text-green-500" />}
