@@ -408,9 +408,9 @@ export default function CreatePurchase() {
   const updateCostWithIGV = (index, value) => {
     const newItems = [...purchaseItems]
     const costWithIGV = parseFloat(value) || 0
+    const isExempt = newItems[index].taxAffectation === '20' || newItems[index].taxAffectation === '30'
     newItems[index].cost = costWithIGV
-    // Calcular costo sin IGV sin redondear para mantener precisión
-    newItems[index].costWithoutIGV = costWithIGV > 0 ? costWithIGV / 1.18 : 0
+    newItems[index].costWithoutIGV = costWithIGV > 0 ? (isExempt ? costWithIGV : costWithIGV / 1.18) : 0
     setPurchaseItems(newItems)
   }
 
@@ -418,9 +418,9 @@ export default function CreatePurchase() {
   const updateCostWithoutIGV = (index, value) => {
     const newItems = [...purchaseItems]
     const costWithoutIGV = parseFloat(value) || 0
+    const isExempt = newItems[index].taxAffectation === '20' || newItems[index].taxAffectation === '30'
     newItems[index].costWithoutIGV = costWithoutIGV
-    // Calcular costo con IGV sin redondear para mantener precisión
-    newItems[index].cost = costWithoutIGV > 0 ? costWithoutIGV * 1.18 : 0
+    newItems[index].cost = costWithoutIGV > 0 ? (isExempt ? costWithoutIGV : costWithoutIGV * 1.18) : 0
     setPurchaseItems(newItems)
   }
 
@@ -525,6 +525,9 @@ export default function CreatePurchase() {
     newItems[index].productId = item.id
     newItems[index].productName = item.name
     newItems[index].itemType = item.itemType || 'product'
+    newItems[index].taxAffectation = item.taxAffectation || '10'
+
+    const isExempt = item.taxAffectation === '20' || item.taxAffectation === '30'
 
     if (item.itemType === 'ingredient') {
       // Para ingredientes
@@ -533,7 +536,7 @@ export default function CreatePurchase() {
       const costValue = item.lastPurchasePrice || item.averageCost || 0
       if (costValue > 0) {
         newItems[index].cost = costValue
-        newItems[index].costWithoutIGV = costValue / 1.18
+        newItems[index].costWithoutIGV = isExempt ? costValue : costValue / 1.18
       }
     } else {
       // Para productos
@@ -542,8 +545,7 @@ export default function CreatePurchase() {
       if (item.cost && item.cost > 0) {
         const costValue = item.cost
         newItems[index].cost = costValue
-        // Calcular costo sin IGV automáticamente
-        newItems[index].costWithoutIGV = costValue / 1.18
+        newItems[index].costWithoutIGV = isExempt ? costValue : costValue / 1.18
       }
     }
 
@@ -625,17 +627,25 @@ export default function CreatePurchase() {
   }
 
   const calculateAmounts = () => {
-    const total = purchaseItems.reduce((sum, item) => {
-      return sum + calculateItemSubtotal(item)
-    }, 0)
+    let subtotal = 0
+    let igv = 0
+    let total = 0
 
-    // Los costos ya incluyen IGV, calculamos el IGV del total
-    // Total = Subtotal + IGV
-    // Total = Subtotal + (Subtotal * 0.18)
-    // Total = Subtotal * 1.18
-    // Subtotal = Total / 1.18
-    const subtotal = total / 1.18
-    const igv = total - subtotal
+    purchaseItems.forEach(item => {
+      const itemTotal = calculateItemSubtotal(item)
+      const isExempt = item.taxAffectation === '20' || item.taxAffectation === '30'
+
+      if (isExempt) {
+        // Exonerado o inafecto: no tiene IGV
+        subtotal += itemTotal
+      } else {
+        // Gravado: el costo incluye IGV
+        const itemSubtotal = itemTotal / 1.18
+        subtotal += itemSubtotal
+        igv += itemTotal - itemSubtotal
+      }
+      total += itemTotal
+    })
 
     return {
       subtotal,
@@ -932,6 +942,7 @@ export default function CreatePurchase() {
             unit: item.unit || 'NIU',
             quantity: parseFloat(item.quantity) || 0,
             unitPrice: parseFloat(item.cost) || 0,
+            taxAffectation: item.taxAffectation || '10',
             ...(item.variantSku && { variantSku: item.variantSku }),
             ...(item.batchNumber && { batchNumber: item.batchNumber }),
             ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
