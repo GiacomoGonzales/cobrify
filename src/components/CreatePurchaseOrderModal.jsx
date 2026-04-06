@@ -277,7 +277,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         searchTerm: product.name,
         laboratoryName: product.laboratoryName || '',
         marca: product.marca || '',
-        igvType: product.igvType || 'gravado',
+        igvType: product.afectacionIgv || product.igvType || 'gravado',
       } : item
     ))
     setShowProductSearch(null)

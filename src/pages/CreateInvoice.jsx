@@ -10,7 +10,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
 import { invoiceSchema } from '@/utils/schemas'
-import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
+import { calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency } from '@/lib/utils'
 import {
   getCustomers,
@@ -161,6 +161,7 @@ export default function CreateInvoice() {
         newItems[index].name = product.name
         newItems[index].unitPrice = product.hasVariants ? (product.basePrice || 0) : product.price
         newItems[index].unit = product.unit || 'UNIDAD'
+        newItems[index].taxAffectation = product.taxAffectation || '10'
       }
     }
 
@@ -171,10 +172,11 @@ export default function CreateInvoice() {
     return (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
   }
 
-  const amounts = calculateInvoiceAmounts(
+  const amounts = calculateMixedInvoiceAmounts(
     invoiceItems.map(item => ({
       price: parseFloat(item.unitPrice) || 0,
       quantity: parseFloat(item.quantity) || 0,
+      taxAffectation: item.taxAffectation || '10',
     }))
   )
 
@@ -255,6 +257,7 @@ export default function CreateInvoice() {
         unitPrice: parseFloat(item.unitPrice),
         unit: item.unit,
         subtotal: calculateItemTotal(item),
+        taxAffectation: item.taxAffectation || '10',
       }))
 
       // 3. Crear factura
