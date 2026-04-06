@@ -2870,6 +2870,22 @@ export default function Settings() {
                     />
                   </label>
 
+                  {/* Mostrar precios de venta en compras */}
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showSalePriceInPurchase ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Precios de venta en compras</span>
+                      <span className="text-xs text-gray-500">Mostrar y actualizar precios de venta al registrar una compra. Si tienes múltiples precios o variantes, se mostrarán todos</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showSalePriceInPurchase}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSalePriceInPurchase: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+
                 </div>
               </div>
 

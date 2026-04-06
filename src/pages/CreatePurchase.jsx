@@ -120,7 +120,7 @@ export default function CreatePurchase() {
   const [creditType, setCreditType] = useState('unico')
   const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
+    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '' },
   ])
 
   // Warehouses y Branches
@@ -194,17 +194,24 @@ export default function CreatePurchase() {
             p.id === item.productId || p.name === item.name
           )
 
+          const isExemptOC = existingProduct?.taxAffectation === '20' || existingProduct?.taxAffectation === '30'
+          const costOC = item.unitPrice || 0
           return {
             productId: existingProduct?.id || item.productId || '',
             productName: item.name || '',
             quantity: item.quantity || 1,
-            unitPrice: item.unitPrice || 0,
-            cost: item.unitPrice || 0,
-            costWithoutIGV: (item.unitPrice || 0) / 1.18,
+            unitPrice: costOC,
+            cost: costOC,
+            costWithoutIGV: costOC > 0 ? (isExemptOC ? costOC : costOC / 1.18) : 0,
             batchNumber: '',
             expirationDate: '',
             itemType: 'product',
             unit: item.unit || 'NIU',
+            taxAffectation: existingProduct?.taxAffectation || '10',
+            salePrice: existingProduct?.price || '',
+            salePrice2: existingProduct?.price2 || '',
+            salePrice3: existingProduct?.price3 || '',
+            salePrice4: existingProduct?.price4 || '',
           }
         })
         setPurchaseItems(newItems)
@@ -346,20 +353,35 @@ export default function CreatePurchase() {
 
           // Cargar items
           if (purchase.items && purchase.items.length > 0) {
-            const loadedItems = purchase.items.map(item => ({
-              productId: item.productId,
-              productName: item.productName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              cost: item.unitPrice, // El costo es el precio unitario de compra
-              costWithoutIGV: item.unitPrice > 0 ? item.unitPrice / 1.18 : 0,
-              batchNumber: item.batchNumber || '',
-              expirationDate: item.expirationDate
-                ? (item.expirationDate.toDate ? getLocalDateString(item.expirationDate.toDate()) : getLocalDateString(new Date(item.expirationDate)))
-                : '',
-              itemType: item.itemType || 'product',
-              unit: item.unit || 'NIU'
-            }))
+            const loadedItems = purchase.items.map(item => {
+              // Buscar producto actual para obtener precios de venta
+              const prod = products.find(p => p.id === item.productId)
+              const isExemptItem = item.taxAffectation === '20' || item.taxAffectation === '30'
+              // Si es variante, buscar la variante específica
+              const variant = item.variantSku && prod?.variants?.find(v => v.sku === item.variantSku)
+              return {
+                productId: item.productId,
+                productName: item.productName,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                cost: item.unitPrice,
+                costWithoutIGV: item.unitPrice > 0 ? (isExemptItem ? item.unitPrice : item.unitPrice / 1.18) : 0,
+                batchNumber: item.batchNumber || '',
+                expirationDate: item.expirationDate
+                  ? (item.expirationDate.toDate ? getLocalDateString(item.expirationDate.toDate()) : getLocalDateString(new Date(item.expirationDate)))
+                  : '',
+                itemType: item.itemType || 'product',
+                unit: item.unit || 'NIU',
+                taxAffectation: item.taxAffectation || '10',
+                variantSku: item.variantSku || null,
+                isVariant: !!item.variantSku,
+                hasVariants: !!item.variantSku,
+                salePrice: variant ? (variant.price || '') : (prod?.price || ''),
+                salePrice2: variant ? (variant.price2 || '') : (prod?.price2 || ''),
+                salePrice3: variant ? (variant.price3 || '') : (prod?.price3 || ''),
+                salePrice4: variant ? (variant.price4 || '') : (prod?.price4 || ''),
+              }
+            })
             setPurchaseItems(loadedItems)
 
             // También cargar las búsquedas de productos
@@ -388,7 +410,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
+      { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '' },
     ])
   }
 
@@ -486,6 +508,7 @@ export default function CreatePurchase() {
     if (item.hasVariants && item.variants?.length > 0) {
       const newItems = [...purchaseItems]
       // Reemplazar la fila actual con las variantes
+      const isExemptVar = item.taxAffectation === '20' || item.taxAffectation === '30'
       const variantRows = item.variants.map(v => {
         const variantLabel = Object.values(v.attributes || {}).join(' / ')
         const costValue = item.cost && item.cost > 0 ? item.cost : 0
@@ -497,12 +520,18 @@ export default function CreatePurchase() {
           quantity: '',
           unitPrice: 0,
           cost: costValue,
-          costWithoutIGV: costValue > 0 ? costValue / 1.18 : 0,
+          costWithoutIGV: costValue > 0 ? (isExemptVar ? costValue : costValue / 1.18) : 0,
           batchNumber: '',
           expirationDate: '',
           itemType: 'product',
           unit: item.unit || 'NIU',
           isVariant: true,
+          taxAffectation: item.taxAffectation || '10',
+          salePrice: v.price || '',
+          salePrice2: v.price2 || '',
+          salePrice3: v.price3 || '',
+          salePrice4: v.price4 || '',
+          hasVariants: true,
         }
       })
 
@@ -547,6 +576,11 @@ export default function CreatePurchase() {
         newItems[index].cost = costValue
         newItems[index].costWithoutIGV = isExempt ? costValue : costValue / 1.18
       }
+      // Hidratar precios de venta
+      newItems[index].salePrice = item.price || ''
+      newItems[index].salePrice2 = item.price2 || ''
+      newItems[index].salePrice3 = item.price3 || ''
+      newItems[index].salePrice4 = item.price4 || ''
     }
 
     setPurchaseItems(newItems)
@@ -742,7 +776,13 @@ export default function CreatePurchase() {
           newItems[currentItemIndex].quantity = data.stock ? parseFloat(data.stock) : 1
           newItems[currentItemIndex].cost = costValue
           newItems[currentItemIndex].unitPrice = productData.price || 0
-          newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? costValue / 1.18 : 0
+          const isExemptNew = productData.taxAffectation === '20' || productData.taxAffectation === '30'
+          newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? (isExemptNew ? costValue : costValue / 1.18) : 0
+          newItems[currentItemIndex].taxAffectation = productData.taxAffectation || '10'
+          newItems[currentItemIndex].salePrice = productData.price || ''
+          newItems[currentItemIndex].salePrice2 = productData.price2 || ''
+          newItems[currentItemIndex].salePrice3 = productData.price3 || ''
+          newItems[currentItemIndex].salePrice4 = productData.price4 || ''
           setPurchaseItems(newItems)
 
           // Actualizar búsqueda y cerrar dropdown
@@ -1411,7 +1451,63 @@ export default function CreatePurchase() {
         await Promise.all(ingredientStockUpdates)
       }
 
-      // 5. Mostrar éxito y redirigir
+      // 5. Actualizar precios de venta si la opción está activa
+      if (businessSettings?.posCustomFields?.showSalePriceInPurchase) {
+        const priceUpdates = []
+        // Agrupar items por productId para manejar variantes
+        const productItemsGrouped = {}
+        for (const item of activeItems) {
+          if (!item.productId || item.itemType === 'ingredient') continue
+          if (!productItemsGrouped[item.productId]) {
+            productItemsGrouped[item.productId] = []
+          }
+          productItemsGrouped[item.productId].push(item)
+        }
+
+        for (const [productId, items] of Object.entries(productItemsGrouped)) {
+          const product = products.find(p => p.id === productId)
+          if (!product) continue
+
+          if (product.hasVariants && product.variants?.length > 0) {
+            // Producto con variantes: actualizar precio en cada variante
+            const updatedVariants = product.variants.map(v => {
+              const matchingItem = items.find(i => i.variantSku === v.sku)
+              if (matchingItem) {
+                return {
+                  ...v,
+                  price: matchingItem.salePrice ? parseFloat(matchingItem.salePrice) : v.price,
+                  price2: matchingItem.salePrice2 ? parseFloat(matchingItem.salePrice2) : v.price2,
+                  price3: matchingItem.salePrice3 ? parseFloat(matchingItem.salePrice3) : v.price3,
+                  price4: matchingItem.salePrice4 ? parseFloat(matchingItem.salePrice4) : v.price4,
+                }
+              }
+              return v
+            })
+            const avgPrice = updatedVariants.reduce((sum, v) => sum + (v.price || 0), 0) / updatedVariants.length
+            priceUpdates.push(updateProduct(businessId, productId, {
+              variants: updatedVariants,
+              basePrice: parseFloat(avgPrice.toFixed(2)),
+            }))
+          } else {
+            // Producto sin variantes
+            const item = items[0]
+            const updates = {}
+            if (item.salePrice) updates.price = parseFloat(item.salePrice)
+            if (item.salePrice2) updates.price2 = parseFloat(item.salePrice2)
+            if (item.salePrice3) updates.price3 = parseFloat(item.salePrice3)
+            if (item.salePrice4) updates.price4 = parseFloat(item.salePrice4)
+            if (Object.keys(updates).length > 0) {
+              priceUpdates.push(updateProduct(businessId, productId, updates))
+            }
+          }
+        }
+
+        if (priceUpdates.length > 0) {
+          await Promise.all(priceUpdates)
+        }
+      }
+
+      // 6. Mostrar éxito y redirigir
       toast.success(isEditMode ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
         appNavigate('compras')
@@ -1746,7 +1842,8 @@ export default function CreatePurchase() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {purchaseItems.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
+                  <React.Fragment key={index}>
+                  <tr className="hover:bg-gray-50">
                     {/* Producto */}
                     <td className="px-4 py-2">
                       <div className="flex gap-1">
@@ -1922,6 +2019,77 @@ export default function CreatePurchase() {
                       </button>
                     </td>
                   </tr>
+                  {/* Fila de precios de venta */}
+                  {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
+                    <tr className="bg-blue-50/40 border-b border-gray-200">
+                      <td colSpan={(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 4 : 2} className="px-4 py-1.5 text-right">
+                        <span className="text-xs font-medium text-blue-600">Precios de venta:</span>
+                      </td>
+                      <td className="px-2 py-1.5" colSpan={2}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0.00"
+                            value={item.salePrice || ''}
+                            onChange={e => updateItem(index, 'salePrice', e.target.value)}
+                            className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      </td>
+                      {businessSettings?.multiplePricesEnabled ? (
+                        <>
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price2 || 'P2'}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                placeholder="0.00"
+                                value={item.salePrice2 || ''}
+                                onChange={e => updateItem(index, 'salePrice2', e.target.value)}
+                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price3 || 'P3'}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                placeholder="0.00"
+                                value={item.salePrice3 || ''}
+                                onChange={e => updateItem(index, 'salePrice3', e.target.value)}
+                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price4 || 'P4'}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                placeholder="0.00"
+                                value={item.salePrice4 || ''}
+                                onChange={e => updateItem(index, 'salePrice4', e.target.value)}
+                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <td colSpan={2}></td>
+                      )}
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -2108,6 +2276,64 @@ export default function CreatePurchase() {
                     />
                   </div>
                 </div>
+
+                {/* Precios de venta - móvil */}
+                {businessSettings?.posCustomFields?.showSalePriceInPurchase && (
+                  <div className={`grid gap-2 ${businessSettings?.multiplePricesEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div>
+                      <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={item.salePrice || ''}
+                        onChange={e => updateItem(index, 'salePrice', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    {businessSettings?.multiplePricesEnabled && (
+                      <>
+                        <div>
+                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price2 || 'Precio 2'}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0.00"
+                            value={item.salePrice2 || ''}
+                            onChange={e => updateItem(index, 'salePrice2', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price3 || 'Precio 3'}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0.00"
+                            value={item.salePrice3 || ''}
+                            onChange={e => updateItem(index, 'salePrice3', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price4 || 'Precio 4'}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0.00"
+                            value={item.salePrice4 || ''}
+                            onChange={e => updateItem(index, 'salePrice4', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Subtotal */}
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
