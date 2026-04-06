@@ -277,7 +277,12 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         searchTerm: product.name,
         laboratoryName: product.laboratoryName || '',
         marca: product.marca || '',
-        igvType: product.afectacionIgv || product.igvType || 'gravado',
+        igvType: (() => {
+          const tax = product.taxAffectation || product.afectacionIgv || product.igvType || '10'
+          if (tax === '20' || tax === 'exonerado') return 'exonerado'
+          if (tax === '30' || tax === 'inafecto') return 'inafecto'
+          return 'gravado'
+        })(),
       } : item
     ))
     setShowProductSearch(null)
