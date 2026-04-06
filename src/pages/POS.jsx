@@ -1802,6 +1802,7 @@ export default function POS() {
         return addToCart({ ...product, price: autoPrice }, autoPrice, null, selectedBatch)
       }
       setProductForPriceSelection(product)
+      setPendingBatchForPrice(selectedBatch)
       setShowPriceModal(true)
       return
     }
@@ -1986,7 +1987,7 @@ export default function POS() {
       addToCart({ ...product, price: selectedPrice, presentationName: null, presentationFactor: 1 }, selectedPrice, { name: 'base', factor: 1, price: selectedPrice }, batchToUse)
     } else {
       // Flujo normal: producto sin presentaciones → precios
-      addToCart({ ...product, price: selectedPrice }, selectedPrice)
+      addToCart({ ...product, price: selectedPrice }, selectedPrice, null, pendingBatchForPrice)
     }
 
     // Cerrar modal y limpiar estado
