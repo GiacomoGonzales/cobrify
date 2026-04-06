@@ -28,6 +28,8 @@ import { getStockMovements } from '@/services/warehouseService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getProducts } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { getMassTransfers } from '@/services/massTransferService'
+import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 
 export default function StockMovements() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -49,6 +51,12 @@ export default function StockMovements() {
   const [lastDoc, setLastDoc] = useState(null)
   const [hasMoreFromServer, setHasMoreFromServer] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  // Tab y transferencias masivas
+  const [activeTab, setActiveTab] = useState('movements')
+  const [massTransfers, setMassTransfers] = useState([])
+  const [expandedTransfer, setExpandedTransfer] = useState(null)
+  const [isLoadingTransfers, setIsLoadingTransfers] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -418,6 +426,37 @@ export default function StockMovements() {
     setFilterDateTo('')
   }
 
+  // Cargar transferencias masivas
+  const loadMassTransfers = async () => {
+    if (!user?.uid || isDemoMode) return
+    setIsLoadingTransfers(true)
+    try {
+      const result = await getMassTransfers(getBusinessId())
+      if (result.success) setMassTransfers(result.data || [])
+    } catch (error) {
+      console.error('Error al cargar transferencias:', error)
+    } finally {
+      setIsLoadingTransfers(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'transfers') loadMassTransfers()
+  }, [activeTab, user])
+
+  const handleDownloadTransferPDF = async (transfer) => {
+    try {
+      const businessId = getBusinessId()
+      const { getCompanySettings } = await import('@/services/firestoreService')
+      const settingsResult = await getCompanySettings(businessId)
+      const business = settingsResult.success ? settingsResult.data : {}
+      await downloadLogisticsMovementPDF(transfer, business, 'transfer')
+    } catch (error) {
+      console.error('Error al generar PDF:', error)
+      toast.error('Error al generar el PDF')
+    }
+  }
+
   const hasActiveFilters = searchTerm || filterBranch !== 'all' || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
 
   const handleExportExcel = () => {
@@ -585,6 +624,149 @@ export default function StockMovements() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('movements')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'movements' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          Movimientos
+        </button>
+        <button
+          onClick={() => setActiveTab('transfers')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'transfers' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <ArrowRightLeft className="w-4 h-4" />
+          Transferencias
+        </button>
+      </div>
+
+      {activeTab === 'transfers' ? (
+        /* ===== PESTAÑA TRANSFERENCIAS ===== */
+        <Card>
+          <CardContent className="p-4">
+            {isLoadingTransfers ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+                <span className="ml-2 text-gray-600">Cargando transferencias...</span>
+              </div>
+            ) : massTransfers.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <ArrowRightLeft className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">No hay transferencias registradas</p>
+                <p className="text-sm mt-1">Las transferencias masivas aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {massTransfers.map(transfer => {
+                  const isExpanded = expandedTransfer === transfer.id
+                  const date = transfer.createdAt?.toDate ? transfer.createdAt.toDate() : (transfer.createdAt?.seconds ? new Date(transfer.createdAt.seconds * 1000) : new Date(transfer.createdAt))
+                  const dateStr = date.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+                  return (
+                    <div key={transfer.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Header de transferencia */}
+                      <button
+                        onClick={() => setExpandedTransfer(isExpanded ? null : transfer.id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-bold text-primary-700">{transfer.number}</span>
+                          <span className="text-sm text-gray-500">{dateStr}</span>
+                          <span className="text-sm text-gray-700">
+                            {transfer.fromWarehouseName} <span className="text-primary-600">→</span> {transfer.toWarehouseName}
+                          </span>
+                          <Badge variant="default" className="text-xs">{transfer.totalItems || 0} uds</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDownloadTransferPDF(transfer) }}
+                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Descargar PDF"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" />
+                          </button>
+                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+
+                      {/* Items expandibles */}
+                      {isExpanded && (
+                        <div className="border-t border-gray-200">
+                          {transfer.notes && (
+                            <div className="px-4 py-2 bg-amber-50 text-sm text-amber-700">
+                              <strong>Notas:</strong> {transfer.notes}
+                            </div>
+                          )}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">#</th>
+                                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Código</th>
+                                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Producto</th>
+                                  <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Cantidad</th>
+                                  <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Unidad</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {(transfer.items || []).map((item, idx) => (
+                                  <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                                    <td className="px-4 py-2 text-gray-600">{item.productCode || '-'}</td>
+                                    <td className="px-4 py-2">
+                                      <div className="font-medium text-gray-900">{item.productName}</div>
+                                      {(item.variantSku || item.variantLabel) && (
+                                        <div className="text-xs text-purple-600">Variante: {item.variantSku}{item.variantLabel ? ` — ${item.variantLabel}` : ''}</div>
+                                      )}
+                                      {item.batchNumber && (
+                                        <div className="text-xs text-amber-700">
+                                          Lote: {item.batchNumber}
+                                          {item.batchExpiration && (() => {
+                                            try {
+                                              const d = item.batchExpiration?.toDate ? item.batchExpiration.toDate()
+                                                : item.batchExpiration?.seconds ? new Date(item.batchExpiration.seconds * 1000)
+                                                : new Date(item.batchExpiration)
+                                              if (!isNaN(d.getTime())) return ` | Venc: ${d.toLocaleDateString('es-PE')}`
+                                            } catch { /* ignore */ }
+                                            return ''
+                                          })()}
+                                        </div>
+                                      )}
+                                      {item.selectedSerials?.length > 0 && (
+                                        <div className="text-xs text-blue-600">S/N: {item.selectedSerials.join(', ')}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-center font-semibold">{item.quantity}</td>
+                                    <td className="px-4 py-2 text-center text-gray-500">{item.unit || 'und'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="px-4 py-2 bg-gray-50 border-t text-sm font-medium text-gray-700">
+                            Total: {transfer.totalItems || 0} unidades en {transfer.totalProducts || transfer.items?.length || 0} productos
+                            {transfer.userName && <span className="text-gray-500 ml-3">— {transfer.userName}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       {/* Filtros */}
       <Card>
         <CardContent className="p-4">
@@ -951,6 +1133,8 @@ export default function StockMovements() {
             )}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   )

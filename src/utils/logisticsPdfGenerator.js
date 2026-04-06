@@ -52,7 +52,7 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   const isTransfer = type === 'transfer'
   const title = isTransfer ? 'TRANSFERENCIA DE ALMACÉN' : isExit ? 'SALIDA DE ALMACÉN' : 'RETORNO A ALMACÉN'
   const ACCENT = hexToRgb(business.pdfAccentColor || '#4F46E5')
-  const ACCENT_LIGHT = ACCENT.map(c => Math.min(255, c + 180))
+  const ACCENT_LIGHT = [245, 245, 245]
 
   // ===== LOGO =====
   const logoData = await loadLogo(business.logoUrl)
@@ -77,18 +77,32 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   const infoX = logoEndX
   let infoY = y + 2
 
-  doc.setFontSize(13)
+  const commercialName = (business.name || business.tradeName || 'EMPRESA').toUpperCase()
+  const legalName = (business.businessName || '').toUpperCase()
+
+  doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(business.tradeName || business.name || 'EMPRESA', infoX, infoY + 12)
-  infoY += 16
+  doc.text(commercialName, infoX, infoY + 10)
+  infoY += 14
 
-  doc.setFontSize(8)
+  if (legalName && legalName !== commercialName) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(80, 80, 80)
+    doc.text(legalName, infoX, infoY + 4)
+    infoY += 10
+  }
+
+  doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  if (business.address) { doc.text(business.address, infoX, infoY + 10); infoY += 11 }
-  if (business.phone) { doc.text(`Tel: ${business.phone}`, infoX, infoY + 10); infoY += 11 }
-  if (business.ruc || business.documentNumber) { doc.text(`RUC: ${business.ruc || business.documentNumber}`, infoX, infoY + 10); infoY += 11 }
+  if (business.address) { doc.text(business.address.toUpperCase(), infoX, infoY + 4); infoY += 8 }
+  const locationParts = [business.district, business.province, business.department].filter(Boolean)
+  if (locationParts.length > 0) { doc.text(locationParts.join(', ').toUpperCase(), infoX, infoY + 4); infoY += 8 }
+  if (business.phone) { doc.text(`TEL: ${business.phone}`, infoX, infoY + 4); infoY += 8 }
+  if (business.email) { doc.text(`EMAIL: ${business.email.toUpperCase()}`, infoX, infoY + 4); infoY += 8 }
+  if (business.ruc || business.documentNumber) { doc.text(`RUC: ${business.ruc || business.documentNumber}`, infoX, infoY + 4); infoY += 8 }
 
   // ===== HEADER: Cuadro del documento (derecha) =====
   const boxW = 170
@@ -139,7 +153,8 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
-    const lines = doc.splitTextToSize(value || '-', width - 5)
+    const val = (value || '-').toUpperCase()
+    const lines = doc.splitTextToSize(val, width - 5)
     doc.text(lines[0], x, y + 12)
   }
 
@@ -171,7 +186,9 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
 
   // ===== TABLA DE ITEMS =====
   const items = movement.items || []
-  const rowH = 20
+  const lineH = 10
+  const minRowH = 22
+  const DETAIL_GRAY = [100, 100, 100]
 
   // Definir columnas
   let cols
@@ -179,10 +196,9 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
     cols = [
       { label: '#', w: 25, align: 'center' },
       { label: 'CÓDIGO', w: 70, align: 'left' },
-      { label: 'DESCRIPCIÓN', w: contentWidth - 25 - 70 - 85 - 55 - 50, align: 'left' },
-      { label: 'LOTE', w: 85, align: 'center' },
-      { label: 'CANTIDAD', w: 55, align: 'center' },
-      { label: 'UNIDAD', w: 50, align: 'center' },
+      { label: 'DESCRIPCIÓN', w: contentWidth - 25 - 70 - 60 - 55, align: 'left' },
+      { label: 'CANTIDAD', w: 60, align: 'center' },
+      { label: 'UNIDAD', w: 55, align: 'center' },
     ]
   } else if (isExit) {
     cols = [
@@ -204,9 +220,47 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
     ]
   }
 
+  // Calcular columna de descripción
+  const descCol = isTransfer ? cols[2] : (isExit ? cols[2] : cols[2])
+  const descColW = descCol.w
+
+  // Función para calcular líneas extra de un item
+  const getExtraLines = (item) => {
+    const lines = []
+    if (item.variantSku || item.variantLabel) {
+      lines.push(`VARIANTE: ${(item.variantSku || '').toUpperCase()}${item.variantLabel ? ' — ' + item.variantLabel.toUpperCase() : ''}`)
+    }
+    if (item.batchNumber) {
+      let batchText = `LOTE: ${item.batchNumber.toUpperCase()}`
+      if (item.batchExpiration) {
+        try {
+          const d = item.batchExpiration.toDate ? item.batchExpiration.toDate()
+            : item.batchExpiration.seconds ? new Date(item.batchExpiration.seconds * 1000)
+            : new Date(item.batchExpiration)
+          if (!isNaN(d.getTime())) {
+            batchText += `  |  VENC: ${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+          }
+        } catch { /* ignore */ }
+      }
+      lines.push(batchText)
+    }
+    if (item.selectedSerials && item.selectedSerials.length > 0) {
+      lines.push(`S/N: ${item.selectedSerials.join(', ').toUpperCase()}`)
+    }
+    return lines
+  }
+
+  const calculateRowHeight = (item) => {
+    const nameLines = doc.splitTextToSize((item.productName || '-').toUpperCase(), descColW - 10)
+    const extraLines = isTransfer ? getExtraLines(item) : []
+    const totalLines = nameLines.length + extraLines.length
+    return { height: Math.max(minRowH, totalLines * lineH + 12), nameLines, extraLines }
+  }
+
   // Header de tabla
+  const headerH = 20
   doc.setFillColor(...ACCENT)
-  doc.rect(margin, y, contentWidth, rowH, 'F')
+  doc.rect(margin, y, contentWidth, headerH, 'F')
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...WHITE)
@@ -217,12 +271,14 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
     doc.text(col.label, tx, y + 13, { align: col.align === 'center' ? 'center' : 'left' })
     colX += col.w
   })
-  y += rowH
+  y += headerH
 
-  // Filas
-  doc.setFontSize(8)
+  // Filas con altura dinámica
+  const tableStartY = y
   items.forEach((item, idx) => {
-    if (y > pageHeight - 150) {
+    const { height: rowH, nameLines, extraLines } = calculateRowHeight(item)
+
+    if (y + rowH > pageHeight - 150) {
       doc.addPage()
       y = margin
     }
@@ -232,47 +288,87 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
       doc.rect(margin, y, contentWidth, rowH, 'F')
     }
 
-    // Bordes horizontales
+    // Borde inferior
     doc.setDrawColor(...LIGHT_GRAY)
     doc.setLineWidth(0.3)
     doc.line(margin, y + rowH, pageWidth - margin, y + rowH)
 
+    const centerY = y + rowH / 2 + 3
+
+    // Columnas simples
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
 
-    const condLabel = item.condition === 'good' ? 'Buen estado' : item.condition === 'damaged' ? 'Dañado' : 'Perdido'
-    const rowData = isTransfer
-      ? [String(idx + 1), item.productCode || '-', item.productName || '-', item.batchNumber || '-', String(item.quantity), item.unit || 'und']
-      : isExit
-        ? [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und']
-        : [String(idx + 1), item.productCode || '-', item.productName || '-', String(item.quantity), item.unit || 'und', condLabel, item.conditionNotes || '']
-
     colX = margin
-    cols.forEach((col, ci) => {
-      const tx = col.align === 'center' ? colX + col.w / 2 : colX + 4
-      let text = rowData[ci] || ''
-      // Truncar
-      const maxChars = Math.floor(col.w / 4.5)
-      if (text.length > maxChars) text = text.substring(0, maxChars - 1) + '…'
-      doc.text(text, tx, y + 13, { align: col.align === 'center' ? 'center' : 'left' })
-      colX += col.w
+    // #
+    doc.text(String(idx + 1), colX + cols[0].w / 2, centerY, { align: 'center' })
+    colX += cols[0].w
+
+    // Código
+    const code = (item.productCode || '-').toUpperCase()
+    doc.text(code.substring(0, 14), colX + 4, centerY)
+    colX += cols[1].w
+
+    // Descripción (multilínea)
+    const descX = colX
+    const descStartY = y + 10
+    doc.setFont('helvetica', 'bold')
+    nameLines.forEach((line, li) => {
+      doc.text(line, descX + 4, descStartY + li * lineH)
     })
+
+    // Líneas extra (variante, lote, series)
+    if (extraLines.length > 0) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...DETAIL_GRAY)
+      extraLines.forEach((line, li) => {
+        const extraY = descStartY + nameLines.length * lineH + li * lineH
+        const truncated = line.length > 80 ? line.substring(0, 79) + '…' : line
+        doc.text(truncated, descX + 4, extraY)
+      })
+      doc.setTextColor(...BLACK)
+      doc.setFontSize(8)
+    }
+    colX += cols[2].w
+
+    // Cantidad
+    doc.setFont('helvetica', 'normal')
+    if (isTransfer) {
+      doc.text(String(item.quantity), colX + cols[3].w / 2, centerY, { align: 'center' })
+      colX += cols[3].w
+      doc.text((item.unit || 'UND').toUpperCase(), colX + cols[4].w / 2, centerY, { align: 'center' })
+    } else if (isExit) {
+      doc.text(String(item.quantity), colX + cols[3].w / 2, centerY, { align: 'center' })
+      colX += cols[3].w
+      doc.text((item.unit || 'UND').toUpperCase(), colX + cols[4].w / 2, centerY, { align: 'center' })
+    } else {
+      doc.text(String(item.quantity), colX + cols[3].w / 2, centerY, { align: 'center' })
+      colX += cols[3].w
+      doc.text((item.unit || 'UND').toUpperCase(), colX + cols[4].w / 2, centerY, { align: 'center' })
+      colX += cols[4].w
+      const condLabel = item.condition === 'good' ? 'BUEN ESTADO' : item.condition === 'damaged' ? 'DAÑADO' : 'PERDIDO'
+      doc.text(condLabel, colX + cols[5].w / 2, centerY, { align: 'center' })
+      colX += cols[5].w
+      doc.text((item.conditionNotes || '').toUpperCase().substring(0, 20), colX + 4, centerY)
+    }
 
     y += rowH
   })
 
-  // Borde exterior de la tabla
+  // Borde exterior
   doc.setDrawColor(...ACCENT)
   doc.setLineWidth(0.8)
-  doc.rect(margin, y - items.length * rowH - rowH, contentWidth, (items.length + 1) * rowH)
+  doc.rect(margin, tableStartY - headerH, contentWidth, y - tableStartY + headerH)
 
-  // Bordes verticales de columnas
+  // Bordes verticales
   colX = margin
   cols.forEach((col, ci) => {
     if (ci > 0) {
       doc.setDrawColor(...LIGHT_GRAY)
       doc.setLineWidth(0.3)
-      doc.line(colX, y - items.length * rowH - rowH, colX, y)
+      doc.line(colX, tableStartY - headerH, colX, y)
     }
     colX += col.w
   })
@@ -284,10 +380,10 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   const totalQty = movement.totalItems || items.reduce((s, i) => s + i.quantity, 0)
-  doc.text(`Total: ${totalQty} unidades en ${items.length} producto${items.length !== 1 ? 's' : ''}`, margin, y)
+  doc.text(`TOTAL: ${totalQty} UNIDADES EN ${items.length} PRODUCTO${items.length !== 1 ? 'S' : ''}`, margin, y)
   y += 16
 
-  if (!isExit) {
+  if (!isExit && !isTransfer) {
     const good = movement.goodItems || 0
     const damaged = movement.damagedItems || 0
     const lost = movement.lostItems || 0
@@ -329,31 +425,31 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isTransfer ? 'Entregado por (Origen)' : isExit ? 'Entregado por (Almacén)' : 'Entregado por (Obra)', sign1X + signWidth / 2, finalSignY + 14, { align: 'center' })
+  doc.text(isTransfer ? 'ENTREGADO POR (ORIGEN)' : isExit ? 'ENTREGADO POR (ALMACÉN)' : 'ENTREGADO POR (OBRA)', sign1X + signWidth / 2, finalSignY + 14, { align: 'center' })
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(movement.userName || '', sign1X + signWidth / 2, finalSignY + 26, { align: 'center' })
+  doc.text((movement.userName || '').toUpperCase(), sign1X + signWidth / 2, finalSignY + 26, { align: 'center' })
 
   // Línea firma derecha
   doc.line(sign2X, finalSignY, sign2X + signWidth, finalSignY)
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(isTransfer ? 'Recibido por (Destino)' : isExit ? 'Recibido por (Obra)' : 'Recibido por (Almacén)', sign2X + signWidth / 2, finalSignY + 14, { align: 'center' })
+  doc.text(isTransfer ? 'RECIBIDO POR (DESTINO)' : isExit ? 'RECIBIDO POR (OBRA)' : 'RECIBIDO POR (ALMACÉN)', sign2X + signWidth / 2, finalSignY + 14, { align: 'center' })
   if (!isExit && movement.receivedBy) {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...BLACK)
-    doc.text(movement.receivedBy, sign2X + signWidth / 2, finalSignY + 26, { align: 'center' })
+    doc.text(movement.receivedBy.toUpperCase(), sign2X + signWidth / 2, finalSignY + 26, { align: 'center' })
   }
 
   // Sello "Firma y Sello"
   doc.setFontSize(6)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(...GRAY)
-  doc.text('Firma y Sello', sign1X + signWidth / 2, finalSignY + 38, { align: 'center' })
-  doc.text('Firma y Sello', sign2X + signWidth / 2, finalSignY + 38, { align: 'center' })
+  doc.text('FIRMA Y SELLO', sign1X + signWidth / 2, finalSignY + 38, { align: 'center' })
+  doc.text('FIRMA Y SELLO', sign2X + signWidth / 2, finalSignY + 38, { align: 'center' })
 
   // ===== PIE DE PÁGINA =====
   doc.setFontSize(7)
@@ -379,6 +475,9 @@ function formatTimestamp(ts) {
   if (!ts) return new Date().toLocaleString('es-PE')
   if (ts.toDate) return ts.toDate().toLocaleString('es-PE')
   if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleString('es-PE')
+  if (ts instanceof Date) return ts.toLocaleString('es-PE')
+  const d = new Date(ts)
+  if (!isNaN(d.getTime())) return d.toLocaleString('es-PE')
   return String(ts)
 }
 
