@@ -773,10 +773,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       doc.setFontSize(8)
     }
 
-    const totalLines = descLines.length + (batchLine ? 1 : 0)
+    const serialLine = item.serialNumber ? `S/N: ${item.serialNumber}` : ''
+    const totalLines = descLines.length + (batchLine ? 1 : 0) + (serialLine ? 1 : 0)
     const pharmacyExtraHeight = isPharmacy ? Math.max(marcaLineCount, labLineCount) * pharmacyLineH : 0
     const calculatedHeight = Math.max(minRowHeight, totalLines * lineHeight + (spacious ? 12 : 8), pharmacyExtraHeight + (spacious ? 12 : 8))
-    return { height: calculatedHeight, descLines, batchLine }
+    return { height: calculatedHeight, descLines, batchLine, serialLine }
   }
 
   // Función para dibujar el encabezado de la tabla (se usa en cada página)
@@ -828,7 +829,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Función para dibujar una fila de item
-  const drawItemRow = (item, index, rowHeight, descLines, batchLine) => {
+  const drawItemRow = (item, index, rowHeight, descLines, batchLine, serialLine) => {
     const centerYRow = currentY + rowHeight / 2 + 3
 
     // Fondo de la fila
@@ -894,12 +895,25 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     })
 
     // Lote y vencimiento debajo de la descripción (solo farmacia)
+    let extraLinesDrawn = 0
     if (batchLine) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
       doc.setTextColor(100, 100, 100)
       const batchY = descStartY + (descLines.length * lineHeight)
       doc.text(batchLine, itemColX + 5, batchY)
+      doc.setTextColor(...BLACK)
+      doc.setFontSize(8)
+      extraLinesDrawn++
+    }
+
+    // Número de serie debajo de descripción/lote
+    if (serialLine) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(100, 100, 100)
+      const serialY = descStartY + ((descLines.length + extraLinesDrawn) * lineHeight)
+      doc.text(serialLine, itemColX + 5, serialY)
       doc.setTextColor(...BLACK)
       doc.setFontSize(8)
     }
@@ -927,7 +941,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFontSize(8)
 
   items.forEach((item, index) => {
-    const { height: rowHeight, descLines, batchLine } = calculateItemHeight(item)
+    const { height: rowHeight, descLines, batchLine, serialLine } = calculateItemHeight(item)
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
@@ -938,7 +952,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       drawTableHeader()
     }
 
-    drawItemRow(item, index, rowHeight, descLines, batchLine)
+    drawItemRow(item, index, rowHeight, descLines, batchLine, serialLine)
   })
 
   // Si no hay items, dibujar un espacio mínimo

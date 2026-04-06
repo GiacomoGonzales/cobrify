@@ -554,10 +554,15 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
             <span>Descripción</span>
           </div>
           {(guide.items || []).map((item, index) => (
-            <div key={index} className="item-row">
-              <span>{item.quantity || 0}</span>
-              <span>{UNITS[item.unit] || item.unit || 'UND'}</span>
-              <span>{item.description || item.name || '-'}</span>
+            <div key={index}>
+              <div className="item-row">
+                <span>{item.quantity || 0}</span>
+                <span>{UNITS[item.unit] || item.unit || 'UND'}</span>
+                <span>{item.description || item.name || '-'}</span>
+              </div>
+              {item.serialNumber && (
+                <div className="item-code" style={{ paddingLeft: '10px', fontSize: '9px' }}>S/N: {item.serialNumber}</div>
+              )}
             </div>
           ))}
         </div>

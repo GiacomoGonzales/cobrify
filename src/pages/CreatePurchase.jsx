@@ -2091,71 +2091,63 @@ export default function CreatePurchase() {
                   {/* Fila de precios de venta */}
                   {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
                     <tr className="bg-blue-50/40 border-b border-gray-200">
-                      <td colSpan={(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 4 : 2} className="px-4 py-1.5 text-right">
-                        <span className="text-xs font-medium text-blue-600">Precios de venta:</span>
-                      </td>
-                      <td className="px-2 py-1.5" colSpan={2}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="0.00"
-                            value={item.salePrice || ''}
-                            onChange={e => updateItem(index, 'salePrice', e.target.value)}
-                            className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                      <td colSpan={99} className="px-4 py-1.5">
+                        <div className="flex items-center flex-wrap gap-3">
+                          <span className="text-xs font-medium text-blue-600">Precios de venta:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="0.00"
+                              value={item.salePrice || ''}
+                              onChange={e => updateItem(index, 'salePrice', e.target.value)}
+                              className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          {businessSettings?.multiplePricesEnabled && (
+                            <>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price2 || 'P2'}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="0.00"
+                                  value={item.salePrice2 || ''}
+                                  onChange={e => updateItem(index, 'salePrice2', e.target.value)}
+                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price3 || 'P3'}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="0.00"
+                                  value={item.salePrice3 || ''}
+                                  onChange={e => updateItem(index, 'salePrice3', e.target.value)}
+                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price4 || 'P4'}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="0.00"
+                                  value={item.salePrice4 || ''}
+                                  onChange={e => updateItem(index, 'salePrice4', e.target.value)}
+                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
-                      {businessSettings?.multiplePricesEnabled ? (
-                        <>
-                          <td className="px-2 py-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price2 || 'P2'}</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                placeholder="0.00"
-                                value={item.salePrice2 || ''}
-                                onChange={e => updateItem(index, 'salePrice2', e.target.value)}
-                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price3 || 'P3'}</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                placeholder="0.00"
-                                value={item.salePrice3 || ''}
-                                onChange={e => updateItem(index, 'salePrice3', e.target.value)}
-                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price4 || 'P4'}</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                placeholder="0.00"
-                                value={item.salePrice4 || ''}
-                                onChange={e => updateItem(index, 'salePrice4', e.target.value)}
-                                className="w-20 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <td colSpan={2}></td>
-                      )}
                     </tr>
                   )}
                   {/* Fila de números de serie */}

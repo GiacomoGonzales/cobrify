@@ -6,7 +6,8 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers } from '@/services/firestoreService'
+import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers, updateProductStockTransaction } from '@/services/firestoreService'
+import { createStockMovement } from '@/services/warehouseService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
@@ -100,6 +101,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [selectedBranchId, setSelectedBranchId] = useState('')
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+  const [deductStock, setDeductStock] = useState(false)
 
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
@@ -716,6 +718,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         batchExpiryDate,
         marca: product.marca || '',
         laboratoryName: product.laboratoryName || '',
+        trackSerials: product.trackSerials || false,
+        serials: product.serials || [],
+        serialNumber: '',
       }
     }))
     setShowProductSearch(null)
@@ -1007,10 +1012,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           },
         },
 
-        items: items.map((item, index) => ({
-          ...item,
-          lineNumber: index + 1,
-        })),
+        items: items.map((item, index) => {
+          const { serials, trackSerials, ...rest } = item
+          return { ...rest, lineNumber: index + 1 }
+        }),
 
         additionalInfo,
 
@@ -1019,6 +1024,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         branchName: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name || null : null,
         warehouseId: selectedWarehouseId || null,
         warehouseName: selectedWarehouseId ? warehouses.find(w => w.id === selectedWarehouseId)?.name || null : null,
+        stockDeducted: false,
       }
 
       console.log('Creando guía de remisión:', dispatchGuide)
@@ -1026,6 +1032,58 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const result = await createDispatchGuide(businessId, dispatchGuide)
 
       if (result.success) {
+        // Descontar stock si el usuario lo activó
+        if (deductStock && selectedWarehouseId) {
+          try {
+            const stockItems = items.filter(item => item.productId && item.quantity > 0)
+            const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+            const { db: fireDb } = await import('@/lib/firebase')
+            for (const item of stockItems) {
+              // Marcar serial como despachado si tiene serie seleccionada
+              const extraUpdates = {}
+              if (item.serialNumber) {
+                // Leer producto fresco de Firestore para obtener seriales actualizados
+                const productSnap = await getDocFn(docRef(fireDb, 'businesses', businessId, 'products', item.productId))
+                if (productSnap.exists() && productSnap.data()?.serials?.length > 0) {
+                  const updatedSerials = productSnap.data().serials.map(s =>
+                    s.serialNumber === item.serialNumber && s.status === 'available'
+                      ? { ...s, status: 'dispatched', dispatchGuideId: result.id }
+                      : s
+                  )
+                  extraUpdates.serials = updatedSerials
+                }
+              }
+              await updateProductStockTransaction(
+                businessId,
+                item.productId,
+                selectedWarehouseId,
+                -parseFloat(item.quantity),
+                extraUpdates
+              )
+              await createStockMovement(businessId, {
+                productId: item.productId,
+                productName: item.description || '',
+                warehouseId: selectedWarehouseId,
+                type: 'exit',
+                quantity: -item.quantity,
+                reason: 'Guía de remisión',
+                referenceType: 'dispatch_guide',
+                referenceId: result.id,
+                referenceNumber: result.number,
+                userId: user?.uid || '',
+                ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                notes: `Despacho: ${result.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
+              })
+            }
+            // Marcar guía como stock descontado
+            const { updateDispatchGuide } = await import('@/services/firestoreService')
+            await updateDispatchGuide(businessId, result.id, { stockDeducted: true })
+          } catch (stockError) {
+            console.error('Error al descontar stock:', stockError)
+            toast.warning('Guía creada pero hubo un error al descontar stock')
+          }
+        }
+
         toast.success(`Guía de remisión ${result.number} ${skipSunat ? 'guardada' : 'creada'} exitosamente`)
 
         // Envío automático a SUNAT si está configurado y no se omitió (fire & forget)
@@ -2079,6 +2137,40 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       </div>
                     )}
 
+                    {/* Selección de número de serie */}
+                    {item.trackSerials && item.productId && (() => {
+                      const availableSerials = (item.serials || []).filter(s =>
+                        s.status === 'available' && (!s.warehouseId || !selectedWarehouseId || s.warehouseId === selectedWarehouseId)
+                      )
+                      // Excluir series ya seleccionadas en otros items
+                      const usedSerials = items.filter(i => i.id !== item.id && i.serialNumber).map(i => i.serialNumber)
+                      const filteredSerials = availableSerials.filter(s => !usedSerials.includes(s.serialNumber))
+
+                      if (filteredSerials.length === 0) return (
+                        <div className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-0.5">N° de Serie</label>
+                          <span className="text-xs text-gray-400 py-1 block">Sin series disponibles</span>
+                        </div>
+                      )
+                      return (
+                        <div className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-0.5">N° de Serie</label>
+                          <select
+                            value={item.serialNumber || ''}
+                            onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, serialNumber: e.target.value, quantity: e.target.value ? 1 : item.quantity } : i))}
+                            className={`w-full px-2 py-1 border rounded text-xs ${!item.serialNumber ? 'border-amber-300 bg-amber-50' : 'border-green-300 bg-green-50'}`}
+                          >
+                            <option value="">Seleccionar serie...</option>
+                            {filteredSerials.map(s => (
+                              <option key={s.id} value={s.serialNumber}>
+                                {s.serialNumber}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })()}
+
                     <div>
                       <label className="block text-xs text-gray-500 mb-0.5">GTIN</label>
                       <input
@@ -2135,6 +2227,24 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           </div>
 
         </div>
+
+        {/* Opción de descontar stock */}
+        {selectedWarehouseId && (
+          <div className="px-6 py-3 bg-amber-50 border-t border-amber-200">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deductStock}
+                onChange={(e) => setDeductStock(e.target.checked)}
+                className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-900">Descontar stock del almacén</span>
+                <p className="text-xs text-gray-500">Restar las cantidades de los productos del inventario al generar la guía</p>
+              </div>
+            </label>
+          </div>
+        )}
 
         {/* Footer con botones */}
         <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">

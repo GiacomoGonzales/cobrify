@@ -459,6 +459,54 @@ export default function DispatchGuides() {
       })
 
       if (result.success) {
+        // Restaurar stock si fue descontado
+        if (voidingGuide.stockDeducted && voidingGuide.warehouseId) {
+          try {
+            const { updateProductStockTransaction } = await import('@/services/firestoreService')
+            const { createStockMovement } = await import('@/services/warehouseService')
+            const stockItems = (voidingGuide.items || []).filter(item => item.productId && parseFloat(item.quantity) > 0)
+            const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+            const { db: fireDb } = await import('@/lib/firebase')
+            for (const item of stockItems) {
+              const extraUpdates = {}
+              if (item.serialNumber) {
+                const productSnap = await getDocFn(docRef(fireDb, 'businesses', businessId, 'products', item.productId))
+                if (productSnap.exists() && productSnap.data()?.serials?.length > 0) {
+                  extraUpdates.serials = productSnap.data().serials.map(s =>
+                    s.serialNumber === item.serialNumber && s.status === 'dispatched'
+                      ? { ...s, status: 'available', dispatchGuideId: null }
+                      : s
+                  )
+                }
+              }
+              await updateProductStockTransaction(
+                businessId,
+                item.productId,
+                voidingGuide.warehouseId,
+                parseFloat(item.quantity), // Positivo: restaurar
+                extraUpdates
+              )
+              await createStockMovement(businessId, {
+                productId: item.productId,
+                productName: item.description || '',
+                warehouseId: voidingGuide.warehouseId,
+                type: 'entry',
+                quantity: parseFloat(item.quantity),
+                reason: 'Anulación guía de remisión',
+                referenceType: 'dispatch_guide_void',
+                referenceId: voidingGuide.id,
+                referenceNumber: voidingGuide.number,
+                userId: user?.uid || '',
+                notes: `Stock restaurado por anulación: ${voidingGuide.number}`
+              })
+            }
+            await updateDispatchGuide(businessId, voidingGuide.id, { stockDeducted: false })
+            toast.info('Stock restaurado al anular la guía')
+          } catch (stockError) {
+            console.error('Error al restaurar stock:', stockError)
+            toast.warning('Guía anulada pero hubo un error al restaurar stock')
+          }
+        }
         toast.success(`Guía ${voidingGuide.number} marcada como anulada`)
         await loadGuides()
       } else {
@@ -1087,6 +1135,67 @@ export default function DispatchGuides() {
                     </button>
                   )}
 
+                  {/* Descontar stock - Solo si no se ha descontado y tiene almacén */}
+                  {!guide.stockDeducted && guide.warehouseId && guide.sunatStatus !== 'voided' && (
+                    <button
+                      onClick={async () => {
+                        setOpenMenuId(null)
+                        try {
+                          const { updateProductStockTransaction } = await import('@/services/firestoreService')
+                          const { createStockMovement } = await import('@/services/warehouseService')
+                          const businessId = getBusinessId()
+                          const stockItems = (guide.items || []).filter(item => item.productId && parseFloat(item.quantity) > 0)
+                          const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+                          const { db: fireDb } = await import('@/lib/firebase')
+                          for (const item of stockItems) {
+                            const extraUpdates = {}
+                            if (item.serialNumber) {
+                              const productSnap = await getDocFn(docRef(fireDb, 'businesses', businessId, 'products', item.productId))
+                              if (productSnap.exists() && productSnap.data()?.serials?.length > 0) {
+                                extraUpdates.serials = productSnap.data().serials.map(s =>
+                                  s.serialNumber === item.serialNumber && s.status === 'available'
+                                    ? { ...s, status: 'dispatched', dispatchGuideId: guide.id }
+                                    : s
+                                )
+                              }
+                            }
+                            await updateProductStockTransaction(
+                              businessId,
+                              item.productId,
+                              guide.warehouseId,
+                              -parseFloat(item.quantity),
+                              extraUpdates
+                            )
+                            await createStockMovement(businessId, {
+                              productId: item.productId,
+                              productName: item.description || '',
+                              warehouseId: guide.warehouseId,
+                              type: 'exit',
+                              quantity: -parseFloat(item.quantity),
+                              reason: 'Guía de remisión',
+                              referenceType: 'dispatch_guide',
+                              referenceId: guide.id,
+                              referenceNumber: guide.number,
+                              userId: user?.uid || '',
+                              ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                              notes: `Despacho: ${guide.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
+                            })
+                          }
+                          await updateDispatchGuide(getBusinessId(), guide.id, { stockDeducted: true })
+                          setGuides(prev => prev.map(g => g.id === guide.id ? { ...g, stockDeducted: true } : g))
+                          toast.success('Stock descontado exitosamente')
+                        } catch (error) {
+                          console.error('Error al descontar stock:', error)
+                          toast.error('Error al descontar stock')
+                        }
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 text-amber-700"
+                    >
+                      <Package className="w-4 h-4" />
+                      <span>Descontar stock</span>
+                    </button>
+                  )}
+
                   {/* Marcar como anulada - Solo si está aceptada */}
                   {guide.sunatStatus === 'accepted' && (() => {
                     const validation = canVoidDispatchGuide(guide)
@@ -1509,7 +1618,12 @@ export default function DispatchGuides() {
                       {(selectedGuide.items || []).map((item, index) => (
                         <tr key={index} className="border-b border-purple-100">
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
-                          <td className="py-2 px-2 font-medium">{item.description || item.name || '-'}</td>
+                          <td className="py-2 px-2">
+                            <span className="font-medium">{item.description || item.name || '-'}</span>
+                            {item.serialNumber && (
+                              <span className="block text-xs text-amber-700">S/N: {item.serialNumber}</span>
+                            )}
+                          </td>
                           {businessMode === 'pharmacy' && (
                             <>
                               <td className="py-2 px-2 text-gray-600">{item.marca || '-'}</td>

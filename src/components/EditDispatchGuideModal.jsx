@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, AlertTriangle, Search, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { updateDispatchGuide, getCompanySettings, getCustomers } from '@/services/firestoreService'
+import { updateDispatchGuide, getCompanySettings, getCustomers, getProducts } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
@@ -166,6 +166,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
   // Items (productos)
   const [items, setItems] = useState([])
+  const [products, setProducts] = useState([])
 
   // Más información
   const [additionalInfo, setAdditionalInfo] = useState('')
@@ -215,6 +216,20 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       }
     }
     loadCustomers()
+  }, [isOpen, user?.uid, getBusinessId])
+
+  // Cargar productos para obtener datos de series
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (!user?.uid || !isOpen) return
+      try {
+        const result = await getProducts(getBusinessId())
+        if (result.success) setProducts(result.data || [])
+      } catch (error) {
+        console.error('Error al cargar productos:', error)
+      }
+    }
+    loadProducts()
   }, [isOpen, user?.uid, getBusinessId])
 
   // Filtrar clientes según lo que escribe el usuario en Razón Social
@@ -346,12 +361,28 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         batchExpiryDate: item.batchExpiryDate || '',
         marca: item.marca || '',
         laboratoryName: item.laboratoryName || '',
+        serialNumber: item.serialNumber || '',
+        trackSerials: false,
+        serials: [],
       })))
+      // Hidratar datos de series desde productos cargados
+      if (products.length > 0) {
+        setItems(prev => prev.map(item => {
+          if (!item.productId) return item
+          const product = products.find(p => p.id === item.productId)
+          if (!product) return item
+          return {
+            ...item,
+            trackSerials: product.trackSerials || false,
+            serials: product.serials || [],
+          }
+        }))
+      }
     } else {
       setItems([])
     }
 
-  }, [guide, isOpen])
+  }, [guide, isOpen, products])
 
   // Obtener ubigeo completo
   const getUbigeo = (dept, prov, dist) => {
@@ -624,10 +655,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           },
         },
 
-        items: items.map((item, index) => ({
-          ...item,
-          lineNumber: index + 1,
-        })),
+        items: items.map((item, index) => {
+          const { serials, trackSerials, ...rest } = item
+          return { ...rest, lineNumber: index + 1 }
+        }),
 
         additionalInfo,
         branchId: selectedBranchId || null,
@@ -1427,7 +1458,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {items.map((item, index) => (
-                      <tr key={item.id}>
+                      <React.Fragment key={item.id}>
+                      <tr>
                         <td className="px-3 py-2 text-sm text-gray-900">{index + 1}</td>
                         <td className="px-3 py-2">
                           <input
@@ -1481,6 +1513,35 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                           </button>
                         </td>
                       </tr>
+                      {item.trackSerials && item.productId && (() => {
+                        const warehouseId = guide?.warehouseId || ''
+                        const availableSerials = (item.serials || []).filter(s =>
+                          (s.status === 'available' || s.serialNumber === item.serialNumber) && (!s.warehouseId || !warehouseId || s.warehouseId === warehouseId)
+                        )
+                        const usedSerials = items.filter(i => i.id !== item.id && i.serialNumber).map(i => i.serialNumber)
+                        const filteredSerials = availableSerials.filter(s => !usedSerials.includes(s.serialNumber) || s.serialNumber === item.serialNumber)
+                        if (filteredSerials.length === 0) return null
+                        return (
+                          <tr className="bg-amber-50/50">
+                            <td colSpan={6} className="px-3 py-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-amber-700">S/N:</span>
+                                <select
+                                  value={item.serialNumber || ''}
+                                  onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, serialNumber: e.target.value, quantity: e.target.value ? 1 : i.quantity } : i))}
+                                  className={`px-2 py-1 border rounded text-xs ${!item.serialNumber ? 'border-amber-300 bg-amber-50' : 'border-green-300 bg-green-50'}`}
+                                >
+                                  <option value="">Seleccionar serie...</option>
+                                  {filteredSerials.map(s => (
+                                    <option key={s.id} value={s.serialNumber}>{s.serialNumber}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })()}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
