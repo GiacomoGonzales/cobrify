@@ -2924,6 +2924,7 @@ export default function POS() {
 
   const handleCheckout = async () => {
     if (!user?.uid) return
+    const businessId = getBusinessId()
 
     // Auto-actualizar fecha de emisión a la fecha actual del sistema
     // (evita que quede congelada si el usuario no cerró el navegador por días)
@@ -3279,7 +3280,6 @@ export default function POS() {
         return
       }
 
-      const businessId = getBusinessId()
       const isEditMode = !!editingInvoiceId
 
       // 1. Obtener número de documento
