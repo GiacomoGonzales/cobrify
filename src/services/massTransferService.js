@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
 import { updateProductStockTransaction } from '@/services/firestoreService'
+import { transferIngredientStock } from '@/services/ingredientService'
 
 /**
  * Servicio de Transferencias Masivas entre Almacenes
@@ -73,6 +74,7 @@ export const createMassTransfer = async (businessId, transferData) => {
         variantSku: item.variantSku || null,
         variantLabel: item.variantLabel || null,
         selectedSerials: item.selectedSerials || [],
+        isIngredient: item.isIngredient || false,
       })),
       totalItems,
       totalProducts: transferData.items.length,
@@ -86,6 +88,59 @@ export const createMassTransfer = async (businessId, transferData) => {
 
     // Ejecutar transferencias de stock por cada item
     for (const item of transferData.items) {
+      // Si es ingrediente, usar flujo específico
+      if (item.isIngredient) {
+        const ingredientResult = await transferIngredientStock(
+          businessId,
+          item.productId,
+          transferData.fromWarehouseId,
+          transferData.toWarehouseId,
+          item.quantity
+        )
+
+        if (!ingredientResult.success) {
+          console.error(`Error al transferir ingrediente ${item.productName}:`, ingredientResult.error)
+          continue
+        }
+
+        // Movimiento de salida para ingrediente
+        await createStockMovement(businessId, {
+          ingredientId: item.productId,
+          ingredientName: item.productName,
+          warehouseId: transferData.fromWarehouseId,
+          type: 'transfer_out',
+          quantity: -item.quantity,
+          unit: item.unit || 'und',
+          reason: 'Transferencia masiva',
+          referenceType: 'mass_transfer',
+          referenceId: docRef.id,
+          toWarehouse: transferData.toWarehouseId,
+          userId: transferData.userId,
+          isIngredient: true,
+          notes: `${number} → ${transferData.toWarehouseName}`,
+        })
+
+        // Movimiento de entrada para ingrediente
+        await createStockMovement(businessId, {
+          ingredientId: item.productId,
+          ingredientName: item.productName,
+          warehouseId: transferData.toWarehouseId,
+          type: 'transfer_in',
+          quantity: item.quantity,
+          unit: item.unit || 'und',
+          reason: 'Transferencia masiva',
+          referenceType: 'mass_transfer',
+          referenceId: docRef.id,
+          fromWarehouse: transferData.fromWarehouseId,
+          userId: transferData.userId,
+          isIngredient: true,
+          notes: `${number} ← ${transferData.fromWarehouseName}`,
+        })
+
+        continue
+      }
+
+      // Flujo normal para productos
       // Salida del almacén origen
       const exitResult = await updateProductStockTransaction(
         businessId,

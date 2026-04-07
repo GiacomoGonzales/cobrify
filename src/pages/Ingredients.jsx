@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store, MoreVertical, RefreshCw } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -17,12 +17,10 @@ import {
   createIngredient,
   updateIngredient,
   deleteIngredient,
-  registerPurchase,
-  getPurchases,
   getIngredientStockForBranch
 } from '@/services/ingredientService'
 import { getActiveBranches } from '@/services/branchService'
-import { getWarehouses, createStockMovement } from '@/services/warehouseService'
+import { getWarehouses } from '@/services/warehouseService'
 import { generateIngredientsExcel } from '@/services/ingredientExportService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
@@ -96,10 +94,7 @@ export default function Ingredients() {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showPurchaseModal, setShowPurchaseModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [showAdjustModal, setShowAdjustModal] = useState(false)
-  const [adjustData, setAdjustData] = useState({ newStock: '', reason: '' })
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -116,16 +111,10 @@ export default function Ingredients() {
     currentStock: '',
     minimumStock: '',
     averageCost: '',
-    supplier: ''
+    supplier: '',
+    trackStock: true
   })
 
-  const [purchaseData, setPurchaseData] = useState({
-    quantity: '',
-    unitPrice: '',
-    supplier: '',
-    invoiceNumber: '',
-    warehouseId: ''
-  })
 
   useEffect(() => {
     loadIngredients()
@@ -323,56 +312,6 @@ export default function Ingredients() {
     }
   }
 
-  const handleRegisterPurchase = async () => {
-    if (!selectedIngredient) {
-      toast.error('Selecciona un ingrediente')
-      return
-    }
-
-    const quantity = parseFloat(purchaseData.quantity)
-    const unitPrice = parseFloat(purchaseData.unitPrice)
-
-    if (!quantity || quantity <= 0) {
-      toast.error('Ingresa una cantidad válida')
-      return
-    }
-
-    if (!unitPrice || unitPrice <= 0) {
-      toast.error('Ingresa un precio válido')
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const businessId = getBusinessId()
-      const result = await registerPurchase(businessId, {
-        ingredientId: selectedIngredient.id,
-        ingredientName: selectedIngredient.name,
-        quantity: quantity,
-        unit: selectedIngredient.purchaseUnit,
-        unitPrice: unitPrice,
-        totalCost: quantity * unitPrice,
-        supplier: purchaseData.supplier || 'Sin proveedor',
-        invoiceNumber: purchaseData.invoiceNumber,
-        warehouseId: purchaseData.warehouseId || null
-      })
-
-      if (result.success) {
-        toast.success('Compra registrada exitosamente')
-        setShowPurchaseModal(false)
-        resetPurchaseForm()
-        loadIngredients()
-      } else {
-        toast.error(result.error || 'Error al registrar compra')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error al registrar compra')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   const openEditModal = (ingredient) => {
     setSelectedIngredient(ingredient)
     setFormData({
@@ -382,115 +321,15 @@ export default function Ingredients() {
       currentStock: ingredient.currentStock,
       minimumStock: ingredient.minimumStock,
       averageCost: ingredient.averageCost,
-      supplier: ingredient.supplier || ''
+      supplier: ingredient.supplier || '',
+      trackStock: ingredient.trackStock !== false // Por defecto true para compatibilidad
     })
     setShowEditModal(true)
-  }
-
-  const openPurchaseModal = (ingredient) => {
-    setSelectedIngredient(ingredient)
-    // Seleccionar almacén por defecto (principal de la sucursal principal)
-    const defaultWarehouse = warehouses.find(w => w.isDefault && !w.branchId) || warehouses[0]
-    setPurchaseData({
-      quantity: 0,
-      unitPrice: ingredient.lastPurchasePrice || ingredient.averageCost || 0,
-      supplier: ingredient.supplier || '',
-      invoiceNumber: '',
-      warehouseId: defaultWarehouse?.id || ''
-    })
-    setShowPurchaseModal(true)
   }
 
   const openDeleteModal = (ingredient) => {
     setSelectedIngredient(ingredient)
     setShowDeleteModal(true)
-  }
-
-  const openAdjustModal = (ingredient) => {
-    setSelectedIngredient(ingredient)
-    setAdjustData({ newStock: getStockForBranch(ingredient).toString(), reason: '' })
-    setShowAdjustModal(true)
-  }
-
-  const handleAdjustStock = async () => {
-    if (!selectedIngredient) return
-    const newStock = parseFloat(adjustData.newStock)
-    if (isNaN(newStock) || newStock < 0) {
-      toast.error('Ingresa un stock válido')
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const businessId = getBusinessId()
-      const currentStock = getStockForBranch(selectedIngredient)
-      const difference = newStock - currentStock
-
-      if (difference === 0) {
-        toast.info('El stock no ha cambiado')
-        setShowAdjustModal(false)
-        setIsSaving(false)
-        return
-      }
-
-      // Actualizar stock del ingrediente
-      const warehouseStocks = [...(selectedIngredient.warehouseStocks || [])]
-      // Determinar almacén: si hay filtro de sucursal, usar ese almacén, si no el primero
-      const targetWarehouseId = filterBranch !== 'all'
-        ? filterBranch
-        : (warehouseStocks.length > 0 ? warehouseStocks[0].warehouseId : null)
-
-      if (targetWarehouseId && warehouseStocks.length > 0) {
-        const wsIndex = warehouseStocks.findIndex(ws => ws.warehouseId === targetWarehouseId)
-        if (wsIndex >= 0) {
-          warehouseStocks[wsIndex] = {
-            ...warehouseStocks[wsIndex],
-            stock: Math.max(0, (warehouseStocks[wsIndex].stock || 0) + difference)
-          }
-        }
-      }
-
-      const totalStock = warehouseStocks.length > 0
-        ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-        : newStock
-
-      const updates = {
-        currentStock: totalStock,
-        ...(warehouseStocks.length > 0 && { warehouseStocks })
-      }
-
-      const result = await updateIngredient(businessId, selectedIngredient.id, updates)
-      if (!result.success) {
-        toast.error(result.error || 'Error al ajustar stock')
-        setIsSaving(false)
-        return
-      }
-
-      // Crear movimiento de stock
-      await createStockMovement(businessId, {
-        ingredientId: selectedIngredient.id,
-        ingredientName: selectedIngredient.name,
-        type: 'adjustment',
-        quantity: difference,
-        warehouseId: targetWarehouseId || null,
-        reason: adjustData.reason || `Ajuste de stock: ${selectedIngredient.name}`,
-      })
-
-      // Actualizar lista local
-      setIngredients(prev => prev.map(ing =>
-        ing.id === selectedIngredient.id
-          ? { ...ing, currentStock: totalStock, warehouseStocks }
-          : ing
-      ))
-
-      toast.success(`Stock ajustado: ${currentStock.toFixed(2)} → ${newStock.toFixed(2)} ${selectedIngredient.purchaseUnit}`)
-      setShowAdjustModal(false)
-      setSelectedIngredient(null)
-    } catch (error) {
-      toast.error('Error al ajustar stock')
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   const resetForm = () => {
@@ -501,18 +340,8 @@ export default function Ingredients() {
       currentStock: '',
       minimumStock: '',
       averageCost: '',
-      supplier: ''
-    })
-    setSelectedIngredient(null)
-  }
-
-  const resetPurchaseForm = () => {
-    setPurchaseData({
-      quantity: '',
-      unitPrice: '',
       supplier: '',
-      invoiceNumber: '',
-      warehouseId: ''
+      trackStock: true
     })
     setSelectedIngredient(null)
   }
@@ -655,17 +484,17 @@ export default function Ingredients() {
             Importar Excel
           </Button>
           <Button
-            variant="primary"
+            variant="outline"
             onClick={() => {
               const basePath = isDemoMode ? '/demo' : '/app'
-              navigate(`${basePath}/ingredientes/compra`)
+              navigate(`${basePath}/inventario`)
             }}
             className="w-full sm:w-auto"
           >
-            <Receipt className="w-4 h-4 mr-2" />
-            Registrar Compra
+            <ArrowRight className="w-4 h-4 mr-2" />
+            Ver Inventario
           </Button>
-          <Button variant="outline" onClick={() => setShowAddModal(true)} className="w-full sm:w-auto">
+          <Button variant="primary" onClick={() => setShowAddModal(true)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             {texts.newButton}
           </Button>
@@ -919,29 +748,15 @@ export default function Ingredients() {
                     }}
                   >
                     <button
-                      onClick={() => { openPurchaseModal(menuIngredient); setOpenMenuId(null) }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      Registrar compra
-                    </button>
-                    <button
                       onClick={() => {
                         const basePath = isDemoMode ? '/demo' : '/app'
-                        navigate(`${basePath}/ingredientes/historial?ingredientId=${menuIngredient.id}`)
+                        navigate(`${basePath}/inventario?search=${encodeURIComponent(menuIngredient.name)}`)
                         setOpenMenuId(null)
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50"
                     >
-                      <History className="w-4 h-4" />
-                      Ver historial
-                    </button>
-                    <button
-                      onClick={() => { openAdjustModal(menuIngredient); setOpenMenuId(null) }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Ajustar stock
+                      <ArrowRight className="w-4 h-4" />
+                      Ver en Inventario
                     </button>
                     <button
                       onClick={() => { openEditModal(menuIngredient); setOpenMenuId(null) }}
@@ -1016,30 +831,32 @@ export default function Ingredients() {
             ))}
           </Select>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Stock Mínimo"
-              type="text"
-              inputMode="decimal"
-              placeholder="Ej: 10"
-              value={formData.minimumStock}
-              onChange={e => {
-                const value = e.target.value.replace(',', '.')
-                setFormData({ ...formData, minimumStock: value })
-              }}
-            />
-            <Input
-              label="Stock Inicial"
-              type="text"
-              inputMode="decimal"
-              placeholder="Ej: 50"
-              value={formData.currentStock}
-              onChange={e => {
-                const value = e.target.value.replace(',', '.')
-                setFormData({ ...formData, currentStock: value })
-              }}
-            />
-          </div>
+          {formData.trackStock && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Stock Mínimo"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ej: 10"
+                value={formData.minimumStock}
+                onChange={e => {
+                  const value = e.target.value.replace(',', '.')
+                  setFormData({ ...formData, minimumStock: value })
+                }}
+              />
+              <Input
+                label="Stock Inicial"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ej: 50"
+                value={formData.currentStock}
+                onChange={e => {
+                  const value = e.target.value.replace(',', '.')
+                  setFormData({ ...formData, currentStock: value })
+                }}
+              />
+            </div>
+          )}
 
           <Input
             label="Proveedor (opcional)"
@@ -1047,6 +864,27 @@ export default function Ingredients() {
             onChange={e => setFormData({ ...formData, supplier: e.target.value })}
             placeholder="Nombre del proveedor"
           />
+
+          {/* Switch para control de stock */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Solo para costos</p>
+              <p className="text-xs text-gray-500">No maneja inventario, solo sirve para calcular costos en recetas</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, trackStock: !formData.trackStock })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                !formData.trackStock ? 'bg-primary-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  !formData.trackStock ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <Button
@@ -1070,131 +908,6 @@ export default function Ingredients() {
                 </>
               ) : (
                 showEditModal ? 'Guardar Cambios' : texts.saveButton
-              )}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Register Purchase Modal */}
-      <Modal
-        isOpen={showPurchaseModal}
-        onClose={() => {
-          setShowPurchaseModal(false)
-          resetPurchaseForm()
-        }}
-        title={`Registrar Compra: ${selectedIngredient?.name}`}
-      >
-        <div className="space-y-4">
-          <Input
-            label={`Cantidad (${selectedIngredient?.purchaseUnit})`}
-            type="text"
-            inputMode="decimal"
-            value={purchaseData.quantity}
-            onChange={e => {
-              const value = e.target.value.replace(',', '.')
-              setPurchaseData({ ...purchaseData, quantity: value })
-            }}
-            placeholder="Ej: 50"
-            required
-          />
-
-          <Input
-            label={`Precio Unitario (por ${selectedIngredient?.purchaseUnit})`}
-            type="text"
-            inputMode="decimal"
-            value={purchaseData.unitPrice}
-            onChange={e => {
-              const value = e.target.value.replace(',', '.')
-              setPurchaseData({ ...purchaseData, unitPrice: value })
-            }}
-            placeholder="Ej: 0.08"
-            required
-          />
-
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">Costo Total:</p>
-            <p className="text-xl font-bold text-gray-900">
-              {formatCurrency((parseFloat(purchaseData.quantity) || 0) * (parseFloat(purchaseData.unitPrice) || 0))}
-            </p>
-          </div>
-
-          <Input
-            label="Proveedor"
-            value={purchaseData.supplier}
-            onChange={e => setPurchaseData({ ...purchaseData, supplier: e.target.value })}
-            placeholder="Nombre del proveedor"
-          />
-
-          <Input
-            label="Nº Factura/Boleta (opcional)"
-            value={purchaseData.invoiceNumber}
-            onChange={e => setPurchaseData({ ...purchaseData, invoiceNumber: e.target.value })}
-            placeholder="F001-123"
-          />
-
-          {/* Selector de Almacén */}
-          {warehouses.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Store className="w-4 h-4 inline mr-1" />
-                Almacén de Ingreso
-              </label>
-              <select
-                value={purchaseData.warehouseId}
-                onChange={e => setPurchaseData({ ...purchaseData, warehouseId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Sin almacén específico</option>
-                {/* Almacenes de Sucursal Principal */}
-                {warehouses.filter(w => !w.branchId).length > 0 && (
-                  <optgroup label="Sucursal Principal">
-                    {warehouses.filter(w => !w.branchId).map(warehouse => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {/* Almacenes de otras sucursales */}
-                {branches.map(branch => {
-                  const branchWarehouses = warehouses.filter(w => w.branchId === branch.id)
-                  if (branchWarehouses.length === 0) return null
-                  return (
-                    <optgroup key={branch.id} label={branch.name}>
-                      {branchWarehouses.map(warehouse => (
-                        <option key={warehouse.id} value={warehouse.id}>
-                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )
-                })}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                El stock ingresará a este almacén
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowPurchaseModal(false)
-                resetPurchaseForm()
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleRegisterPurchase} disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Registrando...
-                </>
-              ) : (
-                'Registrar Compra'
               )}
             </Button>
           </div>
@@ -1244,63 +957,6 @@ export default function Ingredients() {
               ) : (
                 'Eliminar'
               )}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal Ajustar Stock */}
-      <Modal
-        isOpen={showAdjustModal}
-        onClose={() => { setShowAdjustModal(false); setSelectedIngredient(null) }}
-        title={`Ajustar stock: ${selectedIngredient?.name || ''}`}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500">Stock actual</p>
-            <p className="text-lg font-bold">{parseFloat(getStockForBranch(selectedIngredient || { currentStock: 0 })).toFixed(2)} {selectedIngredient?.purchaseUnit}</p>
-          </div>
-
-          <Input
-            label={`Stock real (${selectedIngredient?.purchaseUnit || ''})`}
-            type="number"
-            step="0.01"
-            min="0"
-            value={adjustData.newStock}
-            onChange={(e) => setAdjustData(prev => ({ ...prev, newStock: e.target.value }))}
-            placeholder="Ingresa el stock real"
-          />
-
-          {adjustData.newStock !== '' && (() => {
-            const current = getStockForBranch(selectedIngredient || { currentStock: 0 })
-            const diff = parseFloat(adjustData.newStock) - current
-            if (isNaN(diff) || diff === 0) return null
-            return (
-              <div className={`p-3 rounded-lg ${diff > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                <div className="flex items-center gap-2">
-                  {diff > 0 ? <TrendingUp className="w-4 h-4 text-green-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
-                  <span className={`text-sm font-medium ${diff > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    {diff > 0 ? '+' : ''}{diff.toFixed(2)} {selectedIngredient?.purchaseUnit}
-                  </span>
-                </div>
-              </div>
-            )
-          })()}
-
-          <Input
-            label="Motivo (opcional)"
-            value={adjustData.reason}
-            onChange={(e) => setAdjustData(prev => ({ ...prev, reason: e.target.value }))}
-            placeholder="Ej: Recuento físico, merma, etc."
-          />
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => { setShowAdjustModal(false); setSelectedIngredient(null) }} disabled={isSaving}>
-              Cancelar
-            </Button>
-            <Button onClick={handleAdjustStock} disabled={isSaving}>
-              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</> : 'Guardar ajuste'}
             </Button>
           </div>
         </div>

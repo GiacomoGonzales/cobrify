@@ -12,6 +12,9 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { prepareInvoiceXML } from '@/services/sunatService'
 import { getCompanySettings } from '@/services/firestoreService'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 // Nombres de meses en español
 const MONTHS = [
@@ -265,11 +268,29 @@ export default function Accounting() {
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
       const filename = `XMLs_${monthLabel}_${selectedYear}.zip`
 
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(content)
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(a.href)
+      if (Capacitor.isNativePlatform()) {
+        const reader = new FileReader()
+        const base64Data = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result.split(',')[1])
+          reader.readAsDataURL(content)
+        })
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        })
+        await Share.share({
+          title: filename,
+          url: savedFile.uri,
+          dialogTitle: 'Compartir XMLs'
+        })
+      } else {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(content)
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(a.href)
+      }
 
       toast.success(`${downloaded} XMLs descargados`)
     } catch (error) {
@@ -320,11 +341,29 @@ export default function Accounting() {
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
       const filename = `CDRs_${monthLabel}_${selectedYear}.zip`
 
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(content)
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(a.href)
+      if (Capacitor.isNativePlatform()) {
+        const reader = new FileReader()
+        const base64Data = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result.split(',')[1])
+          reader.readAsDataURL(content)
+        })
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        })
+        await Share.share({
+          title: filename,
+          url: savedFile.uri,
+          dialogTitle: 'Compartir CDRs'
+        })
+      } else {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(content)
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(a.href)
+      }
 
       toast.success(`${downloaded} CDRs descargados`)
     } catch (error) {
@@ -426,11 +465,39 @@ export default function Accounting() {
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
       const filename = `Contabilidad_${monthLabel}_${selectedYear}.zip`
 
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(content)
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(a.href)
+      // Check if running on native platform (iOS/Android)
+      if (Capacitor.isNativePlatform()) {
+        // Convert blob to base64
+        const reader = new FileReader()
+        const base64Data = await new Promise((resolve) => {
+          reader.onloadend = () => {
+            const base64 = reader.result.split(',')[1]
+            resolve(base64)
+          }
+          reader.readAsDataURL(content)
+        })
+
+        // Save file to device
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        })
+
+        // Share the file
+        await Share.share({
+          title: filename,
+          url: savedFile.uri,
+          dialogTitle: 'Compartir archivo ZIP'
+        })
+      } else {
+        // Web download
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(content)
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(a.href)
+      }
 
       toast.success(`Descarga completa: ${xmlCount} XMLs, ${cdrCount} CDRs, 1 Excel`)
     } catch (error) {

@@ -1996,9 +1996,10 @@ Gracias por tu preferencia.`
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Comprobantes {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
-                </p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Comprobantes</p>
+                {dateFilter !== 'all' && (
+                  <p className="text-xs text-primary-600">({getFilterLabel()})</p>
+                )}
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
                 {dateFilter !== 'all' && (
                   <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
@@ -2025,9 +2026,10 @@ Gracias por tu preferencia.`
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  Monto Total {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
-                </p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Monto Total</p>
+                {dateFilter !== 'all' && (
+                  <p className="text-xs text-primary-600">({getFilterLabel()})</p>
+                )}
                 <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
                   {formatCurrency(stats.totalAmount)}
                 </p>

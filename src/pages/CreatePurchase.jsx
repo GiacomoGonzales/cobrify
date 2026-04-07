@@ -1449,6 +1449,7 @@ export default function CreatePurchase() {
             supplier: selectedSupplier?.businessName || '',
             invoiceNumber: invoiceNumber.trim() || '',
             purchaseDate: parseLocalDate(invoiceDate),
+            warehouseId: selectedWarehouse?.id || null,
           })
         })
 
@@ -1476,27 +1477,61 @@ export default function CreatePurchase() {
         // Calcular diferencias (ingredientes existentes + nuevos + removidos)
         const allIngredientIds = new Set([...Object.keys(originalIngredientQtys), ...Object.keys(newIngredientQtys)])
 
+        const originalIngredientWarehouseId = originalPurchase?.warehouseId || null
+        const newIngredientWarehouseId = selectedWarehouse?.id || null
+
         const ingredientStockUpdates = [...allIngredientIds].map(async ingredientId => {
           const originalQty = originalIngredientQtys[ingredientId] || 0
           const newQty = newIngredientQtys[ingredientId] || 0
 
-          if (originalQty === newQty) return // Sin cambio
+          if (originalQty === newQty && originalIngredientWarehouseId === newIngredientWarehouseId) return // Sin cambio
 
           const ingredient = ingredients.find(i => i.id === ingredientId)
           if (!ingredient) return
 
-          const currentStock = ingredient.currentStock || 0
           const purchaseUnit = ingredient.purchaseUnit
           const itemUnit = groupedIngredients[ingredientId]?.unit || originalIngredientItems.find(i => i.productId === ingredientId)?.unit || 'NIU'
 
-          // Enfoque "revertir + sumar": primero revertir la cantidad original, luego sumar la nueva
-          // Esto funciona correctamente incluso si el registro original falló (stock nunca se sumó)
           const convertedOriginalQty = convertUnit(originalQty, itemUnit, purchaseUnit)
           const convertedNewQty = convertUnit(newQty, itemUnit, purchaseUnit)
-          const revertedStock = Math.max(0, currentStock - convertedOriginalQty)
-          const newStock = revertedStock + convertedNewQty
 
-          const updates = { currentStock: newStock }
+          // Actualizar warehouseStocks
+          let updatedWarehouseStocks = [...(ingredient.warehouseStocks || [])]
+
+          // Revertir cantidad original del almacén original
+          if (originalIngredientWarehouseId && convertedOriginalQty > 0) {
+            const origIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === originalIngredientWarehouseId)
+            if (origIdx >= 0) {
+              updatedWarehouseStocks[origIdx] = {
+                ...updatedWarehouseStocks[origIdx],
+                stock: Math.max(0, (updatedWarehouseStocks[origIdx].stock || 0) - convertedOriginalQty)
+              }
+            }
+          }
+
+          // Agregar nueva cantidad al almacén seleccionado
+          if (newIngredientWarehouseId && convertedNewQty > 0) {
+            const newIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === newIngredientWarehouseId)
+            if (newIdx >= 0) {
+              updatedWarehouseStocks[newIdx] = {
+                ...updatedWarehouseStocks[newIdx],
+                stock: (updatedWarehouseStocks[newIdx].stock || 0) + convertedNewQty
+              }
+            } else {
+              updatedWarehouseStocks.push({
+                warehouseId: newIngredientWarehouseId,
+                stock: convertedNewQty
+              })
+            }
+          }
+
+          // Calcular nuevo stock total desde warehouseStocks
+          const newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+          const updates = {
+            currentStock: newStock,
+            warehouseStocks: updatedWarehouseStocks
+          }
 
           // Recalcular costo promedio
           if (newQty > 0 && groupedIngredients[ingredientId]) {
@@ -1504,8 +1539,8 @@ export default function CreatePurchase() {
             const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
             if (avgUnitPrice > 0) {
               const currentAvgCost = ingredient.averageCost || 0
+              const revertedStock = Math.max(0, newStock - convertedNewQty)
               if (currentAvgCost > 0 && revertedStock > 0) {
-                // Costo promedio ponderado con el stock restante + nueva compra
                 updates.averageCost = ((revertedStock * currentAvgCost) + (convertedNewQty * avgUnitPrice)) / newStock
               } else {
                 updates.averageCost = avgUnitPrice

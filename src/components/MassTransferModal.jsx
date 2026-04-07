@@ -11,6 +11,7 @@ export default function MassTransferModal({
   isOpen,
   onClose,
   products,
+  ingredients = [],
   warehouses,
   allWarehouses,
   branches,
@@ -46,10 +47,12 @@ export default function MassTransferModal({
     return groups
   }, [warehouseList, branches])
 
-  // Productos con stock en almacén origen (incluye variantes)
+  // Productos e ingredientes con stock en almacén origen (incluye variantes)
   const availableProducts = useMemo(() => {
     if (!fromWarehouse) return []
-    return products.filter(p => {
+
+    // Filtrar productos
+    const filteredProducts = products.filter(p => {
       if (p.trackStock === false) return false
       // Productos con variantes: verificar si alguna variante tiene stock en este almacén
       if (p.hasVariants && p.variants?.length > 0) {
@@ -61,7 +64,21 @@ export default function MassTransferModal({
       const ws = p.warehouseStocks?.find(s => s.warehouseId === fromWarehouse)
       return ws && ws.stock > 0
     })
-  }, [products, fromWarehouse])
+
+    // Filtrar ingredientes con stock en el almacén
+    const filteredIngredients = (ingredients || []).filter(ing => {
+      const ws = (ing.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+      return ws && ws.stock > 0
+    }).map(ing => ({
+      ...ing,
+      isIngredient: true,
+      // Normalizar campos para compatibilidad
+      code: ing.code || '',
+      barcode: '',
+    }))
+
+    return [...filteredProducts, ...filteredIngredients]
+  }, [products, ingredients, fromWarehouse])
 
   // Filtrar por búsqueda
   const filteredProducts = useMemo(() => {
@@ -86,7 +103,48 @@ export default function MassTransferModal({
     return ws?.stock || 0
   }
 
+  const getIngredientWarehouseStock = (ingredient) => {
+    const ws = (ingredient.warehouseStocks || []).find(s => s.warehouseId === fromWarehouse)
+    return ws?.stock || 0
+  }
+
   const addProduct = (product) => {
+    // Si es ingrediente, agregar directamente (sin variantes ni lotes)
+    if (product.isIngredient) {
+      const existing = items.find(i => i.productId === product.id && i.isIngredient)
+      if (existing) {
+        const stock = getIngredientWarehouseStock(product)
+        setItems(items.map(i =>
+          i.productId === product.id && i.isIngredient
+            ? { ...i, quantity: Math.min(i.quantity + 1, stock) }
+            : i
+        ))
+      } else {
+        const stock = getIngredientWarehouseStock(product)
+        setItems([...items, {
+          productId: product.id,
+          productName: product.name,
+          productCode: product.code || '',
+          unit: product.purchaseUnit || 'und',
+          quantity: 1,
+          availableStock: stock,
+          isIngredient: true,
+          batchNumber: '',
+          batchExpiration: null,
+          batchData: null,
+          batches: [],
+          hasBatches: false,
+          serials: [],
+          hasSerials: false,
+          selectedSerials: [],
+        }])
+      }
+      setSearchTerm('')
+      setShowDropdown(false)
+      searchRef.current?.focus()
+      return
+    }
+
     // Productos con variantes: agregar una fila por cada variante con stock
     if (product.hasVariants && product.variants?.length > 0) {
       const variantRows = product.variants
@@ -159,8 +217,8 @@ export default function MassTransferModal({
     searchRef.current?.focus()
   }
 
-  const updateItemQuantity = (index, value) => {
-    const qty = parseInt(value) || 0
+  const updateItemQuantity = (index, value, isIngredient = false) => {
+    const qty = isIngredient ? (parseFloat(value) || 0) : (parseInt(value) || 0)
     setItems(items.map((item, i) => {
       if (i !== index) return item
       const maxStock = item.batchData ? item.batchData.quantity : item.availableStock
@@ -247,6 +305,7 @@ export default function MassTransferModal({
           variantLabel: i.variantLabel || null,
           serialNumbers: i.selectedSerials || [],
           serials: i.hasSerials ? products.find(p => p.id === i.productId)?.serials || [] : [],
+          isIngredient: i.isIngredient || false,
         })),
         notes,
         userId,
@@ -455,7 +514,7 @@ export default function MassTransferModal({
                   {' → '}
                   <strong>{warehouseList.find(w => w.id === toWarehouse)?.name}</strong>
                   {' | '}
-                  {availableProducts.length} productos con stock
+                  {availableProducts.length} items con stock (productos e ingredientes)
                 </span>
               </div>
             )}
@@ -482,17 +541,24 @@ export default function MassTransferModal({
                 {showDropdown && filteredProducts.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[40vh] overflow-y-auto">
                     {filteredProducts.map(p => {
-                      const stock = getWarehouseStock(p)
+                      const stock = p.isIngredient ? getIngredientWarehouseStock(p) : getWarehouseStock(p)
                       return (
                         <button
                           key={p.id}
                           type="button"
                           onMouseDown={() => addProduct(p)}
-                          className="w-full text-left px-3 py-2 hover:bg-primary-50 flex items-center justify-between text-sm border-b last:border-b-0"
+                          className={`w-full text-left px-3 py-2 hover:bg-primary-50 flex items-center justify-between text-sm border-b last:border-b-0 ${p.isIngredient ? 'bg-orange-50/50' : ''}`}
                         >
                           <div>
-                            <div className="font-medium">{p.name}</div>
-                            <div className="text-xs text-gray-500">{p.code || 'Sin código'}</div>
+                            <div className="font-medium flex items-center gap-2">
+                              {p.name}
+                              {p.isIngredient && (
+                                <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
+                                  Ingrediente
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500">{p.code || (p.isIngredient ? p.purchaseUnit : 'Sin código')}</div>
                           </div>
                           <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
                             Stock: {stock}
@@ -504,7 +570,7 @@ export default function MassTransferModal({
                 )}
                 {showDropdown && searchTerm && filteredProducts.length === 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-500 text-center">
-                    No se encontraron productos con stock
+                    No se encontraron productos ni ingredientes con stock
                   </div>
                 )}
               </div>
@@ -528,15 +594,23 @@ export default function MassTransferModal({
                     <tbody>
                       {items.map((item, idx) => (
                         <React.Fragment key={idx}>
-                        <tr className={`border-t hover:bg-gray-50 ${item.isVariant ? 'bg-purple-50/30' : ''}`}>
+                        <tr className={`border-t hover:bg-gray-50 ${item.isVariant ? 'bg-purple-50/30' : ''} ${item.isIngredient ? 'bg-orange-50/30' : ''}`}>
                           <td className="p-2 pl-3">
-                            <div className="font-medium">{item.productName}</div>
+                            <div className="font-medium flex items-center gap-2">
+                              {item.productName}
+                              {item.isIngredient && (
+                                <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
+                                  Ing.
+                                </span>
+                              )}
+                            </div>
                             {item.isVariant && (
                               <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
                                 {item.variantSku} — {item.variantLabel}
                               </span>
                             )}
-                            {!item.isVariant && <div className="text-xs text-gray-400">{item.productCode || ''}</div>}
+                            {!item.isVariant && !item.isIngredient && <div className="text-xs text-gray-400">{item.productCode || ''}</div>}
+                            {item.isIngredient && <div className="text-xs text-gray-400">{item.unit}</div>}
                           </td>
                           <td className="p-2">
                             {item.hasBatches ? (
@@ -566,10 +640,11 @@ export default function MassTransferModal({
                           <td className="text-center p-2">
                             <input
                               type="number"
-                              min="1"
+                              min={item.isIngredient ? "0.01" : "1"}
+                              step={item.isIngredient ? "0.01" : "1"}
                               max={item.batchData ? item.batchData.quantity : item.availableStock}
                               value={item.quantity}
-                              onChange={e => updateItemQuantity(idx, e.target.value)}
+                              onChange={e => updateItemQuantity(idx, e.target.value, item.isIngredient)}
                               disabled={item.hasSerials}
                               className={`w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-primary-500 ${item.hasSerials ? 'bg-gray-100' : ''}`}
                             />
@@ -619,16 +694,25 @@ export default function MassTransferModal({
                 {/* Mobile */}
                 <div className="sm:hidden divide-y">
                   {items.map((item, idx) => (
-                    <div key={idx} className="p-3 space-y-2">
+                    <div key={idx} className={`p-3 space-y-2 ${item.isIngredient ? 'bg-orange-50/30' : ''}`}>
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="font-medium text-sm">{item.productName}</div>
+                          <div className="font-medium text-sm flex items-center gap-2">
+                            {item.productName}
+                            {item.isIngredient && (
+                              <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
+                                Ing.
+                              </span>
+                            )}
+                          </div>
                           {item.isVariant && (
                             <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
                               {item.variantSku} — {item.variantLabel}
                             </span>
                           )}
-                          <div className="text-xs text-gray-400">{item.productCode} | Stock: {item.batchData ? item.batchData.quantity : item.availableStock}</div>
+                          <div className="text-xs text-gray-400">
+                            {item.isIngredient ? item.unit : item.productCode} | Stock: {item.batchData ? item.batchData.quantity : item.availableStock}
+                          </div>
                         </div>
                         <button onClick={() => removeItem(idx)} className="p-1 hover:bg-red-50 rounded text-red-500">
                           <Trash2 className="w-4 h-4" />
@@ -680,13 +764,15 @@ export default function MassTransferModal({
                         <span className="text-xs text-gray-500">Cantidad:</span>
                         <input
                           type="number"
-                          min="1"
+                          min={item.isIngredient ? "0.01" : "1"}
+                          step={item.isIngredient ? "0.01" : "1"}
                           max={item.batchData ? item.batchData.quantity : item.availableStock}
                           value={item.quantity}
-                          onChange={e => updateItemQuantity(idx, e.target.value)}
+                          onChange={e => updateItemQuantity(idx, e.target.value, item.isIngredient)}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm"
                           disabled={item.hasSerials}
                         />
+                        {item.isIngredient && <span className="text-xs text-gray-500">{item.unit}</span>}
                       </div>
                     </div>
                   ))}

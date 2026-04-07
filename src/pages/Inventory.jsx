@@ -54,7 +54,7 @@ import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
-import { getIngredients } from '@/services/ingredientService'
+import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -676,8 +676,7 @@ export default function Inventory() {
       const reasonLabel = reasonLabels[damageData.reason] || damageData.reason
 
       // Crear movimiento de merma
-      await createStockMovement(businessId, {
-        productId: damageProduct.id,
+      const movementData = {
         warehouseId: damageData.warehouseId,
         type: 'damage',
         quantity: -quantity, // Siempre negativo
@@ -685,36 +684,73 @@ export default function Inventory() {
         referenceType: 'damage_adjustment',
         userId: user.uid,
         notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}`
-      })
+      }
 
-      // Actualizar seriales a 'lost' si aplica
-      const extraDamageUpdates = {}
-      if (damageData.selectedSerials?.length > 0 && damageProduct.serials?.length > 0) {
-        const updatedSerials = damageProduct.serials.map(s => {
-          if (damageData.selectedSerials.includes(s.serialNumber) && s.status === 'available') {
-            return { ...s, status: 'lost', lostReason: reasonLabel, lostDate: new Date() }
+      // Usar ingredientId o productId según corresponda
+      if (damageProduct.isIngredient) {
+        movementData.ingredientId = damageProduct.id
+        movementData.ingredientName = damageProduct.name
+        movementData.isIngredient = true
+      } else {
+        movementData.productId = damageProduct.id
+      }
+
+      await createStockMovement(businessId, movementData)
+
+      if (damageProduct.isIngredient) {
+        // Actualizar stock del ingrediente
+        const updatedWarehouseStocks = [...(damageProduct.warehouseStocks || [])]
+        const wsIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === damageData.warehouseId)
+        if (wsIdx >= 0) {
+          updatedWarehouseStocks[wsIdx] = {
+            ...updatedWarehouseStocks[wsIdx],
+            stock: Math.max(0, (updatedWarehouseStocks[wsIdx].stock || 0) - quantity)
           }
-          return s
+        }
+        const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+        const updateResult = await updateIngredient(businessId, damageProduct.id, {
+          currentStock: newTotalStock,
+          warehouseStocks: updatedWarehouseStocks
         })
-        extraDamageUpdates.serials = updatedSerials
+
+        if (!updateResult.success) {
+          throw new Error('Error al actualizar el stock del ingrediente')
+        }
+      } else {
+        // Actualizar seriales a 'lost' si aplica (solo para productos)
+        const extraDamageUpdates = {}
+        if (damageData.selectedSerials?.length > 0 && damageProduct.serials?.length > 0) {
+          const updatedSerials = damageProduct.serials.map(s => {
+            if (damageData.selectedSerials.includes(s.serialNumber) && s.status === 'available') {
+              return { ...s, status: 'lost', lostReason: reasonLabel, lostDate: new Date() }
+            }
+            return s
+          })
+          extraDamageUpdates.serials = updatedSerials
+        }
+
+        // Actualizar stock del producto en el almacén (transacción atómica)
+        const updateResult = await updateProductStockTransaction(
+          businessId,
+          damageProduct.id,
+          damageData.warehouseId,
+          -quantity,
+          extraDamageUpdates
+        )
+
+        if (!updateResult.success) {
+          throw new Error('Error al actualizar el stock')
+        }
       }
 
-      // Actualizar stock del producto en el almacén (transacción atómica)
-      const updateResult = await updateProductStockTransaction(
-        businessId,
-        damageProduct.id,
-        damageData.warehouseId,
-        -quantity,
-        extraDamageUpdates
-      )
-
-      if (!updateResult.success) {
-        throw new Error('Error al actualizar el stock')
-      }
-
-      toast.success(`Merma registrada: ${quantity} unidades de ${damageProduct.name}`)
+      toast.success(`Merma registrada: ${quantity} ${damageProduct.isIngredient ? damageProduct.purchaseUnit : 'unidades'} de ${damageProduct.name}`)
       closeDamageModal()
-      loadProducts() // Recargar productos
+      if (damageProduct.isIngredient) {
+        loadIngredients()
+      } else {
+        loadProducts()
+      }
     } catch (error) {
       console.error('Error al registrar merma:', error)
       toast.error('Error al registrar la merma')
@@ -868,7 +904,9 @@ export default function Inventory() {
 
     try {
       const businessId = getBusinessId()
-      const result = await getStockMovements(businessId, { productId: product.id })
+      // Usar ingredientId si es ingrediente, productId si es producto
+      const filterKey = product.isIngredient ? 'ingredientId' : 'productId'
+      const result = await getStockMovements(businessId, { [filterKey]: product.id })
 
       if (result.success) {
         // Enriquecer movimientos con nombres de almacenes
@@ -1090,6 +1128,80 @@ export default function Inventory() {
       return
     }
 
+    // ========== TRANSFERENCIA DE INGREDIENTES ==========
+    if (transferProduct.isIngredient) {
+      // Verificar stock disponible
+      const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
+      const availableStock = warehouseStock?.stock || 0
+
+      if (quantity > availableStock) {
+        toast.error(`Stock insuficiente. Disponible: ${availableStock} ${transferProduct.purchaseUnit}`)
+        return
+      }
+
+      setIsTransferring(true)
+      try {
+        const businessId = getBusinessId()
+        const fromWarehouseName = warehouses.find(w => w.id === transferData.fromWarehouse)?.name || ''
+        const toWarehouseName = warehouses.find(w => w.id === transferData.toWarehouse)?.name || ''
+
+        // Usar la función de transferencia de ingredientes
+        const result = await transferIngredientStock(
+          businessId,
+          transferProduct.id,
+          transferData.fromWarehouse,
+          transferData.toWarehouse,
+          quantity
+        )
+
+        if (!result.success) {
+          throw new Error(result.error || 'Error al transferir ingrediente')
+        }
+
+        // Crear movimientos de stock
+        await createStockMovement(businessId, {
+          ingredientId: transferProduct.id,
+          ingredientName: transferProduct.name,
+          warehouseId: transferData.fromWarehouse,
+          type: 'transfer_out',
+          quantity: -quantity,
+          unit: transferProduct.purchaseUnit,
+          reason: 'Transferencia entre almacenes',
+          referenceType: 'transfer',
+          toWarehouse: transferData.toWarehouse,
+          userId: user.uid,
+          isIngredient: true,
+          notes: transferData.notes || `Transferencia → ${toWarehouseName}`,
+        })
+
+        await createStockMovement(businessId, {
+          ingredientId: transferProduct.id,
+          ingredientName: transferProduct.name,
+          warehouseId: transferData.toWarehouse,
+          type: 'transfer_in',
+          quantity: quantity,
+          unit: transferProduct.purchaseUnit,
+          reason: 'Transferencia entre almacenes',
+          referenceType: 'transfer',
+          fromWarehouse: transferData.fromWarehouse,
+          userId: user.uid,
+          isIngredient: true,
+          notes: transferData.notes || `Transferencia ← ${fromWarehouseName}`,
+        })
+
+        toast.success(`Transferencia exitosa: ${quantity} ${transferProduct.purchaseUnit} de ${transferProduct.name}`)
+        closeTransferModal()
+        loadIngredients()
+      } catch (error) {
+        console.error('Error en transferencia de ingrediente:', error)
+        toast.error(error.message || 'Error al realizar la transferencia')
+      } finally {
+        setIsTransferring(false)
+      }
+      return
+    }
+
+    // ========== TRANSFERENCIA DE PRODUCTOS ==========
     // Verificar que el producto maneja stock
     if (transferProduct.trackStock === false) {
       toast.error('Este producto no maneja stock y no puede ser transferido')
@@ -1304,6 +1416,7 @@ export default function Inventory() {
     const ingredientItems = ingredients.map(i => ({
       ...i,
       itemType: 'ingredient',
+      isIngredient: true,
       code: i.code || '-',
       price: i.averageCost || 0,
       stock: i.currentStock || 0,
@@ -2119,7 +2232,8 @@ export default function Inventory() {
                   const hasWarehouseStocks = item.warehouseStocks && item.warehouseStocks.length > 0
                   const hasBatches = item.batches && item.batches.filter(b => b.quantity > 0).length > 0
                   const hasVariantsWithStock = item.hasVariants && item.variants?.length > 0
-                  const canExpand = (warehouses.length > 0 || hasBatches || hasVariantsWithStock) && realStock !== null && isProduct
+                  const hasIngredientWarehouseStocks = item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0
+                  const canExpand = ((warehouses.length > 0 || hasBatches || hasVariantsWithStock) && realStock !== null && isProduct) || hasIngredientWarehouseStocks
 
                   return (
                     <div key={`card-${item.itemType}-${item.id}`}>
@@ -2139,7 +2253,7 @@ export default function Inventory() {
                             )}
                             <p className="text-sm font-medium line-clamp-2">{item.name}</p>
                           </div>
-                          {warehouses.length >= 1 && isProduct && (
+                          {warehouses.length >= 1 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -2192,7 +2306,7 @@ export default function Inventory() {
                               <span className="text-xs text-gray-500">S/C</span>
                             ) : (
                               <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock < 4 ? 'text-yellow-600' : 'text-green-600'}`}>
-                                {realStock} uds
+                                {item.isIngredient ? realStock.toFixed(2) : realStock} {item.unit || 'uds'}
                               </span>
                             )}
                             <span className="text-sm text-gray-700">{formatCurrency(isProduct ? (item.hasVariants ? item.basePrice : item.price) : (item.averageCost || 0))}</span>
@@ -2502,6 +2616,34 @@ export default function Inventory() {
                           </div>
                         </div>
                       )}
+
+                      {/* Expandible: Stock por almacén para ingredientes (mobile) */}
+                      {isExpanded && canExpand && item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0 && (
+                        <div className="px-4 pb-3 bg-gray-50">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-2">
+                              <Store className="w-3.5 h-3.5" />
+                              <span className="font-medium">Stock por Almacén:</span>
+                            </div>
+                            {item.warehouseStocks.map(ws => {
+                              const warehouse = allWarehouses.find(w => w.id === ws.warehouseId)
+                              if (!warehouse) return null
+                              return (
+                                <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                    <span className="text-sm text-gray-700">{warehouse.name}</span>
+                                    {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                                  </div>
+                                  <span className={`font-semibold text-sm ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -2619,10 +2761,12 @@ export default function Inventory() {
                         <TableCell className="text-right lg:w-[6%]">
                           {(() => {
                             const realStock = getRealStock(item)
+                            const hasIngredientWarehouseStocks = item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0
+                            const canExpandTable = ((warehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0) || (item.hasVariants && item.variants?.length > 0)) && realStock !== null && isProduct) || hasIngredientWarehouseStocks
                             return (
                               <div className="flex items-center justify-end space-x-1">
                                 {/* Botón de expandir/contraer si hay almacenes o lotes */}
-                                {(warehouses.length > 0 || (item.batches && item.batches.filter(b => b.quantity > 0).length > 0) || (item.hasVariants && item.variants?.length > 0)) && realStock !== null && isProduct && (
+                                {canExpandTable && (
                                   <button
                                     onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
                                     className="p-0.5 hover:bg-gray-100 rounded transition-colors"
@@ -2650,7 +2794,7 @@ export default function Inventory() {
                                           : 'text-green-600'
                                       }`}
                                     >
-                                      {realStock}
+                                      {item.isIngredient ? realStock.toFixed(2) : realStock}
                                     </span>
                                   )}
                                 </div>
@@ -2683,7 +2827,7 @@ export default function Inventory() {
                             {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
                           </Badge>
                         </TableCell>
-                        {warehouses.length >= 1 && isProduct && (
+                        {warehouses.length >= 1 && (
                           <TableCell className="lg:w-[4%]">
                             <div className="flex justify-end">
                               <button
@@ -3057,6 +3201,40 @@ export default function Inventory() {
                           </TableCell>
                         </TableRow>
                       )}
+
+                      {/* Fila expandible para ingredientes - Stock por almacén */}
+                      {isExpanded && item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0 && (
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={8} className="py-3">
+                            <div className="pl-8 space-y-4">
+                              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                                <Store className="w-4 h-4" />
+                                <span className="font-medium">Stock por Almacén:</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {item.warehouseStocks.map(ws => {
+                                  const warehouse = allWarehouses.find(w => w.id === ws.warehouseId)
+                                  if (!warehouse) return null
+                                  return (
+                                    <div key={ws.warehouseId} className="bg-white border border-gray-100 rounded-lg p-2.5">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-2">
+                                          <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                          <span className="text-sm text-gray-700">{warehouse.name}</span>
+                                          {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                                        </div>
+                                        <span className={`font-semibold text-sm ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                          {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </React.Fragment>
                     )
                   })}
@@ -3065,7 +3243,7 @@ export default function Inventory() {
 
               {/* Menú de acciones flotante */}
               {openMenuId && (() => {
-                const menuItem = [...products, ...ingredients].find(p => p.id === openMenuId)
+                const menuItem = [...products, ...ingredients.map(ing => ({ ...ing, isIngredient: true }))].find(p => p.id === openMenuId)
                 if (!menuItem) return null
                 const noStock = getRealStock(menuItem) === null || getRealStock(menuItem) === 0
                 return (
@@ -4149,6 +4327,7 @@ export default function Inventory() {
         isOpen={showMassTransferModal}
         onClose={() => setShowMassTransferModal(false)}
         products={products}
+        ingredients={ingredients}
         warehouses={warehouses}
         allWarehouses={allWarehouses}
         branches={branches}
@@ -4158,6 +4337,7 @@ export default function Inventory() {
         companySettings={companySettings}
         onTransferCompleted={() => {
           loadProducts()
+          loadIngredients()
           setShowMassTransferModal(false)
         }}
       />

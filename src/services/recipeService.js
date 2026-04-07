@@ -227,6 +227,10 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
 
         if (ingredientResult.success) {
           const ingredientData = ingredientResult.data
+
+          // Si el ingrediente no maneja stock, omitir validación
+          if (ingredientData.trackStock === false) continue
+
           const currentStock = ingredientData.currentStock || 0
 
           const quantityNeeded = convertUnit(

@@ -109,7 +109,13 @@ export default function InventoryCountModal({
   const initializeCountData = (warehouseId) => {
     const initialCountData = {}
     products.forEach(product => {
-      if (product.stock !== null && product.stock !== undefined || (product.hasVariants && product.variants?.length > 0)) {
+      // Incluir productos con stock, ingredientes con currentStock, o productos con variantes
+      const hasStock = product.stock !== null && product.stock !== undefined
+      const hasCurrentStock = product.currentStock !== null && product.currentStock !== undefined
+      const hasVariants = product.hasVariants && product.variants?.length > 0
+      const isIngredient = product.isIngredient
+
+      if (hasStock || hasCurrentStock || hasVariants || isIngredient) {
         const warehouseStock = getWarehouseStock(product, warehouseId)
         // Filtrar lotes del almacén seleccionado (o legacy sin warehouseId)
         const activeBatches = (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === warehouseId))
@@ -706,8 +712,35 @@ export default function InventoryCountModal({
 
           let result
           if (item.isIngredient) {
+            // Actualizar warehouseStocks para ingredientes igual que productos
+            const currentIngredientWarehouseStocks = item.warehouseStocks || []
+            let newIngredientWarehouseStocks = [...currentIngredientWarehouseStocks]
+
+            const ingredientWarehouseIdx = newIngredientWarehouseStocks.findIndex(
+              ws => ws.warehouseId === selectedWarehouse.id
+            )
+
+            if (ingredientWarehouseIdx >= 0) {
+              newIngredientWarehouseStocks[ingredientWarehouseIdx] = {
+                ...newIngredientWarehouseStocks[ingredientWarehouseIdx],
+                stock: newStock
+              }
+            } else {
+              if (newStock > 0) {
+                newIngredientWarehouseStocks.push({
+                  warehouseId: selectedWarehouse.id,
+                  stock: newStock
+                })
+              }
+            }
+
+            const totalIngredientStock = newIngredientWarehouseStocks.reduce(
+              (sum, ws) => sum + (ws.stock || 0), 0
+            )
+
             result = await updateIngredient(businessId, item.productId, {
-              stock: newStock,
+              currentStock: totalIngredientStock,
+              warehouseStocks: newIngredientWarehouseStocks
             })
           } else {
             const currentWarehouseStocks = item.warehouseStocks || []

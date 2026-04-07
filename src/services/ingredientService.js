@@ -267,6 +267,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
     const currentStock = currentData.currentStock || 0
     const currentAvgCost = currentData.averageCost || 0
     const warehouseStocks = currentData.warehouseStocks || []
+    const tracksStock = currentData.trackStock !== false // Por defecto true
 
     // Convertir cantidad comprada a la unidad de almacenamiento si es necesario
     const quantityToAdd = convertUnit(
@@ -275,34 +276,43 @@ export const registerPurchase = async (businessId, purchaseData) => {
       currentData.purchaseUnit
     )
 
-    // Actualizar warehouseStocks si se especificó un almacén
+    let newStock = currentStock
     let updatedWarehouseStocks = [...warehouseStocks]
-    if (purchaseData.warehouseId) {
-      const warehouseIndex = updatedWarehouseStocks.findIndex(
-        ws => ws.warehouseId === purchaseData.warehouseId
-      )
 
-      if (warehouseIndex >= 0) {
-        updatedWarehouseStocks[warehouseIndex] = {
-          ...updatedWarehouseStocks[warehouseIndex],
-          stock: (updatedWarehouseStocks[warehouseIndex].stock || 0) + quantityToAdd
+    // Solo actualizar stock si el ingrediente maneja inventario
+    if (tracksStock) {
+      // Actualizar warehouseStocks si se especificó un almacén
+      if (purchaseData.warehouseId) {
+        const warehouseIndex = updatedWarehouseStocks.findIndex(
+          ws => ws.warehouseId === purchaseData.warehouseId
+        )
+
+        if (warehouseIndex >= 0) {
+          updatedWarehouseStocks[warehouseIndex] = {
+            ...updatedWarehouseStocks[warehouseIndex],
+            stock: (updatedWarehouseStocks[warehouseIndex].stock || 0) + quantityToAdd
+          }
+        } else {
+          updatedWarehouseStocks.push({
+            warehouseId: purchaseData.warehouseId,
+            stock: quantityToAdd
+          })
         }
-      } else {
-        updatedWarehouseStocks.push({
-          warehouseId: purchaseData.warehouseId,
-          stock: quantityToAdd
-        })
       }
+
+      // Calcular nuevo stock total
+      newStock = purchaseData.warehouseId
+        ? updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        : currentStock + quantityToAdd
     }
 
-    // Calcular nuevo stock total
-    const newStock = purchaseData.warehouseId
-      ? updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-      : currentStock + quantityToAdd
-
-    // Calcular nuevo costo promedio ponderado
+    // Calcular nuevo costo promedio (siempre se actualiza, maneje o no stock)
+    // Para ingredientes sin stock, simplemente usamos el último precio de compra
     let newAvgCost
-    if (currentAvgCost === 0 || currentStock === 0) {
+    if (!tracksStock) {
+      // Sin control de stock: usar directamente el precio de compra
+      newAvgCost = purchaseData.unitPrice
+    } else if (currentAvgCost === 0 || currentStock === 0) {
       newAvgCost = purchaseData.unitPrice
     } else {
       const totalCurrentValue = currentStock * currentAvgCost
@@ -311,37 +321,41 @@ export const registerPurchase = async (businessId, purchaseData) => {
     }
 
     const updateData = {
-      currentStock: newStock,
       averageCost: newAvgCost,
       lastPurchasePrice: purchaseData.unitPrice,
       lastPurchaseDate: purchaseData.purchaseDate || Timestamp.now(),
       updatedAt: Timestamp.now()
     }
 
-    // Solo actualizar warehouseStocks si se usó almacén
-    if (purchaseData.warehouseId) {
-      updateData.warehouseStocks = updatedWarehouseStocks
+    // Solo actualizar stock si el ingrediente maneja inventario
+    if (tracksStock) {
+      updateData.currentStock = newStock
+      if (purchaseData.warehouseId) {
+        updateData.warehouseStocks = updatedWarehouseStocks
+      }
     }
 
     batch.update(ingredientRef, updateData)
 
-    // 3. Crear movimiento de stock
-    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
-    const movementRef = doc(movementsRef)
+    // 3. Crear movimiento de stock (solo si maneja inventario)
+    if (tracksStock) {
+      const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+      const movementRef = doc(movementsRef)
 
-    batch.set(movementRef, {
-      ingredientId: purchaseData.ingredientId,
-      ingredientName: purchaseData.ingredientName,
-      type: 'purchase',
-      quantity: quantityToAdd,
-      unit: currentData.purchaseUnit,
-      warehouseId: purchaseData.warehouseId || null,
-      reason: `Compra - ${purchaseData.supplier || 'Sin proveedor'}`,
-      relatedPurchaseId: purchaseRef.id,
-      beforeStock: currentStock,
-      afterStock: newStock,
-      createdAt: Timestamp.now()
-    })
+      batch.set(movementRef, {
+        ingredientId: purchaseData.ingredientId,
+        ingredientName: purchaseData.ingredientName,
+        type: 'purchase',
+        quantity: quantityToAdd,
+        unit: currentData.purchaseUnit,
+        warehouseId: purchaseData.warehouseId || null,
+        reason: `Compra - ${purchaseData.supplier || 'Sin proveedor'}`,
+        relatedPurchaseId: purchaseRef.id,
+        beforeStock: currentStock,
+        afterStock: newStock,
+        createdAt: Timestamp.now()
+      })
+    }
 
     await batch.commit()
 
@@ -477,6 +491,13 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
       }
 
       const currentData = ingredientDoc.data()
+
+      // Si el ingrediente no maneja stock, omitir descuento (solo se usa para calcular costos)
+      if (currentData.trackStock === false) {
+        console.log(`Ingrediente ${ingredient.ingredientName} no maneja stock, omitiendo descuento`)
+        continue
+      }
+
       const currentStock = currentData.currentStock || 0
       const warehouseStocks = currentData.warehouseStocks || []
 
@@ -607,52 +628,57 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
 
     if (ingredientDoc.exists()) {
       const currentData = ingredientDoc.data()
-      const currentStock = currentData.currentStock || 0
+      const tracksStock = currentData.trackStock !== false
 
-      const quantityToRevert = convertUnit(
-        purchaseData.quantity,
-        purchaseData.unit,
-        currentData.purchaseUnit
-      )
+      // Solo revertir stock si el ingrediente maneja inventario
+      if (tracksStock) {
+        const currentStock = currentData.currentStock || 0
 
-      const newStock = Math.max(0, currentStock - quantityToRevert)
+        const quantityToRevert = convertUnit(
+          purchaseData.quantity,
+          purchaseData.unit,
+          currentData.purchaseUnit
+        )
 
-      const updateData = {
-        currentStock: newStock,
-        updatedAt: Timestamp.now()
-      }
+        const newStock = Math.max(0, currentStock - quantityToRevert)
 
-      // Revertir warehouseStocks si aplica
-      if (purchaseData.warehouseId && currentData.warehouseStocks) {
-        const updatedWarehouseStocks = [...currentData.warehouseStocks]
-        const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === purchaseData.warehouseId)
-        if (idx >= 0) {
-          updatedWarehouseStocks[idx] = {
-            ...updatedWarehouseStocks[idx],
-            stock: Math.max(0, (updatedWarehouseStocks[idx].stock || 0) - quantityToRevert)
-          }
-          updateData.warehouseStocks = updatedWarehouseStocks
-          updateData.currentStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        const updateData = {
+          currentStock: newStock,
+          updatedAt: Timestamp.now()
         }
+
+        // Revertir warehouseStocks si aplica
+        if (purchaseData.warehouseId && currentData.warehouseStocks) {
+          const updatedWarehouseStocks = [...currentData.warehouseStocks]
+          const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === purchaseData.warehouseId)
+          if (idx >= 0) {
+            updatedWarehouseStocks[idx] = {
+              ...updatedWarehouseStocks[idx],
+              stock: Math.max(0, (updatedWarehouseStocks[idx].stock || 0) - quantityToRevert)
+            }
+            updateData.warehouseStocks = updatedWarehouseStocks
+            updateData.currentStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+          }
+        }
+
+        batch.update(ingredientRef, updateData)
+
+        // 3. Crear movimiento de stock
+        const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+        const movementRef = doc(movementsRef)
+        batch.set(movementRef, {
+          ingredientId: purchaseData.ingredientId,
+          ingredientName: purchaseData.ingredientName,
+          type: 'purchase_delete',
+          quantity: quantityToRevert,
+          unit: currentData.purchaseUnit,
+          warehouseId: purchaseData.warehouseId || null,
+          reason: `Eliminación de compra - ${purchaseData.supplier || 'Sin proveedor'}`,
+          beforeStock: currentStock,
+          afterStock: updateData.currentStock,
+          createdAt: Timestamp.now()
+        })
       }
-
-      batch.update(ingredientRef, updateData)
-
-      // 3. Crear movimiento de stock
-      const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
-      const movementRef = doc(movementsRef)
-      batch.set(movementRef, {
-        ingredientId: purchaseData.ingredientId,
-        ingredientName: purchaseData.ingredientName,
-        type: 'purchase_delete',
-        quantity: quantityToRevert,
-        unit: currentData.purchaseUnit,
-        warehouseId: purchaseData.warehouseId || null,
-        reason: `Eliminación de compra - ${purchaseData.supplier || 'Sin proveedor'}`,
-        beforeStock: currentStock,
-        afterStock: updateData.currentStock,
-        createdAt: Timestamp.now()
-      })
     }
 
     // 4. Eliminar la compra
@@ -662,6 +688,66 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar compra de ingrediente:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Transferir stock de ingrediente entre almacenes
+ */
+export const transferIngredientStock = async (businessId, ingredientId, fromWarehouseId, toWarehouseId, quantity) => {
+  try {
+    const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredientId)
+    const ingredientDoc = await getDoc(ingredientRef)
+
+    if (!ingredientDoc.exists()) {
+      throw new Error('Ingrediente no encontrado')
+    }
+
+    const currentData = ingredientDoc.data()
+    let updatedWarehouseStocks = [...(currentData.warehouseStocks || [])]
+
+    // Descontar del almacén origen
+    const fromIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === fromWarehouseId)
+    if (fromIdx >= 0) {
+      const currentFromStock = updatedWarehouseStocks[fromIdx].stock || 0
+      if (currentFromStock < quantity) {
+        throw new Error(`Stock insuficiente en almacén origen. Disponible: ${currentFromStock}, Requerido: ${quantity}`)
+      }
+      updatedWarehouseStocks[fromIdx] = {
+        ...updatedWarehouseStocks[fromIdx],
+        stock: currentFromStock - quantity
+      }
+    } else {
+      throw new Error('El ingrediente no tiene stock en el almacén origen')
+    }
+
+    // Agregar al almacén destino
+    const toIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === toWarehouseId)
+    if (toIdx >= 0) {
+      updatedWarehouseStocks[toIdx] = {
+        ...updatedWarehouseStocks[toIdx],
+        stock: (updatedWarehouseStocks[toIdx].stock || 0) + quantity
+      }
+    } else {
+      updatedWarehouseStocks.push({
+        warehouseId: toWarehouseId,
+        stock: quantity
+      })
+    }
+
+    // El stock total no cambia en una transferencia
+    const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+    await updateDoc(ingredientRef, {
+      currentStock: newTotalStock,
+      warehouseStocks: updatedWarehouseStocks,
+      updatedAt: Timestamp.now()
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al transferir ingrediente:', error)
     return { success: false, error: error.message }
   }
 }

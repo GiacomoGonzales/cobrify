@@ -68,7 +68,7 @@ import {
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
-import { getRecipeByProductId } from '@/services/recipeService'
+import { getRecipeByProductId, checkRecipeStock } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
@@ -2943,6 +2943,48 @@ export default function POS() {
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
       return
+    }
+
+    // Validar stock de ingredientes de recetas (solo si no permite venta sin stock)
+    if (!companySettings?.allowNegativeStock) {
+      const allMissingIngredients = []
+
+      for (const item of cart) {
+        // Solo verificar productos que no sean personalizados
+        if (item.isCustom) continue
+
+        const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
+        if (stockCheck.success && !stockCheck.hasStock) {
+          stockCheck.missingIngredients.forEach(ing => {
+            allMissingIngredients.push({
+              product: item.name,
+              ingredient: ing.name,
+              available: ing.available,
+              needed: ing.needed,
+              unit: ing.unit
+            })
+          })
+        }
+      }
+
+      if (allMissingIngredients.length > 0) {
+        // Agrupar por ingrediente para mostrar mensaje más claro
+        const ingredientSummary = allMissingIngredients.reduce((acc, item) => {
+          const key = item.ingredient
+          if (!acc[key]) {
+            acc[key] = { available: item.available, needed: 0, unit: item.unit }
+          }
+          acc[key].needed += item.needed
+          return acc
+        }, {})
+
+        const missingList = Object.entries(ingredientSummary)
+          .map(([name, data]) => `${name}: necesitas ${data.needed.toFixed(2)} ${data.unit}, tienes ${data.available.toFixed(2)}`)
+          .join('\n')
+
+        toast.error(`Stock insuficiente de ingredientes:\n${missingList}`, { duration: 6000 })
+        return
+      }
     }
 
     // Validar consistencia del modo edición
