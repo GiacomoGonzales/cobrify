@@ -795,7 +795,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + 5
+  // Asegurar que currentY esté siempre debajo del recuadro del documento
+  // El recuadro termina en MARGIN_TOP + headerHeight, sumar margen suficiente para que el texto no se cruce
+  const docBoxBottomY = MARGIN_TOP + headerHeight + 18
+  currentY = Math.max(currentY + headerHeight + 5, docBoxBottomY)
 
   // ========== ESLOGAN (centrado debajo del encabezado) ==========
   if (companySettings?.companySlogan) {
@@ -807,14 +810,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
     const sloganLinesToShow = sloganLines.slice(0, 2)
     const sloganCenterX = MARGIN_LEFT + CONTENT_WIDTH / 2
-    // Si alguna línea del slogan es tan ancha que chocaría con el recuadro del comprobante,
-    // empujar el slogan debajo del recuadro completo
-    const spaceLeftOfBox = docBoxX - MARGIN_LEFT - 10
-    const sloganCollidesWithBox = sloganLinesToShow.some(line => doc.getTextWidth(line) > spaceLeftOfBox)
-    if (sloganCollidesWithBox) {
-      const boxBottomY = MARGIN_TOP + headerHeight + 13
-      if (currentY < boxBottomY) currentY = boxBottomY
-    }
     sloganLinesToShow.forEach((line) => {
       doc.text(line, sloganCenterX, currentY, { align: 'center' })
       currentY += 14
