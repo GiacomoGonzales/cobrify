@@ -1497,16 +1497,32 @@ export default function POS() {
             petName: appointmentData.petName || '',
           }))
 
-          // Agregar el servicio al carrito como producto personalizado
-          if (appointmentData.serviceName && appointmentData.servicePrice > 0) {
+          // Agregar servicios al carrito (cada servicio como ítem separado)
+          const petSuffix = appointmentData.petName ? ` - ${appointmentData.petName}` : ''
+          if (appointmentData.services && appointmentData.services.length > 0) {
+            // Usar el array de servicios individuales
+            const serviceItems = appointmentData.services.map((service, idx) => ({
+              id: `appointment-${appointmentData.appointmentId}-${idx}-${Date.now()}`,
+              code: service.code || 'SERVICIO-VET',
+              name: `${service.name}${petSuffix}`,
+              price: service.price || 0,
+              quantity: 1,
+              unit: 'ZZ',
+              taxAffectation: '10',
+              stock: null,
+              isCustom: true,
+            }))
+            setCart(serviceItems)
+          } else if (appointmentData.serviceName && appointmentData.servicePrice > 0) {
+            // Fallback: cita antigua sin array de servicios
             const serviceItem = {
               id: `appointment-${appointmentData.appointmentId}-${Date.now()}`,
               code: 'SERVICIO-VET',
-              name: `${appointmentData.serviceName}${appointmentData.petName ? ` - ${appointmentData.petName}` : ''}`,
+              name: `${appointmentData.serviceName}${petSuffix}`,
               price: appointmentData.servicePrice,
               quantity: 1,
-              unit: 'ZZ', // Servicio
-              taxAffectation: '10', // Gravado
+              unit: 'ZZ',
+              taxAffectation: '10',
               stock: null,
               isCustom: true,
             }

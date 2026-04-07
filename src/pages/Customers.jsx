@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -24,6 +24,7 @@ import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
+import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
@@ -56,6 +57,8 @@ export default function Customers() {
 
   // Estado para modal de historia clínica (veterinaria)
   const [medicalHistoryCustomer, setMedicalHistoryCustomer] = useState(null)
+  // Estado para múltiples mascotas (veterinaria)
+  const [pets, setPets] = useState([])
 
   const {
     register,
@@ -143,6 +146,10 @@ export default function Customers() {
       studentSchedule: '',
       birthDate: '',
     })
+    // Inicializar con una mascota vacía en veterinaria
+    if (businessMode === 'veterinary') {
+      setPets([createEmptyPet()])
+    }
     setIsModalOpen(true)
   }
 
@@ -164,7 +171,7 @@ export default function Customers() {
       subscriptionPrice: customer.subscriptionPrice || '',
       subscriptionExpiry: customer.subscriptionExpiry || '',
       birthDate: customer.birthDate || '',
-      // Campos de mascota (veterinaria)
+      // Campos de mascota legacy (se mantienen para compatibilidad)
       petName: customer.petName || '',
       petSpecies: customer.petSpecies || '',
       petBreed: customer.petBreed || '',
@@ -172,12 +179,15 @@ export default function Customers() {
       petWeight: customer.petWeight || '',
       petNotes: customer.petNotes || '',
     })
+    // Cargar mascotas normalizadas
+    setPets(normalizePets(customer))
     setIsModalOpen(true)
   }
 
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingCustomer(null)
+    setPets([])
     reset()
   }
 
@@ -249,6 +259,22 @@ export default function Customers() {
     setIsSaving(true)
 
     try {
+      // Agregar mascotas al data si estamos en modo veterinaria
+      if (businessMode === 'veterinary' && pets.length > 0) {
+        const validPets = pets.filter(p => p.name.trim() !== '')
+        data.pets = validPets
+        // Backward compatibility: escribir datos de la primera mascota en campos legacy
+        const primary = validPets[0]
+        if (primary) {
+          data.petName = primary.name
+          data.petSpecies = primary.species || ''
+          data.petBreed = primary.breed || ''
+          data.petAge = primary.age || ''
+          data.petWeight = primary.weight || ''
+          data.petNotes = primary.notes || ''
+        }
+      }
+
       let result
 
       if (editingCustomer) {
@@ -364,9 +390,11 @@ export default function Customers() {
         customer.email?.toLowerCase().includes(search) ||
         customer.phone?.toLowerCase().includes(search) ||
         customer.address?.toLowerCase().includes(search) ||
-        customer.petName?.toLowerCase().includes(search) ||
-        customer.petSpecies?.toLowerCase().includes(search) ||
-        customer.petBreed?.toLowerCase().includes(search) ||
+        normalizePets(customer).some(p =>
+          p.name?.toLowerCase().includes(search) ||
+          p.species?.toLowerCase().includes(search) ||
+          p.breed?.toLowerCase().includes(search)
+        ) ||
         customer.studentName?.toLowerCase().includes(search) ||
         customer.studentSchedule?.toLowerCase().includes(search) ||
         customer.vehiclePlate?.toLowerCase().includes(search) ||
@@ -693,7 +721,7 @@ export default function Customers() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                      {businessMode === 'veterinary' && customer.petName && (
+                      {businessMode === 'veterinary' && normalizePets(customer).length > 0 && (
                         <button
                           onClick={() => setMedicalHistoryCustomer(customer)}
                           className="p-1.5 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -743,11 +771,10 @@ export default function Customers() {
                       {businessSettings?.posCustomFields?.showVehiclePlateField && customer.vehiclePlate && (
                         <span className="font-medium uppercase">{customer.vehiclePlate}</span>
                       )}
-                      {businessMode === 'veterinary' && customer.petName && (
+                      {businessMode === 'veterinary' && normalizePets(customer).length > 0 && (
                         <span className="inline-flex items-center gap-1 text-primary-600">
                           <PawPrint className="w-3 h-3" />
-                          {customer.petName}
-                          {customer.petSpecies && <span className="text-gray-500">({customer.petSpecies})</span>}
+                          {normalizePets(customer).map(p => p.name).join(', ')}
                         </span>
                       )}
                       {customer.email && (
@@ -846,11 +873,7 @@ export default function Customers() {
                     <TableHead className="text-xs py-2">Placa</TableHead>
                   )}
                   {businessMode === 'veterinary' && (
-                    <>
-                      <TableHead className="text-xs py-2">Mascota</TableHead>
-                      <TableHead className="text-xs py-2">Especie</TableHead>
-                      <TableHead className="text-xs py-2">Raza</TableHead>
-                    </>
+                    <TableHead className="text-xs py-2">Mascotas</TableHead>
                   )}
                   {businessSettings?.posCustomFields?.showSubscriptionFields && (
                     <>
@@ -916,20 +939,22 @@ export default function Customers() {
                       </TableCell>
                     )}
                     {businessMode === 'veterinary' && (
-                      <>
-                        <TableCell className="py-1.5">
-                          <div className="flex items-center gap-1">
-                            <PawPrint className="w-3 h-3 text-primary-500" />
-                            <p className="text-xs font-medium">{customer.petName || '-'}</p>
+                      <TableCell className="py-1.5">
+                        {normalizePets(customer).length > 0 ? (
+                          <div className="space-y-0.5">
+                            {normalizePets(customer).map((pet, idx) => (
+                              <div key={pet.id || idx} className="flex items-center gap-1">
+                                <PawPrint className="w-3 h-3 text-primary-500 flex-shrink-0" />
+                                <p className="text-xs font-medium">{pet.name}</p>
+                                {pet.species && <span className="text-xs text-gray-500">({pet.species})</span>}
+                                {pet.breed && <span className="text-xs text-gray-400">- {pet.breed}</span>}
+                              </div>
+                            ))}
                           </div>
-                        </TableCell>
-                        <TableCell className="py-1.5">
-                          <p className="text-xs text-gray-600">{customer.petSpecies || '-'}</p>
-                        </TableCell>
-                        <TableCell className="py-1.5">
-                          <p className="text-xs text-gray-600">{customer.petBreed || '-'}</p>
-                        </TableCell>
-                      </>
+                        ) : (
+                          <p className="text-xs text-gray-400">-</p>
+                        )}
+                      </TableCell>
                     )}
                     {businessSettings?.posCustomFields?.showSubscriptionFields && (
                       <>
@@ -990,7 +1015,7 @@ export default function Customers() {
                     )}
                     <TableCell className="py-1.5">
                       <div className="flex items-center justify-end gap-0.5">
-                        {businessMode === 'veterinary' && customer.petName && (
+                        {businessMode === 'veterinary' && normalizePets(customer).length > 0 && (
                           <button
                             onClick={() => setMedicalHistoryCustomer(customer)}
                             className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -1168,71 +1193,118 @@ export default function Customers() {
             />
           )}
 
-          {/* Campos de Mascota - solo para modo veterinaria */}
+          {/* Campos de Mascotas - solo para modo veterinaria */}
           {businessMode === 'veterinary' && (
-            <>
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <PawPrint className="w-4 h-4" />
-                  Datos de la Mascota
+                  Mascotas ({pets.length})
                 </h4>
-                <div className="space-y-4">
-                  <Input
-                    label="Nombre de la Mascota"
-                    placeholder="Ej: Firulais, Michi, Rocky..."
-                    error={errors.petName?.message}
-                    {...register('petName')}
-                  />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Especie
-                      </label>
-                      <select
-                        {...register('petSpecies')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="Perro">Perro</option>
-                        <option value="Gato">Gato</option>
-                        <option value="Ave">Ave</option>
-                        <option value="Conejo">Conejo</option>
-                        <option value="Hamster">Hamster</option>
-                        <option value="Pez">Pez</option>
-                        <option value="Reptil">Reptil</option>
-                        <option value="Otro">Otro</option>
-                      </select>
-                    </div>
-                    <Input
-                      label="Raza"
-                      placeholder="Ej: Labrador, Siamés..."
-                      error={errors.petBreed?.message}
-                      {...register('petBreed')}
-                    />
-                    <Input
-                      label="Edad"
-                      placeholder="Ej: 3 años, 6 meses"
-                      error={errors.petAge?.message}
-                      {...register('petAge')}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      label="Peso"
-                      placeholder="Ej: 5 kg, 500 gr"
-                      error={errors.petWeight?.message}
-                      {...register('petWeight')}
-                    />
-                    <Input
-                      label="Notas / Observaciones"
-                      placeholder="Alergias, condiciones, etc."
-                      error={errors.petNotes?.message}
-                      {...register('petNotes')}
-                    />
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setPets([...pets, createEmptyPet()])}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Agregar mascota
+                </button>
               </div>
-            </>
+              <div className="space-y-3">
+                {pets.map((pet, index) => (
+                  <div key={pet.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 relative">
+                    {pets.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setPets(pets.filter((_, i) => i !== index))}
+                        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                        title="Eliminar mascota"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <div className="space-y-3">
+                      <Input
+                        label={pets.length > 1 ? `Mascota ${index + 1} - Nombre` : 'Nombre de la Mascota'}
+                        placeholder="Ej: Firulais, Michi, Rocky..."
+                        value={pet.name}
+                        onChange={e => {
+                          const updated = [...pets]
+                          updated[index] = { ...updated[index], name: e.target.value }
+                          setPets(updated)
+                        }}
+                      />
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
+                          <select
+                            value={pet.species}
+                            onChange={e => {
+                              const updated = [...pets]
+                              updated[index] = { ...updated[index], species: e.target.value }
+                              setPets(updated)
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="Perro">Perro</option>
+                            <option value="Gato">Gato</option>
+                            <option value="Ave">Ave</option>
+                            <option value="Conejo">Conejo</option>
+                            <option value="Hamster">Hamster</option>
+                            <option value="Pez">Pez</option>
+                            <option value="Reptil">Reptil</option>
+                            <option value="Otro">Otro</option>
+                          </select>
+                        </div>
+                        <Input
+                          label="Raza"
+                          placeholder="Ej: Labrador, Siamés..."
+                          value={pet.breed}
+                          onChange={e => {
+                            const updated = [...pets]
+                            updated[index] = { ...updated[index], breed: e.target.value }
+                            setPets(updated)
+                          }}
+                        />
+                        <Input
+                          label="Edad"
+                          placeholder="Ej: 3 años, 6 meses"
+                          value={pet.age}
+                          onChange={e => {
+                            const updated = [...pets]
+                            updated[index] = { ...updated[index], age: e.target.value }
+                            setPets(updated)
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Input
+                          label="Peso"
+                          placeholder="Ej: 5 kg, 500 gr"
+                          value={pet.weight}
+                          onChange={e => {
+                            const updated = [...pets]
+                            updated[index] = { ...updated[index], weight: e.target.value }
+                            setPets(updated)
+                          }}
+                        />
+                        <Input
+                          label="Notas / Observaciones"
+                          placeholder="Alergias, condiciones, etc."
+                          value={pet.notes}
+                          onChange={e => {
+                            const updated = [...pets]
+                            updated[index] = { ...updated[index], notes: e.target.value }
+                            setPets(updated)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Nivel de precio - solo si está habilitado múltiples precios */}

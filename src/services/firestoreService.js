@@ -372,10 +372,15 @@ export const getCustomersWithStats = async userId => {
 
     // Calcular estadísticas por cliente
     const customersWithStats = customers.map(customer => {
-      // Filtrar facturas del cliente - comparar por documentNumber ya que no se guarda el ID
-      const customerInvoices = invoices.filter(
-        invoice => invoice.customer?.documentNumber === customer.documentNumber
-      )
+      // Filtrar facturas del cliente - por customerId (principal) o documentNumber (fallback)
+      const customerInvoices = invoices.filter(invoice => {
+        // Prioridad 1: comparar por customerId (vinculación directa)
+        if (invoice.customerId && invoice.customerId === customer.id) return true
+        // Prioridad 2: comparar por documentNumber (solo si es un documento real, no genérico)
+        const docNum = customer.documentNumber
+        if (docNum && docNum !== '00000000' && docNum !== '' && invoice.customer?.documentNumber === docNum) return true
+        return false
+      })
 
       // Calcular total gastado
       const totalSpent = customerInvoices.reduce(

@@ -40,13 +40,23 @@ export const customerSchema = z.object({
   studentSchedule: z.string().optional().or(z.literal('')),
   // Campo para placa de vehículo (venta de baterías, autopartes, etc.)
   vehiclePlate: z.string().optional().or(z.literal('')),
-  // Campos para mascota (veterinarias)
+  // Campos para mascota (veterinarias) - legacy (single pet)
   petName: z.string().optional().or(z.literal('')),
   petSpecies: z.string().optional().or(z.literal('')),
   petBreed: z.string().optional().or(z.literal('')),
   petAge: z.string().optional().or(z.literal('')),
   petWeight: z.string().optional().or(z.literal('')),
   petNotes: z.string().optional().or(z.literal('')),
+  // Múltiples mascotas (nuevo)
+  pets: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    species: z.string().optional().or(z.literal('')),
+    breed: z.string().optional().or(z.literal('')),
+    age: z.string().optional().or(z.literal('')),
+    weight: z.string().optional().or(z.literal('')),
+    notes: z.string().optional().or(z.literal('')),
+  })).optional(),
   // Nivel de precio para sistema de múltiples precios
   priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
   // Campos de suscripción

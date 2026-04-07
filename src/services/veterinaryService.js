@@ -198,7 +198,7 @@ export const getPendingAlerts = async (businessId, daysAhead = 7) => {
     const customer = { id: customerDoc.id, ...customerDoc.data() }
 
     // Solo procesar si tiene datos de mascota (modo veterinaria)
-    if (!customer.petName) continue
+    if (!customer.petName && (!customer.pets || customer.pets.length === 0)) continue
 
     // Verificar vacunas próximas
     const vaccinationsRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'vaccinations')
@@ -271,7 +271,7 @@ export const getOverdueAlerts = async (businessId) => {
   for (const customerDoc of customersSnapshot.docs) {
     const customer = { id: customerDoc.id, ...customerDoc.data() }
 
-    if (!customer.petName) continue
+    if (!customer.petName && (!customer.pets || customer.pets.length === 0)) continue
 
     // Vacunas vencidas
     const vaccinationsRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'vaccinations')

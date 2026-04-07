@@ -245,6 +245,7 @@ export default function VeterinaryAgenda() {
       petName: appointment.petName,
       serviceName: appointment.serviceName,
       servicePrice: appointment.servicePrice || 0,
+      services: appointment.services || [],
       phone: appointment.phone,
     }
 

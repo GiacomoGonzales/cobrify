@@ -23,6 +23,7 @@ import {
   markServiceCompleted,
 } from '@/services/veterinaryService'
 import { createAppointment } from '@/services/appointmentService'
+import { normalizePets } from '@/utils/petUtils'
 
 export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
   const { getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -30,6 +31,9 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Mascota seleccionada (para clientes con múltiples mascotas)
+  const [selectedPetIndex, setSelectedPetIndex] = useState(0)
 
   // Vista: 'main' | 'recurring' | 'appointment'
   const [view, setView] = useState('main')
@@ -57,6 +61,7 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
     if (isOpen && customer?.id) {
       setView('main')
       setSelectedProduct(null)
+      setSelectedPetIndex(0)
       setSearchQuery('')
       loadAllData()
       loadProducts()
@@ -79,26 +84,34 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
 
       // Cargar ventas del cliente
       try {
-        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
-        const q = query(invoicesRef, where('customerId', '==', customer.id), orderBy('createdAt', 'desc'))
-        const snapshot = await getDocs(q)
-        setCustomerInvoices(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))
-      } catch (e) {
-        // Fallback: buscar por documentNumber si customerId no tiene resultados
-        try {
+        let invoices = []
+
+        // 1. Buscar por customerId (principal)
+        if (customer.id) {
+          const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+          const q = query(invoicesRef, where('customerId', '==', customer.id))
+          const snapshot = await getDocs(q)
+          invoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+        }
+
+        // 2. Fallback: buscar por documentNumber si no hay resultados por customerId
+        // (solo si tiene un documento real, no '00000000')
+        if (invoices.length === 0 && customer.documentNumber && customer.documentNumber !== '00000000') {
           const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
           const q = query(invoicesRef, where('customer.documentNumber', '==', customer.documentNumber))
           const snapshot = await getDocs(q)
-          const invs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-          invs.sort((a, b) => {
-            const dA = a.createdAt?.toDate?.() || new Date(0)
-            const dB = b.createdAt?.toDate?.() || new Date(0)
-            return dB - dA
-          })
-          setCustomerInvoices(invs)
-        } catch (e2) {
-          console.warn('Error cargando ventas del cliente:', e2)
+          invoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
         }
+
+        // Ordenar por fecha descendente
+        invoices.sort((a, b) => {
+          const dA = a.createdAt?.toDate?.() || new Date(0)
+          const dB = b.createdAt?.toDate?.() || new Date(0)
+          return dB - dA
+        })
+        setCustomerInvoices(invoices)
+      } catch (e) {
+        console.warn('Error cargando ventas del cliente:', e)
       }
 
       // Unificar historial
@@ -221,11 +234,15 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
       const businessId = getBusinessId()
       const totalPrice = selectedServices.reduce((sum, s) => sum + (s.price || 0), 0)
 
+      const customerPets = normalizePets(customer)
+      const currentPet = customerPets[selectedPetIndex] || customerPets[0] || {}
+
       await createAppointment(businessId, {
         customerId: customer.id,
         customerName: customer.name,
-        petName: customer.petName,
-        petSpecies: customer.petSpecies,
+        petName: currentPet.name || customer.petName || '',
+        petSpecies: currentPet.species || customer.petSpecies || '',
+        petId: currentPet.id || null,
         phone: customer.phone,
         // Compatibilidad: primer servicio como principal
         serviceName: selectedServices.map(s => s.name).join(', '),
@@ -298,20 +315,47 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-t-xl">
-          <div className="flex items-center gap-3">
-            <PawPrint className="w-6 h-6" />
-            <div>
-              <h2 className="text-lg font-semibold">{customer?.petName || 'Mascota'}</h2>
-              <p className="text-sm text-primary-100">
-                {customer?.petSpecies} {customer?.petBreed && `• ${customer.petBreed}`} | {customer?.name}
-              </p>
+        {(() => {
+          const customerPets = normalizePets(customer)
+          const currentPet = customerPets[selectedPetIndex] || customerPets[0] || {}
+          return (
+            <div className="border-b rounded-t-xl">
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-t-xl">
+                <div className="flex items-center gap-3">
+                  <PawPrint className="w-6 h-6" />
+                  <div>
+                    <h2 className="text-lg font-semibold">{currentPet.name || 'Mascota'}</h2>
+                    <p className="text-sm text-primary-100">
+                      {currentPet.species} {currentPet.breed && `• ${currentPet.breed}`} | {customer?.name}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {customerPets.length > 1 && (
+                <div className="flex gap-1 px-4 py-2 bg-gray-50 overflow-x-auto">
+                  {customerPets.map((pet, idx) => (
+                    <button
+                      key={pet.id || idx}
+                      onClick={() => setSelectedPetIndex(idx)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        idx === selectedPetIndex
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <PawPrint className="w-3 h-3" />
+                      {pet.name}
+                      {pet.species && <span className="opacity-75">({pet.species})</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+          )
+        })()}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
