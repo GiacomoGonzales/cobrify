@@ -2158,6 +2158,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
   const ignoreStock = business?.catalogIgnoreStock === true
+  const groupByCategory = business?.catalogGroupByCategory === true
   const isDark = business?.catalogTheme === 'dark'
   const isCafe = business?.catalogTheme === 'cafe'
 
@@ -2686,6 +2687,109 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </button>
           </div>
         </div>
+
+        {/* Vista agrupada por categoría con scroll horizontal */}
+        {groupByCategory && !selectedCategory && !searchQuery && filteredProducts.length > 0 && rootCategories.length > 0 && (
+          <div className="space-y-8 mb-10">
+            {rootCategories.map(category => {
+              const categoryIds = [category.id, ...categories.filter(c => c.parentId === category.id).map(c => c.id)]
+              const categoryProducts = filteredProducts.filter(p => categoryIds.includes(p.category))
+              if (categoryProducts.length === 0) return null
+              return (
+                <div key={category.id}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className={`text-lg font-bold ${thText}`}>{category.name}</h2>
+                    <button
+                      onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
+                      className="text-sm font-medium hover:opacity-80 transition-opacity"
+                      style={{ color: business?.catalogColor || '#10B981' }}
+                    >
+                      Ver todo →
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto scrollbar-hide -mx-4 px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    <div className="flex gap-4">
+                      {categoryProducts.slice(0, 10).map(product => {
+                        const cartQty = getCartQuantity(product.id)
+                        const outOfStock = isProductOutOfStock(product, ignoreStock)
+                        const priceRange = getProductPriceRange(product, business)
+                        return (
+                          <div
+                            key={product.id}
+                            className={`flex-shrink-0 w-40 md:w-48 rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                            onClick={() => setSelectedProduct(product)}
+                          >
+                            <div className="relative bg-gray-100 overflow-hidden aspect-square">
+                              {product.imageUrl ? (
+                                <img
+                                  src={optimizeImageUrl(product.imageUrl, 'thumbnail')}
+                                  alt={product.name}
+                                  loading="lazy"
+                                  className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                                />
+                              ) : (
+                                <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
+                                  <Package className="w-10 h-10 text-gray-300" />
+                                </div>
+                              )}
+                              {outOfStock && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-xs font-bold shadow-lg">AGOTADO</span>
+                                </div>
+                              )}
+                              {cartQty > 0 && !outOfStock && (
+                                <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
+                                  {cartQty}
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-3">
+                              <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
+                              <div className="flex items-center justify-between">
+                                {showPrices && !product.catalogHidePrice ? (
+                                  <span className={`text-sm font-bold ${thText} ${outOfStock ? 'line-through text-gray-400' : ''}`}>
+                                    {product.hasVariants && product.variants?.length > 0
+                                      ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                                      : `S/ ${product.price?.toFixed(2)}`
+                                    }
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-500">Consultar</span>
+                                )}
+                                {!outOfStock && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                                        setSelectedProduct(product)
+                                      } else {
+                                        addToCart(product)
+                                      }
+                                    }}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity text-white hover:opacity-80"
+                                    style={{ backgroundColor: business?.catalogColor || '#10B981' }}
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {/* Separador antes de mostrar todos */}
+            <div className="flex items-center gap-4 pt-2">
+              <div className={`flex-1 border-t ${thBorderColor}`} />
+              <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
+              <div className={`flex-1 border-t ${thBorderColor}`} />
+            </div>
+          </div>
+        )}
 
         {filteredProducts.length === 0 ? (
           <div className="text-center py-16">

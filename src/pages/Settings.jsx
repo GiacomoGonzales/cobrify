@@ -264,6 +264,7 @@ export default function Settings() {
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
   const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
+  const [catalogGroupByCategory, setCatalogGroupByCategory] = useState(false)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -893,6 +894,7 @@ export default function Settings() {
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
         setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
+        setCatalogGroupByCategory(businessData.catalogGroupByCategory || false)
         if (businessData.businessHours) {
           setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
         }
@@ -5767,6 +5769,18 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Agrupar productos por categoría</span>
+                            <span className="text-xs text-gray-500">Muestra secciones por categoría con scroll horizontal, seguido de todos los productos más abajo</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogGroupByCategory}
+                            onChange={(e) => setCatalogGroupByCategory(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
                       </div>
 
                       {/* Tipos de pedido en menú digital (solo restaurante) */}
@@ -5861,6 +5875,7 @@ export default function Settings() {
                         catalogShowAllPrices,
                         catalogAllowTakeaway,
                         catalogAllowDelivery,
+                        catalogGroupByCategory,
                         businessHours,
                         updatedAt: serverTimestamp(),
                       }, { merge: true })
