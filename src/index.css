@@ -151,6 +151,29 @@
     background: rgba(0, 0, 0, 0.25);
   }
 
+  /* Catalog scrollbar - sutil, delgada */
+  .catalog-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  }
+
+  .catalog-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .catalog-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .catalog-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 9999px;
+  }
+
+  .catalog-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
   /* Animation classes */
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;

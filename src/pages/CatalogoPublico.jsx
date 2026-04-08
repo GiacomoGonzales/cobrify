@@ -2596,8 +2596,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {rootCategories.length > 0 && (
         <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30`}>
           <div className="max-w-7xl mx-auto px-4">
-            {/* Categorías raíz */}
-            <div className="flex overflow-x-auto gap-2 py-3 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+            {/* Categorías raíz - móvil: 1 fila scroll edge-to-edge, desktop: wrap centrado */}
+            <div className="flex md:flex-wrap md:justify-center overflow-x-auto md:overflow-x-visible gap-2 py-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
               <button
                 onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
