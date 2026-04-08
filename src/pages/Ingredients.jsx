@@ -114,6 +114,7 @@ export default function Ingredients() {
     supplier: '',
     trackStock: true
   })
+  const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
 
 
   useEffect(() => {
@@ -218,11 +219,29 @@ export default function Ingredients() {
       const businessId = getBusinessId()
 
       // Convertir strings vacíos a 0
+      // Construir warehouseStocks desde los inputs por almacén
+      const activeWarehouses = warehouses.filter(w => w.isActive !== false)
+      let warehouseStocks = []
+      let totalStock = 0
+
+      if (activeWarehouses.length > 0 && formData.trackStock) {
+        warehouseStocks = activeWarehouses
+          .filter(w => parseFloat(warehouseInitialStocks[w.id]) > 0)
+          .map(w => {
+            const qty = parseFloat(warehouseInitialStocks[w.id]) || 0
+            totalStock += qty
+            return { warehouseId: w.id, stock: qty, minStock: 0 }
+          })
+      } else {
+        totalStock = parseFloat(formData.currentStock) || 0
+      }
+
       const dataToSave = {
         ...formData,
-        currentStock: parseFloat(formData.currentStock) || 0,
+        currentStock: totalStock,
         minimumStock: parseFloat(formData.minimumStock) || 0,
-        averageCost: parseFloat(formData.averageCost) || 0
+        averageCost: parseFloat(formData.averageCost) || 0,
+        ...(warehouseStocks.length > 0 && { warehouseStocks })
       }
 
       const result = await createIngredient(businessId, dataToSave)
@@ -344,6 +363,7 @@ export default function Ingredients() {
       trackStock: true
     })
     setSelectedIngredient(null)
+    setWarehouseInitialStocks({})
   }
 
   // Exportar ingredientes a Excel
@@ -844,17 +864,42 @@ export default function Ingredients() {
                   setFormData({ ...formData, minimumStock: value })
                 }}
               />
-              <Input
-                label="Stock Inicial"
-                type="text"
-                inputMode="decimal"
-                placeholder="Ej: 50"
-                value={formData.currentStock}
-                onChange={e => {
-                  const value = e.target.value.replace(',', '.')
-                  setFormData({ ...formData, currentStock: value })
-                }}
-              />
+              {warehouses.filter(w => w.isActive !== false).length > 0 && !showEditModal ? (
+                <div className="col-span-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Stock Inicial por Almacén</label>
+                  <div className="space-y-2">
+                    {warehouses.filter(w => w.isActive !== false).map(w => (
+                      <div key={w.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                        <span className="text-sm text-gray-700 flex-1">{w.name}</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={warehouseInitialStocks[w.id] || ''}
+                          onChange={e => {
+                            const value = e.target.value.replace(',', '.')
+                            setWarehouseInitialStocks(prev => ({ ...prev, [w.id]: value }))
+                          }}
+                          className="w-24 px-3 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Input
+                  label="Stock Inicial"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ej: 50"
+                  value={formData.currentStock}
+                  onChange={e => {
+                    const value = e.target.value.replace(',', '.')
+                    setFormData({ ...formData, currentStock: value })
+                  }}
+                />
+              )}
             </div>
           )}
 

@@ -300,16 +300,36 @@ export const getStockMovements = async (businessId, filters = {}) => {
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
     let movements = []
 
-    // Si se filtra por producto, usar query separada sin orderBy para evitar índice compuesto
-    if (filters.productId) {
+    // Si se filtra por producto o ingrediente, usar query separada sin orderBy para evitar índice compuesto
+    const filterProductId = filters.productId
+    const filterIngredientId = filters.ingredientId
+    if (filterProductId || filterIngredientId) {
+      const filterId = filterIngredientId || filterProductId
+
+      // Buscar por productId
       const productQuery = query(
         movementsRef,
-        where('productId', '==', filters.productId)
+        where('productId', '==', filterId)
       )
       const snapshot = await getDocs(productQuery)
       snapshot.forEach((doc) => {
         movements.push({ id: doc.id, ...doc.data() })
       })
+
+      // Si es ingrediente, también buscar por ingredientId (algunos movimientos usan este campo)
+      if (filterIngredientId) {
+        const ingredientQuery = query(
+          movementsRef,
+          where('ingredientId', '==', filterId)
+        )
+        const ingSnapshot = await getDocs(ingredientQuery)
+        const existingIds = new Set(movements.map(m => m.id))
+        ingSnapshot.forEach((doc) => {
+          if (!existingIds.has(doc.id)) {
+            movements.push({ id: doc.id, ...doc.data() })
+          }
+        })
+      }
 
       // Ordenar en cliente
       movements.sort((a, b) => {

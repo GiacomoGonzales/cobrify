@@ -2938,28 +2938,36 @@ export default function POS() {
   }
 
 
+  const checkoutGuardRef = React.useRef(false)
   const handleCheckout = async () => {
     if (!user?.uid) return
-    const businessId = getBusinessId()
-
-    // Auto-actualizar fecha de emisión a la fecha actual del sistema
-    // (evita que quede congelada si el usuario no cerró el navegador por días)
-    const currentDate = getLocalDateString()
-    const emissionDateToUse = businessSettings?.allowCustomEmissionDate ? emissionDate : currentDate
-    if (emissionDate !== emissionDateToUse) {
-      setEmissionDate(emissionDateToUse)
-    }
-
-    // Validar caja diaria abierta si el setting lo requiere
+    if (isProcessing || checkoutGuardRef.current) return
+    // Validaciones rápidas (antes de bloquear UI)
     if (companySettings?.requireOpenCashRegister && !cashRegisterOpen) {
       toast.error('Debe abrir la caja diaria antes de emitir ventas')
       return
     }
-
-    // Validar carrito no vacío
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
       return
+    }
+
+    checkoutGuardRef.current = true
+    setIsProcessing(true)
+
+    // Helper para abortar validación y desbloquear UI
+    const abortCheckout = (msg, opts) => {
+      toast.error(msg, opts)
+      setIsProcessing(false); checkoutGuardRef.current = false
+    }
+
+    const businessId = getBusinessId()
+
+    // Auto-actualizar fecha de emisión a la fecha actual del sistema
+    const currentDate = getLocalDateString()
+    const emissionDateToUse = businessSettings?.allowCustomEmissionDate ? emissionDate : currentDate
+    if (emissionDate !== emissionDateToUse) {
+      setEmissionDate(emissionDateToUse)
     }
 
     // Validar stock de ingredientes de recetas (solo si no permite venta sin stock)
@@ -2999,27 +3007,26 @@ export default function POS() {
           .map(([name, data]) => `${name}: necesitas ${data.needed.toFixed(2)} ${data.unit}, tienes ${data.available.toFixed(2)}`)
           .join('\n')
 
-        toast.error(`Stock insuficiente de ingredientes:\n${missingList}`, { duration: 6000 })
+        abortCheckout(`Stock insuficiente de ingredientes:\n${missingList}`, { duration: 6000 })
         return
       }
     }
 
     // Validar consistencia del modo edición
-    // Si editingInvoiceId está definido pero editingInvoiceData no, hay un problema de estado
     if (editingInvoiceId && !editingInvoiceData) {
       console.error('⚠️ Estado inconsistente: editingInvoiceId definido pero editingInvoiceData es null')
-      toast.error('Error de estado. Por favor, recarga la página e intenta nuevamente.')
+      abortCheckout('Error de estado. Por favor, recarga la página e intenta nuevamente.')
       return
     }
 
     // Si es factura, validar datos de RUC
     if (documentType === 'factura') {
       if (!customerData.documentNumber || customerData.documentNumber.length !== 11) {
-        toast.error('Las facturas requieren un RUC válido (11 dígitos)')
+        abortCheckout('Las facturas requieren un RUC válido (11 dígitos)')
         return
       }
       if (!customerData.businessName) {
-        toast.error('La razón social es requerida para facturas')
+        abortCheckout('La razón social es requerida para facturas')
         return
       }
     }
@@ -3031,7 +3038,7 @@ export default function POS() {
         bnAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')?.accountNumber
       }
       if (!bnAccount) {
-        toast.error('Para emitir con detraccion debes configurar tu cuenta del Banco de la Nacion en Ajustes > Cuentas bancarias (tipo "detracciones")')
+        abortCheckout('Para emitir con detraccion debes configurar tu cuenta del Banco de la Nacion en Ajustes > Cuentas bancarias (tipo "detracciones")')
         return
       }
     }
@@ -3039,39 +3046,38 @@ export default function POS() {
     // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT)
     if (documentType === 'boleta' && amounts.total > 700) {
       if (!customerData.documentNumber) {
-        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren documento del cliente')
+        abortCheckout('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren documento del cliente')
         return
       }
       if (customerData.documentType === ID_TYPES.DNI && customerData.documentNumber.length !== 8) {
-        toast.error('El DNI debe tener 8 dígitos')
+        abortCheckout('El DNI debe tener 8 dígitos')
         return
       }
       if (customerData.documentType === ID_TYPES.CE && customerData.documentNumber.length < 9) {
-        toast.error('El Carnet de Extranjería debe tener al menos 9 caracteres')
+        abortCheckout('El Carnet de Extranjería debe tener al menos 9 caracteres')
         return
       }
       if (!customerData.name || customerData.name.trim() === '') {
-        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el nombre completo del cliente')
+        abortCheckout('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el nombre completo del cliente')
         return
       }
     }
 
-    // Si es boleta, validar datos mínimos (opcional, puede ser cliente general)
+    // Si es boleta, validar datos mínimos
     if (documentType === 'boleta' && customerData.documentNumber) {
-      // Validar según el tipo de documento seleccionado
       if (customerData.documentType === ID_TYPES.RUC) {
         if (customerData.documentNumber.length !== 11) {
-          toast.error('El RUC debe tener 11 dígitos')
+          abortCheckout('El RUC debe tener 11 dígitos')
           return
         }
       } else if (customerData.documentType === ID_TYPES.DNI) {
         if (customerData.documentNumber.length !== 8) {
-          toast.error('El DNI debe tener 8 dígitos')
+          abortCheckout('El DNI debe tener 8 dígitos')
           return
         }
       } else if (customerData.documentType === ID_TYPES.CE) {
         if (customerData.documentNumber.length < 9) {
-          toast.error('El Carnet de Extranjería debe tener al menos 9 caracteres')
+          abortCheckout('El Carnet de Extranjería debe tener al menos 9 caracteres')
           return
         }
       }
@@ -3089,7 +3095,7 @@ export default function POS() {
     // EXCEPCIÓN: Si es venta al crédito, no requiere pago inmediato
     // EXCEPCIÓN: Si hidePaymentMethods está activo, se asume pago completo en efectivo
     if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay) {
-      toast.error(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
+      abortCheckout(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
 
@@ -3123,11 +3129,9 @@ export default function POS() {
     // Validar que haya al menos un método de pago
     // EXCEPCIÓN: Si es venta al crédito, no requiere método de pago
     if (!isCreditSale && allPayments.length === 0) {
-      toast.error('Debes seleccionar al menos un método de pago')
+      abortCheckout('Debes seleccionar al menos un método de pago')
       return
     }
-
-    setIsProcessing(true)
 
     try {
       // MODO DEMO: Simular venta sin guardar en Firebase
@@ -3292,7 +3296,7 @@ export default function POS() {
         setDiscountAmount('')
         setDiscountPercentage('')
 
-        setIsProcessing(false)
+        setIsProcessing(false); checkoutGuardRef.current = false
         return
       }
 
@@ -3538,7 +3542,7 @@ export default function POS() {
         // Solo permitir notas de venta en modo offline (no requieren SUNAT)
         if (documentType === 'factura' || documentType === 'boleta') {
           toast.warning('Sin conexión: Las facturas y boletas requieren conexión a SUNAT. Puedes crear una Nota de Venta.', 5000)
-          setIsProcessing(false)
+          setIsProcessing(false); checkoutGuardRef.current = false
           return
         }
 
@@ -3567,12 +3571,12 @@ export default function POS() {
           if (companySettings?.enableCustomerDisplay) {
             CustomerDisplay.showCompleted(amounts.total, `OFFLINE-${offlineId}`, documentType)
           }
-          setIsProcessing(false)
+          setIsProcessing(false); checkoutGuardRef.current = false
           return
         } catch (offlineError) {
           console.error('❌ Error guardando venta offline:', offlineError)
           toast.error('Error al guardar la venta localmente')
-          setIsProcessing(false)
+          setIsProcessing(false); checkoutGuardRef.current = false
           return
         }
       }
@@ -3992,13 +3996,17 @@ export default function POS() {
                 }
               }
 
-              // 4.5. Descontar ingredientes del inventario (para restaurantes)
+              // 4.5. Descontar ingredientes del inventario
+              // - Recetas con deductOnSale=true (default en restaurantes): descontar al vender
+              // - Recetas con deductOnSale=false (producción): NO descontar, ya se descontó al producir
               for (const item of bgCart) {
                 if (item.isCustom) continue
                 try {
                   const recipeResult = await getRecipeByProductId(businessId, item.id)
                   if (recipeResult.success && recipeResult.data) {
                     const recipe = recipeResult.data
+                    // Si deductOnSale es false, los ingredientes se manejan por producción
+                    if (recipe.deductOnSale === false) continue
                     const ingredientsToDeduct = recipe.ingredients.map(ing => ({
                       ...ing,
                       quantity: ing.quantity * item.quantity
@@ -4177,7 +4185,7 @@ export default function POS() {
       console.error('Error al procesar venta:', error)
       toast.error(error.message || 'Error al procesar la venta. Inténtalo nuevamente.')
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false); checkoutGuardRef.current = false
     }
   }
 

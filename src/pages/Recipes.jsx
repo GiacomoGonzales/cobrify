@@ -78,7 +78,8 @@ export default function Recipes() {
     portions: 1,
     preparationTime: 0,
     instructions: '',
-    ingredients: []
+    ingredients: [],
+    deductOnSale: businessMode === 'restaurant'
   })
 
   // Ingredient form
@@ -403,7 +404,8 @@ export default function Recipes() {
       portions: recipe.portions,
       preparationTime: recipe.preparationTime || 0,
       instructions: recipe.instructions || '',
-      ingredients: recipe.ingredients
+      ingredients: recipe.ingredients,
+      deductOnSale: recipe.deductOnSale !== undefined ? recipe.deductOnSale : businessMode === 'restaurant'
     })
     setShowEditModal(true)
     setProductSearch(recipe.productName || '')
@@ -416,7 +418,8 @@ export default function Recipes() {
       portions: 1,
       preparationTime: 0,
       instructions: '',
-      ingredients: []
+      ingredients: [],
+      deductOnSale: businessMode === 'restaurant'
     })
     setIngredientForm({
       ingredientId: '',
@@ -959,6 +962,24 @@ export default function Recipes() {
           </div>
 
           {/* Instructions */}
+          {/* Descontar al vender */}
+          <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-colors">
+            <div className="flex-1">
+              <span className="text-sm font-medium text-gray-900 block">Descontar insumos al vender</span>
+              <span className="text-xs text-gray-500">
+                {formData.deductOnSale
+                  ? 'Los insumos se restan del inventario cada vez que se vende este producto'
+                  : 'Los insumos solo se restan al producir (página Producción)'}
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={formData.deductOnSale}
+              onChange={e => setFormData({ ...formData, deductOnSale: e.target.checked })}
+              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+            />
+          </label>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {texts.instructionsLabel}

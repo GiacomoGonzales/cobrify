@@ -885,6 +885,7 @@ export default function Inventory() {
         toast.success(`Producción ${modeLabel}: ${quantity} unidades de ${productionProduct.name}`)
         closeProductionModal()
         loadProducts()
+        loadIngredients()
       } else {
         toast.error(result.error || 'Error al ejecutar producción')
       }
@@ -4132,7 +4133,10 @@ export default function Inventory() {
                           }`}
                         >
                           {movement.quantity > 0 ? '+' : ''}
-                          {movement.quantity}
+                          {Math.round(movement.quantity * 100) / 100}
+                          {historyProduct?.isIngredient && historyProduct?.purchaseUnit && (
+                            <span className="text-xs font-normal text-gray-400 ml-1">{historyProduct.purchaseUnit}</span>
+                          )}
                         </span>
                       </div>
 
@@ -4179,10 +4183,10 @@ export default function Inventory() {
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="w-[15%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                      <th className="w-[14%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                      <th className="w-[18%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
-                      <th className="w-[9%] px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
-                      <th className="w-[44%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                      <th className="w-[13%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                      <th className="w-[17%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
+                      <th className="w-[15%] px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
+                      <th className="w-[40%] px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -4219,8 +4223,11 @@ export default function Inventory() {
                           </td>
                           <td className="px-3 py-2 text-center">
                             <span className={`font-bold ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                              {movement.quantity > 0 ? '+' : ''}{Math.round(movement.quantity * 100) / 100}
                             </span>
+                            {historyProduct?.isIngredient && historyProduct?.purchaseUnit && (
+                              <span className="text-xs text-gray-400 ml-1">{historyProduct.purchaseUnit}</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <p className="text-xs text-gray-600 whitespace-normal break-words line-clamp-3">
@@ -4242,9 +4249,12 @@ export default function Inventory() {
           {/* Resumen de movimientos */}
           {!isLoadingHistory && productMovements.length > 0 && (() => {
             const stockFromMovements = productMovements.reduce((sum, m) => sum + (m.quantity || 0), 0)
+            const stockUnit = historyProduct?.isIngredient ? (historyProduct?.purchaseUnit || 'und') : 'und'
             const currentStock = historyProduct?.hasVariants && historyProduct.variants?.length > 0
               ? historyProduct.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-              : (historyProduct?.stock || 0)
+              : historyProduct?.warehouseStocks?.length > 0
+                ? historyProduct.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+                : (historyProduct?.stock || historyProduct?.currentStock || 0)
             const hasDiscrepancy = Math.abs(stockFromMovements - currentStock) >= 1
 
             return (
@@ -4257,21 +4267,21 @@ export default function Inventory() {
                   <div className="bg-green-50 p-3 rounded-lg text-center">
                     <p className="text-xs text-gray-600">Entradas</p>
                     <p className="text-lg font-bold text-green-600">
-                      +{productMovements.filter(m => m.quantity > 0).reduce((sum, m) => sum + m.quantity, 0)}
+                      +{Math.round(productMovements.filter(m => m.quantity > 0).reduce((sum, m) => sum + m.quantity, 0) * 100) / 100}
                     </p>
                     <p className="text-xs text-gray-500">{productMovements.filter(m => m.quantity > 0).length} mov.</p>
                   </div>
                   <div className="bg-red-50 p-3 rounded-lg text-center">
                     <p className="text-xs text-gray-600">Salidas</p>
                     <p className="text-lg font-bold text-red-600">
-                      {productMovements.filter(m => m.quantity < 0).reduce((sum, m) => sum + m.quantity, 0)}
+                      {Math.round(productMovements.filter(m => m.quantity < 0).reduce((sum, m) => sum + m.quantity, 0) * 100) / 100}
                     </p>
                     <p className="text-xs text-gray-500">{productMovements.filter(m => m.quantity < 0).length} mov.</p>
                   </div>
                   <div className="bg-blue-50 p-3 rounded-lg text-center">
                     <p className="text-xs text-gray-600">Balance</p>
                     <p className={`text-lg font-bold ${stockFromMovements >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {stockFromMovements >= 0 ? '+' : ''}{stockFromMovements}
+                      {stockFromMovements >= 0 ? '+' : ''}{Math.round(stockFromMovements * 100) / 100} <span className="text-xs font-normal text-gray-500">{stockUnit}</span>
                     </p>
                   </div>
                 </div>
@@ -4285,7 +4295,7 @@ export default function Inventory() {
                           Stock desincronizado
                         </p>
                         <p className="text-xs text-yellow-700">
-                          Stock actual: <span className="font-bold">{currentStock}</span> — Según movimientos: <span className="font-bold">{stockFromMovements}</span>
+                          Stock actual: <span className="font-bold">{currentStock} {stockUnit}</span> — Según movimientos: <span className="font-bold">{stockFromMovements} {stockUnit}</span>
                         </p>
                       </div>
                     </div>
