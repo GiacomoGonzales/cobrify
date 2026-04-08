@@ -227,6 +227,7 @@ export default function Products() {
   const [trackSerials, setTrackSerials] = useState(false) // Control de N° de serie
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
+  const [catalogComparePrice, setCatalogComparePrice] = useState('') // Precio tachado en catálogo
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({}) // Stock inicial por almacén { warehouseId: quantity }
 
@@ -485,6 +486,7 @@ export default function Products() {
     setTrackExpiration(false)
     setCatalogVisible(false)
     setCatalogHidePrice(false)
+    setCatalogComparePrice('')
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -598,6 +600,7 @@ export default function Products() {
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
     setCatalogHidePrice(product.catalogHidePrice || false)
+    setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
 
     // Load product image if exists
     setProductImage(null)
@@ -695,6 +698,7 @@ export default function Products() {
     setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
     setCatalogVisible(product.catalogVisible || false)
     setCatalogHidePrice(product.catalogHidePrice || false)
+    setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
 
     // No copiar la imagen (el usuario puede agregarla manualmente)
     setProductImage(null)
@@ -837,6 +841,7 @@ export default function Products() {
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
         catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
+        catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null, // Precio tachado en catálogo
         // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
         ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
         // Product location (works in all modes when enabled)
@@ -4169,6 +4174,23 @@ export default function Products() {
                   error={errors.price?.message}
                   {...register('price')}
                 />
+              )}
+
+              {/* Precio antes (tachado) - solo si está visible en catálogo */}
+              {catalogVisible && !hasVariants && !catalogHidePrice && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio antes</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={catalogComparePrice}
+                    onChange={e => setCatalogComparePrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Se muestra tachado en el catálogo</p>
+                </div>
               )}
 
               {/* Precios adicionales - solo si está habilitado en Settings y NO tiene variantes */}

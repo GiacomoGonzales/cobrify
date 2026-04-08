@@ -198,6 +198,7 @@ const ProductFormModal = ({
   const [trackExpiration, setTrackExpiration] = useState(false)
   const [trackSerials, setTrackSerials] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
+  const [catalogComparePrice, setCatalogComparePrice] = useState('')
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
   const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (isIgvExempt ? 'exempt' : 'standard')
   const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : '10')
@@ -270,6 +271,7 @@ const ProductFormModal = ({
       setTrackExpiration(initialData.trackExpiration || false)
       setTrackSerials(initialData.trackSerials || false)
       setCatalogVisible(initialData.catalogVisible || false)
+      setCatalogComparePrice(initialData.catalogComparePrice?.toString() || '')
       setTaxAffectation(initialData.taxAffectation || '10')
       setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
       setPresentations(initialData.presentations || [])
@@ -473,6 +475,7 @@ const ProductFormModal = ({
       trackExpiration,
       trackSerials,
       catalogVisible,
+      catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null,
       taxAffectation,
       ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }),
       presentations: showPresentations ? presentations : [],

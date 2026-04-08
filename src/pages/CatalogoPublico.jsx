@@ -531,6 +531,9 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <div className="flex items-center justify-between mb-6">
             {showPrices ? (
               <div>
+                {product.catalogComparePrice > 0 && (
+                  <span className="text-sm line-through text-gray-400">S/ {product.catalogComparePrice.toFixed(2)}</span>
+                )}
                 {(() => {
                   const showAllPrices = business?.catalogShowAllPrices !== false
                   const minWholesale = business?.catalogWholesaleMinQty || 0
@@ -2747,12 +2750,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
                               <div className="flex items-center justify-between">
                                 {showPrices && !product.catalogHidePrice ? (
-                                  <span className={`text-sm font-bold ${thText} ${outOfStock ? 'line-through text-gray-400' : ''}`}>
-                                    {product.hasVariants && product.variants?.length > 0
-                                      ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                                      : `S/ ${product.price?.toFixed(2)}`
-                                    }
-                                  </span>
+                                  <div className={outOfStock ? 'line-through text-gray-400' : ''}>
+                                    {product.catalogComparePrice > 0 && (
+                                      <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)} </span>
+                                    )}
+                                    <span className={`text-sm font-bold ${thText}`}>
+                                      {product.hasVariants && product.variants?.length > 0
+                                        ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                                        : `S/ ${product.price?.toFixed(2)}`
+                                      }
+                                    </span>
+                                  </div>
                                 ) : (
                                   <span className="text-xs text-gray-500">Consultar</span>
                                 )}
@@ -2855,6 +2863,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div className="flex items-center justify-between">
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
+                          {product.catalogComparePrice > 0 && (
+                            <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                          )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
                             const prices = getProductPrices(product, business)
@@ -2967,6 +2978,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div className="flex items-center justify-between mt-2">
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
+                          {product.catalogComparePrice > 0 && (
+                            <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                          )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
                             const prices = getProductPrices(product, business)
