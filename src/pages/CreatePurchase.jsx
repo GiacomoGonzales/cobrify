@@ -26,7 +26,7 @@ import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/serv
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
 import Modal from '@/components/ui/Modal'
-import { collection, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 // Helper function for legacy categories (used in ingredient logic)
@@ -1573,8 +1573,11 @@ export default function CreatePurchase() {
           if (!product) continue
 
           if (product.hasVariants && product.variants?.length > 0) {
-            // Producto con variantes: actualizar precio en cada variante
-            const updatedVariants = product.variants.map(v => {
+            // Producto con variantes: leer datos frescos de Firestore para no sobreescribir el stock
+            // que fue actualizado en el paso 3 por updateProductStockTransaction
+            const freshDoc = await getDoc(doc(db, 'businesses', businessId, 'products', productId))
+            const freshVariants = freshDoc.exists() ? (freshDoc.data().variants || product.variants) : product.variants
+            const updatedVariants = freshVariants.map(v => {
               const matchingItem = items.find(i => i.variantSku === v.sku)
               if (matchingItem) {
                 return {
