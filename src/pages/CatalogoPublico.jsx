@@ -2235,7 +2235,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       finalUnitPrice = product.price2
       finalPriceLabel = business.priceLabels?.price2 || 'Mayorista'
     } else if (hasWholesale && quantity < minWholesale) {
-      finalUnitPrice = product.price
+      finalUnitPrice = unitPrice || product.price
       finalPriceLabel = null
     }
 
@@ -2258,7 +2258,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             updatedPrice = product.price2
             updatedLabel = business.priceLabels?.price2 || 'Mayorista'
           } else {
-            updatedPrice = product.price
+            updatedPrice = unitPrice || product.price
             updatedLabel = null
           }
         }
@@ -2274,6 +2274,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         quantity,
         selectedModifiers,
         unitPrice: finalUnitPrice,
+        originalUnitPrice: unitPrice || product.price,
         priceLevelLabel: finalPriceLabel
       }]
     })
@@ -2294,7 +2295,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             updated.unitPrice = item.price2
             updated.priceLevelLabel = business.priceLabels?.price2 || 'Mayorista'
           } else {
-            updated.unitPrice = item.price
+            updated.unitPrice = item.originalUnitPrice || item.price
             updated.priceLevelLabel = null
           }
         }
