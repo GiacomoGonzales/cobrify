@@ -32,6 +32,8 @@ import {
   PanelLeftClose,
   PanelRightClose,
   BedDouble,
+  Pause,
+  Play,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -361,6 +363,10 @@ export default function POS() {
   const [isScanning, setIsScanning] = useState(false)
   const [expandedCart, setExpandedCart] = useState(false)
 
+  // Ventas en espera (hold/park)
+  const [heldSales, setHeldSales] = useState([])
+  const [showHeldSales, setShowHeldSales] = useState(false)
+
   // Sellers
   const [sellers, setSellers] = useState([])
   const [selectedSeller, setSelectedSeller] = useState(null)
@@ -658,6 +664,97 @@ export default function POS() {
     } catch (error) {
       console.error('Error al limpiar borrador:', error)
     }
+  }
+
+  // --- Ventas en espera (hold/park) ---
+  const getHeldSalesKey = () => `pos_held_sales_${getBusinessId()}_${user?.uid}`
+
+  // Cargar ventas en espera al iniciar
+  useEffect(() => {
+    if (!user?.uid) return
+    try {
+      const saved = localStorage.getItem(getHeldSalesKey())
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // Filtrar ventas con más de 24 horas
+        const maxAge = 24 * 60 * 60 * 1000
+        const valid = parsed.filter(s => Date.now() - (s.timestamp || 0) < maxAge)
+        setHeldSales(valid)
+        if (valid.length < parsed.length) {
+          localStorage.setItem(getHeldSalesKey(), JSON.stringify(valid))
+        }
+      }
+    } catch (e) {
+      console.error('Error al cargar ventas en espera:', e)
+    }
+  }, [user])
+
+  const saveHeldSales = (sales) => {
+    setHeldSales(sales)
+    try {
+      localStorage.setItem(getHeldSalesKey(), JSON.stringify(sales))
+    } catch (e) {
+      console.error('Error al guardar ventas en espera:', e)
+    }
+  }
+
+  const holdCurrentSale = () => {
+    if (cart.length === 0) return
+    if (heldSales.length >= 10) {
+      toast.error('Máximo 10 ventas en espera')
+      return
+    }
+    const label = customerData.name || customerData.businessName || `Venta ${heldSales.length + 1}`
+    const held = {
+      id: Date.now(),
+      label,
+      itemCount: cart.length,
+      total: amounts.total,
+      cart,
+      customerData,
+      selectedCustomer,
+      documentType,
+      payments,
+      discountAmount,
+      discountPercentage,
+      orderType,
+      selectedSeller,
+      generalNotes,
+      paymentType,
+      timestamp: Date.now(),
+    }
+    saveHeldSales([...heldSales, held])
+    clearCart()
+    toast.success(`Venta aparcada: ${label}`)
+  }
+
+  const restoreHeldSale = (heldId) => {
+    const sale = heldSales.find(s => s.id === heldId)
+    if (!sale) return
+    // Si hay items en el carrito actual, aparcar primero
+    if (cart.length > 0) {
+      holdCurrentSale()
+    }
+    setCart(sale.cart || [])
+    setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
+    setSelectedCustomer(sale.selectedCustomer || null)
+    setDocumentType(sale.documentType || companySettings?.defaultDocumentType || 'boleta')
+    setPayments(sale.payments || [{ method: getDefaultPaymentMethod(), amount: '' }])
+    setDiscountAmount(sale.discountAmount || '')
+    setDiscountPercentage(sale.discountPercentage || '')
+    setOrderType(sale.orderType || 'takeaway')
+    setSelectedSeller(sale.selectedSeller || null)
+    setGeneralNotes(sale.generalNotes || '')
+    setPaymentType(sale.paymentType || 'contado')
+    setSaleCompleted(false)
+    setLastInvoiceData(null)
+    saveHeldSales(heldSales.filter(s => s.id !== heldId))
+    setShowHeldSales(false)
+    toast.info(`Venta recuperada: ${sale.label}`)
+  }
+
+  const removeHeldSale = (heldId) => {
+    saveHeldSales(heldSales.filter(s => s.id !== heldId))
   }
 
   // Scroll to top when component mounts
@@ -5893,10 +5990,65 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
             <CardContent className={`flex-1 flex flex-col p-3 pt-0 xl:p-6 xl:pt-0 overflow-hidden min-w-0 ${expandedCart ? 'lg:!pt-4' : ''}`}>
               {/* Cart Items */}
-              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
-                <ShoppingCart className="w-3.5 h-3.5" />
-                Carrito de Compras
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  Carrito de Compras
+                </label>
+                <div className="flex items-center gap-1">
+                  {cart.length > 0 && !saleCompleted && (
+                    <button
+                      onClick={holdCurrentSale}
+                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary-600 transition-colors px-1.5 py-0.5 rounded hover:bg-gray-100"
+                      title="Aparcar venta"
+                    >
+                      <Pause className="w-3 h-3" />
+                      <span className="hidden sm:inline">Aparcar</span>
+                    </button>
+                  )}
+                  {heldSales.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowHeldSales(!showHeldSales)}
+                        className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary-600 transition-colors px-1.5 py-0.5 rounded hover:bg-gray-100"
+                        title="Ventas en espera"
+                      >
+                        <Play className="w-3 h-3" />
+                        <span className="hidden sm:inline">En espera</span>
+                        <span className="bg-primary-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
+                          {heldSales.length}
+                        </span>
+                      </button>
+                      {showHeldSales && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowHeldSales(false)} />
+                          <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-64 py-1">
+                            <p className="text-[10px] text-gray-400 uppercase tracking-wider px-3 py-1.5">Ventas en espera</p>
+                            {heldSales.map(sale => (
+                              <div key={sale.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 group">
+                                <button
+                                  onClick={() => restoreHeldSale(sale.id)}
+                                  className="flex-1 text-left min-w-0"
+                                >
+                                  <p className="text-xs font-medium text-gray-700 truncate">{sale.label}</p>
+                                  <p className="text-[10px] text-gray-400">{sale.itemCount} items · {formatCurrency(sale.total)}</p>
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeHeldSale(sale.id) }}
+                                  className="text-gray-300 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Eliminar"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Banner de venta completada */}
               {saleCompleted && (
