@@ -949,7 +949,7 @@ export const syncAllProductsStock = async (businessId, targetWarehouseId) => {
  * @param {string} productId - ID del producto a recalcular
  * @returns {Object} - { success, corrected, stockFromMovements, previousStock, byWarehouse }
  */
-export const recalculateStockFromMovements = async (businessId, productId) => {
+export const recalculateStockFromMovements = async (businessId, productId, isIngredient = false) => {
   try {
     // 1. Obtener almacenes para identificar el principal
     const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
@@ -961,16 +961,28 @@ export const recalculateStockFromMovements = async (businessId, productId) => {
 
     console.log('Almacén principal:', defaultWarehouseId, defaultWarehouse?.name)
 
-    // 2. Obtener todos los movimientos del producto
+    // 2. Obtener todos los movimientos del producto/ingrediente
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
     const q = query(movementsRef, where('productId', '==', productId))
     const snapshot = await getDocs(q)
+
+    const allDocs = [...snapshot.docs]
+
+    // Si es ingrediente, también buscar por ingredientId
+    if (isIngredient) {
+      const q2 = query(movementsRef, where('ingredientId', '==', productId))
+      const snapshot2 = await getDocs(q2)
+      const existingIds = new Set(allDocs.map(d => d.id))
+      snapshot2.docs.forEach(d => {
+        if (!existingIds.has(d.id)) allDocs.push(d)
+      })
+    }
 
     // 3. Sumar cantidades por almacén
     const stockByWarehouse = {}
     let totalFromMovements = 0
 
-    snapshot.docs.forEach(docSnap => {
+    allDocs.forEach(docSnap => {
       const mov = docSnap.data()
       const qty = mov.quantity || 0
       // Si no tiene warehouseId o es 'default', usar el almacén principal
@@ -989,15 +1001,16 @@ export const recalculateStockFromMovements = async (businessId, productId) => {
     console.log('Stock por almacén:', stockByWarehouse)
     console.log('Total desde movimientos:', totalFromMovements)
 
-    // 4. Leer producto actual
-    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    // 4. Leer producto/ingrediente actual
+    const collectionName = isIngredient ? 'ingredients' : 'products'
+    const productRef = doc(db, 'businesses', businessId, collectionName, productId)
     const productDoc = await getDoc(productRef)
     if (!productDoc.exists()) {
-      return { success: false, error: 'Producto no encontrado' }
+      return { success: false, error: isIngredient ? 'Ingrediente no encontrado' : 'Producto no encontrado' }
     }
 
     const product = productDoc.data()
-    const previousStock = product.stock || 0
+    const previousStock = isIngredient ? (product.currentStock || 0) : (product.stock || 0)
     const previousWarehouseStocks = product.warehouseStocks || []
     const previousWarehouseTotal = previousWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
@@ -1037,14 +1050,15 @@ export const recalculateStockFromMovements = async (businessId, productId) => {
 
     console.log('Nuevo warehouseStocks:', newWarehouseStocks)
 
-    // 6. Actualizar producto
+    // 6. Actualizar producto/ingrediente
+    const stockField = isIngredient ? 'currentStock' : 'stock'
     await updateDoc(productRef, {
-      stock: totalFromMovements,
+      [stockField]: totalFromMovements,
       warehouseStocks: newWarehouseStocks,
       updatedAt: serverTimestamp(),
     })
 
-    console.log('Producto actualizado con stock:', totalFromMovements)
+    console.log(`${isIngredient ? 'Ingrediente' : 'Producto'} actualizado con stock:`, totalFromMovements)
 
     return {
       success: true,

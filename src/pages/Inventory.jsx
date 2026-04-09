@@ -953,7 +953,7 @@ export default function Inventory() {
       console.log('Recalculando stock para:', historyProduct.id, historyProduct.name)
       console.log('Stock actual en modal:', historyProduct.stock)
 
-      const result = await recalculateStockFromMovements(businessId, historyProduct.id)
+      const result = await recalculateStockFromMovements(businessId, historyProduct.id, historyProduct.isIngredient)
       console.log('Resultado recalculo:', result)
 
       if (result.success) {

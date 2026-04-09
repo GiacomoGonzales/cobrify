@@ -692,6 +692,32 @@ Gracias por tu preferencia.`
               }
             }
           }
+
+          // Revertir ingredientes descontados por recetas con deductOnSale
+          try {
+            const { getRecipeByProductId } = await import('@/services/recipeService')
+            const { restoreIngredients } = await import('@/services/ingredientService')
+
+            for (const item of voidingInvoice.items) {
+              if (!item.productId || item.isCustom) continue
+              try {
+                const recipeResult = await getRecipeByProductId(businessId, item.productId)
+                if (recipeResult.success && recipeResult.data && recipeResult.data.deductOnSale !== false) {
+                  const recipe = recipeResult.data
+                  const ingredientsToRestore = recipe.ingredients.map(ing => ({
+                    ...ing,
+                    quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
+                  }))
+                  await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
+                  console.log(`✅ Ingredientes restaurados para ${item.name}`)
+                }
+              } catch (err) {
+                console.warn(`No se pudo restaurar ingredientes para ${item.name}:`, err)
+              }
+            }
+          } catch (err) {
+            console.warn('No se pudo cargar módulo de recetas/ingredientes:', err)
+          }
         }
 
         // Revertir métricas del vendedor si la venta tenía un vendedor asignado
@@ -887,6 +913,32 @@ Gracias por tu preferencia.`
                 console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
               }
             }
+          }
+
+          // Revertir ingredientes descontados por recetas con deductOnSale
+          try {
+            const { getRecipeByProductId } = await import('@/services/recipeService')
+            const { restoreIngredients } = await import('@/services/ingredientService')
+
+            for (const item of voidingSunatInvoice.items) {
+              if (!item.productId || item.isCustom) continue
+              try {
+                const recipeResult = await getRecipeByProductId(businessId, item.productId)
+                if (recipeResult.success && recipeResult.data && recipeResult.data.deductOnSale !== false) {
+                  const recipe = recipeResult.data
+                  const ingredientsToRestore = recipe.ingredients.map(ing => ({
+                    ...ing,
+                    quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
+                  }))
+                  await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
+                  console.log(`✅ Ingredientes restaurados para ${item.name}`)
+                }
+              } catch (err) {
+                console.warn(`No se pudo restaurar ingredientes para ${item.name}:`, err)
+              }
+            }
+          } catch (err) {
+            console.warn('No se pudo cargar módulo de recetas/ingredientes:', err)
           }
         }
 

@@ -4015,7 +4015,8 @@ export default function POS() {
                       businessId,
                       ingredientsToDeduct,
                       bgInvoiceId,
-                      item.name
+                      item.name,
+                      bgSelectedWarehouse?.id || null
                     )
                   }
                 } catch (error) {

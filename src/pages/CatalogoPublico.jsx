@@ -236,6 +236,31 @@ const getVariantPrices = (variant, business) => {
   return prices
 }
 
+// Imagen optimizada con blur placeholder para carga rápida
+function CatalogImage({ src, alt, className = '', size = 'card', priority = false }) {
+  const [loaded, setLoaded] = useState(false)
+  const optimizedSrc = optimizeImageUrl(src, size)
+  const blurSrc = optimizeImageUrl(src, 'blur')
+  const isCloudinary = src?.includes('res.cloudinary.com')
+
+  return (
+    <div className="relative w-full h-full">
+      {isCloudinary && !loaded && (
+        <img src={blurSrc} alt="" aria-hidden className={`absolute inset-0 w-full h-full object-cover scale-110 blur-sm ${className}`} />
+      )}
+      <img
+        src={optimizedSrc}
+        alt={alt}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchpriority={priority ? 'high' : undefined}
+        decoding={priority ? 'sync' : 'async'}
+        onLoad={() => setLoaded(true)}
+        className={`${className} transition-opacity duration-300 ${loaded || !isCloudinary ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </div>
+  )
+}
+
 // Modal de producto con soporte para modificadores
 function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false }) {
   const showPrices = globalShowPrices && !product?.catalogHidePrice
@@ -2724,10 +2749,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                           >
                             <div className="relative bg-gray-100 overflow-hidden aspect-square">
                               {product.imageUrl ? (
-                                <img
-                                  src={optimizeImageUrl(product.imageUrl, 'thumbnail')}
+                                <CatalogImage
+                                  src={product.imageUrl}
                                   alt={product.name}
-                                  loading="lazy"
+                                  size="thumbnail"
                                   className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                                 />
                               ) : (
@@ -2820,10 +2845,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
                     {product.imageUrl ? (
-                      <img
-                        src={optimizeImageUrl(product.imageUrl, 'card')}
+                      <CatalogImage
+                        src={product.imageUrl}
                         alt={product.name}
-                        loading="lazy"
+                        size="card"
+                        priority={index < 4}
                         className={`w-full h-auto object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
@@ -2933,10 +2959,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
                     {product.imageUrl ? (
-                      <img
-                        src={optimizeImageUrl(product.imageUrl, 'thumbnail')}
+                      <CatalogImage
+                        src={product.imageUrl}
                         alt={product.name}
-                        loading="lazy"
+                        size="thumbnail"
                         className={`w-full h-full object-cover ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (

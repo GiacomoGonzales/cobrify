@@ -40,9 +40,10 @@ export function optimizeImageUrl(url, size = 'card') {
   if (!url || !url.includes('res.cloudinary.com')) return url || ''
 
   const configs = {
-    thumbnail: 'c_fill,w_160,h_160,q_auto,f_auto',
-    card: 'c_limit,w_400,q_auto,f_auto',
-    detail: 'c_limit,w_800,q_auto,f_auto',
+    thumbnail: 'c_fill,w_200,h_200,q_auto:low,f_auto,dpr_auto',
+    card: 'c_limit,w_400,q_auto:eco,f_auto,dpr_auto',
+    detail: 'c_limit,w_800,q_auto,f_auto,dpr_auto',
+    blur: 'c_fill,w_40,h_40,q_10,f_auto,e_blur:500',
   }
 
   const transforms = configs[size] || configs.card

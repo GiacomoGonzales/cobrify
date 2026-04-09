@@ -510,7 +510,15 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
 
       let newStock
       let updatedWarehouseStocks = [...warehouseStocks]
-      const effectiveWarehouseId = warehouseId || ingredient.warehouseId
+      let effectiveWarehouseId = warehouseId || ingredient.warehouseId
+
+      // Si no hay warehouseId pero el ingrediente tiene warehouseStocks, usar el primer almacén con stock
+      if (!effectiveWarehouseId && warehouseStocks.length > 0) {
+        const warehouseWithStock = warehouseStocks.find(ws => (ws.stock || 0) >= quantityToDeduct)
+          || warehouseStocks.find(ws => (ws.stock || 0) > 0)
+          || warehouseStocks[0]
+        effectiveWarehouseId = warehouseWithStock.warehouseId
+      }
 
       if (effectiveWarehouseId && warehouseStocks.length > 0) {
         // Descontar del almacén específico
@@ -569,6 +577,84 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
     return { success: true }
   } catch (error) {
     console.error('Error al descontar ingredientes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Restaurar ingredientes al anular una venta (inverso de deductIngredients)
+ */
+export const restoreIngredients = async (businessId, ingredients, warehouseId = null) => {
+  try {
+    const batch = writeBatch(db)
+
+    for (const ingredient of ingredients) {
+      const isProduct = ingredient.ingredientType === 'product'
+      const collectionName = isProduct ? 'products' : 'ingredients'
+      const ref = doc(db, 'businesses', businessId, collectionName, ingredient.ingredientId)
+      const docSnap = await getDoc(ref)
+
+      if (!docSnap.exists()) {
+        console.warn(`${isProduct ? 'Producto' : 'Ingrediente'} ${ingredient.ingredientName} no encontrado para restaurar`)
+        continue
+      }
+
+      const data = docSnap.data()
+      if (!isProduct && data.trackStock === false) continue
+
+      const stockField = isProduct ? 'stock' : 'currentStock'
+      const currentStock = data[stockField] ?? data.currentStock ?? data.stock ?? 0
+      const warehouseStocks = data.warehouseStocks || []
+      const quantityToRestore = isProduct ? ingredient.quantity : convertUnit(ingredient.quantity, ingredient.unit, data.purchaseUnit)
+
+      let effectiveWarehouseId = warehouseId || ingredient.warehouseId
+      if (!effectiveWarehouseId && warehouseStocks.length > 0) {
+        effectiveWarehouseId = warehouseStocks[0].warehouseId
+      }
+
+      let newStock
+      let updatedWarehouseStocks = [...warehouseStocks]
+
+      if (effectiveWarehouseId && warehouseStocks.length > 0) {
+        const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === effectiveWarehouseId)
+        if (idx >= 0) {
+          updatedWarehouseStocks[idx] = {
+            ...updatedWarehouseStocks[idx],
+            stock: (updatedWarehouseStocks[idx].stock || 0) + quantityToRestore
+          }
+        } else {
+          updatedWarehouseStocks.push({ warehouseId: effectiveWarehouseId, stock: quantityToRestore, minStock: 0 })
+        }
+        newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      } else {
+        newStock = currentStock + quantityToRestore
+      }
+
+      const updateData = { [stockField]: newStock, updatedAt: Timestamp.now() }
+      if (warehouseStocks.length > 0 || updatedWarehouseStocks.length > 0) {
+        updateData.warehouseStocks = updatedWarehouseStocks
+      }
+      batch.update(ref, updateData)
+
+      // Movimiento de stock
+      const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+      batch.set(doc(movementsRef), {
+        ...(isProduct ? { productId: ingredient.ingredientId } : { ingredientId: ingredient.ingredientId }),
+        productId: ingredient.ingredientId,
+        productName: ingredient.ingredientName,
+        type: 'void_return',
+        quantity: quantityToRestore,
+        unit: isProduct ? 'unidades' : (data.purchaseUnit || ingredient.unit),
+        warehouseId: effectiveWarehouseId || null,
+        reason: 'Anulación de venta - restauración de insumo',
+        createdAt: Timestamp.now()
+      })
+    }
+
+    await batch.commit()
+    return { success: true }
+  } catch (error) {
+    console.error('Error al restaurar ingredientes:', error)
     return { success: false, error: error.message }
   }
 }
