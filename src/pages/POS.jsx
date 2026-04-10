@@ -6119,6 +6119,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   {item.batchExpiryDate && ` | Vence: ${formatBatchExpiry(item.batchExpiryDate)}`}
                                 </p>
                               )}
+                              {item.serialNumber && (
+                                <p className="text-xs text-blue-600 mt-0.5">
+                                  S/N: {item.serialNumber}
+                                </p>
+                              )}
                               {item.modifiers && item.modifiers.length > 0 && (
                                 <div className="mt-0.5">
                                   {item.modifiers.map((mod, idx) => (
