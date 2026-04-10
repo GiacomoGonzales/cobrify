@@ -376,6 +376,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             isNormalized: false,
             batchNumber,
             batchExpiryDate,
+            marca: product?.marca || item.marca || '',
+            laboratoryName: product?.laboratoryName || item.laboratoryName || '',
+            trackSerials: product?.trackSerials || false,
+            serials: product?.serials || [],
+            serialNumber: item.serialNumber || '',
           }
         }) || []
 
