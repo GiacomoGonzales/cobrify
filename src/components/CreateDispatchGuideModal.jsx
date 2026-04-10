@@ -2246,6 +2246,18 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
                     {/* Selección de número de serie */}
                     {item.trackSerials && item.productId && (() => {
+                      // Si ya viene un serialNumber pre-llenado (desde factura/boleta), mostrarlo como texto fijo
+                      if (item.serialNumber && referenceInvoice) {
+                        return (
+                          <div className="col-span-2">
+                            <label className="block text-xs text-gray-500 mb-0.5">N° de Serie</label>
+                            <span className="text-xs text-green-700 font-medium bg-green-50 border border-green-300 rounded px-2 py-1 block">
+                              S/N: {item.serialNumber}
+                            </span>
+                          </div>
+                        )
+                      }
+
                       const availableSerials = (item.serials || []).filter(s =>
                         s.status === 'available' && (!s.warehouseId || !selectedWarehouseId || s.warehouseId === selectedWarehouseId)
                       )
