@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -105,6 +105,7 @@ export default function DispatchGuides() {
   const [allProducts, setAllProducts] = useState([]) // Productos para PDF (marca, lab, SKU)
   const [selectedGuide, setSelectedGuide] = useState(null) // Guía seleccionada para ver detalles
   const [editingGuide, setEditingGuide] = useState(null) // Guía en edición
+  const [cloningGuide, setCloningGuide] = useState(null) // Guía para clonar
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -261,11 +262,13 @@ export default function DispatchGuides() {
   }
 
   const handleCreateGuide = () => {
+    setCloningGuide(null)
     setShowCreateModal(true)
   }
 
   const handleCloseModal = () => {
     setShowCreateModal(false)
+    setCloningGuide(null)
     loadGuides() // Recargar guías después de crear una
   }
 
@@ -1097,6 +1100,19 @@ export default function DispatchGuides() {
                     </button>
                   )}
 
+                  {/* Clonar guía - Disponible para cualquier estado */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      setCloningGuide(guide)
+                      setShowCreateModal(true)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-teal-50 flex items-center gap-3 text-teal-600"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Clonar guía</span>
+                  </button>
+
                   {/* Separador antes de acciones de edición */}
                   {guide.sunatStatus !== 'accepted' && (
                     <div className="border-t border-gray-100 my-1" />
@@ -1401,8 +1417,13 @@ export default function DispatchGuides() {
       {/* Create Guide Modal */}
       <CreateDispatchGuideModal
         isOpen={showCreateModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          setCloningGuide(null)
+          loadGuides()
+        }}
         selectedBranch={filterBranch !== 'all' && filterBranch !== 'main' ? branches.find(b => b.id === filterBranch) : null}
+        cloneData={cloningGuide}
       />
 
       {/* Edit Guide Modal */}

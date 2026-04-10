@@ -90,7 +90,7 @@ const getTomorrowDateString = () => {
   return getLocalDateString(1)
 }
 
-export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
+export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null, cloneData = null }) {
   const toast = useToast()
   const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
@@ -216,15 +216,15 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [isOpen])
 
-  // Inicializar fechas cuando se abre el modal (sin referenceInvoice)
+  // Inicializar fechas cuando se abre el modal (sin referenceInvoice ni cloneData)
   useEffect(() => {
-    if (isOpen && !referenceInvoice) {
+    if (isOpen && !referenceInvoice && !cloneData) {
       // Inicializar fecha de emisión con la fecha actual de Perú (hoy)
       setIssueDate(getLocalDateString(0))
       // Inicializar fecha de traslado para hoy (el usuario puede cambiarla)
       setTransferDate(getLocalDateString(0))
     }
-  }, [isOpen, referenceInvoice])
+  }, [isOpen, referenceInvoice, cloneData])
 
   // Cargar sucursales disponibles
   useEffect(() => {
@@ -516,6 +516,108 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [referenceInvoice])
 
+  // Pre-llenar datos cuando se clona una guía existente
+  useEffect(() => {
+    if (!cloneData || !isOpen) return
+
+    // Fechas: usar fecha actual (no la de la guía original)
+    setIssueDate(getLocalDateString(0))
+    setTransferDate(getLocalDateString(0))
+
+    // Datos básicos
+    setTransferReason(cloneData.transferReason || '01')
+    setTransportMode(cloneData.transportMode || '02')
+    setTransferDescription(cloneData.transferDescription || '')
+    setTotalWeight(cloneData.totalWeight ? String(cloneData.totalWeight) : '')
+    setWeightUnit(cloneData.weightUnit || 'KGM')
+    setIsM1LVehicle(cloneData.isM1LVehicle || false)
+    setAdditionalInfo(cloneData.additionalInfo || '')
+
+    // Destinatario
+    const recipient = cloneData.recipient || cloneData.customer || {}
+    setRecipientDocType(recipient.documentType || '6')
+    setRecipientDocNumber(recipient.documentNumber || '')
+    setRecipientName(recipient.name || '')
+    setRecipientAddress(recipient.address || '')
+    setRecipientEmail(recipient.email || '')
+    if (recipient.ubigeo && recipient.ubigeo.length === 6) {
+      setRecipientDepartment(recipient.ubigeo.substring(0, 2))
+      setRecipientProvince(recipient.ubigeo.substring(2, 4))
+      setRecipientDistrict(recipient.ubigeo.substring(4, 6))
+    } else {
+      setRecipientDepartment('')
+      setRecipientProvince('')
+      setRecipientDistrict('')
+    }
+
+    // Punto de partida
+    const origin = cloneData.origin || {}
+    setOriginAddress(origin.address || '')
+    setOriginDepartment(origin.department || '')
+    setOriginProvince(origin.province || '')
+    setOriginDistrict(origin.district || '')
+
+    // Punto de llegada
+    const destination = cloneData.destination || {}
+    setDestinationAddress(destination.address || '')
+    setDestinationDepartment(destination.department || '')
+    setDestinationProvince(destination.province || '')
+    setDestinationDistrict(destination.district || '')
+
+    // Transporte
+    const transport = cloneData.transport || {}
+    if (cloneData.transportMode === '02') {
+      // Transporte privado
+      const driver = transport.driver || cloneData.driver || {}
+      setDriverDocType(driver.documentType || '1')
+      setDriverDocNumber(driver.documentNumber || '')
+      setDriverName(driver.name || '')
+      setDriverLastName(driver.lastName || '')
+      setDriverLicense(driver.license || '')
+      const vehicle = transport.vehicle || cloneData.vehicle || {}
+      setVehiclePlate(vehicle.plate || '')
+      setVehicleAuthEntity(vehicle.authorizationEntity || '')
+      setVehicleAuthNumber(vehicle.authorizationNumber || '')
+    } else {
+      // Transporte público
+      const carrier = transport.carrier || cloneData.carrier || {}
+      setCarrierRuc(carrier.ruc || '')
+      setCarrierName(carrier.businessName || '')
+    }
+
+    // Items - clonar sin IDs de referencia a la guía original
+    const clonedItems = (cloneData.items || []).map((item, index) => ({
+      id: index + 1,
+      productId: item.productId || '',
+      code: item.code || '',
+      description: item.description || '',
+      searchTerm: item.description || '',
+      quantity: item.quantity || 0,
+      unit: item.unit || 'NIU',
+      sunatCode: item.sunatCode || '',
+      gtin: item.gtin || '',
+      subpCode: item.subpCode || '',
+      isNormalized: item.isNormalized || false,
+      batchNumber: item.batchNumber || '',
+      batchExpiryDate: item.batchExpiryDate || '',
+    }))
+    setItems(clonedItems)
+
+    // Documentos relacionados - NO copiar (la nueva guía no tiene la misma referencia)
+    setRelatedDocuments([])
+
+    // Sucursal y almacén
+    if (cloneData.branchId) {
+      setSelectedBranchId(cloneData.branchId)
+    }
+    if (cloneData.warehouseId) {
+      setSelectedWarehouseId(cloneData.warehouseId)
+    }
+
+    // Forzar envío manual (no automático)
+    setAutoSendToSunat(false)
+  }, [cloneData, isOpen])
+
   // Cargar productos cuando se abre el modal sin referencia (creación manual)
   useEffect(() => {
     if (isOpen && !referenceInvoice && productsList.length === 0) {
@@ -538,7 +640,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [isOpen, referenceInvoice])
 
-  // Cargar configuración de envío automático al abrir el modal
+  // Cargar configuración de envío automático al abrir el modal (no aplica para clonación)
   useEffect(() => {
     const loadAutoSendConfig = async () => {
       const businessId = getBusinessId()
@@ -554,10 +656,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       }
     }
 
-    if (isOpen) {
+    if (isOpen && !cloneData) {
       loadAutoSendConfig()
     }
-  }, [isOpen, getBusinessId])
+  }, [isOpen, getBusinessId, cloneData])
 
   // Actualizar dirección de origen/destino cuando cambia la sucursal seleccionada
   // En compras (isPurchase): la dirección de mi empresa va al DESTINO (punto de llegada)
@@ -1142,9 +1244,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              Guía de Remisión Electrónica
+              {cloneData ? 'Clonar Guía de Remisión' : 'Guía de Remisión Electrónica'}
             </h2>
-            <p className="text-sm text-gray-600">Guía Remitente</p>
+            <p className="text-sm text-gray-600">{cloneData ? `Basada en ${cloneData.number}` : 'Guía Remitente'}</p>
           </div>
         </div>
         <div className="text-right">
