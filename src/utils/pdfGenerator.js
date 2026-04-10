@@ -1248,6 +1248,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
 
+    // Línea de número de serie (productos con trackSerials)
+    let serialLine = item.serialNumber ? `S/N: ${item.serialNumber}` : null
+
     // Líneas de detalle farmacéutico/lotes (farmacia o retail con batch control)
     let pharmaLines = []
     if (hasBatchControl) {
@@ -1292,10 +1295,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       }
     }
 
-    const totalLines = descLines.length + pharmaLines.length
+    const totalLines = descLines.length + (serialLine ? 1 : 0) + pharmaLines.length
     const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6) * S
     const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
-    return { height: calculatedHeight, descLines, pharmaLines }
+    return { height: calculatedHeight, descLines, pharmaLines, serialLine }
   }
 
   // Calcular alturas de todos los items
@@ -1355,7 +1358,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   })
 
   for (let i = 0; i < items.length; i++) {
-    const { height: rowHeight, descLines, pharmaLines } = itemHeights[i]
+    const { height: rowHeight, descLines, pharmaLines, serialLine } = itemHeights[i]
 
     // Verificar si la fila cabe en la página actual, si no → nueva página
     if (dataRowY + rowHeight > currentPageBottomLimit) {
@@ -1417,12 +1420,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
 
-    // Líneas farmacéuticas debajo de la descripción
+    // Número de serie debajo de la descripción
+    let serialLinesCount = 0
+    if (serialLine) {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(80, 80, 80)
+      doc.text(serialLine, cols.desc + 4, descStartY + (descLines.length * lineHeight))
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...BLACK)
+      serialLinesCount = 1
+    }
+
+    // Líneas farmacéuticas debajo de la descripción y serial
     if (pharmaLines && pharmaLines.length > 0) {
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(6.5)
       doc.setTextColor(80, 100, 120) // Azul-gris
-      const pharmaStartY = descStartY + (descLines.length * lineHeight)
+      const pharmaStartY = descStartY + ((descLines.length + serialLinesCount) * lineHeight)
       pharmaLines.forEach((line, lineIdx) => {
         doc.text(line, cols.desc + 4, pharmaStartY + (lineIdx * lineHeight))
       })

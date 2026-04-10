@@ -922,6 +922,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           commands.push(ESCPOSCommands.text('Codigo: ' + convertSpanishText(item.code) + '\n'));
         }
 
+        // Número de serie si existe
+        if (item.serialNumber) {
+          commands.push(ESCPOSCommands.text('S/N: ' + convertSpanishText(item.serialNumber) + '\n'));
+        }
+
         // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
         if (itemObservations) {
           commands.push(ESCPOSCommands.text('  ' + itemObservations + '\n'));

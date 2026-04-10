@@ -7650,6 +7650,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 quantity: item.quantity,
                 price: item.unitPrice,
                 observations: item.observations,
+                ...(item.serialNumber && { serialNumber: item.serialNumber }),
               })),
               series: lastInvoiceData.series,
               number: lastInvoiceData.number,
