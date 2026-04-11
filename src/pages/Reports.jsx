@@ -406,6 +406,9 @@ export default function Reports() {
     }
 
     switch (dateRange) {
+      case 'today':
+        filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
         break
@@ -452,6 +455,11 @@ export default function Reports() {
       startDate = new Date(endDate.getTime() - duration)
     } else {
       switch (dateRange) {
+        case 'today':
+          // Ayer
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0)
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999)
+          break
         case 'week':
           startDate.setDate(now.getDate() - 14)
           endDate.setDate(now.getDate() - 7)
@@ -909,6 +917,15 @@ export default function Reports() {
           currentDate.setMonth(currentDate.getMonth() + 1)
         }
       }
+    } else if (dateRange === 'today') {
+      groupBy = 'day'
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      periodsData[key] = {
+        period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+        revenue: 0,
+        count: 0,
+      }
     } else if (dateRange === 'week') {
       groupBy = 'day'
       // Últimos 7 días
@@ -1096,6 +1113,9 @@ export default function Reports() {
     }
 
     switch (dateRange) {
+      case 'today':
+        filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
         break
@@ -1147,6 +1167,9 @@ export default function Reports() {
     }
 
     switch (dateRange) {
+      case 'today':
+        filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
         break
@@ -1427,6 +1450,9 @@ export default function Reports() {
 
       let periodStart = new Date(filterDate)
       switch (dateRange) {
+        case 'today':
+          periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+          break
         case 'week':
           periodStart.setDate(now.getDate() - 7)
           break
@@ -1724,6 +1750,7 @@ export default function Reports() {
           )}
           <div className="flex flex-wrap items-center gap-2">
             {[
+              { value: 'today', label: 'Hoy' },
               { value: 'week', label: 'Semana' },
               { value: 'month', label: 'Este mes' },
               { value: 'quarter', label: 'Trimestre' },
@@ -4104,6 +4131,7 @@ export default function Reports() {
           const now = new Date()
           let startDate = new Date()
           switch (dateRange) {
+            case 'today': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0); break
             case 'week': startDate.setDate(now.getDate() - 7); break
             case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break
             case 'quarter': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break
