@@ -2116,16 +2116,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }
   }, [business, isRestaurantMenu])
 
-  // Obtener categorías raíz (sin parentId) para mostrar en el catálogo
+  // Obtener categorías raíz (sin parentId) para mostrar en el catálogo, ordenadas
   const rootCategories = useMemo(() => {
-    return categories.filter(cat => !cat.parentId && cat.showInCatalog !== false)
+    return categories
+      .filter(cat => !cat.parentId && cat.showInCatalog !== false)
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
   }, [categories])
 
-  // Obtener subcategorías visibles de la categoría raíz seleccionada
+  // Obtener subcategorías visibles de la categoría raíz seleccionada, ordenadas
   const activeSubcategories = useMemo(() => {
     if (!selectedCategory) return []
-    return categories.filter(cat => cat.parentId === selectedCategory && cat.showInCatalog !== false)
+    return categories
+      .filter(cat => cat.parentId === selectedCategory && cat.showInCatalog !== false)
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
   }, [categories, selectedCategory])
+
+  // Productos destacados
+  const featuredProducts = useMemo(() => {
+    return filteredProducts.filter(p => p.isFeatured)
+  }, [filteredProducts])
 
   // Función para obtener todos los IDs de subcategorías de una categoría
   const getAllDescendantCategoryIds = (parentId) => {
@@ -2720,6 +2729,75 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         {/* Vista agrupada por categoría con scroll horizontal */}
         {groupByCategory && !selectedCategory && !searchQuery && filteredProducts.length > 0 && rootCategories.length > 0 && (
           <div className="space-y-8 mb-10">
+            {/* Carrusel de productos destacados */}
+            {featuredProducts.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">⭐</span>
+                  <h2 className={`text-lg font-bold ${thText}`}>Destacados</h2>
+                </div>
+                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  <div className="flex gap-4">
+                    {featuredProducts.slice(0, 15).map(product => {
+                      const cartQty = getCartQuantity(product.id)
+                      const outOfStock = isProductOutOfStock(product, ignoreStock)
+                      return (
+                        <div
+                          key={`featured-${product.id}`}
+                          className={`flex-shrink-0 w-40 md:w-48 rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                          onClick={() => setSelectedProduct(product)}
+                        >
+                          <div className="relative bg-gray-100 overflow-hidden aspect-square">
+                            {product.imageUrl ? (
+                              <CatalogImage
+                                src={product.imageUrl}
+                                alt={product.name}
+                                size="thumbnail"
+                                className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                              />
+                            ) : (
+                              <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
+                                <Package className="w-10 h-10 text-gray-300" />
+                              </div>
+                            )}
+                            {outOfStock && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-xs font-bold shadow-lg">AGOTADO</span>
+                              </div>
+                            )}
+                            {cartQty > 0 && !outOfStock && (
+                              <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg" style={{ backgroundColor: business?.catalogColor || '#10B981' }}>
+                                {cartQty}
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
+                            <div className="flex items-center justify-between">
+                              {showPrices && !product.catalogHidePrice ? (
+                                <div className={outOfStock ? 'line-through text-gray-400' : ''}>
+                                  {product.catalogComparePrice > 0 && (
+                                    <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)} </span>
+                                  )}
+                                  <span className={`text-sm font-bold ${thText}`}>
+                                    {product.hasVariants && product.variants?.length > 0
+                                      ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                                      : `S/ ${product.price?.toFixed(2)}`
+                                    }
+                                  </span>
+                                </div>
+                              ) : showPrices ? (
+                                <span className={`text-sm italic ${thTextMuted}`}>Consultar</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             {rootCategories.map(category => {
               const categoryIds = [category.id, ...categories.filter(c => c.parentId === category.id).map(c => c.id)]
               const categoryProducts = filteredProducts.filter(p => categoryIds.includes(p.category))

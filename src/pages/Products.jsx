@@ -120,11 +120,11 @@ const migrateLegacyCategories = (cats) => {
 }
 
 const getRootCategories = (categories) => {
-  return categories.filter(cat => cat.parentId === null)
+  return categories.filter(cat => cat.parentId === null).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
 
 const getSubcategories = (categories, parentId) => {
-  return categories.filter(cat => cat.parentId === parentId)
+  return categories.filter(cat => cat.parentId === parentId).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
 
 const getCategoryPath = (categories, categoryId) => {
@@ -228,6 +228,7 @@ export default function Products() {
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [catalogComparePrice, setCatalogComparePrice] = useState('') // Precio tachado en catálogo
+  const [isFeatured, setIsFeatured] = useState(false) // Producto destacado en catálogo
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({}) // Stock inicial por almacén { warehouseId: quantity }
 
@@ -601,6 +602,7 @@ export default function Products() {
     setCatalogVisible(product.catalogVisible || false)
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
+    setIsFeatured(product.isFeatured || false)
 
     // Load product image if exists
     setProductImage(null)
@@ -699,6 +701,7 @@ export default function Products() {
     setCatalogVisible(product.catalogVisible || false)
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
+    setIsFeatured(product.isFeatured || false)
 
     // No copiar la imagen (el usuario puede agregarla manualmente)
     setProductImage(null)
@@ -842,6 +845,7 @@ export default function Products() {
         catalogVisible: catalogVisible, // Visible en catálogo público
         catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
         catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null, // Precio tachado en catálogo
+        isFeatured: catalogVisible && isFeatured, // Producto destacado en catálogo
         // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
         ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
         // Product location (works in all modes when enabled)
@@ -1817,11 +1821,13 @@ export default function Products() {
     if (!newCategoryName.trim() || !user?.uid) return
 
     try {
+      const maxOrder = categories.filter(c => c.parentId === parentCategoryId).reduce((max, c) => Math.max(max, c.order ?? 0), -1)
       const newCategory = {
         id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: newCategoryName.trim(),
         parentId: parentCategoryId,
         showInCatalog: categoryShowInCatalog,
+        order: maxOrder + 1,
       }
 
       const updatedCategories = [...categories, newCategory]
@@ -1872,6 +1878,25 @@ export default function Products() {
       console.error('Error al actualizar categoría:', error)
       toast.error('Error al actualizar la categoría')
     }
+  }
+
+  const handleMoveCategoryOrder = async (categoryId, direction) => {
+    const cat = categories.find(c => c.id === categoryId)
+    if (!cat) return
+    const siblings = categories
+      .filter(c => c.parentId === cat.parentId)
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+    const idx = siblings.findIndex(c => c.id === categoryId)
+    const swapIdx = idx + direction
+    if (swapIdx < 0 || swapIdx >= siblings.length) return
+
+    const updatedCategories = categories.map(c => {
+      if (c.id === siblings[idx].id) return { ...c, order: siblings[swapIdx].order ?? swapIdx }
+      if (c.id === siblings[swapIdx].id) return { ...c, order: siblings[idx].order ?? idx }
+      return c
+    })
+    setCategories(updatedCategories)
+    await saveProductCategories(getBusinessId(), updatedCategories)
   }
 
   const handleDeleteCategory = async (categoryId) => {
@@ -4383,18 +4408,32 @@ export default function Products() {
               </label>
 
               {catalogVisible && (
-                <label className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors ml-4">
-                  <input
-                    type="checkbox"
-                    checked={catalogHidePrice}
-                    onChange={e => setCatalogHidePrice(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Ocultar precio en catálogo</span>
-                    <p className="text-xs text-gray-500 mt-0.5">Muestra "Consultar" en vez del precio</p>
-                  </div>
-                </label>
+                <>
+                  <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors ml-4">
+                    <input
+                      type="checkbox"
+                      checked={isFeatured}
+                      onChange={e => setIsFeatured(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Producto destacado</span>
+                      <p className="text-xs text-gray-500 mt-0.5">Aparece en la sección de destacados del catálogo</p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors ml-4">
+                    <input
+                      type="checkbox"
+                      checked={catalogHidePrice}
+                      onChange={e => setCatalogHidePrice(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Ocultar precio en catálogo</span>
+                      <p className="text-xs text-gray-500 mt-0.5">Muestra "Consultar" en vez del precio</p>
+                    </div>
+                  </label>
+                </>
               )}
 
               {businessSettings?.presentationsEnabled && (
@@ -5946,17 +5985,31 @@ export default function Products() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleMoveCategoryOrder(category.id, -1)}
+                          className="p-1.5 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+                          title="Subir"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveCategoryOrder(category.id, 1)}
+                          className="p-1.5 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+                          title="Bajar"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => handleEditCategory(category)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                           title="Editar"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Eliminar"
                           disabled={productCount > 0 || subcategories.length > 0}
                         >
@@ -6003,7 +6056,21 @@ export default function Products() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleMoveCategoryOrder(subcategory.id, -1)}
+                                  className="p-1 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+                                  title="Subir"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleMoveCategoryOrder(subcategory.id, 1)}
+                                  className="p-1 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+                                  title="Bajar"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
                                 <button
                                   onClick={() => handleEditCategory(subcategory)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
