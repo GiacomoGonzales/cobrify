@@ -22,6 +22,9 @@ import {
   Store,
   MapPin,
   BedDouble,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import RealEstateReports from './RealEstateReports'
@@ -171,6 +174,12 @@ export default function Reports() {
   const [customEndDate, setCustomEndDate] = useState('')
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
+  const [productSearch, setProductSearch] = useState('')
+  const [productPage, setProductPage] = useState(0)
+  const PRODUCTS_PER_PAGE = 25
+
+  // Resetear paginación cuando cambian los filtros
+  useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate])
 
   // Helper para parsear fecha en zona horaria local (evita problemas con UTC)
   const parseLocalDate = (dateString) => {
@@ -348,8 +357,9 @@ export default function Reports() {
       if (invoice.convertedTo) {
         return false
       }
-      // Si el documento está anulado, rechazado o en proceso de anulación SUNAT, no contar
-      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided' || invoice.sunatStatus === 'rejected') {
+      // Si el documento está anulado o en proceso de anulación SUNAT, no contar
+      // Nota: rechazados por SUNAT (sunatStatus === 'rejected') SÍ se cuentan porque la venta ocurrió
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
         return false
       }
       // Filtrar por sucursal
@@ -467,8 +477,8 @@ export default function Reports() {
       .filter(invoice => {
         const invoiceDate = getInvoiceDate(invoice)
         if (!invoiceDate) return false
-        // Excluir anuladas, rechazadas y en proceso de anulación
-        if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided' || invoice.sunatStatus === 'rejected') return false
+        // Excluir anuladas y en proceso de anulación (rechazadas SÍ cuentan)
+        if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
         if (invoice.convertedTo) return false
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
@@ -2509,113 +2519,174 @@ export default function Reports() {
           {/* Tabla de productos */}
           <Card>
             <CardHeader>
-              <CardTitle>Todos los Productos Vendidos</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle>Todos los Productos Vendidos ({topProducts.length})</CardTitle>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar producto..."
+                    value={productSearch}
+                    onChange={(e) => { setProductSearch(e.target.value); setProductPage(0) }}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {/* Mobile Cards */}
-              <div className="lg:hidden space-y-3">
-                {topProducts.length === 0 ? (
-                  <p className="text-center py-8 text-gray-500">No hay datos de productos en este período</p>
-                ) : (
-                  topProducts.map((product, index) => (
-                    <div key={index} className="bg-white border rounded-lg px-4 py-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {index + 1}
-                          </div>
-                          <div>
-                            <span className="font-medium text-gray-900">{product.name}</span>
-                            {product.sku && <span className="block text-xs text-gray-400">SKU: {product.sku}</span>}
-                          </div>
-                        </div>
-                        <span className="font-bold text-gray-900">{formatCurrency(product.revenue)}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-2 text-sm">
-                        <span className="text-gray-500">{product.quantity.toFixed(2)} uds</span>
-                        <div className="flex items-center gap-3">
-                          <span className={`font-medium ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            +{formatCurrency(product.profit)}
-                          </span>
-                          <span className={`font-medium ${product.profitMargin >= 30 ? 'text-green-600' : product.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {product.profitMargin.toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              {(() => {
+                const filtered = productSearch.trim()
+                  ? topProducts.filter(p =>
+                      p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
+                      p.sku?.toLowerCase().includes(productSearch.toLowerCase())
+                    )
+                  : topProducts
+                const totalPages = Math.ceil(filtered.length / PRODUCTS_PER_PAGE)
+                const paginated = filtered.slice(productPage * PRODUCTS_PER_PAGE, (productPage + 1) * PRODUCTS_PER_PAGE)
 
-              {/* Desktop Table */}
-              <div className="hidden lg:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Posición</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                      <TableHead className="text-right">Ingresos</TableHead>
-                      <TableHead className="text-right">Costo</TableHead>
-                      <TableHead className="text-right">Utilidad</TableHead>
-                      <TableHead className="text-right">Margen</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {topProducts.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                          No hay datos de productos en este período
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      topProducts.map((product, index) => (
-                        <TableRow key={index}>
-                          <TableCell>
-                            <div
-                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                                index === 0
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : index === 1
-                                  ? 'bg-gray-200 text-gray-700'
-                                  : index === 2
-                                  ? 'bg-orange-100 text-orange-700'
-                                  : 'bg-gray-100 text-gray-600'
-                              }`}
-                            >
-                              {index + 1}
+                return (
+                  <>
+                    {/* Mobile Cards */}
+                    <div className="lg:hidden space-y-3">
+                      {paginated.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">
+                          {productSearch ? 'No se encontraron productos' : 'No hay datos de productos en este período'}
+                        </p>
+                      ) : (
+                        paginated.map((product, i) => {
+                          const globalIndex = productPage * PRODUCTS_PER_PAGE + i
+                          return (
+                            <div key={globalIndex} className="bg-white border rounded-lg px-4 py-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${globalIndex === 0 ? 'bg-yellow-100 text-yellow-700' : globalIndex === 1 ? 'bg-gray-200 text-gray-700' : globalIndex === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    {globalIndex + 1}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">{product.name}</span>
+                                    {product.sku && <span className="block text-xs text-gray-400">SKU: {product.sku}</span>}
+                                  </div>
+                                </div>
+                                <span className="font-bold text-gray-900">{formatCurrency(product.revenue)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 text-sm">
+                                <span className="text-gray-500">{product.quantity.toFixed(2)} uds</span>
+                                <div className="flex items-center gap-3">
+                                  <span className={`font-medium ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    +{formatCurrency(product.profit)}
+                                  </span>
+                                  <span className={`font-medium ${product.profitMargin >= 30 ? 'text-green-600' : product.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {product.profitMargin.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          </TableCell>
-                          <TableCell className="text-gray-500 text-sm">{product.sku || '-'}</TableCell>
-                          <TableCell className="font-medium">{product.name}</TableCell>
-                          <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {formatCurrency(product.revenue)}
-                          </TableCell>
-                          <TableCell className="text-right text-gray-600">
-                            {formatCurrency(product.cost)}
-                          </TableCell>
-                          <TableCell className={`text-right font-semibold ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(product.profit)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className={`font-medium ${
-                              product.profitMargin >= 30
-                                ? 'text-green-600'
-                                : product.profitMargin >= 15
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                            }`}>
-                              {product.profitMargin.toFixed(1)}%
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                          )
+                        })
+                      )}
+                    </div>
+
+                    {/* Desktop Table */}
+                    <div className="hidden lg:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Posición</TableHead>
+                            <TableHead>SKU</TableHead>
+                            <TableHead>Producto</TableHead>
+                            <TableHead className="text-right">Cantidad</TableHead>
+                            <TableHead className="text-right">Ingresos</TableHead>
+                            <TableHead className="text-right">Costo</TableHead>
+                            <TableHead className="text-right">Utilidad</TableHead>
+                            <TableHead className="text-right">Margen</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginated.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                                {productSearch ? 'No se encontraron productos' : 'No hay datos de productos en este período'}
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            paginated.map((product, i) => {
+                              const globalIndex = productPage * PRODUCTS_PER_PAGE + i
+                              return (
+                                <TableRow key={globalIndex}>
+                                  <TableCell>
+                                    <div
+                                      className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                        globalIndex === 0
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : globalIndex === 1
+                                          ? 'bg-gray-200 text-gray-700'
+                                          : globalIndex === 2
+                                          ? 'bg-orange-100 text-orange-700'
+                                          : 'bg-gray-100 text-gray-600'
+                                      }`}
+                                    >
+                                      {globalIndex + 1}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-gray-500 text-sm">{product.sku || '-'}</TableCell>
+                                  <TableCell className="font-medium">{product.name}</TableCell>
+                                  <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {formatCurrency(product.revenue)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-gray-600">
+                                    {formatCurrency(product.cost)}
+                                  </TableCell>
+                                  <TableCell className={`text-right font-semibold ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatCurrency(product.profit)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={`font-medium ${
+                                      product.profitMargin >= 30
+                                        ? 'text-green-600'
+                                        : product.profitMargin >= 15
+                                        ? 'text-yellow-600'
+                                        : 'text-red-600'
+                                    }`}>
+                                      {product.profitMargin.toFixed(1)}%
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Paginación */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <span className="text-sm text-gray-500">
+                          {productPage * PRODUCTS_PER_PAGE + 1}-{Math.min((productPage + 1) * PRODUCTS_PER_PAGE, filtered.length)} de {filtered.length} productos
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setProductPage(p => Math.max(0, p - 1))}
+                            disabled={productPage === 0}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-sm font-medium px-2">{productPage + 1} / {totalPages}</span>
+                          <button
+                            onClick={() => setProductPage(p => Math.min(totalPages - 1, p + 1))}
+                            disabled={productPage >= totalPages - 1}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </TableBody>
-                </Table>
-              </div>
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
 
