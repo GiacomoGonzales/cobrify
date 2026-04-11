@@ -23,6 +23,7 @@ import {
   updateCashSession, // TEMPORAL: Para editar historial
   getOpenCashSessions,
   getClosedWithoutReceipt,
+  getOrderModificationsAfterPrecuenta,
 } from '@/services/firestoreService'
 import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
@@ -55,6 +56,7 @@ export default function CashRegister() {
   const [historyMovements, setHistoryMovements] = useState([])
   const [historyInvoices, setHistoryInvoices] = useState([])
   const [historyClosedWithoutReceipt, setHistoryClosedWithoutReceipt] = useState([])
+  const [historyOrderModifications, setHistoryOrderModifications] = useState([])
 
   // TEMPORAL: Estados para edición de historial
   const [isEditingHistory, setIsEditingHistory] = useState(false)
@@ -563,6 +565,7 @@ export default function CashRegister() {
     setShowHistoryDetailModal(true)
     setHistoryInvoices([])
     setHistoryClosedWithoutReceipt([])
+    setHistoryOrderModifications([])
 
     // Cargar movimientos, facturas y cierres sin comprobante de esa sesión
     if (!isDemoMode) {
@@ -589,6 +592,12 @@ export default function CashRegister() {
         const closedResult = await getClosedWithoutReceipt(getBusinessId(), sessionOpenedAt, sessionClosedAt)
         if (closedResult.success) {
           setHistoryClosedWithoutReceipt(closedResult.data || [])
+        }
+
+        // Cargar modificaciones de órdenes después de precuenta
+        const modsResult = await getOrderModificationsAfterPrecuenta(getBusinessId(), sessionOpenedAt, sessionClosedAt)
+        if (modsResult.success) {
+          setHistoryOrderModifications(modsResult.data || [])
         }
       } catch (error) {
         console.error('Error al cargar movimientos:', error)
@@ -788,7 +797,20 @@ export default function CashRegister() {
       // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
       const sessionData = closedSessionData || currentSession
 
-      await generateCashReportPDF(sessionData, movements, todayInvoices, businessData)
+      // Cargar mesas cerradas sin comprobante de la sesión actual
+      const sessionOpenedAt = sessionData.openedAt?.toDate
+        ? sessionData.openedAt.toDate()
+        : sessionData.openedAt ? new Date(sessionData.openedAt) : new Date()
+      const sessionClosedAt = sessionData.closedAt?.toDate
+        ? sessionData.closedAt.toDate()
+        : sessionData.closedAt ? new Date(sessionData.closedAt) : new Date()
+      const closedResult = await getClosedWithoutReceipt(getBusinessId(), sessionOpenedAt, sessionClosedAt)
+      const closedWithoutReceiptData = closedResult.success ? closedResult.data : []
+
+      const modsResult = await getOrderModificationsAfterPrecuenta(getBusinessId(), sessionOpenedAt, sessionClosedAt)
+      const orderModificationsData = modsResult.success ? modsResult.data : []
+
+      await generateCashReportPDF(sessionData, movements, todayInvoices, businessData, closedWithoutReceiptData, orderModificationsData)
       toast.success('Reporte PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -2433,6 +2455,47 @@ export default function CashRegister() {
               </div>
             )}
 
+            {/* Órdenes modificadas después de precuenta (alerta) */}
+            {historyOrderModifications.length > 0 && (
+              <div className="border-t border-orange-200 pt-4">
+                <h4 className="font-semibold text-orange-700 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Órdenes modificadas después de precuenta ({historyOrderModifications.length})
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {historyOrderModifications.map(record => {
+                    const ts = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null)
+                    const timeStr = ts ? ts.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
+                    return (
+                      <div key={record.id} className="p-2 bg-orange-50 border border-orange-100 rounded text-xs">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-semibold text-orange-800">Mesa {record.tableNumber}</span>
+                            <span className="text-orange-600 ml-2">
+                              {record.changeType === 'remove_item' ? 'Item eliminado' : 'Cantidad reducida'}
+                            </span>
+                          </div>
+                          <span className="text-orange-400">{timeStr}</span>
+                        </div>
+                        <div className="text-orange-700 mt-1">
+                          <span className="font-medium">{record.itemName}</span>
+                          {record.changeType === 'remove_item'
+                            ? ` (x${record.previousQuantity})`
+                            : ` (${record.previousQuantity} → ${record.newQuantity})`
+                          }
+                          <span className="ml-2 font-semibold text-red-600">-{formatCurrency(record.amountDifference)}</span>
+                        </div>
+                        <div className="text-orange-500 mt-0.5 flex justify-between">
+                          <span>Mozo: {record.waiterName || '-'} | Editó: {record.modifiedByName || 'Desconocido'}</span>
+                          <span>Precuenta: {formatCurrency(record.precuentaTotal)} → {formatCurrency(record.newTotal)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Comprobantes de la Sesión */}
             {historyInvoices.length > 0 && (
               <div className="border-t border-gray-200 pt-4">
@@ -2515,7 +2578,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData, historyClosedWithoutReceipt)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData, historyClosedWithoutReceipt, historyOrderModifications)
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')

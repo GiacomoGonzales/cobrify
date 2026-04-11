@@ -1823,6 +1823,87 @@ export const getClosedWithoutReceipt = async (businessId, startDate, endDate) =>
 }
 
 /**
+ * Guardar snapshot de precuenta (foto de la orden al imprimir precuenta)
+ */
+export const savePrecuentaSnapshot = async (businessId, data) => {
+  try {
+    const docRef = await addDoc(
+      collection(db, 'businesses', businessId, 'precuentaSnapshots'),
+      { ...data, createdAt: serverTimestamp() }
+    )
+    return { success: true, data: { id: docRef.id } }
+  } catch (error) {
+    console.error('Error al guardar snapshot de precuenta:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener snapshot de precuenta por orderId
+ */
+export const getPrecuentaSnapshot = async (businessId, orderId) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', businessId, 'precuentaSnapshots'),
+      where('orderId', '==', orderId)
+    )
+    const snapshot = await getDocs(q)
+    if (snapshot.empty) return { success: true, data: null }
+    // Retornar el más reciente
+    const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const dA = a.createdAt?.toDate?.() || new Date(0)
+        const dB = b.createdAt?.toDate?.() || new Date(0)
+        return dB - dA
+      })
+    return { success: true, data: records[0] }
+  } catch (error) {
+    console.error('Error al obtener snapshot de precuenta:', error)
+    return { success: false, data: null }
+  }
+}
+
+/**
+ * Registrar modificación de orden después de precuenta
+ */
+export const saveOrderModification = async (businessId, data) => {
+  try {
+    await addDoc(
+      collection(db, 'businesses', businessId, 'orderModifiedAfterPrecuenta'),
+      { ...data, createdAt: serverTimestamp() }
+    )
+    return { success: true }
+  } catch (error) {
+    console.error('Error al registrar modificación post-precuenta:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener modificaciones de órdenes después de precuenta en un rango de fechas
+ */
+export const getOrderModificationsAfterPrecuenta = async (businessId, startDate, endDate) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', businessId, 'orderModifiedAfterPrecuenta'),
+      where('createdAt', '>=', startDate),
+      ...(endDate ? [where('createdAt', '<=', endDate)] : [])
+    )
+    const snapshot = await getDocs(q)
+    const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const dA = a.createdAt?.toDate?.() || new Date(0)
+        const dB = b.createdAt?.toDate?.() || new Date(0)
+        return dB - dA
+      })
+    return { success: true, data: records }
+  } catch (error) {
+    console.error('Error al obtener modificaciones post-precuenta:', error)
+    return { success: false, data: [] }
+  }
+}
+
+/**
  * Obtener todos los movimientos de caja (para Flujo de Caja)
  */
 export const getAllCashMovements = async (userId) => {

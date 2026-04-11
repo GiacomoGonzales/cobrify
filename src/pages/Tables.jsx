@@ -37,7 +37,7 @@ import {
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder } from '@/services/orderService'
-import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
+import { getCompanySettings, getProductCategories, savePrecuentaSnapshot } from '@/services/firestoreService'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -692,6 +692,20 @@ export default function Tables() {
         return
       }
 
+      // Guardar snapshot de precuenta para auditoría (solo precuenta completa, no dividida)
+      if (!itemFilter && !overrideTotal) {
+        savePrecuentaSnapshot(businessId, {
+          orderId: freshOrder.id,
+          tableNumber: selectedTable.number,
+          items: (freshOrder.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          total: freshOrder.total || 0,
+          subtotal: freshOrder.subtotal || 0,
+          tax: freshOrder.tax || 0,
+          printedBy: user.uid,
+          printedByName: user.displayName || user.email || 'Usuario',
+        }).catch(err => console.error('Error al guardar snapshot de precuenta:', err))
+      }
+
       // Obtener información del negocio desde Firestore
       const businessRef = doc(db, 'businesses', businessId)
       const businessSnap = await getDoc(businessRef)
@@ -844,6 +858,18 @@ export default function Tables() {
     if (!selectedTable || !selectedOrder || !splitData) return
     try {
       const businessId = getBusinessId()
+
+      // Guardar snapshot de precuenta para auditoría
+      savePrecuentaSnapshot(businessId, {
+        orderId: selectedOrder.id,
+        tableNumber: selectedTable.number,
+        items: (selectedOrder.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        total: selectedOrder.total || 0,
+        subtotal: selectedOrder.subtotal || 0,
+        tax: selectedOrder.tax || 0,
+        printedBy: user.uid,
+        printedByName: user.displayName || user.email || 'Usuario',
+      }).catch(err => console.error('Error al guardar snapshot de precuenta:', err))
       const businessResult = await getCompanySettings(businessId)
       const businessInfo = businessResult.success ? {
         name: businessResult.data?.name || '',

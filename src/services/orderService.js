@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { updateTableAmount } from './tableService'
+import { getPrecuentaSnapshot, saveOrderModification } from './firestoreService'
 
 /**
  * Helper: Calcular totales (subtotal, IGV, total) según configuración fiscal del negocio
@@ -410,7 +411,7 @@ export const updateItemStatus = async (businessId, orderId, itemId, newStatus) =
 /**
  * Eliminar un item de una orden existente y actualizar la mesa
  */
-export const removeOrderItem = async (businessId, orderId, itemIndex) => {
+export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy = null) => {
   try {
     const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
     const orderSnap = await getDoc(orderRef)
@@ -425,6 +426,8 @@ export const removeOrderItem = async (businessId, orderId, itemIndex) => {
     if (itemIndex < 0 || itemIndex >= currentItems.length) {
       return { success: false, error: 'Item no encontrado' }
     }
+
+    const removedItem = currentItems[itemIndex]
 
     // Eliminar el item del array
     const updatedItems = currentItems.filter((_, index) => index !== itemIndex)
@@ -457,6 +460,28 @@ export const removeOrderItem = async (businessId, orderId, itemIndex) => {
       }
     }
 
+    // Registrar auditoría si existe snapshot de precuenta
+    getPrecuentaSnapshot(businessId, orderId).then(snapshotResult => {
+      if (snapshotResult.success && snapshotResult.data) {
+        const snapshot = snapshotResult.data
+        saveOrderModification(businessId, {
+          orderId,
+          tableNumber: orderData.tableNumber || snapshot.tableNumber || '-',
+          waiterName: orderData.waiterName || '-',
+          changeType: 'remove_item',
+          itemName: removedItem.name || '-',
+          itemPrice: removedItem.price || 0,
+          previousQuantity: removedItem.quantity || 1,
+          newQuantity: null,
+          amountDifference: (removedItem.price || 0) * (removedItem.quantity || 1),
+          precuentaTotal: snapshot.total || 0,
+          newTotal: total,
+          modifiedBy: modifiedBy?.uid || null,
+          modifiedByName: modifiedBy?.name || 'Desconocido',
+        })
+      }
+    }).catch(err => console.error('Error en auditoría post-precuenta:', err))
+
     return { success: true, data: { subtotal, tax, total } }
   } catch (error) {
     console.error('Error al eliminar item de la orden:', error)
@@ -467,7 +492,7 @@ export const removeOrderItem = async (businessId, orderId, itemIndex) => {
 /**
  * Actualizar cantidad de un item en una orden existente y actualizar la mesa
  */
-export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, newQuantity) => {
+export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, newQuantity, modifiedBy = null) => {
   try {
     const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
     const orderSnap = await getDoc(orderRef)
@@ -485,8 +510,10 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
 
     if (newQuantity <= 0) {
       // Si la cantidad es 0 o negativa, eliminar el item
-      return await removeOrderItem(businessId, orderId, itemIndex)
+      return await removeOrderItem(businessId, orderId, itemIndex, modifiedBy)
     }
+
+    const previousQuantity = currentItems[itemIndex].quantity || 1
 
     // Actualizar la cantidad y el total del item
     const updatedItems = [...currentItems]
@@ -522,6 +549,31 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
       if (!updateTableResult.success) {
         console.warn('No se pudo actualizar el monto de la mesa:', updateTableResult.error)
       }
+    }
+
+    // Registrar auditoría si se redujo la cantidad y existe snapshot de precuenta
+    if (newQuantity < previousQuantity) {
+      getPrecuentaSnapshot(businessId, orderId).then(snapshotResult => {
+        if (snapshotResult.success && snapshotResult.data) {
+          const snapshot = snapshotResult.data
+          const item = currentItems[itemIndex]
+          saveOrderModification(businessId, {
+            orderId,
+            tableNumber: orderData.tableNumber || snapshot.tableNumber || '-',
+            waiterName: orderData.waiterName || '-',
+            changeType: 'reduce_quantity',
+            itemName: item.name || '-',
+            itemPrice: item.price || 0,
+            previousQuantity,
+            newQuantity,
+            amountDifference: (item.price || 0) * (previousQuantity - newQuantity),
+            precuentaTotal: snapshot.total || 0,
+            newTotal: total,
+            modifiedBy: modifiedBy?.uid || null,
+            modifiedByName: modifiedBy?.name || 'Desconocido',
+          })
+        }
+      }).catch(err => console.error('Error en auditoría post-precuenta:', err))
     }
 
     return { success: true, data: { subtotal, tax, total } }

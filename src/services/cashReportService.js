@@ -252,7 +252,7 @@ const hexToRgb = (hex) => {
 /**
  * Generar reporte de cierre de caja en PDF (estilo profesional compacto)
  */
-export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = []) => {
+export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = [], orderModifications = []) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
@@ -589,6 +589,46 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
         doc.text(ts.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }), RX - 2, y + 3.5, { align: 'right' });
       }
       y += 11;
+    });
+    y += 3;
+  }
+
+  // ===== ÓRDENES MODIFICADAS DESPUÉS DE PRECUENTA (alerta) =====
+  if (orderModifications.length > 0) {
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    // Header naranja de alerta
+    doc.setFillColor(234, 88, 12);
+    doc.rect(ML, y, CW, 0.6, 'F');
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(234, 88, 12);
+    doc.text(`⚠ ÓRDENES MODIFICADAS DESPUÉS DE PRECUENTA (${orderModifications.length})`, ML, y);
+    y += 5;
+
+    orderModifications.forEach((record) => {
+      if (y > PH - 20) { doc.addPage(); y = 10; }
+      doc.setFillColor(255, 247, 237);
+      doc.rect(ML, y, CW, 13, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(180, 60, 10);
+      doc.text(`Mesa ${record.tableNumber || '-'}`, ML + 2, y + 3.5);
+      const changeLabel = record.changeType === 'remove_item' ? 'Item eliminado' : 'Cantidad reducida';
+      doc.text(changeLabel, ML + 35, y + 3.5);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(140, 50, 10);
+      const itemDetail = record.changeType === 'remove_item'
+        ? `${record.itemName} (x${record.previousQuantity})`
+        : `${record.itemName} (${record.previousQuantity} → ${record.newQuantity})`;
+      doc.text(itemDetail, ML + 2, y + 7.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`-${fmt(record.amountDifference)}`, ML + 120, y + 7.5);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5); doc.setTextColor(160, 70, 20);
+      doc.text(`Mozo: ${(record.waiterName || '-').substring(0, 15)} | Editó: ${(record.modifiedByName || '-').substring(0, 15)}`, ML + 2, y + 11.5);
+      doc.text(`Precuenta: ${fmt(record.precuentaTotal)} → ${fmt(record.newTotal)}`, ML + 90, y + 11.5);
+      const ts = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null);
+      if (ts) {
+        doc.text(ts.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }), RX - 2, y + 3.5, { align: 'right' });
+      }
+      y += 14;
     });
     y += 3;
   }

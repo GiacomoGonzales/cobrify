@@ -11,7 +11,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
-  const { getBusinessId, business } = useAppContext()
+  const { getBusinessId, business, user } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
@@ -105,7 +105,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
     try {
-      const result = await updateOrderItemQuantity(getBusinessId(), order.id, itemIndex, newQuantity)
+      const result = await updateOrderItemQuantity(getBusinessId(), order.id, itemIndex, newQuantity, { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' })
       if (result.success) {
         toast.success('Cantidad actualizada')
         onSuccess()
@@ -132,7 +132,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
     try {
-      const result = await removeOrderItem(getBusinessId(), order.id, itemIndex)
+      const result = await removeOrderItem(getBusinessId(), order.id, itemIndex, { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' })
       if (result.success) {
         toast.success('Item eliminado')
         onSuccess()

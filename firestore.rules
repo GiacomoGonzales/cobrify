@@ -359,6 +359,24 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Mesas cerradas sin comprobante (auditoría)
+      match /tableCloseWithoutReceipt/{recordId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Snapshots de precuentas (auditoría)
+      match /precuentaSnapshots/{snapshotId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Órdenes modificadas después de precuenta (auditoría)
+      match /orderModifiedAfterPrecuenta/{recordId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Sellers (Vendedores)
       match /sellers/{sellerId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
