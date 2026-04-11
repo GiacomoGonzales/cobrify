@@ -193,10 +193,14 @@ export default function Reports() {
     loadBranches()
   }, [user])
 
-  // Solo recargar desde Firestore cuando se selecciona "Todo el período"
-  // Los demás rangos se filtran client-side con los datos ya cargados
+  // Recargar datos cuando el rango cambia a uno más amplio
+  const [loadedRange, setLoadedRange] = useState(null)
   useEffect(() => {
-    if (user?.uid && dateRange === 'all' && invoices.length === 0) loadData()
+    if (!user?.uid || !loadedRange) return
+    const rangeOrder = { today: 0, week: 1, month: 2, quarter: 3, year: 4, custom: 4, all: 5 }
+    const currentOrder = rangeOrder[dateRange] ?? 2
+    const loadedOrder = rangeOrder[loadedRange] ?? 2
+    if (currentOrder > loadedOrder) loadData()
   }, [dateRange])
 
   // Cargar sucursales para filtro
@@ -229,81 +233,69 @@ export default function Reports() {
         return
       }
 
-      // Cargar facturas: si es "all" traer todo, sino traer último año (suficiente para todos los rangos)
+      // Cargar facturas: ajustar rango según el filtro seleccionado
       let invoicesFetcher
       if (dateRange === 'all') {
         invoicesFetcher = getInvoices(getBusinessId())
       } else {
         const sinceDate = new Date()
-        sinceDate.setFullYear(sinceDate.getFullYear() - 1)
-        sinceDate.setDate(1)
+        if (dateRange === 'today' || dateRange === 'week') {
+          sinceDate.setDate(sinceDate.getDate() - 14) // 2 semanas (para comparación con período anterior)
+        } else if (dateRange === 'month') {
+          sinceDate.setMonth(sinceDate.getMonth() - 2) // 2 meses
+          sinceDate.setDate(1)
+        } else if (dateRange === 'quarter') {
+          sinceDate.setMonth(sinceDate.getMonth() - 6)
+          sinceDate.setDate(1)
+        } else {
+          sinceDate.setFullYear(sinceDate.getFullYear() - 2)
+          sinceDate.setDate(1)
+        }
         sinceDate.setHours(0, 0, 0, 0)
         invoicesFetcher = getRecentInvoices(getBusinessId(), sinceDate)
       }
 
-      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult] = await Promise.all([
+      // Cargar todo en paralelo
+      const promises = [
         invoicesFetcher,
         getCustomersWithStats(getBusinessId()),
         getProducts(getBusinessId()),
         getRecipes(getBusinessId()),
         getProductCategories(getBusinessId()),
-      ])
-
-      if (invoicesResult.success) {
-        setInvoices(invoicesResult.data || [])
-      }
-      if (customersResult.success) {
-        setCustomers(customersResult.data || [])
-      }
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
-      }
-      if (recipesResult.success) {
-        setRecipes(recipesResult.data || [])
-      }
-      if (categoriesResult.success) {
-        setProductCategories(categoriesResult.data || [])
-      }
-
-      // Cargar gastos solo si tiene el feature habilitado
-      if (hasFeature && hasFeature('expenseManagement')) {
-        try {
-          const expensesData = await getExpenses(getBusinessId())
-          setExpenses(expensesData || [])
-        } catch (error) {
-          console.error('Error al cargar gastos:', error)
-          setExpenses([])
-        }
-      }
-
-      // Cargar compras para el cálculo de rentabilidad
-      try {
-        const purchasesResult = await getPurchases(getBusinessId())
-        if (purchasesResult.success) {
-          setPurchases(purchasesResult.data || [])
-        }
-      } catch (error) {
-        console.error('Error al cargar compras:', error)
-        setPurchases([])
-      }
-
-      // Cargar movimientos financieros y de caja para otros ingresos/egresos
-      try {
-        const [financialResult, cashResult] = await Promise.all([
+        getPurchases(getBusinessId()),
+        Promise.all([
           getFinancialMovements(getBusinessId()),
           getAllCashMovements(getBusinessId())
-        ])
-        if (financialResult.success) {
-          setFinancialMovements(financialResult.data || [])
-        }
-        if (cashResult.success) {
-          setCashMovements(cashResult.data || [])
-        }
-      } catch (error) {
-        console.error('Error al cargar movimientos:', error)
-        setFinancialMovements([])
-        setCashMovements([])
+        ]),
+      ]
+      if (hasFeature && hasFeature('expenseManagement')) {
+        promises.push(getExpenses(getBusinessId()))
       }
+
+      const results = await Promise.all(promises.map(p => p.catch(err => {
+        console.error('Error en carga paralela:', err)
+        return { success: false, data: [] }
+      })))
+
+      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult, purchasesResult, movementsResults] = results
+
+      if (invoicesResult.success) setInvoices(invoicesResult.data || [])
+      if (customersResult.success) setCustomers(customersResult.data || [])
+      if (productsResult.success) setProducts(productsResult.data || [])
+      if (recipesResult.success) setRecipes(recipesResult.data || [])
+      if (categoriesResult.success) setProductCategories(categoriesResult.data || [])
+      if (purchasesResult?.success) setPurchases(purchasesResult.data || [])
+
+      // Movimientos financieros y de caja
+      const [financialResult, cashResult] = movementsResults || [{ success: false }, { success: false }]
+      if (financialResult?.success) setFinancialMovements(financialResult.data || [])
+      if (cashResult?.success) setCashMovements(cashResult.data || [])
+
+      // Gastos (si se cargaron)
+      if (hasFeature && hasFeature('expenseManagement') && results[7]) {
+        setExpenses(results[7] || [])
+      }
+
       // Cargar datos de hotel si es modo hotel
       if (businessMode === 'hotel') {
         try {
@@ -322,6 +314,7 @@ export default function Reports() {
       console.error('Error al cargar datos:', error)
     } finally {
       setIsLoading(false)
+      setLoadedRange(dateRange)
     }
   }
 
