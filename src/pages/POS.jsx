@@ -1884,13 +1884,6 @@ export default function POS() {
       return
     }
 
-    // Si el producto tiene modificadores, abrir modal de selección
-    if (product.modifiers && product.modifiers.length > 0) {
-      setProductForModifiers(product)
-      setShowModifierModal(true)
-      return
-    }
-
     // FARMACIA: Verificar lotes PRIMERO (antes de presentaciones)
     const availableBatches = getAvailableBatches(product)
     if (availableBatches.length >= 1 && selectedBatch === null) {
@@ -1922,6 +1915,14 @@ export default function POS() {
       setProductForPriceSelection(product)
       setPendingBatchForPrice(selectedBatch)
       setShowPriceModal(true)
+      return
+    }
+
+    // Si el producto tiene modificadores, abrir modal de selección
+    // (después de precio para que el producto ya tenga el precio correcto)
+    if (product.modifiers && product.modifiers.length > 0) {
+      setProductForModifiers({ ...product, _selectedPrice: selectedPrice || product.price })
+      setShowModifierModal(true)
       return
     }
 
