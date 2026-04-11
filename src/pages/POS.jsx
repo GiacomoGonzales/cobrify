@@ -2353,8 +2353,10 @@ export default function POS() {
       return
     }
 
-    let price = parseFloat(customProduct.price)
-    if (!price || price <= 0) {
+    let price = parseFloat(customProduct.price) || 0
+    if (customProduct.isBonificacion) {
+      price = 0
+    } else if (price <= 0) {
       toast.error('El precio debe ser mayor a 0')
       return
     }
@@ -2388,23 +2390,24 @@ export default function POS() {
     const customProductItem = {
       id: `custom-${Date.now()}`,
       code: 'CUSTOM',
-      name: customProduct.name.trim(),
+      name: customProduct.isBonificacion ? `${customProduct.name.trim()} (BONIFICACIÓN)` : customProduct.name.trim(),
       price: price,
       quantity: quantity,
       unit: customProduct.unit || 'NIU',
-      // Si la empresa está exenta de IGV, forzar exonerado
-      taxAffectation: taxConfig.igvExempt ? '20' : (customProduct.taxAffectation || '10'),
+      // Bonificaciones son inafectas (no generan IGV)
+      taxAffectation: customProduct.isBonificacion ? '30' : (taxConfig.igvExempt ? '20' : (customProduct.taxAffectation || '10')),
       // Solo incluir igvRate si es standard y gravado
-      ...(taxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && { igvRate: customIgvRate }),
+      ...(taxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && !customProduct.isBonificacion && { igvRate: customIgvRate }),
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
+      ...(customProduct.isBonificacion && { isBonificacion: true }),
     }
 
     setCart([...cart, customProductItem])
     toast.success('Producto personalizado agregado al carrito')
 
     // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: taxConfig.igvRate || 18, addIgv: false })
+    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: taxConfig.igvRate || 18, addIgv: false, isBonificacion: false })
     setShowCustomProductModal(false)
   }
 
@@ -7014,11 +7017,27 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             />
           </div>
 
+          {/* Bonificación - solo para notas de venta */}
+          {documentType === 'nota_venta' && (
+            <label className="flex items-center gap-3 p-3 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition-colors">
+              <input
+                type="checkbox"
+                checked={customProduct.isBonificacion || false}
+                onChange={e => setCustomProduct({ ...customProduct, isBonificacion: e.target.checked, ...(e.target.checked ? { price: '0', taxAffectation: '30' } : {}) })}
+                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700">Bonificación (gratis)</span>
+                <p className="text-xs text-gray-500 mt-0.5">Producto sin costo para el cliente</p>
+              </div>
+            </label>
+          )}
+
           {/* Price and Quantity */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Precio Unitario <span className="text-red-500">*</span>
+                Precio Unitario {!customProduct.isBonificacion && <span className="text-red-500">*</span>}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
@@ -7205,7 +7224,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               variant="outline"
               onClick={() => {
                 setShowCustomProductModal(false)
-                setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
+                setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false, isBonificacion: false })
               }}
               className="flex-1"
             >
@@ -7214,7 +7233,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             <Button
               onClick={addCustomProductToCart}
               className="flex-1"
-              disabled={!customProduct.name || !customProduct.price || parseFloat(customProduct.price) <= 0}
+              disabled={!customProduct.name || (!customProduct.isBonificacion && (!customProduct.price || parseFloat(customProduct.price) <= 0))}
             >
               <Plus className="w-4 h-4 mr-2" />
               Agregar al Carrito
