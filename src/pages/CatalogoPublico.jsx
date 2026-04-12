@@ -2131,10 +2131,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
   }, [categories, selectedCategory])
 
-  // Productos destacados
-  const featuredProducts = useMemo(() => {
-    return filteredProducts.filter(p => p.isFeatured)
-  }, [filteredProducts])
 
   // Función para obtener todos los IDs de subcategorías de una categoría
   const getAllDescendantCategoryIds = (parentId) => {
@@ -2191,6 +2187,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       return matchesSearch && matchesCategory
     })
   }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds])
+
+  // Productos destacados
+  const featuredProducts = useMemo(() => {
+    return filteredProducts.filter(p => p.isFeatured)
+  }, [filteredProducts])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
