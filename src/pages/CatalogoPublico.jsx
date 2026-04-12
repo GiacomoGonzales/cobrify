@@ -2698,34 +2698,36 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Productos */}
       <main className="max-w-7xl mx-auto px-4 py-6 md:py-8">
-        {/* Header de resultados */}
-        <div className="flex items-center justify-between mb-6">
-          <p className={thTextFaint}>
-            {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
-            {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
-              <span> en <strong>
-                {rootCategories.find(c => c.id === selectedCategory).name}
-                {selectedSubcategory && activeSubcategories.find(c => c.id === selectedSubcategory) && (
-                  <> &rsaquo; {activeSubcategories.find(c => c.id === selectedSubcategory).name}</>
-                )}
-              </strong></span>
-            )}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
-            >
-              <Grid3X3 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
-            >
-              <List className="w-5 h-5" />
-            </button>
+        {/* Header de resultados (sin carruseles o con categoría seleccionada) */}
+        {(!groupByCategory || selectedCategory || searchQuery) && (
+          <div className="flex items-center justify-between mb-6">
+            <p className={thTextFaint}>
+              {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
+              {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
+                <span> en <strong>
+                  {rootCategories.find(c => c.id === selectedCategory).name}
+                  {selectedSubcategory && activeSubcategories.find(c => c.id === selectedSubcategory) && (
+                    <> &rsaquo; {activeSubcategories.find(c => c.id === selectedSubcategory).name}</>
+                  )}
+                </strong></span>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
+              >
+                <Grid3X3 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
+              >
+                <List className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Vista agrupada por categoría con scroll horizontal */}
         {groupByCategory && !selectedCategory && !searchQuery && filteredProducts.length > 0 && rootCategories.length > 0 && (
@@ -2899,6 +2901,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             <div className="flex items-center gap-4 pt-2">
               <div className={`flex-1 border-t ${thBorderColor}`} />
               <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
               <div className={`flex-1 border-t ${thBorderColor}`} />
             </div>
           </div>
