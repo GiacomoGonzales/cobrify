@@ -29,7 +29,7 @@ export default function TableActionModal({
   const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer', 'move'
 
   // Form states
-  const [showOrderPreview, setShowOrderPreview] = useState(false)
+  const [showOrderPreview, setShowOrderPreview] = useState(true)
   const [selectedWaiter, setSelectedWaiter] = useState('')
   const [selectedDestinationTable, setSelectedDestinationTable] = useState('')
   const [reservationTime, setReservationTime] = useState('')
