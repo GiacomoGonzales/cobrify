@@ -2810,7 +2810,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <div className="flex items-center justify-between mb-3">
                     <h2 className={`text-lg font-bold ${thText}`}>{category.name}</h2>
                     <button
-                      onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
+                      onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                       className="text-sm font-medium hover:opacity-80 transition-opacity"
                       style={{ color: business?.catalogColor || '#10B981' }}
                     >
