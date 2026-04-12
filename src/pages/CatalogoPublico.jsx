@@ -557,7 +557,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             {showPrices ? (
               <div>
                 {product.catalogComparePrice > 0 && (
-                  <span className="text-sm line-through text-gray-400">S/ {product.catalogComparePrice.toFixed(2)}</span>
+                  <span className="text-sm line-through block text-gray-400">S/ {product.catalogComparePrice.toFixed(2)}</span>
                 )}
                 {(() => {
                   const showAllPrices = business?.catalogShowAllPrices !== false
@@ -2780,7 +2780,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               {showPrices && !product.catalogHidePrice ? (
                                 <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                   {product.catalogComparePrice > 0 && (
-                                    <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)} </span>
+                                    <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                                   )}
                                   <span className={`text-sm font-bold ${thText}`}>
                                     {product.hasVariants && product.variants?.length > 0
@@ -2859,7 +2859,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 {showPrices && !product.catalogHidePrice ? (
                                   <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                     {product.catalogComparePrice > 0 && (
-                                      <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)} </span>
+                                      <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                                     )}
                                     <span className={`text-sm font-bold ${thText}`}>
                                       {product.hasVariants && product.variants?.length > 0
@@ -2986,7 +2986,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {product.catalogComparePrice > 0 && (
-                            <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                            <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                           )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
@@ -3101,7 +3101,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {product.catalogComparePrice > 0 && (
-                            <span className={`text-xs line-through ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                            <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                           )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
