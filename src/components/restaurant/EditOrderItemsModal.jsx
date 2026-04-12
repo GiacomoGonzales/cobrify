@@ -3,6 +3,7 @@ import { Edit, Plus, Minus, Trash2, Loader2, Search } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { removeOrderItem, updateOrderItemQuantity, addOrderItems } from '@/services/orderService'
+import ModifierSelectorModal from './ModifierSelectorModal'
 import { getProducts } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -25,6 +26,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   const [products, setProducts] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [addingProduct, setAddingProduct] = useState(false)
+  const [productForModifiers, setProductForModifiers] = useState(null)
 
   // Cargar configuración del negocio
   useEffect(() => {
@@ -154,9 +156,19 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
       return
     }
 
+    // Si tiene modifiers, abrir modal de selección
+    if (product.modifiers && product.modifiers.length > 0) {
+      setProductForModifiers(product)
+      return
+    }
+
+    await addProductToOrder(product)
+  }
+
+  const addProductToOrder = async (product, modifiersData = null) => {
     setAddingProduct(true)
     try {
-      const price = product.price || 0
+      const price = modifiersData?.totalPrice || product.price || 0
       const newItem = {
         productId: product.id,
         name: product.name,
@@ -165,6 +177,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
         total: price,
         notes: '',
         category: product.category || '',
+        ...(modifiersData?.selectedModifiers && { selectedModifiers: modifiersData.selectedModifiers }),
       }
       const result = await addOrderItems(getBusinessId(), order.id, [newItem])
       if (result.success) {
@@ -219,6 +232,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     : []
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -393,5 +407,18 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
         </div>
       </div>
     </Modal>
+
+      {/* Modal de modificadores */}
+      <ModifierSelectorModal
+        isOpen={!!productForModifiers}
+        onClose={() => setProductForModifiers(null)}
+        product={productForModifiers}
+        onConfirm={(modifiersData) => {
+          const product = productForModifiers
+          setProductForModifiers(null)
+          addProductToOrder(product, modifiersData)
+        }}
+      />
+    </>
   )
 }
