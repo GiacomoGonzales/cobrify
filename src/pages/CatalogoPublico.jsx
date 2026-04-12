@@ -822,18 +822,18 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         return (
                           <div
                             key={option.id}
-                            className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : 'border-gray-200'}`}
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : 'border-gray-200'}`}
                             style={count > 0 ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
                           >
-                            <div>
-                              <span className="font-medium" style={count > 0 ? { color: accentColor } : { color: '#374151' }}>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-sm" style={count > 0 ? { color: accentColor } : { color: '#374151' }}>
                                 {option.name}
                               </span>
                               {showPrices && option.priceAdjustment > 0 && (
-                                <span className="text-sm text-gray-500 ml-2">+S/ {option.priceAdjustment.toFixed(2)} c/u</span>
+                                <span className="text-xs text-gray-500 block">+S/ {option.priceAdjustment.toFixed(2)} c/u</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-shrink-0">
                               {showPrices && count > 0 && option.priceAdjustment > 0 && (
                                 <span className="text-xs font-medium" style={{ color: accentColor }}>
                                   +S/ {(option.priceAdjustment * count).toFixed(2)}
@@ -871,18 +871,20 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         <button
                           key={option.id}
                           onClick={() => handleOptionToggle(modifier.id, option.id)}
-                          className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
+                          className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
                             isSelected ? '' : 'border-gray-200 hover:border-gray-300'
                           }`}
                           style={isSelected ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
                         >
-                          <span className="font-medium" style={isSelected ? { color: accentColor } : { color: '#374151' }}>
-                            {option.name}
-                          </span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-sm" style={isSelected ? { color: accentColor } : { color: '#374151' }}>
+                              {option.name}
+                            </span>
                             {showPrices && option.priceAdjustment > 0 && (
-                              <span className="text-sm text-gray-500">+S/ {option.priceAdjustment.toFixed(2)}</span>
+                              <span className="text-xs text-gray-500 block">+S/ {option.priceAdjustment.toFixed(2)}</span>
                             )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <div
                               className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
                               style={isSelected ? { borderColor: accentColor, backgroundColor: accentColor } : {}}
