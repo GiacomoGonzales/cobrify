@@ -10,6 +10,7 @@ export default function TableActionModal({
   isOpen,
   onClose,
   table,
+  order,
   onOccupy,
   onRelease,
   onReserve,
@@ -270,14 +271,14 @@ export default function TableActionModal({
                 </div>
 
                 {/* Vista previa del pedido */}
-                {table.order?.items?.length > 0 && (
+                {order?.items?.length > 0 && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button
                       onClick={() => setShowOrderPreview(!showOrderPreview)}
                       className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
                     >
                       <span className="text-gray-600 font-medium">
-                        Pedido ({table.order.items.length} {table.order.items.length === 1 ? 'item' : 'items'})
+                        Pedido ({order.items.length} {order.items.length === 1 ? 'item' : 'items'})
                       </span>
                       {showOrderPreview
                         ? <ChevronUp className="w-4 h-4 text-gray-400" />
@@ -286,7 +287,7 @@ export default function TableActionModal({
                     </button>
                     {showOrderPreview && (
                       <div className="px-3 py-2 max-h-40 overflow-y-auto divide-y divide-gray-100">
-                        {table.order.items.map((item, idx) => (
+                        {order.items.map((item, idx) => (
                           <div key={idx} className="flex items-center justify-between py-1.5 text-sm">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               <span className="text-gray-400 font-medium shrink-0">{item.quantity}x</span>

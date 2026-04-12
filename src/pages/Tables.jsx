@@ -1555,6 +1555,7 @@ export default function Tables() {
           setSelectedTable(null)
         }}
         table={selectedTable}
+        order={selectedOrder}
         waiters={waiters}
         availableTables={tables.filter(t => t.status === 'available')}
         onOccupy={handleOccupyTable}
