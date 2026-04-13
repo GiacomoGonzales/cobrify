@@ -277,6 +277,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         searchTerm: product.name,
         laboratoryName: product.laboratoryName || '',
         marca: product.marca || '',
+        presentation: product.presentation || '',
+        concentration: product.concentration || '',
         igvType: (() => {
           const tax = product.taxAffectation || product.afectacionIgv || product.igvType || '10'
           if (tax === '20' || tax === 'exonerado') return 'exonerado'

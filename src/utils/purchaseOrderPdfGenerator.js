@@ -412,6 +412,14 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.text('SOLES', colRightX + 55, rightY)
   rightY += dataLineHeight
 
+  if (order.paymentCondition) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('COND. PAGO:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(order.paymentCondition, colRightX + 55, rightY)
+    rightY += dataLineHeight
+  }
+
   currentY = Math.max(leftY, rightY) + 10
 
   // ========== TABLA DE PRODUCTOS ==========
@@ -474,7 +482,10 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const itemName = item.name || ''
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    // Agregar detalles farmacéuticos (presentación, concentración)
+    const pharmaDetails = [item.presentation, item.concentration].filter(Boolean).join(' | ')
+    if (pharmaDetails) itemDesc += `\n${pharmaDetails}`
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
     const lineHeight = 8 * 1.4 * 0.3528 // fontSize * lineHeightFactor * pt-to-mm
@@ -505,7 +516,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     if (isPharmacy) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
-      const labText = item.laboratoryName || ''
+      const labText = item.laboratoryName || item.marca || ''
       if (labText) {
         const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
         doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
