@@ -161,9 +161,23 @@ export default function Dashboard() {
     }
   }
 
-  // Helper to get date from invoice (handles both Firestore timestamp and regular Date)
+  // Helper to get date from invoice - usa fecha de emisión si existe, sino createdAt
   const getInvoiceDate = (inv) => {
-    if (!inv.createdAt) return null
+    if (inv?.emissionDate) {
+      if (inv.emissionDate.toDate) return inv.emissionDate.toDate()
+      if (typeof inv.emissionDate === 'string') {
+        const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+        if (createdAt) {
+          const [year, month, day] = inv.emissionDate.split('-').map(Number)
+          const combined = new Date(createdAt)
+          combined.setFullYear(year, month - 1, day)
+          return combined
+        }
+        return new Date(inv.emissionDate + 'T12:00:00')
+      }
+      return new Date(inv.emissionDate)
+    }
+    if (!inv?.createdAt) return null
     return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
   }
 
