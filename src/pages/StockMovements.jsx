@@ -32,7 +32,7 @@ import { getMassTransfers } from '@/services/massTransferService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 
 export default function StockMovements() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
   const [movements, setMovements] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -810,7 +810,7 @@ export default function StockMovements() {
                     className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    <option value="main">Sucursal Principal</option>
+                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

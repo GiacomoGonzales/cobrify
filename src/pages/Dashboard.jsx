@@ -28,7 +28,7 @@ import { getActiveBranches } from '@/services/branchService'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
@@ -390,7 +390,7 @@ export default function Dashboard() {
                 className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
               >
                 <option value="all">Todas las sucursales</option>
-                <option value="main">Sucursal Principal</option>
+                {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}

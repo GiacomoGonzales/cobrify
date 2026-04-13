@@ -53,7 +53,7 @@ const parseLocalDate = (dateValue) => {
 }
 
 export default function Purchases() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -931,7 +931,7 @@ export default function Purchases() {
                     className="flex-1 text-sm bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    <option value="main">Sucursal Principal</option>
+                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                     {branches.map((branch) => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name}

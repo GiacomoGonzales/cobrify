@@ -46,7 +46,7 @@ import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 export default function Quotations() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const toast = useToast()
@@ -503,7 +503,7 @@ export default function Quotations() {
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    <option value="main">Sucursal Principal</option>
+                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

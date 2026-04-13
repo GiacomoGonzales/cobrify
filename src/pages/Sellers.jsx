@@ -67,7 +67,7 @@ const DEMO_SELLERS = [
 
 
 export default function Sellers() {
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, user } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, user, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
 
   const [sellers, setSellers] = useState([])
@@ -510,7 +510,7 @@ export default function Sellers() {
                   className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                 >
                   <option value="all">Todas las sucursales</option>
-                  <option value="main">Sucursal Principal</option>
+                  {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}

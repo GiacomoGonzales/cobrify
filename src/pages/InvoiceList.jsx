@@ -67,7 +67,7 @@ import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -2205,7 +2205,7 @@ Gracias por tu preferencia.`
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
               >
                 <option value="all">Todas las sucursales</option>
-                <option value="main">Sucursal Principal</option>
+                {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}

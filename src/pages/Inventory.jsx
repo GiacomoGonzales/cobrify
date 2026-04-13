@@ -114,7 +114,7 @@ const getRealStockValue = (item) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess } = useAppContext()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
   const appNavigate = useAppNavigate()
@@ -2123,7 +2123,7 @@ export default function Inventory() {
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    <option value="main">Sucursal Principal</option>
+                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

@@ -14,7 +14,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 
 function BatchControl() {
-  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -590,7 +590,7 @@ function BatchControl() {
                     className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="all">Todas las sucursales</option>
-                    <option value="main">Sede principal</option>
+                    {hasMainBranchAccess && <option value="main">Sede principal</option>}
                     {branches.map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ))}

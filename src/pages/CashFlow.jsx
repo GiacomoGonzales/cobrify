@@ -192,7 +192,7 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CashFlow() {
-  const { user, isDemoMode } = useAppContext()
+  const { user, isDemoMode, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
 
   // Estados
@@ -1724,7 +1724,7 @@ export default function CashFlow() {
                     onChange={e => setNewMovement({ ...newMovement, branchId: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="">Sucursal Principal</option>
+                    {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

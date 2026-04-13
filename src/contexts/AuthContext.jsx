@@ -693,6 +693,9 @@ export const AuthProvider = ({ children }) => {
     return branches.filter(b => allowedBranches.includes(b.id))
   }
 
+  // Helper: ¿tiene acceso a la sucursal principal?
+  const hasMainBranchAccess = isAdmin || isBusinessOwner || !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+
   // Función helper para obtener el Business ID (owner del negocio)
   // Si es sub-usuario, retorna el ownerId; si es business owner o admin, retorna su propio uid
   const getBusinessId = () => {
@@ -731,6 +734,7 @@ export const AuthProvider = ({ children }) => {
     allowedPages,
     allowedWarehouses, // Almacenes permitidos para el usuario
     allowedBranches, // Sucursales permitidas para el usuario
+    hasMainBranchAccess, // Si tiene acceso a la sucursal principal
     allowedDocumentTypes, // Tipos de comprobante permitidos en POS
     allowedPaymentMethods, // Métodos de pago permitidos en POS
     assignedSellerId, // Vendedor asignado al sub-usuario en POS
