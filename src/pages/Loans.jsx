@@ -135,6 +135,7 @@ export default function Loans() {
   // Modal de pago con fecha
   const [paymentModal, setPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
   const [paymentDate, setPaymentDate] = useState((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
+  const [paymentAmount, setPaymentAmount] = useState('')
 
   // Modal de edición de pago
   const [editPaymentModal, setEditPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
@@ -288,6 +289,9 @@ export default function Loans() {
   // Abrir modal de pago
   const openPaymentModal = (loan, installmentIndex) => {
     setPaymentDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()) // Reset a fecha actual
+    const installment = loan.installments[installmentIndex]
+    const remaining = installment.amount - (installment.paidAmount || 0)
+    setPaymentAmount(remaining.toFixed(2))
     setPaymentModal({ open: true, loan, installmentIndex })
   }
 
@@ -302,16 +306,37 @@ export default function Loans() {
 
     if (!loan || installmentIndex === null) return
 
+    const amount = parseFloat(paymentAmount) || 0
+    if (amount <= 0) {
+      toast.error('El monto debe ser mayor a 0')
+      return
+    }
+
+    const installment = loan.installments[installmentIndex]
+    const remaining = installment.amount - (installment.paidAmount || 0)
+
+    if (amount > remaining + 0.01) {
+      toast.error(`El monto no puede ser mayor al saldo pendiente (${formatCurrency(remaining)})`)
+      return
+    }
+
     setIsPayingInstallment(true)
     try {
-      const selectedDate = new Date(paymentDate + 'T12:00:00') // Usar mediodía para evitar problemas de timezone
+      const selectedDate = new Date(paymentDate + 'T12:00:00')
+      const newPaidAmount = (installment.paidAmount || 0) + amount
+      const isFullyPaid = newPaidAmount >= installment.amount - 0.01
 
       const updatedInstallments = [...loan.installments]
+      // Registrar historial de abonos
+      const payments = [...(installment.payments || [])]
+      payments.push({ amount, date: selectedDate.toISOString() })
+
       updatedInstallments[installmentIndex] = {
         ...updatedInstallments[installmentIndex],
-        status: 'paid',
-        paidAt: selectedDate.toISOString(),
-        paidAmount: updatedInstallments[installmentIndex].amount
+        status: isFullyPaid ? 'paid' : 'partial',
+        paidAt: isFullyPaid ? selectedDate.toISOString() : (installment.paidAt || null),
+        paidAmount: isFullyPaid ? installment.amount : newPaidAmount,
+        payments,
       }
 
       const paidInstallments = updatedInstallments.filter(i => i.status === 'paid').length
@@ -327,11 +352,11 @@ export default function Loans() {
       })
 
       if (result.success) {
-        toast.success(`Cuota ${installmentIndex + 1} pagada exitosamente`)
+        toast.success(isFullyPaid
+          ? `Cuota ${installmentIndex + 1} pagada completamente`
+          : `Abono de ${formatCurrency(amount)} registrado en cuota ${installmentIndex + 1}`)
         loadLoans()
-        // Actualizar el modal de visualización
         setViewingLoan({ ...loan, installments: updatedInstallments, paidInstallments, paidAmount: totalPaid, status: allPaid ? 'paid' : 'active' })
-        // Cerrar modal de pago
         setPaymentModal({ open: false, loan: null, installmentIndex: null })
       } else {
         throw new Error(result.error)
@@ -1135,7 +1160,7 @@ export default function Loans() {
               <h4 className="font-medium text-gray-900 sticky top-0 bg-white py-2">Detalle de Cuotas</h4>
               {viewingLoan.installments?.map((inst, idx) => {
                 const dueDate = new Date(inst.dueDate)
-                const isOverdue = inst.status === 'pending' && dueDate < new Date()
+                const isOverdue = (inst.status === 'pending' || inst.status === 'partial') && dueDate < new Date()
 
                 return (
                   <div
@@ -1143,6 +1168,8 @@ export default function Loans() {
                     className={`flex items-center justify-between p-3 rounded-lg border ${
                       inst.status === 'paid'
                         ? 'bg-green-50 border-green-200'
+                        : inst.status === 'partial'
+                        ? 'bg-orange-50 border-orange-200'
                         : isOverdue
                         ? 'bg-red-50 border-red-200'
                         : 'bg-white border-gray-200'
@@ -1150,7 +1177,7 @@ export default function Loans() {
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        inst.status === 'paid' ? 'bg-green-500' : isOverdue ? 'bg-red-500' : 'bg-gray-300'
+                        inst.status === 'paid' ? 'bg-green-500' : inst.status === 'partial' ? 'bg-orange-500' : isOverdue ? 'bg-red-500' : 'bg-gray-300'
                       }`}>
                         {inst.status === 'paid' ? (
                           <CheckCircle className="w-4 h-4 text-white" />
@@ -1164,16 +1191,21 @@ export default function Loans() {
                           Vence: {formatDate(dueDate)}
                           {isOverdue && ' (Vencida)'}
                         </p>
+                        {inst.status === 'partial' && (
+                          <p className="text-xs text-orange-600">
+                            Abonado: {formatCurrency(inst.paidAmount || 0)} — Saldo: {formatCurrency(inst.amount - (inst.paidAmount || 0))}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-bold">{formatCurrency(inst.amount)}</span>
-                      {inst.status === 'pending' && (
+                      {(inst.status === 'pending' || inst.status === 'partial') && (
                         <Button
                           size="sm"
                           onClick={() => openPaymentModal(viewingLoan, idx)}
                         >
-                          Pagar
+                          {inst.status === 'partial' ? 'Abonar' : 'Pagar'}
                         </Button>
                       )}
                       {inst.status === 'paid' && (
@@ -1261,20 +1293,54 @@ export default function Loans() {
         {paymentModal.loan && paymentModal.installmentIndex !== null && (
           <div className="space-y-4">
             {/* Info de la cuota */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">
-                    Cuota {paymentModal.installmentIndex + 1} de {paymentModal.loan.totalInstallments}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Vence: {formatDate(new Date(paymentModal.loan.installments[paymentModal.installmentIndex].dueDate))}
-                  </p>
+            {(() => {
+              const inst = paymentModal.loan.installments[paymentModal.installmentIndex]
+              const alreadyPaid = inst.paidAmount || 0
+              const remaining = inst.amount - alreadyPaid
+              return (
+                <div className="p-4 bg-gray-50 rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        Cuota {paymentModal.installmentIndex + 1} de {paymentModal.loan.totalInstallments}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Vence: {formatDate(new Date(inst.dueDate))}
+                      </p>
+                    </div>
+                    <p className="text-xl font-bold text-primary-600">
+                      {formatCurrency(inst.amount)}
+                    </p>
+                  </div>
+                  {alreadyPaid > 0 && (
+                    <div className="flex justify-between text-sm pt-1 border-t border-gray-200">
+                      <span className="text-gray-500">Abonado: {formatCurrency(alreadyPaid)}</span>
+                      <span className="font-semibold text-orange-600">Saldo: {formatCurrency(remaining)}</span>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xl font-bold text-primary-600">
-                  {formatCurrency(paymentModal.loan.installments[paymentModal.installmentIndex].amount)}
-                </p>
+              )
+            })()}
+
+            {/* Monto del abono */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Monto a pagar
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">S/</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Puedes pagar el monto completo o un abono parcial
+              </p>
             </div>
 
             {/* Selector de fecha */}
@@ -1304,7 +1370,7 @@ export default function Loans() {
               </Button>
               <Button
                 onClick={handlePayInstallment}
-                disabled={isPayingInstallment || !paymentDate}
+                disabled={isPayingInstallment || !paymentDate || !paymentAmount || parseFloat(paymentAmount) <= 0}
               >
                 {isPayingInstallment ? (
                   <>
@@ -1314,7 +1380,10 @@ export default function Loans() {
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Confirmar Pago
+                    {parseFloat(paymentAmount) < (paymentModal.loan?.installments[paymentModal.installmentIndex]?.amount - (paymentModal.loan?.installments[paymentModal.installmentIndex]?.paidAmount || 0) - 0.01)
+                      ? 'Registrar Abono'
+                      : 'Confirmar Pago'
+                    }
                   </>
                 )}
               </Button>
