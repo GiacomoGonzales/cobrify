@@ -562,22 +562,13 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                 {(() => {
                   const showAllPrices = business?.catalogShowAllPrices !== false
                   const minWholesale = business?.catalogWholesaleMinQty || 0
+                  // Si hay múltiples precios con selección activa (botones radio abajo), solo mostrar el precio seleccionado
                   if (showAllPrices && hasMultiplePrices && !hasVariants) {
+                    const selected = availablePrices.find(p => p.key === selectedPriceLevel) || availablePrices[0]
                     return (
-                      <div className="flex flex-col gap-0.5">
-                        {availablePrices.map(p => (
-                          <div key={p.key} className="flex items-baseline gap-2">
-                            <span className={`font-bold ${p.key === selectedPriceLevel ? 'text-3xl text-gray-900' : 'text-xl text-gray-500'}`}>
-                              S/ {p.value.toFixed(2)}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {p.label}
-                              {p.key !== 'price1' && minWholesale > 1 && (
-                                <span className="text-xs text-gray-400 ml-1">(min. {minWholesale} un.)</span>
-                              )}
-                            </span>
-                          </div>
-                        ))}
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-bold text-gray-900">S/ {selected.value.toFixed(2)}</span>
+                        <span className="text-sm text-gray-500">{selected.label}</span>
                       </div>
                     )
                   }
@@ -616,7 +607,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           </div>
 
           {/* Tabla de precios por mayor — productos SIN variantes */}
-          {!hasVariants && hasMultiplePrices && showPrices && (
+          {!hasVariants && hasMultiplePrices && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
               <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
                 {availablePrices.map((priceItem) => {
@@ -734,7 +725,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           )}
 
           {/* Tabla de precios por mayor — variantes (aparece después de seleccionar variante) */}
-          {hasVariants && selectedVariant && availablePrices.length > 1 && showPrices && (
+          {hasVariants && selectedVariant && availablePrices.length > 1 && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
               <h3 className="font-semibold text-gray-900 mb-3">Precios disponibles</h3>
               <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
