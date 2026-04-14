@@ -403,8 +403,10 @@ export default function CreateQuotation() {
                              product.presentations.length > 0
 
     // Verificar si tiene múltiples precios habilitados
+    // Para variantes, verificar los precios de la variante; para productos normales, del producto
+    const priceSource = selectedVariant || product
     const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
-                              (product.price2 || product.price3 || product.price4)
+                              (priceSource.price2 || priceSource.price3 || priceSource.price4)
 
     // Si tiene presentaciones y no se ha seleccionado una, mostrar modal
     if (hasPresentations && !selectedPresentation) {
@@ -421,10 +423,10 @@ export default function CreateQuotation() {
       if (customer?.priceLevel) {
         // Auto-seleccionar precio según nivel del cliente
         const priceKey = customer.priceLevel
-        selectedPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
+        selectedPrice = priceKey === 'price1' ? priceSource.price : (priceSource[priceKey] || priceSource.price)
       } else {
-        // Mostrar modal para seleccionar precio
-        setPendingProductSelection({ index, product })
+        // Mostrar modal para seleccionar precio (guardar variante si aplica)
+        setPendingProductSelection({ index, product, variant: selectedVariant || null })
         setShowPriceModal(true)
         setShowProductSearch(null)
         return
@@ -439,7 +441,7 @@ export default function CreateQuotation() {
 
     // Si se seleccionó una variante (talla, color, etc.)
     if (selectedVariant) {
-      finalPrice = selectedVariant.price
+      finalPrice = selectedPrice || selectedVariant.price
       const attrs = Object.entries(selectedVariant.attributes || {}).map(([k, v]) => v).join(' / ')
       finalName = `${product.name} (${attrs})`
     }
@@ -479,19 +481,21 @@ export default function CreateQuotation() {
   const handlePriceSelection = (priceLevel) => {
     if (!pendingProductSelection) return
 
-    const { index, product } = pendingProductSelection
-    let selectedPrice = product.price
+    const { index, product, variant } = pendingProductSelection
+    // Resolver precio de la variante si existe, sino del producto
+    const priceSource = variant || product
+    let selectedPrice = priceSource.price
 
-    if (priceLevel === 'price2' && product.price2) {
-      selectedPrice = product.price2
-    } else if (priceLevel === 'price3' && product.price3) {
-      selectedPrice = product.price3
-    } else if (priceLevel === 'price4' && product.price4) {
-      selectedPrice = product.price4
+    if (priceLevel === 'price2' && priceSource.price2) {
+      selectedPrice = priceSource.price2
+    } else if (priceLevel === 'price3' && priceSource.price3) {
+      selectedPrice = priceSource.price3
+    } else if (priceLevel === 'price4' && priceSource.price4) {
+      selectedPrice = priceSource.price4
     }
 
     setShowPriceModal(false)
-    selectProduct(index, product, selectedPrice, null)
+    selectProduct(index, product, selectedPrice, null, variant)
   }
 
   // Manejar selección de variante desde el modal
@@ -2014,8 +2018,16 @@ export default function CreateQuotation() {
           </p>
           <p className="font-medium text-gray-900">
             {pendingProductSelection?.product?.name}
+            {pendingProductSelection?.variant && (
+              <span className="text-sm text-gray-500 ml-1">
+                ({Object.values(pendingProductSelection.variant.attributes || {}).join(' / ')})
+              </span>
+            )}
           </p>
 
+          {(() => {
+            const priceSource = pendingProductSelection?.variant || pendingProductSelection?.product
+            return (
           <div className="grid grid-cols-2 gap-3">
             {/* Precio 1 */}
             <button
@@ -2030,12 +2042,12 @@ export default function CreateQuotation() {
                 </span>
               </div>
               <p className="text-lg font-bold text-primary-600">
-                {formatCurrency(pendingProductSelection?.product?.price || 0)}
+                {formatCurrency(priceSource?.price || 0)}
               </p>
             </button>
 
             {/* Precio 2 */}
-            {pendingProductSelection?.product?.price2 && (
+            {priceSource?.price2 && (
               <button
                 type="button"
                 onClick={() => handlePriceSelection('price2')}
@@ -2048,13 +2060,13 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-green-600">
-                  {formatCurrency(pendingProductSelection?.product?.price2)}
+                  {formatCurrency(priceSource?.price2)}
                 </p>
               </button>
             )}
 
             {/* Precio 3 */}
-            {pendingProductSelection?.product?.price3 && (
+            {priceSource?.price3 && (
               <button
                 type="button"
                 onClick={() => handlePriceSelection('price3')}
@@ -2067,13 +2079,13 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-blue-600">
-                  {formatCurrency(pendingProductSelection?.product?.price3)}
+                  {formatCurrency(priceSource?.price3)}
                 </p>
               </button>
             )}
 
             {/* Precio 4 */}
-            {pendingProductSelection?.product?.price4 && (
+            {priceSource?.price4 && (
               <button
                 type="button"
                 onClick={() => handlePriceSelection('price4')}
@@ -2086,11 +2098,13 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-purple-600">
-                  {formatCurrency(pendingProductSelection?.product?.price4)}
+                  {formatCurrency(priceSource?.price4)}
                 </p>
               </button>
             )}
           </div>
+            )
+          })()}
 
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={cancelPendingSelection}>
