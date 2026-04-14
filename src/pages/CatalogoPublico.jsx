@@ -123,11 +123,25 @@ const isProductOutOfStock = (product, ignoreStock = false) => {
   if (!product) return false
   if (ignoreStock) return false
   // Productos sin control de stock siempre disponibles
-  if (product.trackStock === false || product.stock === null || product.stock === undefined) return false
+  if (product.trackStock === false) return false
   // Producto con variantes: agotado solo si TODAS las variantes están agotadas
   if (product.hasVariants && product.variants?.length > 0) {
-    return product.variants.every(v => v.stock !== null && v.stock !== undefined && v.stock <= 0)
+    return product.variants.every(v => {
+      // Verificar stock de variante en warehouseStocks
+      if (v.warehouseStocks?.length > 0) {
+        const totalStock = v.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        return totalStock <= 0
+      }
+      return v.stock !== null && v.stock !== undefined && v.stock <= 0
+    })
   }
+  // Verificar stock en warehouseStocks si existe
+  if (product.warehouseStocks?.length > 0) {
+    const totalStock = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    return totalStock <= 0
+  }
+  // Si no tiene stock definido, mostrar como disponible
+  if (product.stock === null || product.stock === undefined) return false
   return product.stock <= 0
 }
 
