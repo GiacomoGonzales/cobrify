@@ -179,7 +179,9 @@ export default function Inventory() {
     warehouseId: '',
     quantity: '',
     reason: 'damaged',
-    notes: ''
+    notes: '',
+    selectedSerials: [],
+    selectedVariantSku: '',
   })
   const [isProcessingDamage, setIsProcessingDamage] = useState(false)
 
@@ -610,6 +612,7 @@ export default function Inventory() {
       reason: 'damaged',
       notes: '',
       selectedSerials: [],
+      selectedVariantSku: '',
     })
     setShowDamageModal(true)
   }
@@ -623,6 +626,7 @@ export default function Inventory() {
       reason: 'damaged',
       notes: '',
       selectedSerials: [],
+      selectedVariantSku: '',
     })
   }
 
@@ -632,6 +636,13 @@ export default function Inventory() {
     // Validaciones
     if (!damageData.warehouseId) {
       toast.error('Debes seleccionar un almacén')
+      return
+    }
+
+    // Validar variante si el producto tiene variantes
+    const isVariantDamage = damageProduct.hasVariants && damageProduct.variants?.length > 0
+    if (isVariantDamage && !damageData.selectedVariantSku) {
+      toast.error('Debes seleccionar una variante')
       return
     }
 
@@ -649,11 +660,18 @@ export default function Inventory() {
       return
     }
 
-    // Verificar stock disponible en almacén
-    const warehouseStock = damageProduct.warehouseStocks?.find(
-      ws => ws.warehouseId === damageData.warehouseId
-    )
-    const availableStock = warehouseStock?.stock || 0
+    // Verificar stock disponible en almacén (o variante)
+    let availableStock = 0
+    if (isVariantDamage) {
+      const selectedVariant = damageProduct.variants.find(v => v.sku === damageData.selectedVariantSku)
+      const variantWS = selectedVariant?.warehouseStocks?.find(ws => ws.warehouseId === damageData.warehouseId)
+      availableStock = variantWS?.stock || 0
+    } else {
+      const warehouseStock = damageProduct.warehouseStocks?.find(
+        ws => ws.warehouseId === damageData.warehouseId
+      )
+      availableStock = warehouseStock?.stock || 0
+    }
 
     if (quantity > availableStock) {
       toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
@@ -676,6 +694,8 @@ export default function Inventory() {
       const reasonLabel = reasonLabels[damageData.reason] || damageData.reason
 
       // Crear movimiento de merma
+      const variantSku = isVariantDamage ? damageData.selectedVariantSku : null
+      const variantNote = variantSku ? ` (Variante: ${variantSku})` : ''
       const movementData = {
         warehouseId: damageData.warehouseId,
         type: 'damage',
@@ -683,7 +703,8 @@ export default function Inventory() {
         reason: reasonLabel,
         referenceType: 'damage_adjustment',
         userId: user.uid,
-        notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}`
+        notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}${variantNote}`,
+        ...(variantSku && { variantSku }),
       }
 
       // Usar ingredientId o productId según corresponda
@@ -736,7 +757,8 @@ export default function Inventory() {
           damageProduct.id,
           damageData.warehouseId,
           -quantity,
-          extraDamageUpdates
+          extraDamageUpdates,
+          variantSku
         )
 
         if (!updateResult.success) {
@@ -3804,6 +3826,28 @@ export default function Inventory() {
                 )
               })}
           </Select>
+
+          {/* Selector de variante (si el producto tiene variantes) */}
+          {damageProduct?.hasVariants && damageProduct.variants?.length > 0 && (
+            <Select
+              label="Variante"
+              required
+              value={damageData.selectedVariantSku}
+              onChange={(e) => setDamageData({ ...damageData, selectedVariantSku: e.target.value })}
+            >
+              <option value="">Seleccionar variante</option>
+              {damageProduct.variants.map((variant) => {
+                const variantWS = variant.warehouseStocks?.find(ws => ws.warehouseId === damageData.warehouseId)
+                const stock = variantWS?.stock || 0
+                const attrsLabel = Object.values(variant.attributes || {}).join(' / ')
+                return (
+                  <option key={variant.sku} value={variant.sku}>
+                    {attrsLabel || variant.sku} (Stock: {stock})
+                  </option>
+                )
+              })}
+            </Select>
+          )}
 
           <Select
             label="Motivo"
