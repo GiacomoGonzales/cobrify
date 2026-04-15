@@ -485,9 +485,12 @@ export default function Warehouses() {
       initialStock: product.initialStock,
       trackStock: product.trackStock,
       hasVariants: product.hasVariants || false,
+      hasBatches: product.batches?.length > 0,
       warehouseStocksTotal: 0,
       variantsTotal: 0,
       variantsWarehouseTotal: 0,
+      batchesTotal: 0,
+      batchesOrphanTotal: 0,
       hasOrphanStock: false,
       orphanStockTotal: 0,
       issues: [],
@@ -527,6 +530,27 @@ export default function Warehouses() {
       })
     }
 
+    // Calcular stock de lotes
+    if (product.batches?.length > 0) {
+      summary.batchesTotal = product.batches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+
+      // Detectar lotes en almacenes eliminados
+      product.batches.forEach(batch => {
+        if (batch.warehouseId && !warehouseExists(batch.warehouseId) && batch.quantity > 0) {
+          summary.hasOrphanStock = true
+          summary.batchesOrphanTotal += batch.quantity || 0
+          summary.orphanStockTotal += batch.quantity || 0
+        }
+      })
+
+      // Detectar lotes sin almacén asignado
+      const batchesWithoutWarehouse = product.batches.filter(b => !b.warehouseId && b.quantity > 0)
+      if (batchesWithoutWarehouse.length > 0) {
+        const unassignedQty = batchesWithoutWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+        summary.issues.push(`${batchesWithoutWarehouse.length} lote(s) sin almacén asignado (${unassignedQty} unidades)`)
+      }
+    }
+
     // Detectar problemas
     // 1. Stock huérfano (almacenes eliminados)
     if (summary.hasOrphanStock) {
@@ -541,8 +565,8 @@ export default function Warehouses() {
       if (summary.variantsTotal !== summary.variantsWarehouseTotal && summary.variantsWarehouseTotal > 0 && !summary.hasOrphanStock) {
         summary.issues.push(`Diferencia entre stock de variantes (${summary.variantsTotal}) y stock en almacenes (${summary.variantsWarehouseTotal})`)
       }
-    } else {
-      // Producto sin variantes
+    } else if (!summary.hasBatches) {
+      // Producto sin variantes y sin lotes
       if (summary.stockField > 0 && summary.warehouseStocksTotal === 0) {
         summary.issues.push('El producto tiene stock pero NO está asignado a ningún almacén')
       }
@@ -587,8 +611,25 @@ export default function Warehouses() {
           }
         })
         updateData.variants = repairedVariants
+      } else if (selectedProduct.batches?.length > 0) {
+        // Reparar lotes - asignar todos los lotes al almacén seleccionado
+        const repairedBatches = selectedProduct.batches.map(batch => ({
+          ...batch,
+          warehouseId: repairWarehouseId
+        }))
+        updateData.batches = repairedBatches
+
+        // También actualizar warehouseStocks del producto
+        const totalBatchStock = repairedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+        if (totalBatchStock > 0) {
+          updateData.warehouseStocks = [{
+            warehouseId: repairWarehouseId,
+            stock: totalBatchStock,
+            minStock: 0
+          }]
+        }
       } else {
-        // Reparar producto sin variantes
+        // Reparar producto sin variantes ni lotes
         const currentStock = selectedProduct.stock || 0
         if (currentStock > 0) {
           updateData.warehouseStocks = [{
@@ -1661,13 +1702,45 @@ export default function Warehouses() {
                     <Box className="w-4 h-4" />
                     Lotes ({selectedProduct.batches.length})
                   </h4>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {selectedProduct.batches.map((batch, idx) => (
-                      <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
-                        <span>{batch.batchNumber || `Lote ${idx + 1}`}</span>
-                        <span className="font-mono">{batch.quantity || batch.stock || 0}</span>
-                      </div>
-                    ))}
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {selectedProduct.batches.map((batch, idx) => {
+                      const hasOrphanWarehouse = batch.warehouseId && !warehouseExists(batch.warehouseId)
+                      const warehouseName = batch.warehouseId
+                        ? (hasOrphanWarehouse
+                          ? `⚠️ Almacén eliminado (${batch.warehouseId.slice(0, 8)}...)`
+                          : getWarehouseName(batch.warehouseId))
+                        : 'Sin almacén'
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg ${hasOrphanWarehouse ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'}`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-sm">{batch.batchNumber || `Lote ${idx + 1}`}</p>
+                              {batch.expirationDate && (
+                                <p className="text-xs text-gray-500">
+                                  Vence: {new Date(batch.expirationDate).toLocaleDateString('es-PE')}
+                                </p>
+                              )}
+                            </div>
+                            <span className="font-mono font-medium">{batch.quantity || 0}</span>
+                          </div>
+                          <div className="mt-1 pt-1 border-t border-gray-200">
+                            <p className={`text-xs ${hasOrphanWarehouse ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
+                              {warehouseName}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex justify-between border-t pt-2 mt-2 font-medium">
+                    <span>Total stock lotes:</span>
+                    <span className="font-mono">
+                      {selectedProduct.batches.reduce((sum, b) => sum + (b.quantity || 0), 0)}
+                    </span>
                   </div>
                 </div>
               )}
