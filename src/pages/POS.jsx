@@ -58,6 +58,7 @@ import {
   getProducts,
   getCustomers,
   createInvoice,
+  createInvoiceWithNumber,
   getCompanySettings,
   updateProduct,
   updateProductStockTransaction,
@@ -3403,8 +3404,8 @@ export default function POS() {
 
       const isEditMode = !!editingInvoiceId
 
-      // 1. Obtener número de documento
-      let numberResult
+      // 1. En modo edición, obtener número existente. En modo normal, el número se genera atómicamente al crear la factura.
+      let numberResult = null
       if (isEditMode) {
         // MODO EDICIÓN: Usar el número original del documento
         numberResult = {
@@ -3414,15 +3415,8 @@ export default function POS() {
           correlativeNumber: editingInvoiceData.correlativeNumber,
         }
         console.log('📝 Modo edición - Usando número original:', numberResult.number)
-      } else {
-        // MODO NORMAL: Obtener siguiente número (priorizando series de sucursal, luego almacén)
-        numberResult = await getNextDocumentNumber(businessId, documentType, selectedWarehouse?.id, selectedBranch?.id)
-        if (!numberResult.success) {
-          console.error('❌ Error detallado al generar número:', numberResult.error)
-          throw new Error(numberResult.error || 'Error al generar número de comprobante')
-        }
-        console.log('✅ Número generado:', numberResult.number, 'Sucursal:', selectedBranch?.name || 'N/A', 'Almacén:', selectedWarehouse?.name || 'Global')
       }
+      // NOTA: En modo normal, el número se genera atómicamente con createInvoiceWithNumber más adelante
 
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
@@ -3478,9 +3472,12 @@ export default function POS() {
       })
 
       const invoiceData = {
-        number: numberResult.number,
-        series: numberResult.series,
-        correlativeNumber: numberResult.correlativeNumber,
+        // En modo edición, incluir número existente. En modo normal, se genera atómicamente al guardar.
+        ...(isEditMode && {
+          number: numberResult.number,
+          series: numberResult.series,
+          correlativeNumber: numberResult.correlativeNumber,
+        }),
         documentType: documentType,
         // Guardar el ID del cliente si fue seleccionado de la lista
         ...(selectedCustomer?.id && { customerId: selectedCustomer.id }),
@@ -3727,12 +3724,42 @@ export default function POS() {
 
       } else {
         // ========================================
-        // MODO NORMAL: Venta rápida (print-first)
-        // Primero: mostrar éxito + imprimir ticket
-        // Después: guardar en Firestore en background
+        // MODO NORMAL: Venta segura (save-first)
+        // Primero: guardar factura con número atómico
+        // Después: mostrar éxito + imprimir ticket
+        // Esto garantiza que el número solo se usa si la factura se crea exitosamente
         // ========================================
 
-        // INMEDIATO: Mostrar éxito y preparar impresión
+        // 1. PRIMERO: Crear factura con número atómico (garantiza que no se pierdan números)
+        console.log('💾 Guardando factura con número atómico...')
+        const createResult = await createInvoiceWithNumber(
+          businessId,
+          invoiceData,
+          documentType,
+          selectedWarehouse?.id,
+          selectedBranch?.id
+        )
+
+        if (!createResult.success) {
+          console.error('❌ Error al crear factura:', createResult.error)
+          throw new Error(createResult.error || 'Error al generar comprobante')
+        }
+
+        // Obtener datos de la factura creada
+        const invoiceId = createResult.id
+        numberResult = {
+          number: createResult.number,
+          series: createResult.series,
+          correlativeNumber: createResult.correlativeNumber,
+        }
+        console.log('✅ Factura creada atómicamente:', numberResult.number, 'ID:', invoiceId)
+
+        // Actualizar invoiceData con el número generado para uso posterior (impresión, etc.)
+        invoiceData.number = numberResult.number
+        invoiceData.series = numberResult.series
+        invoiceData.correlativeNumber = numberResult.correlativeNumber
+
+        // 2. AHORA SÍ: Mostrar éxito (la venta ya está guardada)
         const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
         toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
@@ -3745,7 +3772,7 @@ export default function POS() {
           CustomerDisplay.showCompleted(amounts.total, numberResult.number, documentType)
         }
 
-        // INMEDIATO: Actualizar stock localmente (sin esperar Firestore)
+        // Actualizar stock localmente
         setProducts(prev => prev.map(product => {
           // Buscar TODOS los items del carrito que correspondan a este producto
           const cartItems = cart.filter(ci => ci.id === product.id || ci.productId === product.id)
@@ -3785,15 +3812,15 @@ export default function POS() {
           return product
         }))
 
-        // INMEDIATO: Limpiar borrador
+        // Limpiar borrador
         clearDraft()
 
-        // INMEDIATO: Auto-imprimir ticket (sin esperar guardado)
+        // Auto-imprimir ticket
         if (companySettings?.autoPrintTicket) {
           setTimeout(() => handlePrintTicket(invoiceData), 100)
         }
 
-        // Limpiar estado de mesa/orden/cotización inmediatamente para liberar UI
+        // Limpiar estado de mesa/orden/cotización
         const _tableData = tableData
         const _pendingOrderId = pendingOrderId
         const _markOrderPaidOnComplete = markOrderPaidOnComplete
@@ -3809,7 +3836,7 @@ export default function POS() {
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
         if (_pendingAppointmentData) setPendingAppointmentData(null)
 
-        // Capturar datos necesarios para el background (los estados pueden cambiar)
+        // Capturar datos necesarios para el background
         const bgCart = [...cart]
         const bgProducts = [...products]
         const bgSelectedWarehouse = selectedWarehouse
@@ -3822,21 +3849,15 @@ export default function POS() {
         const bgUserUid = user.uid
         const bgUserEmail = user.email
         const bgUserDisplayName = user.displayName
+        const bgInvoiceId = invoiceId
 
         // ========================================
-        // BACKGROUND: Todas las operaciones de Firestore
+        // BACKGROUND: Operaciones adicionales de Firestore
+        // (la factura ya fue creada, estas son operaciones complementarias)
         // ========================================
         const backgroundSave = async () => {
           try {
-            // 3. Guardar factura en Firestore
-            const result = await createInvoice(businessId, invoiceData)
-            if (!result.success) {
-              console.error('❌ Error al guardar factura en Firestore:', result.error)
-              toast.error('Error al guardar la venta. Verifica en el listado de ventas.', 5000)
-              return
-            }
-            const bgInvoiceId = result.id
-            console.log('✅ Factura guardada en Firestore:', bgInvoiceId)
+            console.log('✅ Factura ya guardada, ejecutando operaciones complementarias...')
 
             // Incrementar contador de ventas para review prompt
             try { const { incrementSalesCount } = await import('@/components/ReviewPrompt'); incrementSalesCount() } catch (e) { /* ignore */ }

@@ -42,6 +42,106 @@ export const createInvoice = async (userId, invoiceData) => {
 }
 
 /**
+ * Crear factura con generación de número atómica
+ * Esta función garantiza que el número se genera Y la factura se crea en una sola transacción.
+ * Si la factura no se crea, el número NO se incrementa (evita saltos en la numeración).
+ *
+ * @param {string} userId - ID del negocio
+ * @param {Object} invoiceData - Datos de la factura (SIN number, series, correlativeNumber)
+ * @param {string} documentType - Tipo de documento (factura, boleta, nota_venta, etc.)
+ * @param {string} warehouseId - ID del almacén (opcional, compatibilidad)
+ * @param {string} branchId - ID de la sucursal (opcional, prioritario)
+ */
+export const createInvoiceWithNumber = async (userId, invoiceData, documentType, warehouseId = null, branchId = null) => {
+  try {
+    const businessRef = doc(db, 'businesses', userId)
+    const invoicesCollection = collection(db, 'businesses', userId, 'invoices')
+    // Generar ID del documento de factura antes de la transacción
+    const newInvoiceRef = doc(invoicesCollection)
+
+    const result = await runTransaction(db, async (transaction) => {
+      // 1. Leer el documento del negocio para obtener el contador
+      const businessSnap = await transaction.get(businessRef)
+
+      if (!businessSnap.exists()) {
+        throw new Error('Negocio no encontrado')
+      }
+
+      const data = businessSnap.data()
+      let typeData = null
+      let seriesPath = ''
+
+      // Buscar la serie correcta (misma lógica que getNextDocumentNumber)
+      // 1. Primero intentar con branchSeries (sucursales - nuevo sistema)
+      if (branchId && data.branchSeries && data.branchSeries[branchId]) {
+        const branchSeries = data.branchSeries[branchId]
+        if (branchSeries[documentType]) {
+          typeData = branchSeries[documentType]
+          seriesPath = `branchSeries.${branchId}.${documentType}`
+        }
+      }
+
+      // 2. Fallback a warehouseSeries (compatibilidad hacia atrás)
+      if (!typeData && warehouseId && data.warehouseSeries && data.warehouseSeries[warehouseId]) {
+        const warehouseSeries = data.warehouseSeries[warehouseId]
+        if (warehouseSeries[documentType]) {
+          typeData = warehouseSeries[documentType]
+          seriesPath = `warehouseSeries.${warehouseId}.${documentType}`
+        }
+      }
+
+      // 3. Fallback a series globales si no hay series específicas
+      if (!typeData && data.series && data.series[documentType]) {
+        typeData = data.series[documentType]
+        seriesPath = `series.${documentType}`
+      }
+
+      if (!typeData) {
+        throw new Error(`Series no configuradas para ${documentType}`)
+      }
+
+      // 2. Calcular siguiente número
+      const nextNumber = (typeData.lastNumber || 0) + 1
+      const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
+
+      // 3. Crear la factura con el número generado
+      const completeInvoiceData = {
+        ...invoiceData,
+        number: formattedNumber,
+        series: typeData.serie,
+        correlativeNumber: nextNumber,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }
+
+      // 4. Ejecutar ambas operaciones en la misma transacción
+      // - Actualizar el contador
+      transaction.update(businessRef, {
+        [`${seriesPath}.lastNumber`]: nextNumber,
+        updatedAt: serverTimestamp(),
+      })
+      // - Crear la factura
+      transaction.set(newInvoiceRef, completeInvoiceData)
+
+      return {
+        id: newInvoiceRef.id,
+        number: formattedNumber,
+        series: typeData.serie,
+        correlativeNumber: nextNumber,
+      }
+    })
+
+    return {
+      success: true,
+      ...result
+    }
+  } catch (error) {
+    console.error('Error al crear factura con número:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener facturas recientes (por rango de fechas) - optimizado para Dashboard
  * @param {string} userId - ID del negocio
  * @param {Date} sinceDate - Fecha desde la cual obtener facturas

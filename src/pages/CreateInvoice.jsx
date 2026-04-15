@@ -15,8 +15,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   getCustomers,
   getProducts,
-  createInvoice,
-  getNextDocumentNumber,
+  createInvoiceWithNumber,
   updateProduct,
 } from '@/services/firestoreService'
 
@@ -242,13 +241,7 @@ export default function CreateInvoice() {
     setMessage(null)
 
     try {
-      // 1. Obtener siguiente número de documento
-      const numberResult = await getNextDocumentNumber(user.uid, documentType)
-      if (!numberResult.success) {
-        throw new Error('Error al generar número de comprobante')
-      }
-
-      // 2. Preparar items de la factura
+      // 1. Preparar items de la factura
       const items = invoiceItems.map(item => ({
         productId: item.productId || '',
         code: products.find(p => p.id === item.productId)?.code || '',
@@ -260,10 +253,8 @@ export default function CreateInvoice() {
         taxAffectation: item.taxAffectation || '10',
       }))
 
-      // 3. Crear factura
+      // 2. Preparar datos de la factura (SIN número - se genera atómicamente)
       const invoiceData = {
-        number: numberResult.number,
-        documentType: documentType,
         customer: selectedCustomer
           ? {
               id: selectedCustomer.id,
@@ -300,7 +291,8 @@ export default function CreateInvoice() {
         createdByEmail: user.email || '',
       }
 
-      const result = await createInvoice(user.uid, invoiceData)
+      // 3. Crear factura con número atómico (garantiza que no se pierdan números)
+      const result = await createInvoiceWithNumber(user.uid, invoiceData, documentType)
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la factura')
       }
@@ -328,7 +320,7 @@ export default function CreateInvoice() {
       // 5. Mostrar éxito y redirigir
       setMessage({
         type: 'success',
-        text: `✓ ${documentType === 'factura' ? 'Factura' : 'Boleta'} ${numberResult.number} creada exitosamente`,
+        text: `✓ ${documentType === 'factura' ? 'Factura' : 'Boleta'} ${result.number} creada exitosamente`,
       })
 
       setTimeout(() => {
