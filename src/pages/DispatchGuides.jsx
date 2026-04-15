@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -1209,6 +1209,71 @@ export default function DispatchGuides() {
                     >
                       <Package className="w-4 h-4" />
                       <span>Descontar stock</span>
+                    </button>
+                  )}
+
+                  {/* Revertir descuento de stock - Solo si ya se descontó y tiene almacén */}
+                  {guide.stockDeducted && guide.warehouseId && guide.sunatStatus !== 'voided' && (
+                    <button
+                      onClick={async () => {
+                        setOpenMenuId(null)
+                        try {
+                          const { updateProductStockTransaction } = await import('@/services/firestoreService')
+                          const { createStockMovement } = await import('@/services/warehouseService')
+                          const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+                          const { db: fireDb } = await import('@/lib/firebase')
+                          const businessId = getBusinessId()
+                          const stockItems = (guide.items || []).filter(item => item.productId && parseFloat(item.quantity) > 0)
+
+                          for (const item of stockItems) {
+                            const extraUpdates = {}
+                            // Restaurar serial a disponible si aplica
+                            if (item.serialNumber) {
+                              const productSnap = await getDocFn(docRef(fireDb, 'businesses', businessId, 'products', item.productId))
+                              if (productSnap.exists() && productSnap.data()?.serials?.length > 0) {
+                                extraUpdates.serials = productSnap.data().serials.map(s =>
+                                  s.serialNumber === item.serialNumber && s.status === 'dispatched'
+                                    ? { ...s, status: 'available', dispatchGuideId: null }
+                                    : s
+                                )
+                              }
+                            }
+                            // Restaurar stock (cantidad positiva)
+                            await updateProductStockTransaction(
+                              businessId,
+                              item.productId,
+                              guide.warehouseId,
+                              parseFloat(item.quantity), // Positivo para sumar
+                              extraUpdates
+                            )
+                            // Registrar movimiento de entrada
+                            await createStockMovement(businessId, {
+                              productId: item.productId,
+                              productName: item.description || '',
+                              warehouseId: guide.warehouseId,
+                              type: 'entry',
+                              quantity: parseFloat(item.quantity),
+                              reason: 'Reversión guía de remisión',
+                              referenceType: 'dispatch_guide_reversal',
+                              referenceId: guide.id,
+                              referenceNumber: guide.number,
+                              userId: user?.uid || '',
+                              ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                              notes: `Stock restaurado: ${guide.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
+                            })
+                          }
+                          await updateDispatchGuide(getBusinessId(), guide.id, { stockDeducted: false })
+                          setGuides(prev => prev.map(g => g.id === guide.id ? { ...g, stockDeducted: false } : g))
+                          toast.success('Stock restaurado exitosamente')
+                        } catch (error) {
+                          console.error('Error al revertir descuento de stock:', error)
+                          toast.error('Error al revertir descuento de stock')
+                        }
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-700"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Revertir descuento</span>
                     </button>
                   )}
 
