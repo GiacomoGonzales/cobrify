@@ -876,15 +876,38 @@ export default function Products() {
       if (hasVariants) {
         // Product with variants
         productData.variantAttributes = variantAttributes
-        productData.variants = variants.map(v => ({
-          sku: v.sku,
-          attributes: v.attributes,
-          price: typeof v.price === 'string' ? parseFloat(v.price) : v.price,
-          price2: v.price2 || null,
-          price3: v.price3 || null,
-          price4: v.price4 || null,
-          stock: v.stock === '' || v.stock === null ? null : (typeof v.stock === 'string' ? parseInt(v.stock) : v.stock),
-        }))
+
+        // Determinar almacén destino para variantes (usar el seleccionado o el por defecto)
+        let targetWarehouseForVariants = variantWarehouseId
+        if (!targetWarehouseForVariants && warehouses.length > 0) {
+          const defaultWh = warehouses.find(w => w.isDefault && (w.isActive || w.status === 'active'))
+          targetWarehouseForVariants = defaultWh?.id || warehouses.find(w => w.isActive || w.status === 'active')?.id || ''
+        }
+
+        productData.variants = variants.map(v => {
+          const stockValue = v.stock === '' || v.stock === null ? null : (typeof v.stock === 'string' ? parseInt(v.stock) : v.stock)
+
+          // Construir warehouseStocks si hay stock y almacén destino
+          let variantWarehouseStocks = v.warehouseStocks || []
+          if (!editingProduct && stockValue && stockValue > 0 && targetWarehouseForVariants) {
+            variantWarehouseStocks = [{
+              warehouseId: targetWarehouseForVariants,
+              stock: stockValue,
+              minStock: 0
+            }]
+          }
+
+          return {
+            sku: v.sku,
+            attributes: v.attributes,
+            price: typeof v.price === 'string' ? parseFloat(v.price) : v.price,
+            price2: v.price2 || null,
+            price3: v.price3 || null,
+            price4: v.price4 || null,
+            stock: stockValue,
+            warehouseStocks: variantWarehouseStocks,
+          }
+        })
         // Calculate base price as average of variant prices
         const avgPrice = productData.variants.reduce((sum, v) => sum + v.price, 0) / productData.variants.length
         productData.basePrice = parseFloat(avgPrice.toFixed(2))
