@@ -570,6 +570,14 @@ export default function Products() {
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
+    // Pre-seleccionar almacén si las variantes ya tienen warehouseStocks
+    if (productHasVariants && product.variants?.length > 0) {
+      const firstVariantWithWarehouse = product.variants.find(v => v.warehouseStocks?.length > 0)
+      if (firstVariantWithWarehouse?.warehouseStocks?.[0]?.warehouseId) {
+        setVariantWarehouseId(firstVariantWithWarehouse.warehouseStocks[0].warehouseId)
+      }
+    }
+
     // Load modifiers if product has them (restaurant mode)
     setModifiers(product.modifiers || [])
 
@@ -889,7 +897,15 @@ export default function Products() {
 
           // Construir warehouseStocks si hay stock y almacén destino
           let variantWarehouseStocks = v.warehouseStocks || []
-          if (!editingProduct && stockValue && stockValue > 0 && targetWarehouseForVariants) {
+
+          // Asignar warehouseStocks si:
+          // 1. Es creación (!editingProduct) y hay stock y almacén, O
+          // 2. Es edición y la variante NO tiene warehouseStocks pero se seleccionó un almacén
+          const needsWarehouseAssignment =
+            (!editingProduct && stockValue && stockValue > 0 && targetWarehouseForVariants) ||
+            (editingProduct && (!v.warehouseStocks || v.warehouseStocks.length === 0) && stockValue && stockValue > 0 && targetWarehouseForVariants)
+
+          if (needsWarehouseAssignment) {
             variantWarehouseStocks = [{
               warehouseId: targetWarehouseForVariants,
               stock: stockValue,
