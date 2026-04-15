@@ -22,6 +22,7 @@ import {
   Store,
   Copy,
   Truck,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -41,6 +42,7 @@ import {
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
+import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
@@ -66,6 +68,7 @@ export default function Quotations() {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
   const [visibleCount, setVisibleCount] = useState(20)
+  const [isExporting, setIsExporting] = useState(false)
   const ITEMS_PER_PAGE = 20
 
   // Helper para manejar fechas de Firestore y Date objects
@@ -354,6 +357,28 @@ export default function Quotations() {
   const displayedQuotations = filteredQuotations.slice(0, visibleCount)
   const hasMore = filteredQuotations.length > visibleCount
 
+  // Función para exportar cotizaciones a Excel
+  const handleExportToExcel = async () => {
+    if (filteredQuotations.length === 0) {
+      toast.warning('No hay cotizaciones para exportar')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const filters = {
+        status: filterStatus !== 'all' ? filterStatus : null,
+      }
+      await generateQuotationsExcel(filteredQuotations, filters, companySettings)
+      toast.success(`${filteredQuotations.length} cotización(es) exportada(s) exitosamente`)
+    } catch (error) {
+      console.error('Error al exportar a Excel:', error)
+      toast.error('Error al generar el archivo Excel')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
@@ -423,10 +448,25 @@ export default function Quotations() {
             Gestiona tus cotizaciones y conviértelas en facturas
           </p>
         </div>
-        <Button className="w-full sm:w-auto" onClick={() => appNavigate('cotizaciones/nueva')}>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={handleExportToExcel}
+            disabled={isExporting || filteredQuotations.length === 0}
+            className="w-full sm:w-auto"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+            )}
+            Exportar Excel
+          </Button>
+          <Button className="w-full sm:w-auto" onClick={() => appNavigate('cotizaciones/nueva')}>
             <Plus className="w-4 h-4 mr-2" />
             Nueva Cotización
           </Button>
+        </div>
       </div>
 
       {/* Stats */}
