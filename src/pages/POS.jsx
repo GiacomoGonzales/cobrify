@@ -5144,7 +5144,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
 
               {/* 6. Panel de Cliente - Siempre Visible */}
-              <div className="space-y-2 overflow-hidden min-w-0">
+              <div className="space-y-2 min-w-0">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <User className="w-3.5 h-3.5" />
                   Datos del Cliente
@@ -5856,7 +5856,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </>
                 ) : (
                   /* Nota de venta - con búsqueda de DNI/RUC */
-                  <div className="space-y-2 overflow-hidden min-w-0">
+                  <div className="space-y-2 min-w-0">
                     <div className="flex gap-2 min-w-0">
                       <select
                         value={customerData.documentType || ID_TYPES.DNI}

@@ -933,9 +933,10 @@ export default function Reports() {
       }
     } else if (dateRange === 'month') {
       groupBy = 'day'
-      // Últimos 30 días
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+      // Mes calendárico: del 1ro del mes hasta hoy
+      const today = now.getDate()
+      for (let i = 1; i <= today; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth(), i)
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
@@ -1301,8 +1302,10 @@ export default function Reports() {
       }
     } else if (dateRange === 'month') {
       groupBy = 'day'
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+      // Mes calendárico: del 1ro del mes hasta hoy
+      const today = now.getDate()
+      for (let i = 1; i <= today; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth(), i)
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
