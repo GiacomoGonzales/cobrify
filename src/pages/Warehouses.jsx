@@ -493,6 +493,9 @@ export default function Warehouses() {
       batchesOrphanTotal: 0,
       hasOrphanStock: false,
       orphanStockTotal: 0,
+      hasBatchesWithoutWarehouse: false,
+      batchesWithoutWarehouseTotal: 0,
+      batchesWithoutWarehouseCount: 0,
       issues: [],
     }
 
@@ -547,6 +550,9 @@ export default function Warehouses() {
       const batchesWithoutWarehouse = product.batches.filter(b => !b.warehouseId && b.quantity > 0)
       if (batchesWithoutWarehouse.length > 0) {
         const unassignedQty = batchesWithoutWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+        summary.hasBatchesWithoutWarehouse = true
+        summary.batchesWithoutWarehouseTotal = unassignedQty
+        summary.batchesWithoutWarehouseCount = batchesWithoutWarehouse.length
         summary.issues.push(`${batchesWithoutWarehouse.length} lote(s) sin almacén asignado (${unassignedQty} unidades)`)
       }
     }
@@ -658,6 +664,64 @@ export default function Warehouses() {
     } catch (error) {
       console.error('Error al reparar producto:', error)
       toast.error('Error al reparar producto')
+    } finally {
+      setIsRepairing(false)
+    }
+  }
+
+  // Reparar solo lotes sin almacén asignado
+  const handleRepairBatchesWithoutWarehouse = async () => {
+    if (!selectedProduct || !repairWarehouseId) {
+      toast.error('Selecciona un almacén destino')
+      return
+    }
+
+    setIsRepairing(true)
+    try {
+      const businessId = getBusinessId()
+
+      // Solo actualizar lotes que no tienen warehouseId
+      const repairedBatches = selectedProduct.batches.map(batch => {
+        if (!batch.warehouseId && batch.quantity > 0) {
+          return { ...batch, warehouseId: repairWarehouseId }
+        }
+        return batch
+      })
+
+      // Recalcular warehouseStocks
+      const stockByWarehouse = {}
+      repairedBatches.forEach(batch => {
+        if (batch.warehouseId && batch.quantity > 0) {
+          stockByWarehouse[batch.warehouseId] = (stockByWarehouse[batch.warehouseId] || 0) + batch.quantity
+        }
+      })
+
+      const newWarehouseStocks = Object.entries(stockByWarehouse).map(([warehouseId, stock]) => ({
+        warehouseId,
+        stock,
+        minStock: selectedProduct.warehouseStocks?.find(ws => ws.warehouseId === warehouseId)?.minStock || 0
+      }))
+
+      const updateData = {
+        batches: repairedBatches,
+        warehouseStocks: newWarehouseStocks,
+        stock: repairedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+      }
+
+      const result = await updateProduct(businessId, selectedProduct.id, updateData)
+
+      if (result.success) {
+        toast.success('Lotes reparados exitosamente')
+        const updatedProduct = { ...selectedProduct, ...updateData }
+        setSelectedProduct(updatedProduct)
+        setAllProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p))
+        setRepairWarehouseId('')
+      } else {
+        toast.error(result.error || 'Error al reparar lotes')
+      }
+    } catch (error) {
+      console.error('Error al reparar lotes:', error)
+      toast.error('Error al reparar lotes')
     } finally {
       setIsRepairing(false)
     }
@@ -1569,6 +1633,52 @@ export default function Warehouses() {
                               <>
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 Reparar Producto
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Panel de reparación si hay lotes sin almacén asignado */}
+                    {summary?.hasBatchesWithoutWarehouse && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <h4 className="font-medium text-amber-900 mb-3 flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4" />
+                          Reparar Lotes sin Almacén
+                        </h4>
+                        <p className="text-sm text-amber-800 mb-3">
+                          Este producto tiene <strong>{summary.batchesWithoutWarehouseCount} lote(s)</strong> con{' '}
+                          <strong>{summary.batchesWithoutWarehouseTotal} unidades</strong> sin almacén asignado.
+                          Selecciona un almacén para asignarles:
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <select
+                            value={repairWarehouseId}
+                            onChange={(e) => setRepairWarehouseId(e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          >
+                            <option value="">Seleccionar almacén destino...</option>
+                            {warehouses.filter(w => w.isActive || w.status === 'active').map(wh => (
+                              <option key={wh.id} value={wh.id}>
+                                {wh.name} {wh.isDefault ? '(Principal)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            onClick={handleRepairBatchesWithoutWarehouse}
+                            disabled={!repairWarehouseId || isRepairing}
+                            className="whitespace-nowrap bg-amber-600 hover:bg-amber-700"
+                          >
+                            {isRepairing ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Reparando...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Asignar Almacén
                               </>
                             )}
                           </Button>
