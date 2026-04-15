@@ -547,7 +547,9 @@ export default function Products() {
       return
     }
     setEditingProduct(product)
-    const hasNoStock = product.stock === null || product.stock === undefined
+    // Para productos con variantes, siempre manejan stock (trackStock = true)
+    // Para otros productos, usar el campo trackStock guardado en lugar de inferir del stock
+    const hasNoStock = product.hasVariants ? false : (product.trackStock === false)
     setNoStock(hasNoStock)
 
     // Set decimal quantity state (venta por peso)
@@ -2594,7 +2596,9 @@ export default function Products() {
 
     const totalCostValue = products.reduce((sum, product) => {
       if (product.hasVariants && product.variants?.length > 0) {
-        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || v.price || 0), 0)
+        // Para variantes, usar el costo de la variante si existe, si no usar el costo del producto padre
+        const parentCost = parseFloat(product.cost) || 0
+        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || parentCost || 0), 0)
       }
       const realStock = getRealStockValue(product)
       const cost = product.itemType === 'ingredient' ? (product.averageCost || 0) : (parseFloat(product.cost) || 0)
