@@ -665,15 +665,15 @@ export default function Products() {
     setHasVariants(productHasVariants)
     setVariantAttributes(product.variantAttributes || [])
     // Clonar variantes pero limpiar IDs
-    setVariants((product.variants || []).map(v => ({ ...v, id: undefined })))
+    setVariants((product.variants || []).map(({ id, ...rest }) => rest))
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
-    // Clonar modificadores
-    setModifiers((product.modifiers || []).map(m => ({ ...m, id: undefined })))
+    // Clonar modificadores (sin el id para evitar undefined en Firestore)
+    setModifiers((product.modifiers || []).map(({ id, ...rest }) => rest))
 
-    // Clonar presentaciones
-    const clonedPresentations = (product.presentations || []).map(p => ({ ...p, id: undefined }))
+    // Clonar presentaciones (sin el id para evitar undefined en Firestore)
+    const clonedPresentations = (product.presentations || []).map(({ id, ...rest }) => rest)
     setPresentations(clonedPresentations)
     setShowPresentations(clonedPresentations.length > 0)
     setNewPresentation({ name: '', factor: '', price: '' })
