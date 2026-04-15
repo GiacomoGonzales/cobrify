@@ -1647,7 +1647,9 @@ export default function Inventory() {
     }, 0)
     const totalCostValue = itemsWithStock.reduce((sum, i) => {
       if (i.hasVariants && i.variants?.length > 0) {
-        return sum + i.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || v.price || 0), 0)
+        // Para variantes, usar el costo de la variante si existe, si no usar el costo del producto padre
+        const parentCost = parseFloat(i.cost) || 0
+        return sum + i.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || parentCost || 0), 0)
       }
       const branchStock = getStockForBranch(i) || 0
       const cost = i.itemType === 'ingredient' ? (i.averageCost || 0) : (parseFloat(i.cost) || 0)
