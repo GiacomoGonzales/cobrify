@@ -40,7 +40,7 @@ import {
   deleteWarehouse,
   syncAllProductsStock,
 } from '@/services/warehouseService'
-import { getProducts, getAllBranchSeriesFS, getCompanySettings } from '@/services/firestoreService'
+import { getProducts, getAllBranchSeriesFS, getCompanySettings, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
 
@@ -83,6 +83,8 @@ export default function Warehouses() {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [isSearchingProducts, setIsSearchingProducts] = useState(false)
   const [allProducts, setAllProducts] = useState([])
+  const [repairWarehouseId, setRepairWarehouseId] = useState('')
+  const [isRepairing, setIsRepairing] = useState(false)
 
   const {
     register,
@@ -469,6 +471,11 @@ export default function Warehouses() {
     return wh?.name || `Almacén eliminado (${warehouseId?.slice(0, 8)}...)`
   }
 
+  // Helper para verificar si un almacén existe
+  const warehouseExists = (warehouseId) => {
+    return warehouses.some(w => w.id === warehouseId)
+  }
+
   // Calcular totales para diagnóstico
   const getDiagnosticSummary = (product) => {
     if (!product) return null
@@ -481,12 +488,21 @@ export default function Warehouses() {
       warehouseStocksTotal: 0,
       variantsTotal: 0,
       variantsWarehouseTotal: 0,
+      hasOrphanStock: false,
+      orphanStockTotal: 0,
       issues: [],
     }
 
-    // Calcular stock en warehouseStocks
+    // Calcular stock en warehouseStocks del producto
     if (product.warehouseStocks?.length > 0) {
       summary.warehouseStocksTotal = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+      // Detectar stock en almacenes eliminados
+      const orphanStock = product.warehouseStocks.filter(ws => !warehouseExists(ws.warehouseId))
+      if (orphanStock.length > 0) {
+        summary.hasOrphanStock = true
+        summary.orphanStockTotal += orphanStock.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      }
     }
 
     // Calcular stock de variantes
@@ -498,15 +514,31 @@ export default function Warehouses() {
         }
         return sum
       }, 0)
+
+      // Detectar stock de variantes en almacenes eliminados
+      product.variants.forEach(v => {
+        if (v.warehouseStocks?.length > 0) {
+          const orphanStock = v.warehouseStocks.filter(ws => !warehouseExists(ws.warehouseId))
+          if (orphanStock.length > 0) {
+            summary.hasOrphanStock = true
+            summary.orphanStockTotal += orphanStock.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+          }
+        }
+      })
     }
 
     // Detectar problemas
+    // 1. Stock huérfano (almacenes eliminados)
+    if (summary.hasOrphanStock) {
+      summary.issues.push(`⚠️ ${summary.orphanStockTotal} unidades asignadas a almacén(es) ELIMINADO(S) - Requiere reparación`)
+    }
+
     if (product.hasVariants) {
       // Producto con variantes
       if (summary.variantsTotal > 0 && summary.variantsWarehouseTotal === 0) {
         summary.issues.push('Las variantes tienen stock pero NO están asignadas a ningún almacén')
       }
-      if (summary.variantsTotal !== summary.variantsWarehouseTotal && summary.variantsWarehouseTotal > 0) {
+      if (summary.variantsTotal !== summary.variantsWarehouseTotal && summary.variantsWarehouseTotal > 0 && !summary.hasOrphanStock) {
         summary.issues.push(`Diferencia entre stock de variantes (${summary.variantsTotal}) y stock en almacenes (${summary.variantsWarehouseTotal})`)
       }
     } else {
@@ -514,12 +546,80 @@ export default function Warehouses() {
       if (summary.stockField > 0 && summary.warehouseStocksTotal === 0) {
         summary.issues.push('El producto tiene stock pero NO está asignado a ningún almacén')
       }
-      if (summary.stockField !== summary.warehouseStocksTotal && summary.warehouseStocksTotal > 0) {
+      if (summary.stockField !== summary.warehouseStocksTotal && summary.warehouseStocksTotal > 0 && !summary.hasOrphanStock) {
         summary.issues.push(`Diferencia entre stock total (${summary.stockField}) y suma de almacenes (${summary.warehouseStocksTotal})`)
       }
     }
 
     return summary
+  }
+
+  // Reparar producto - reasignar stock huérfano a un almacén existente
+  const handleRepairProduct = async () => {
+    if (!selectedProduct || !repairWarehouseId) {
+      toast.error('Selecciona un almacén destino')
+      return
+    }
+
+    setIsRepairing(true)
+    try {
+      const businessId = getBusinessId()
+      let updateData = {}
+
+      if (selectedProduct.hasVariants && selectedProduct.variants?.length > 0) {
+        // Reparar variantes
+        const repairedVariants = selectedProduct.variants.map(v => {
+          const currentStock = v.stock || 0
+          if (currentStock > 0) {
+            // Reasignar todo el stock de la variante al nuevo almacén
+            return {
+              ...v,
+              warehouseStocks: [{
+                warehouseId: repairWarehouseId,
+                stock: currentStock,
+                minStock: 0
+              }]
+            }
+          }
+          return {
+            ...v,
+            warehouseStocks: []
+          }
+        })
+        updateData.variants = repairedVariants
+      } else {
+        // Reparar producto sin variantes
+        const currentStock = selectedProduct.stock || 0
+        if (currentStock > 0) {
+          updateData.warehouseStocks = [{
+            warehouseId: repairWarehouseId,
+            stock: currentStock,
+            minStock: 0
+          }]
+        } else {
+          updateData.warehouseStocks = []
+        }
+      }
+
+      const result = await updateProduct(businessId, selectedProduct.id, updateData)
+
+      if (result.success) {
+        toast.success('Producto reparado exitosamente')
+
+        // Actualizar el producto en la lista local y en el seleccionado
+        const updatedProduct = { ...selectedProduct, ...updateData }
+        setSelectedProduct(updatedProduct)
+        setAllProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p))
+        setRepairWarehouseId('')
+      } else {
+        toast.error(result.error || 'Error al reparar producto')
+      }
+    } catch (error) {
+      console.error('Error al reparar producto:', error)
+      toast.error('Error al reparar producto')
+    } finally {
+      setIsRepairing(false)
+    }
   }
 
   return (
@@ -1386,6 +1486,51 @@ export default function Warehouses() {
                         <div className="flex gap-2">
                           <CheckCircle className="w-5 h-5 text-green-600" />
                           <p className="text-green-800">No se detectaron problemas con el stock de este producto.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Panel de reparación si hay stock huérfano */}
+                    {summary?.hasOrphanStock && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4" />
+                          Reparar Stock Huérfano
+                        </h4>
+                        <p className="text-sm text-blue-800 mb-3">
+                          Este producto tiene <strong>{summary.orphanStockTotal} unidades</strong> asignadas a almacén(es) que ya no existen.
+                          Selecciona un almacén para reasignar el stock:
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <select
+                            value={repairWarehouseId}
+                            onChange={(e) => setRepairWarehouseId(e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Seleccionar almacén destino...</option>
+                            {warehouses.filter(w => w.isActive || w.status === 'active').map(wh => (
+                              <option key={wh.id} value={wh.id}>
+                                {wh.name} {wh.isDefault ? '(Principal)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            onClick={handleRepairProduct}
+                            disabled={!repairWarehouseId || isRepairing}
+                            className="whitespace-nowrap"
+                          >
+                            {isRepairing ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Reparando...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Reparar Producto
+                              </>
+                            )}
+                          </Button>
                         </div>
                       </div>
                     )}
