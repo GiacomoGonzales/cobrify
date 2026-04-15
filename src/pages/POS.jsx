@@ -1860,6 +1860,19 @@ export default function POS() {
       })
   }
 
+  // Helper: calcular stock que no está asignado a ningún lote
+  const getStockWithoutLot = (product) => {
+    if (!product) return 0
+    // Obtener stock total del almacén seleccionado
+    const totalWarehouseStock = getCurrentWarehouseStock(product)
+    // Obtener suma de todos los lotes disponibles en ese almacén
+    const availableBatches = getAvailableBatches(product)
+    const batchesTotal = availableBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+    // Stock sin lote = total - lotes
+    const stockWithoutLot = totalWarehouseStock - batchesTotal
+    return Math.max(0, stockWithoutLot)
+  }
+
   // Helper: formatear fecha de vencimiento
   const formatBatchExpiry = (date) => {
     if (!date) return 'Sin fecha'
@@ -1985,12 +1998,17 @@ export default function POS() {
 
     // ID único para el item en carrito (diferente por lote + presentación)
     const presKey = product.presentationName ? `-pres-${product.presentationName}` : ''
-    const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}${presKey}` : (product.presentationName ? `${product.id}${presKey}` : product.id)
+    const isNoLotSale = batchToUse?.isNoLot === true
+    const cartItemId = isNoLotSale
+      ? `${product.id}-nolot${presKey}`
+      : batchToUse
+        ? `${product.id}-batch-${batchToUse.lotNumber}${presKey}`
+        : (product.presentationName ? `${product.id}${presKey}` : product.id)
     const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
 
     if (existingItem) {
       if (product.stock !== null && existingItem.quantity >= warehouseStock && !companySettings?.allowNegativeStock) {
-        const stockMsg = batchToUse ? `lote ${batchToUse.lotNumber}` : (selectedWarehouse?.name || 'este almacén')
+        const stockMsg = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : (selectedWarehouse?.name || 'este almacén')
         toast.warning(`Stock agotado en ${stockMsg}. Agrega el producto de nuevo para usar otro lote.`)
         return
       }
@@ -2004,7 +2022,14 @@ export default function POS() {
       const cartItem = {
         ...product,
         quantity: 1,
-        ...(batchToUse && {
+        // Sin lote: marcar isNoLot pero NO asignar batchNumber
+        ...(isNoLotSale && {
+          cartId: cartItemId,
+          isNoLot: true,
+          batchQuantity: batchToUse.quantity
+        }),
+        // Con lote: asignar batchNumber normal
+        ...(batchToUse && !isNoLotSale && {
           cartId: cartItemId,
           batchNumber: batchToUse.lotNumber,
           batchExpiryDate: batchToUse.expiryDate,
@@ -2169,9 +2194,10 @@ export default function POS() {
 
     const product = productForPresentationSelection
     const batchToUse = pendingBatchForPresentation
+    const isNoLotSale = batchToUse?.isNoLot === true
 
     // ID único por lote + presentación (nunca se mezclan lotes diferentes)
-    const batchKey = batchToUse ? `-batch-${batchToUse.lotNumber}` : ''
+    const batchKey = isNoLotSale ? '-nolot' : batchToUse ? `-batch-${batchToUse.lotNumber}` : ''
     const cartId = `${product.id}${batchKey}-pres-${presentation.name}`
 
     // Crear un item del carrito con la información de la presentación y lote
@@ -2182,7 +2208,13 @@ export default function POS() {
       presentationName: presentation.name,
       presentationFactor: presentation.factor,
       quantity: 1,
-      ...(batchToUse && {
+      // Sin lote: marcar isNoLot pero NO asignar batchNumber
+      ...(isNoLotSale && {
+        isNoLot: true,
+        batchQuantity: batchToUse.quantity
+      }),
+      // Con lote: asignar batchNumber normal
+      ...(batchToUse && !isNoLotSale && {
         batchNumber: batchToUse.lotNumber,
         batchExpiryDate: batchToUse.expiryDate,
         batchQuantity: batchToUse.quantity
@@ -2193,7 +2225,7 @@ export default function POS() {
     const availableStock = batchToUse ? batchToUse.quantity : getCurrentWarehouseStock(product)
     const maxPresentations = Math.floor(availableStock / presentation.factor)
     if (product.stock !== null && maxPresentations < 1 && !companySettings?.allowNegativeStock) {
-      const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
+      const stockSource = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
       toast.error(`Stock insuficiente en ${stockSource}. Se necesita mínimo ${presentation.factor} unidades para 1 ${presentation.name}, disponible: ${parseFloat(availableStock.toFixed(2))}`)
       setShowPresentationModal(false)
       setProductForPresentationSelection(null)
@@ -2206,7 +2238,7 @@ export default function POS() {
 
     if (existingItem) {
       if (product.stock !== null && (existingItem.quantity + 1) > maxPresentations && !companySettings?.allowNegativeStock) {
-        const stockSource = batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
+        const stockSource = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
         toast.error(`Stock máximo en ${stockSource}: ${maxPresentations} ${presentation.name}. Para más, selecciona otro lote.`)
         setShowPresentationModal(false)
         setProductForPresentationSelection(null)
@@ -3945,7 +3977,8 @@ export default function POS() {
                   const extraUpdates = {}
                   const batchBreakdown = [] // Registrar de qué lotes se descontó
 
-                  if (productData.batches && productData.batches.length > 0) {
+                  // Si es venta "Sin lote" (isNoLot), NO tocar los batches - solo descontar del stock general
+                  if (productData.batches && productData.batches.length > 0 && !item.isNoLot) {
                     let remainingToDeduct = quantityToDeduct
                     const updatedBatches = [...productData.batches]
 
@@ -4088,6 +4121,7 @@ export default function POS() {
                 const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
                 const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
                 if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
+                if (item.isNoLot) noteParts.push('Sin lote')
                 if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
                 const movementData = {
                   productId: item.id,
@@ -6144,6 +6178,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   {item.batchExpiryDate && ` | Vence: ${formatBatchExpiry(item.batchExpiryDate)}`}
                                 </p>
                               )}
+                              {item.isNoLot && (
+                                <p className="text-xs text-amber-600 mt-0.5">
+                                  Sin lote asignado
+                                </p>
+                              )}
                               {item.serialNumber && (
                                 <p className="text-xs text-blue-600 mt-0.5">
                                   S/N: {item.serialNumber}
@@ -7445,13 +7484,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         title={`Seleccionar lote - ${productForBatchSelection?.name || ''}`}
         size="sm"
       >
-        {productForBatchSelection && (
+        {productForBatchSelection && (() => {
+          const availableBatches = getAvailableBatches(productForBatchSelection)
+          const stockWithoutLot = getStockWithoutLot(productForBatchSelection)
+          return (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
               Selecciona el lote a vender (FEFO - primero el que vence antes):
             </p>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {getAvailableBatches(productForBatchSelection).map((batch, idx) => (
+              {availableBatches.map((batch, idx) => (
                 <button
                   key={batch.lotNumber + idx}
                   onClick={() => handleBatchSelection(batch)}
@@ -7482,6 +7524,31 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 </button>
               ))}
+              {/* Opción para vender stock sin lote asignado */}
+              {stockWithoutLot > 0 && (
+                <button
+                  onClick={() => handleBatchSelection({ isNoLot: true, quantity: stockWithoutLot, lotNumber: null })}
+                  className="w-full p-4 border-2 border-dashed border-amber-400 rounded-lg text-left transition-all hover:bg-amber-50"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">Sin lote</p>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-full">
+                          Stock inicial
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Unidades sin lote asignado
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-amber-600">{stockWithoutLot}</p>
+                      <p className="text-xs text-gray-400">disponibles</p>
+                    </div>
+                  </div>
+                </button>
+              )}
             </div>
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-blue-700">
@@ -7489,7 +7556,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               </p>
             </div>
           </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Modal de Selección de Número de Serie */}
@@ -7554,7 +7622,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           setProductForPresentationSelection(null)
           setPendingBatchForPresentation(null)
         }}
-        title={`Seleccionar presentación - ${productForPresentationSelection?.name || ''}${pendingBatchForPresentation ? ` (Lote: ${pendingBatchForPresentation.lotNumber})` : ''}`}
+        title={`Seleccionar presentación - ${productForPresentationSelection?.name || ''}${pendingBatchForPresentation ? (pendingBatchForPresentation.isNoLot ? ' (Sin lote)' : ` (Lote: ${pendingBatchForPresentation.lotNumber})`) : ''}`}
         size="sm"
       >
         {productForPresentationSelection && (
@@ -7609,7 +7677,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             {productForPresentationSelection.stock !== null && (
               <div className="mt-4 p-3 bg-gray-50 rounded-lg space-y-1">
                 <p className="text-xs font-medium text-gray-700">
-                  Stock disponible{pendingBatchForPresentation ? ` (Lote ${pendingBatchForPresentation.lotNumber})` : ''}:
+                  Stock disponible{pendingBatchForPresentation ? (pendingBatchForPresentation.isNoLot ? ' (Sin lote)' : ` (Lote ${pendingBatchForPresentation.lotNumber})`) : ''}:
                 </p>
                 {(() => {
                   const stockDisponible = pendingBatchForPresentation

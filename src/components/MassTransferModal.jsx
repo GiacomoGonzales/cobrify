@@ -195,6 +195,9 @@ export default function MassTransferModal({
       ))
     } else {
       const stock = getWarehouseStock(product)
+      const warehouseBatches = (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse))
+      const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+      const stockWithoutLot = Math.max(0, stock - batchesTotal)
       setItems([...items, {
         productId: product.id,
         productName: product.name,
@@ -202,11 +205,12 @@ export default function MassTransferModal({
         unit: product.unit || 'und',
         quantity: 1,
         availableStock: stock,
+        stockWithoutLot,
         batchNumber: '',
         batchExpiration: null,
         batchData: null,
         batches: product.batches || [],
-        hasBatches: (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).length > 0,
+        hasBatches: warehouseBatches.length > 0,
         serials: (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)),
         hasSerials: product.trackSerials && (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)).length > 0,
         selectedSerials: [],
@@ -229,6 +233,16 @@ export default function MassTransferModal({
   const updateItemBatch = (index, batchId) => {
     setItems(items.map((item, i) => {
       if (i !== index) return item
+      // Si se selecciona "Sin lote"
+      if (batchId === '__NO_LOT__') {
+        return {
+          ...item,
+          batchNumber: '__NO_LOT__',
+          batchData: { isNoLot: true, quantity: item.stockWithoutLot || 0 },
+          batchExpiration: null,
+          quantity: Math.min(item.quantity || 1, item.stockWithoutLot || 0),
+        }
+      }
       const batch = item.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === batchId)
       return {
         ...item,
@@ -617,9 +631,12 @@ export default function MassTransferModal({
                               <select
                                 value={item.batchNumber}
                                 onChange={e => updateItemBatch(idx, e.target.value)}
-                                className={`w-full px-2 py-1 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                                className={`w-full px-2 py-1 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : item.batchNumber === '__NO_LOT__' ? 'border-amber-300 bg-amber-50' : 'border-gray-300'}`}
                               >
                                 <option value="">Seleccionar lote...</option>
+                                {item.stockWithoutLot > 0 && (
+                                  <option value="__NO_LOT__">Sin lote (stock inicial) - {item.stockWithoutLot} uds</option>
+                                )}
                                 {item.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).map((b, bi) => {
                                   const bId = b.lotNumber || b.batchNumber || b.id
                                   const expDate = formatBatchDate(b.expirationDate || b.expiryDate)
@@ -722,9 +739,12 @@ export default function MassTransferModal({
                         <select
                           value={item.batchNumber}
                           onChange={e => updateItemBatch(idx, e.target.value)}
-                          className={`w-full px-2 py-1.5 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                          className={`w-full px-2 py-1.5 border rounded text-xs ${!item.batchNumber ? 'border-red-300 bg-red-50' : item.batchNumber === '__NO_LOT__' ? 'border-amber-300 bg-amber-50' : 'border-gray-300'}`}
                         >
                           <option value="">Seleccionar lote...</option>
+                          {item.stockWithoutLot > 0 && (
+                            <option value="__NO_LOT__">Sin lote (stock inicial) - {item.stockWithoutLot} uds</option>
+                          )}
                           {item.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === fromWarehouse)).map((b, bi) => {
                             const bId = b.lotNumber || b.batchNumber || b.id
                             const expDate = formatBatchDate(b.expirationDate || b.expiryDate)

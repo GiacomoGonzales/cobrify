@@ -1234,12 +1234,23 @@ export default function Inventory() {
     // Verificar stock disponible en almacén origen (o en el lote seleccionado)
     const batchesInOrigin = (transferProduct.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
     const hasBatches = batchesInOrigin.length > 0
-    const selectedBatchData = hasBatches && transferData.selectedBatch
+    const isNoLotTransfer = transferData.selectedBatch === '__NO_LOT__'
+    const selectedBatchData = hasBatches && transferData.selectedBatch && !isNoLotTransfer
       ? transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
       : null
 
+    // Calcular stock sin lote para validación
+    const warehouseStockTotal = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+    const batchesTotalInOrigin = batchesInOrigin.reduce((sum, b) => sum + (b.quantity || 0), 0)
+    const stockWithoutLotInOrigin = Math.max(0, warehouseStockTotal - batchesTotalInOrigin)
+
     if (hasBatches && !transferData.selectedBatch) {
-      toast.error('Debes seleccionar un lote para transferir')
+      // Si hay lotes pero también hay stock sin lote, aún se debe seleccionar algo
+      if (stockWithoutLotInOrigin > 0) {
+        toast.error('Debes seleccionar un lote o "Sin lote" para transferir')
+      } else {
+        toast.error('Debes seleccionar un lote para transferir')
+      }
       return
     }
 
@@ -1263,6 +1274,9 @@ export default function Inventory() {
       const selectedVariant = transferProduct.variants?.find(v => v.sku === transferData.selectedVariantSku)
       const variantWS = selectedVariant?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
       availableStock = variantWS?.stock || 0
+    } else if (isNoLotTransfer) {
+      // Transferencia de stock sin lote
+      availableStock = stockWithoutLotInOrigin
     } else if (selectedBatchData) {
       availableStock = selectedBatchData.quantity
     } else {
@@ -1271,7 +1285,7 @@ export default function Inventory() {
     }
 
     if (quantity > availableStock) {
-      const stockSource = selectedBatchData ? `lote ${transferData.selectedBatch}` : 'almacén origen'
+      const stockSource = isNoLotTransfer ? 'stock sin lote' : selectedBatchData ? `lote ${transferData.selectedBatch}` : 'almacén origen'
       toast.error(`Stock insuficiente en ${stockSource}. Disponible: ${availableStock}`)
       return
     }
@@ -3022,6 +3036,9 @@ export default function Inventory() {
                                               : null
                                             const stock = warehouseStock?.stock || 0
                                             const warehouseBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
+                                            // Calcular stock sin lote asignado
+                                            const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                                            const stockWithoutLot = Math.max(0, stock - batchesTotal)
 
                                             return (
                                               <div key={warehouse.id} className="bg-white border border-gray-100 rounded-lg p-2.5">
@@ -3035,8 +3052,20 @@ export default function Inventory() {
                                                     {stock}
                                                   </span>
                                                 </div>
-                                                {warehouseBatches.length > 0 && (
+                                                {(warehouseBatches.length > 0 || stockWithoutLot > 0) && (
                                                   <div className="mt-1.5 pl-5 space-y-1">
+                                                    {/* Stock sin lote asignado */}
+                                                    {stockWithoutLot > 0 && (
+                                                      <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 border border-dashed border-gray-300">
+                                                        <div className="flex items-center gap-1.5">
+                                                          <Package className="w-3 h-3 text-gray-400" />
+                                                          <span className="font-medium text-gray-500">Sin lote</span>
+                                                          <span className="text-[10px] text-gray-400">(stock inicial)</span>
+                                                        </div>
+                                                        <span className={`font-semibold ${stockWithoutLot >= 4 ? 'text-green-600' : 'text-yellow-600'}`}>{stockWithoutLot}</span>
+                                                      </div>
+                                                    )}
+                                                    {/* Lotes */}
                                                     {warehouseBatches.map((batch, bIdx) => {
                                                       const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
                                                       const expiryDate = batch.expirationDate || batch.expiryDate
@@ -3097,6 +3126,9 @@ export default function Inventory() {
                                                 : null
                                               const stock = warehouseStock?.stock || 0
                                               const warehouseBatches = (item.batches || []).filter(b => b.quantity > 0 && b.warehouseId === warehouse.id)
+                                              // Calcular stock sin lote asignado
+                                              const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                                              const stockWithoutLot = Math.max(0, stock - batchesTotal)
 
                                               return (
                                                 <div key={warehouse.id} className="bg-white border border-gray-100 rounded-lg p-2.5">
@@ -3110,8 +3142,20 @@ export default function Inventory() {
                                                       {stock}
                                                     </span>
                                                   </div>
-                                                  {warehouseBatches.length > 0 && (
+                                                  {(warehouseBatches.length > 0 || stockWithoutLot > 0) && (
                                                     <div className="mt-1.5 pl-5 space-y-1">
+                                                      {/* Stock sin lote asignado */}
+                                                      {stockWithoutLot > 0 && (
+                                                        <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 border border-dashed border-gray-300">
+                                                          <div className="flex items-center gap-1.5">
+                                                            <Package className="w-3 h-3 text-gray-400" />
+                                                            <span className="font-medium text-gray-500">Sin lote</span>
+                                                            <span className="text-[10px] text-gray-400">(stock inicial)</span>
+                                                          </div>
+                                                          <span className={`font-semibold ${stockWithoutLot >= 4 ? 'text-green-600' : 'text-yellow-600'}`}>{stockWithoutLot}</span>
+                                                        </div>
+                                                      )}
+                                                      {/* Lotes */}
                                                       {warehouseBatches.map((batch, bIdx) => {
                                                         const batchId = batch.lotNumber || batch.batchNumber || batch.id || `lote-${bIdx}`
                                                         const expiryDate = batch.expirationDate || batch.expiryDate
@@ -3625,14 +3669,43 @@ export default function Inventory() {
           </div>
 
           {/* Selección de Lote (si el producto tiene lotes en el almacén origen) */}
-          {transferProduct?.batches?.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)).length > 0 && (
+          {transferProduct?.batches?.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)).length > 0 && (() => {
+            const warehouseBatches = transferProduct.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+            const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+            const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+            const stockWithoutLot = Math.max(0, warehouseStock - batchesTotal)
+
+            return (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Lote <span className="text-red-500">*</span>
               </label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {transferProduct.batches
-                  .filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+                {/* Opción Sin lote */}
+                {stockWithoutLot > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTransferData({ ...transferData, selectedBatch: '__NO_LOT__', quantity: '' })}
+                    className={`w-full p-3 border-2 rounded-lg text-left transition-all ${
+                      transferData.selectedBatch === '__NO_LOT__'
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-dashed border-gray-300 hover:border-amber-400 hover:bg-amber-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-700">Sin lote</p>
+                        <p className="text-xs text-gray-500">Stock inicial sin lote asignado</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-amber-600">{stockWithoutLot}</p>
+                        <p className="text-xs text-gray-400">disponibles</p>
+                      </div>
+                    </div>
+                  </button>
+                )}
+                {/* Lotes */}
+                {warehouseBatches
                   .sort((a, b) => {
                     const dA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
                     const dB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
@@ -3671,7 +3744,7 @@ export default function Inventory() {
                   })}
               </div>
             </div>
-          )}
+          )})()}
 
           {/* Selección de números de serie */}
           {transferProduct?.trackSerials && transferData.fromWarehouse && (() => {
@@ -3722,6 +3795,13 @@ export default function Inventory() {
             required
             min="1"
             max={(() => {
+              if (transferData.selectedBatch === '__NO_LOT__') {
+                // Stock sin lote = total del almacén - suma de lotes
+                const warehouseStock = transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+                const batchesInWarehouse = (transferProduct?.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+                const batchesTotal = batchesInWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                return Math.max(0, warehouseStock - batchesTotal)
+              }
               if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
                 const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
                 return batch?.quantity || 0
@@ -3735,9 +3815,16 @@ export default function Inventory() {
 
           {transferData.fromWarehouse && (
             <div className="text-sm text-gray-600">
-              Stock disponible{transferData.selectedBatch ? ` (Lote ${transferData.selectedBatch})` : ''}: {' '}
+              Stock disponible{transferData.selectedBatch === '__NO_LOT__' ? ' (Sin lote)' : transferData.selectedBatch ? ` (Lote ${transferData.selectedBatch})` : ''}: {' '}
               <span className="font-semibold">
                 {(() => {
+                  if (transferData.selectedBatch === '__NO_LOT__') {
+                    // Stock sin lote = total del almacén - suma de lotes
+                    const warehouseStock = transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
+                    const batchesInWarehouse = (transferProduct?.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+                    const batchesTotal = batchesInWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                    return Math.max(0, warehouseStock - batchesTotal)
+                  }
                   if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
                     const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
                     return batch?.quantity || 0

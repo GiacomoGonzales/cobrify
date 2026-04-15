@@ -69,7 +69,8 @@ export const createMassTransfer = async (businessId, transferData) => {
         productCode: item.productCode || '',
         quantity: item.quantity,
         unit: item.unit || 'und',
-        batchNumber: item.batchNumber || null,
+        batchNumber: item.batchNumber === '__NO_LOT__' ? null : (item.batchNumber || null),
+        isNoLot: item.batchNumber === '__NO_LOT__' || false,
         batchExpiration: item.batchExpiration || null,
         variantSku: item.variantSku || null,
         variantLabel: item.variantLabel || null,
@@ -157,7 +158,8 @@ export const createMassTransfer = async (businessId, transferData) => {
 
       // Entrada al almacén destino (con actualización de lotes si aplica)
       const extraUpdates = {}
-      if (item.batchData) {
+      // Si es transferencia "Sin lote", NO procesar lotes - solo mover stock general
+      if (item.batchData && !item.batchData.isNoLot) {
         const batchId = item.batchNumber
         let updatedBatches = (item.batches || []).map(b => {
           const bId = b.lotNumber || b.batchNumber || b.id
@@ -243,9 +245,9 @@ export const createMassTransfer = async (businessId, transferData) => {
         referenceId: docRef.id,
         toWarehouse: transferData.toWarehouseId,
         userId: transferData.userId,
-        ...(item.batchNumber && { batchNumber: item.batchNumber }),
+        ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
         ...(item.variantSku && { variantSku: item.variantSku }),
-        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
+        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
       })
 
       // Movimiento de entrada
@@ -259,9 +261,9 @@ export const createMassTransfer = async (businessId, transferData) => {
         referenceId: docRef.id,
         fromWarehouse: transferData.fromWarehouseId,
         userId: transferData.userId,
-        ...(item.batchNumber && { batchNumber: item.batchNumber }),
+        ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
         ...(item.variantSku && { variantSku: item.variantSku }),
-        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
+        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
       })
     }
 
