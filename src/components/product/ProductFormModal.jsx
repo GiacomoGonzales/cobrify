@@ -493,7 +493,7 @@ const ProductFormModal = ({
       productData.laboratoryId = pharmacyData.laboratoryId || null
       productData.laboratoryName = pharmacyData.laboratoryName || null
       productData.marca = pharmacyData.marca || null
-      productData.batchNumber = pharmacyData.batchNumber || null
+      // batchNumber removido - los lotes se gestionan via Compras o ajustes de inventario
       productData.activeIngredient = pharmacyData.activeIngredient || null
       productData.therapeuticAction = pharmacyData.therapeuticAction || null
       productData.saleCondition = pharmacyData.saleCondition || 'sin_receta'
@@ -1002,20 +1002,6 @@ const ProductFormModal = ({
                   value={pharmacyData.marca}
                   onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
                   placeholder="Ej: Panadol, Aspirina"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                />
-              </div>
-
-              {/* Número de Lote */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número de Lote
-                </label>
-                <input
-                  type="text"
-                  value={pharmacyData.batchNumber}
-                  onChange={(e) => setPharmacyData({...pharmacyData, batchNumber: e.target.value})}
-                  placeholder="Ej: LOT2024001"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
                 />
               </div>
