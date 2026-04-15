@@ -316,6 +316,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Pre-llenar datos si hay factura de referencia
   useEffect(() => {
     if (referenceInvoice) {
+      // Si viene de una venta (no compra), desactivar descuento de stock porque ya se descontó con la factura
+      if (!referenceInvoice.isPurchase) {
+        setDeductStock(false)
+      }
       // Cargar productos para obtener SKU actualizado
       const loadItemsWithSku = async () => {
         const businessId = getBusinessId()
@@ -2347,8 +2351,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         </div>
 
-        {/* Opción de descontar stock */}
-        {selectedWarehouseId && (
+        {/* Opción de descontar stock - Solo mostrar si NO viene de una factura/boleta de venta */}
+        {/* Cuando viene de una venta, el stock ya fue descontado por la factura/boleta */}
+        {selectedWarehouseId && !referenceInvoice?.id && (
           <div className="px-6 py-3 bg-amber-50 border-t border-amber-200">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -2362,6 +2367,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 <p className="text-xs text-gray-500">Restar las cantidades de los productos del inventario al generar la guía</p>
               </div>
             </label>
+          </div>
+        )}
+        {/* Mensaje informativo cuando viene de una factura/boleta */}
+        {selectedWarehouseId && referenceInvoice?.id && !referenceInvoice?.isPurchase && (
+          <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
+            <div className="flex items-center gap-2 text-blue-700">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm">El stock ya fue descontado al generar la factura/boleta de venta.</p>
+            </div>
           </div>
         )}
 
