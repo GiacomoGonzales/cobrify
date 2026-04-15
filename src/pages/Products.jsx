@@ -1068,43 +1068,31 @@ export default function Products() {
 
           if (productData.hasVariants && productData.variants?.length > 0) {
             // Productos con variantes: crear movimiento por cada variante con stock
-            // Usar el almacén seleccionado o el por defecto
-            let targetWarehouseId = variantWarehouseId
-            if (!targetWarehouseId) {
-              const defaultWarehouse = await getDefaultWarehouse(businessId)
-              targetWarehouseId = defaultWarehouse?.id || ''
-            }
+            // Las variantes ya tienen warehouseStocks asignados desde la construcción de productData
+            // Solo necesitamos registrar los movimientos de stock inicial
 
             for (let i = 0; i < productData.variants.length; i++) {
               const variant = productData.variants[i]
-              if (variant.stock && variant.stock > 0) {
-                // Asignar warehouseStocks a la variante
-                productData.variants[i].warehouseStocks = [{
-                  warehouseId: targetWarehouseId,
-                  stock: variant.stock,
-                  minStock: 0
-                }]
-
+              if (variant.stock && variant.stock > 0 && variant.warehouseStocks?.length > 0) {
                 const variantLabel = Object.values(variant.attributes || {}).join(' / ')
-                await createStockMovement(businessId, {
-                  productId: result.id,
-                  variantIndex: i,
-                  warehouseId: targetWarehouseId,
-                  type: 'entry',
-                  quantity: variant.stock,
-                  reason: 'Stock inicial',
-                  referenceType: 'initial_stock',
-                  referenceId: result.id,
-                  userId: user?.uid,
-                  notes: `Stock inicial variante: ${variantLabel}`
-                }).catch(err => console.error('Error al registrar movimiento de stock variante:', err))
+                const warehouseId = variant.warehouseStocks[0]?.warehouseId
+
+                if (warehouseId) {
+                  await createStockMovement(businessId, {
+                    productId: result.id,
+                    variantIndex: i,
+                    warehouseId: warehouseId,
+                    type: 'entry',
+                    quantity: variant.stock,
+                    reason: 'Stock inicial',
+                    referenceType: 'initial_stock',
+                    referenceId: result.id,
+                    userId: user?.uid,
+                    notes: `Stock inicial variante: ${variantLabel}`
+                  }).catch(err => console.error('Error al registrar movimiento de stock variante:', err))
+                }
               }
             }
-
-            // Actualizar el producto con los warehouseStocks de cada variante
-            await updateProduct(businessId, result.id, {
-              variants: productData.variants
-            }).catch(err => console.error('Error al actualizar warehouseStocks de variantes:', err))
 
           } else if (productData.initialStock > 0) {
             // Producto sin variantes
