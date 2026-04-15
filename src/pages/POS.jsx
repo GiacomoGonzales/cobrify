@@ -2022,11 +2022,13 @@ export default function POS() {
       const cartItem = {
         ...product,
         quantity: 1,
-        // Sin lote: marcar isNoLot pero NO asignar batchNumber
+        // Sin lote: marcar isNoLot y LIMPIAR batchNumber del producto
         ...(isNoLotSale && {
           cartId: cartItemId,
           isNoLot: true,
-          batchQuantity: batchToUse.quantity
+          batchQuantity: batchToUse.quantity,
+          batchNumber: null,
+          batchExpiryDate: null,
         }),
         // Con lote: asignar batchNumber normal
         ...(batchToUse && !isNoLotSale && {
@@ -2054,7 +2056,15 @@ export default function POS() {
       cartId: cartItemId,
       serialNumber: serial.serialNumber,
       serialId: serial.id,
-      ...(batchToUse && {
+      // Si es Sin lote, limpiar batchNumber del producto
+      ...(batchToUse?.isNoLot && {
+        isNoLot: true,
+        batchNumber: null,
+        batchExpiryDate: null,
+        batchQuantity: batchToUse.quantity
+      }),
+      // Con lote normal
+      ...(batchToUse && !batchToUse.isNoLot && {
         batchNumber: batchToUse.lotNumber,
         batchExpiryDate: batchToUse.expiryDate,
         batchQuantity: batchToUse.quantity
@@ -2208,10 +2218,12 @@ export default function POS() {
       presentationName: presentation.name,
       presentationFactor: presentation.factor,
       quantity: 1,
-      // Sin lote: marcar isNoLot pero NO asignar batchNumber
+      // Sin lote: marcar isNoLot y LIMPIAR batchNumber del producto
       ...(isNoLotSale && {
         isNoLot: true,
-        batchQuantity: batchToUse.quantity
+        batchQuantity: batchToUse.quantity,
+        batchNumber: null,
+        batchExpiryDate: null,
       }),
       // Con lote: asignar batchNumber normal
       ...(batchToUse && !isNoLotSale && {
