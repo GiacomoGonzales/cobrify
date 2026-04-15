@@ -18,6 +18,12 @@ import {
   Store,
   Search,
   MoreVertical,
+  Bug,
+  ChevronDown,
+  ChevronRight,
+  Database,
+  Layers,
+  Box,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -69,6 +75,14 @@ export default function Warehouses() {
   const [searchTerm, setSearchTerm] = useState('')
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
+
+  // Diagnóstico de stock
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false)
+  const [diagnosticSearch, setDiagnosticSearch] = useState('')
+  const [diagnosticProducts, setDiagnosticProducts] = useState([])
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false)
+  const [allProducts, setAllProducts] = useState([])
 
   const {
     register,
@@ -397,6 +411,117 @@ export default function Warehouses() {
     setSyncPreview(null)
   }
 
+  // ==================== DIAGNÓSTICO DE STOCK ====================
+
+  // Abrir modal de diagnóstico y cargar productos
+  const handleOpenDiagnostic = async () => {
+    setShowDiagnosticModal(true)
+    setSelectedProduct(null)
+    setDiagnosticSearch('')
+    setDiagnosticProducts([])
+
+    // Cargar todos los productos si no los tenemos
+    if (allProducts.length === 0) {
+      setIsSearchingProducts(true)
+      try {
+        const result = await getProducts(getBusinessId())
+        if (result.success) {
+          setAllProducts(result.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar productos:', error)
+      } finally {
+        setIsSearchingProducts(false)
+      }
+    }
+  }
+
+  // Buscar productos para diagnóstico
+  const handleDiagnosticSearch = (term) => {
+    setDiagnosticSearch(term)
+    setSelectedProduct(null)
+
+    if (!term.trim()) {
+      setDiagnosticProducts([])
+      return
+    }
+
+    const searchLower = term.toLowerCase()
+    const filtered = allProducts.filter(p =>
+      p.name?.toLowerCase().includes(searchLower) ||
+      p.sku?.toLowerCase().includes(searchLower) ||
+      p.code?.toLowerCase().includes(searchLower)
+    ).slice(0, 10)
+
+    setDiagnosticProducts(filtered)
+  }
+
+  // Seleccionar producto para diagnóstico
+  const handleSelectProductForDiagnostic = (product) => {
+    setSelectedProduct(product)
+    setDiagnosticProducts([])
+    setDiagnosticSearch(product.name)
+  }
+
+  // Helper para obtener nombre de almacén
+  const getWarehouseName = (warehouseId) => {
+    const wh = warehouses.find(w => w.id === warehouseId)
+    return wh?.name || `Almacén eliminado (${warehouseId?.slice(0, 8)}...)`
+  }
+
+  // Calcular totales para diagnóstico
+  const getDiagnosticSummary = (product) => {
+    if (!product) return null
+
+    const summary = {
+      stockField: product.stock,
+      initialStock: product.initialStock,
+      trackStock: product.trackStock,
+      hasVariants: product.hasVariants || false,
+      warehouseStocksTotal: 0,
+      variantsTotal: 0,
+      variantsWarehouseTotal: 0,
+      issues: [],
+    }
+
+    // Calcular stock en warehouseStocks
+    if (product.warehouseStocks?.length > 0) {
+      summary.warehouseStocksTotal = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    }
+
+    // Calcular stock de variantes
+    if (product.hasVariants && product.variants?.length > 0) {
+      summary.variantsTotal = product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+      summary.variantsWarehouseTotal = product.variants.reduce((sum, v) => {
+        if (v.warehouseStocks?.length > 0) {
+          return sum + v.warehouseStocks.reduce((ws, w) => ws + (w.stock || 0), 0)
+        }
+        return sum
+      }, 0)
+    }
+
+    // Detectar problemas
+    if (product.hasVariants) {
+      // Producto con variantes
+      if (summary.variantsTotal > 0 && summary.variantsWarehouseTotal === 0) {
+        summary.issues.push('Las variantes tienen stock pero NO están asignadas a ningún almacén')
+      }
+      if (summary.variantsTotal !== summary.variantsWarehouseTotal && summary.variantsWarehouseTotal > 0) {
+        summary.issues.push(`Diferencia entre stock de variantes (${summary.variantsTotal}) y stock en almacenes (${summary.variantsWarehouseTotal})`)
+      }
+    } else {
+      // Producto sin variantes
+      if (summary.stockField > 0 && summary.warehouseStocksTotal === 0) {
+        summary.issues.push('El producto tiene stock pero NO está asignado a ningún almacén')
+      }
+      if (summary.stockField !== summary.warehouseStocksTotal && summary.warehouseStocksTotal > 0) {
+        summary.issues.push(`Diferencia entre stock total (${summary.stockField}) y suma de almacenes (${summary.warehouseStocksTotal})`)
+      }
+    }
+
+    return summary
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -410,14 +535,24 @@ export default function Warehouses() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           {warehouses.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={() => setShowSyncModal(true)}
-              className="flex items-center justify-center gap-2 w-full sm:w-auto"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Sincronizar Stock
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={handleOpenDiagnostic}
+                className="flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <Bug className="w-4 h-4" />
+                Diagnóstico Stock
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowSyncModal(true)}
+                className="flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Sincronizar Stock
+              </Button>
+            </>
           )}
           <Button onClick={openCreateModal} className="flex items-center justify-center gap-2 w-full sm:w-auto">
             <Plus className="w-4 h-4" />
@@ -1139,6 +1274,275 @@ export default function Warehouses() {
               </Button>
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Modal Diagnóstico de Stock */}
+      <Modal
+        isOpen={showDiagnosticModal}
+        onClose={() => {
+          setShowDiagnosticModal(false)
+          setSelectedProduct(null)
+          setDiagnosticSearch('')
+          setDiagnosticProducts([])
+        }}
+        title="Diagnóstico de Stock"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>¿Por qué mi producto muestra stock pero los almacenes están en 0?</strong><br />
+              Busca un producto para ver toda su información de stock y entender de dónde viene cada número.
+            </p>
+          </div>
+
+          {/* Búsqueda de producto */}
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <Search className="w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar producto por nombre, SKU o código..."
+                value={diagnosticSearch}
+                onChange={(e) => handleDiagnosticSearch(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            {/* Resultados de búsqueda */}
+            {diagnosticProducts.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {diagnosticProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => handleSelectProductForDiagnostic(product)}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{product.name}</p>
+                      <p className="text-sm text-gray-500">
+                        {product.sku && `SKU: ${product.sku} • `}
+                        {product.hasVariants ? `${product.variants?.length || 0} variantes` : `Stock: ${product.stock ?? 'N/A'}`}
+                      </p>
+                    </div>
+                    {product.hasVariants && (
+                      <Badge variant="secondary" className="text-xs">Con variantes</Badge>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {isSearchingProducts && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center">
+                <Loader2 className="w-5 h-5 animate-spin mx-auto text-gray-400" />
+                <p className="text-sm text-gray-500 mt-2">Cargando productos...</p>
+              </div>
+            )}
+          </div>
+
+          {/* Información del producto seleccionado */}
+          {selectedProduct && (
+            <div className="space-y-4 border-t pt-4">
+              {/* Header del producto */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <Package className="w-6 h-6 text-gray-600 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">{selectedProduct.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    {selectedProduct.sku && `SKU: ${selectedProduct.sku}`}
+                    {selectedProduct.code && ` • Código: ${selectedProduct.code}`}
+                  </p>
+                  {selectedProduct.hasVariants && (
+                    <Badge variant="secondary" className="mt-1">Producto con variantes</Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Resumen y problemas detectados */}
+              {(() => {
+                const summary = getDiagnosticSummary(selectedProduct)
+                return (
+                  <>
+                    {summary?.issues?.length > 0 && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex gap-2">
+                          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                          <div>
+                            <p className="font-medium text-amber-800">Problemas detectados:</p>
+                            <ul className="mt-1 text-sm text-amber-700 list-disc list-inside">
+                              {summary.issues.map((issue, idx) => (
+                                <li key={idx}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {summary?.issues?.length === 0 && (
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex gap-2">
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                          <p className="text-green-800">No se detectaron problemas con el stock de este producto.</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+
+              {/* Información detallada */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Campos básicos */}
+                <div className="space-y-3 p-3 border rounded-lg">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Database className="w-4 h-4" />
+                    Campos en Firestore
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">product.stock:</span>
+                      <span className="font-mono font-medium">{selectedProduct.stock ?? 'null'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">product.initialStock:</span>
+                      <span className="font-mono font-medium">{selectedProduct.initialStock ?? 'null'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">product.trackStock:</span>
+                      <span className="font-mono font-medium">{selectedProduct.trackStock === true ? 'true' : selectedProduct.trackStock === false ? 'false' : 'undefined'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">product.hasVariants:</span>
+                      <span className="font-mono font-medium">{selectedProduct.hasVariants ? 'true' : 'false'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stock por almacén */}
+                <div className="space-y-3 p-3 border rounded-lg">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Warehouse className="w-4 h-4" />
+                    warehouseStocks[ ]
+                  </h4>
+                  {selectedProduct.warehouseStocks?.length > 0 ? (
+                    <div className="space-y-2 text-sm">
+                      {selectedProduct.warehouseStocks.map((ws, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="text-gray-600 truncate max-w-[150px]" title={getWarehouseName(ws.warehouseId)}>
+                            {getWarehouseName(ws.warehouseId)}
+                          </span>
+                          <span className="font-mono font-medium">{ws.stock}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between border-t pt-2 mt-2">
+                        <span className="font-medium">Total:</span>
+                        <span className="font-mono font-bold">
+                          {selectedProduct.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">Sin asignación a almacenes</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Variantes */}
+              {selectedProduct.hasVariants && selectedProduct.variants?.length > 0 && (
+                <div className="space-y-3 p-3 border rounded-lg">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    Variantes ({selectedProduct.variants.length})
+                  </h4>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {selectedProduct.variants.map((variant, idx) => {
+                      const variantLabel = Object.entries(variant.attributes || {})
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(', ')
+                      return (
+                        <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-sm">{variant.sku || `Variante ${idx + 1}`}</p>
+                              <p className="text-xs text-gray-500">{variantLabel || 'Sin atributos'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm">
+                                <span className="text-gray-600">variant.stock: </span>
+                                <span className="font-mono font-medium">{variant.stock ?? 'null'}</span>
+                              </p>
+                            </div>
+                          </div>
+                          {/* warehouseStocks de la variante */}
+                          {variant.warehouseStocks?.length > 0 ? (
+                            <div className="mt-2 pt-2 border-t border-gray-200">
+                              <p className="text-xs text-gray-500 mb-1">warehouseStocks:</p>
+                              <div className="space-y-1">
+                                {variant.warehouseStocks.map((ws, wsIdx) => (
+                                  <div key={wsIdx} className="flex justify-between text-xs">
+                                    <span className="text-gray-600 truncate max-w-[120px]" title={getWarehouseName(ws.warehouseId)}>
+                                      • {getWarehouseName(ws.warehouseId)}
+                                    </span>
+                                    <span className="font-mono">{ws.stock}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-2 pt-2 border-t border-gray-200">
+                              <p className="text-xs text-amber-600 italic">⚠️ Sin asignación a almacén</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex justify-between border-t pt-2 mt-2 font-medium">
+                    <span>Total stock variantes:</span>
+                    <span className="font-mono">
+                      {selectedProduct.variants.reduce((sum, v) => sum + (v.stock || 0), 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Lotes si existen */}
+              {selectedProduct.batches?.length > 0 && (
+                <div className="space-y-3 p-3 border rounded-lg">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Box className="w-4 h-4" />
+                    Lotes ({selectedProduct.batches.length})
+                  </h4>
+                  <div className="max-h-40 overflow-y-auto space-y-2">
+                    {selectedProduct.batches.map((batch, idx) => (
+                      <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
+                        <span>{batch.batchNumber || `Lote ${idx + 1}`}</span>
+                        <span className="font-mono">{batch.quantity || batch.stock || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Botón cerrar */}
+          <div className="flex justify-end pt-2 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDiagnosticModal(false)
+                setSelectedProduct(null)
+                setDiagnosticSearch('')
+                setDiagnosticProducts([])
+              }}
+            >
+              Cerrar
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
