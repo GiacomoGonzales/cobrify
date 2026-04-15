@@ -23,6 +23,7 @@ import {
   Copy,
   Truck,
   FileSpreadsheet,
+  Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -59,6 +60,9 @@ export default function Quotations() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
+  const [dateFilter, setDateFilter] = useState('30days') // 'all', 'today', '3days', '7days', '30days', 'custom'
+  const [filterStartDate, setFilterStartDate] = useState('')
+  const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingQuotation, setViewingQuotation] = useState(null)
   const [deletingQuotation, setDeletingQuotation] = useState(null)
   const [convertingQuotation, setConvertingQuotation] = useState(null)
@@ -75,6 +79,64 @@ export default function Quotations() {
   const getDateFromTimestamp = (timestamp) => {
     if (!timestamp) return null
     return timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  }
+
+  // Función para obtener el rango de fechas según el filtro seleccionado
+  const getDateRange = () => {
+    const now = new Date()
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: startOfDay, end: endOfDay }
+      case '3days':
+        const threeDaysAgo = new Date(startOfDay)
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 2)
+        return { start: threeDaysAgo, end: endOfDay }
+      case '7days':
+        const sevenDaysAgo = new Date(startOfDay)
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+        return { start: sevenDaysAgo, end: endOfDay }
+      case '30days':
+        const thirtyDaysAgo = new Date(startOfDay)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+        return { start: thirtyDaysAgo, end: endOfDay }
+      case 'custom':
+        return {
+          start: filterStartDate ? new Date(filterStartDate + 'T00:00:00') : null,
+          end: filterEndDate ? new Date(filterEndDate + 'T23:59:59') : null
+        }
+      case 'all':
+      default:
+        return { start: null, end: null }
+    }
+  }
+
+  // Función para filtrar por rango de fecha
+  const filterByDateRange = (quotation) => {
+    if (dateFilter === 'all') return true
+
+    const { start, end } = getDateRange()
+    const quotationDate = getDateFromTimestamp(quotation.createdAt || quotation.issueDate)
+
+    if (!quotationDate) return true
+    if (start && quotationDate < start) return false
+    if (end && quotationDate > end) return false
+
+    return true
+  }
+
+  // Helper para mostrar etiqueta del filtro de fecha
+  const getFilterLabel = () => {
+    switch (dateFilter) {
+      case 'today': return 'Hoy'
+      case '3days': return 'Últimos 3 días'
+      case '7days': return 'Últimos 7 días'
+      case '30days': return 'Últimos 30 días'
+      case 'custom': return 'Personalizado'
+      default: return 'Todo el tiempo'
+    }
   }
 
   useEffect(() => {
@@ -351,7 +413,10 @@ export default function Quotations() {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesBranch
+    // Filtrar por fecha
+    const matchesDate = filterByDateRange(quotation)
+
+    return matchesSearch && matchesStatus && matchesBranch && matchesDate
   })
 
   const displayedQuotations = filteredQuotations.slice(0, visibleCount)
@@ -366,8 +431,12 @@ export default function Quotations() {
 
     setIsExporting(true)
     try {
+      const { start, end } = getDateRange()
       const filters = {
         status: filterStatus !== 'all' ? filterStatus : null,
+        startDate: start,
+        endDate: end,
+        dateFilterLabel: getFilterLabel(),
       }
       await generateQuotationsExcel(filteredQuotations, filters, companySettings)
       toast.success(`${filteredQuotations.length} cotización(es) exportada(s) exitosamente`)
@@ -382,7 +451,7 @@ export default function Quotations() {
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
-  }, [searchTerm, filterStatus, filterBranch])
+  }, [searchTerm, filterStatus, filterBranch, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = status => {
     switch (status) {
@@ -416,13 +485,17 @@ export default function Quotations() {
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0
   }
 
-  // Estadísticas
+  // Cotizaciones filtradas solo por fecha (para estadísticas)
+  const dateFilteredQuotations = quotations.filter(filterByDateRange)
+
+  // Estadísticas (basadas en el período seleccionado)
   const stats = {
-    total: quotations.length,
-    sent: quotations.filter(q => q.status === 'sent').length,
-    accepted: quotations.filter(q => q.status === 'accepted').length,
-    converted: quotations.filter(q => q.status === 'converted').length,
-    totalAmount: quotations
+    total: dateFilteredQuotations.length,
+    totalAll: quotations.length,
+    sent: dateFilteredQuotations.filter(q => q.status === 'sent').length,
+    accepted: dateFilteredQuotations.filter(q => q.status === 'accepted').length,
+    converted: dateFilteredQuotations.filter(q => q.status === 'converted').length,
+    totalAmount: dateFilteredQuotations
       .filter(q => q.status !== 'rejected' && q.status !== 'expired')
       .reduce((sum, q) => sum + (q.total || 0), 0),
   }
@@ -475,7 +548,13 @@ export default function Quotations() {
           <CardContent className="p-4 sm:p-6">
             <div>
               <p className="text-xs sm:text-sm font-medium text-gray-600">Total</p>
+              {dateFilter !== 'all' && (
+                <p className="text-xs text-primary-600">({getFilterLabel()})</p>
+              )}
               <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
+              {dateFilter !== 'all' && (
+                <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -507,6 +586,9 @@ export default function Quotations() {
           <CardContent className="p-4 sm:p-6">
             <div>
               <p className="text-xs sm:text-sm font-medium text-gray-600">Monto Total</p>
+              {dateFilter !== 'all' && (
+                <p className="text-xs text-primary-600">({getFilterLabel()})</p>
+              )}
               <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
                 {formatCurrency(stats.totalAmount)}
               </p>
@@ -531,42 +613,109 @@ export default function Quotations() {
               />
             </div>
 
-            {/* Filtros */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-              {/* Filtro de Sucursal */}
-              {branches.length > 0 && (
+            {/* Filtro de fechas */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'Todo' },
+                { value: 'today', label: 'Hoy' },
+                { value: '3days', label: '3 días' },
+                { value: '7days', label: '7 días' },
+                { value: '30days', label: '30 días' },
+                { value: 'custom', label: 'Personalizado' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setDateFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    dateFilter === option.value
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Fechas personalizadas */}
+            {dateFilter === 'custom' && (
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Desde:</label>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Hasta:</label>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Filtros adicionales */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Filtro de Sucursal */}
+                {branches.length > 0 && (
+                  <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                    <Store className="w-4 h-4 text-gray-500" />
+                    <select
+                      value={filterBranch}
+                      onChange={e => setFilterBranch(e.target.value)}
+                      className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                    >
+                      <option value="all">Todas las sucursales</option>
+                      {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                      {branches.map(branch => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {/* Filtro de Estado */}
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                  <Store className="w-4 h-4 text-gray-500" />
+                  <FileText className="w-4 h-4 text-gray-500" />
                   <select
-                    value={filterBranch}
-                    onChange={e => setFilterBranch(e.target.value)}
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
-                    <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
-                    {branches.map(branch => (
-                      <option key={branch.id} value={branch.id}>{branch.name}</option>
-                    ))}
+                    <option value="all">Todos los estados</option>
+                    <option value="draft">Borrador</option>
+                    <option value="sent">Enviadas</option>
+                    <option value="accepted">Aceptadas</option>
+                    <option value="rejected">Rechazadas</option>
+                    <option value="expired">Vencidas</option>
+                    <option value="converted">Convertidas</option>
                   </select>
                 </div>
-              )}
-              {/* Filtro de Estado */}
-              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                <FileText className="w-4 h-4 text-gray-500" />
-                <select
-                  value={filterStatus}
-                  onChange={e => setFilterStatus(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">Todos los estados</option>
-                  <option value="draft">Borrador</option>
-                  <option value="sent">Enviadas</option>
-                  <option value="accepted">Aceptadas</option>
-                  <option value="rejected">Rechazadas</option>
-                  <option value="expired">Vencidas</option>
-                  <option value="converted">Convertidas</option>
-                </select>
               </div>
+
+              {/* Botón limpiar filtros */}
+              {(filterStatus !== 'all' || filterBranch !== 'all' || dateFilter !== '30days') && (
+                <button
+                  onClick={() => {
+                    setDateFilter('30days')
+                    setFilterStartDate('')
+                    setFilterEndDate('')
+                    setFilterStatus('all')
+                    setFilterBranch('all')
+                    setSearchTerm('')
+                  }}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                >
+                  Limpiar filtros
+                </button>
+              )}
             </div>
           </div>
         </CardContent>
