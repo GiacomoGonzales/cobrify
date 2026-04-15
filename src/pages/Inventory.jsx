@@ -3052,10 +3052,10 @@ export default function Inventory() {
                                                     {stock}
                                                   </span>
                                                 </div>
-                                                {(warehouseBatches.length > 0 || stockWithoutLot > 0) && (
+                                                {(warehouseBatches.length > 0 || (stockWithoutLot > 0 && item.batches?.length > 0)) && (
                                                   <div className="mt-1.5 pl-5 space-y-1">
-                                                    {/* Stock sin lote asignado */}
-                                                    {stockWithoutLot > 0 && (
+                                                    {/* Stock sin lote asignado - solo si el producto usa lotes */}
+                                                    {stockWithoutLot > 0 && item.batches?.length > 0 && (
                                                       <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 border border-dashed border-gray-300">
                                                         <div className="flex items-center gap-1.5">
                                                           <Package className="w-3 h-3 text-gray-400" />
@@ -3142,10 +3142,10 @@ export default function Inventory() {
                                                       {stock}
                                                     </span>
                                                   </div>
-                                                  {(warehouseBatches.length > 0 || stockWithoutLot > 0) && (
+                                                  {(warehouseBatches.length > 0 || (stockWithoutLot > 0 && item.batches?.length > 0)) && (
                                                     <div className="mt-1.5 pl-5 space-y-1">
-                                                      {/* Stock sin lote asignado */}
-                                                      {stockWithoutLot > 0 && (
+                                                      {/* Stock sin lote asignado - solo si el producto usa lotes */}
+                                                      {stockWithoutLot > 0 && item.batches?.length > 0 && (
                                                         <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 border border-dashed border-gray-300">
                                                           <div className="flex items-center gap-1.5">
                                                             <Package className="w-3 h-3 text-gray-400" />

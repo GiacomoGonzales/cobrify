@@ -7563,8 +7563,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 </button>
               ))}
-              {/* Opción para vender stock sin lote asignado */}
-              {stockWithoutLot > 0 && (
+              {/* Opción para vender stock sin lote asignado - solo si el producto usa lotes */}
+              {stockWithoutLot > 0 && productForBatchSelection?.batches?.length > 0 && (
                 <button
                   onClick={() => handleBatchSelection({ isNoLot: true, quantity: stockWithoutLot, lotNumber: null })}
                   className="w-full p-4 border-2 border-dashed border-amber-400 rounded-lg text-left transition-all hover:bg-amber-50"

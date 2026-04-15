@@ -210,7 +210,7 @@ export default function MassTransferModal({
         batchExpiration: null,
         batchData: null,
         batches: product.batches || [],
-        hasBatches: warehouseBatches.length > 0,
+        hasBatches: (product.batches || []).length > 0, // El producto usa control de lotes
         serials: (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)),
         hasSerials: product.trackSerials && (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === fromWarehouse)).length > 0,
         selectedSerials: [],
