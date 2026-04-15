@@ -2474,23 +2474,36 @@ export default function POS() {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
                 const factor = item.presentationFactor || 1
-                // Stock disponible: del lote si tiene, sino del almacén
-                const availableStock = item.batchNumber
-                  ? (productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0)
-                  : getCurrentWarehouseStock(productData)
+                // Stock disponible: del lote si tiene, de "sin lote" si isNoLot, sino del almacén
+                let availableStock
+                if (item.batchNumber) {
+                  // Con lote específico
+                  availableStock = productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0
+                } else if (item.isNoLot) {
+                  // Sin lote: calcular stock sin lote = total almacén - suma de lotes
+                  const totalWarehouseStock = getCurrentWarehouseStock(productData)
+                  const warehouseBatches = (productData.batches || []).filter(b =>
+                    b.quantity > 0 && (!b.warehouseId || b.warehouseId === selectedWarehouse?.id)
+                  )
+                  const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                  availableStock = Math.max(0, totalWarehouseStock - batchesTotal)
+                } else {
+                  // Sin lotes, stock normal del almacén
+                  availableStock = getCurrentWarehouseStock(productData)
+                }
 
                 if (factor > 1) {
                   // Validar en presentaciones
                   const maxPresentations = Math.floor(availableStock / factor)
                   if (newQuantity > maxPresentations) {
                     const presName = item.presentationName || 'presentaciones'
-                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    const stockMsg = item.isNoLot ? 'stock sin lote' : item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
                     toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
                     return item
                   }
                 } else {
                   if (newQuantity > availableStock) {
-                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    const stockMsg = item.isNoLot ? 'stock sin lote' : item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
                     toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
                     return item
                   }
@@ -2528,21 +2541,35 @@ export default function POS() {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
                 const factor = item.presentationFactor || 1
-                const availableStock = item.batchNumber
-                  ? (productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0)
-                  : getCurrentWarehouseStock(productData)
+                // Stock disponible: del lote si tiene, de "sin lote" si isNoLot, sino del almacén
+                let availableStock
+                if (item.batchNumber) {
+                  // Con lote específico
+                  availableStock = productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0
+                } else if (item.isNoLot) {
+                  // Sin lote: calcular stock sin lote = total almacén - suma de lotes
+                  const totalWarehouseStock = getCurrentWarehouseStock(productData)
+                  const warehouseBatches = (productData.batches || []).filter(b =>
+                    b.quantity > 0 && (!b.warehouseId || b.warehouseId === selectedWarehouse?.id)
+                  )
+                  const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                  availableStock = Math.max(0, totalWarehouseStock - batchesTotal)
+                } else {
+                  // Sin lotes, stock normal del almacén
+                  availableStock = getCurrentWarehouseStock(productData)
+                }
 
                 if (factor > 1) {
                   const maxPresentations = Math.floor(availableStock / factor)
                   if (quantity > maxPresentations) {
                     const presName = item.presentationName || 'presentaciones'
-                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : item.isNoLot ? 'stock sin lote' : (selectedWarehouse?.name || 'este almacén')
                     toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
                     return item
                   }
                 } else {
                   if (quantity > availableStock) {
-                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : (selectedWarehouse?.name || 'este almacén')
+                    const stockMsg = item.batchNumber ? `lote ${item.batchNumber}` : item.isNoLot ? 'stock sin lote' : (selectedWarehouse?.name || 'este almacén')
                     toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
                     return item
                   }
