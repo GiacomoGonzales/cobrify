@@ -198,6 +198,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         saleCondition: String(row.condicion_venta || row.Condicion_Venta || row.CONDICION_VENTA || row.condicionVenta || row.sale_condition || '').trim().toLowerCase() || null,
         sanitaryRegistry: String(row.registro_sanitario || row.Registro_Sanitario || row.REGISTRO_SANITARIO || row.registroSanitario || row.sanitary_registry || '').trim() || null,
         location: String(row.ubicacion || row.Ubicacion || row.UBICACION || row.location || '').trim() || null,
+        // Mostrar en catálogo público
+        showInCatalog: (() => {
+          const rawValue = String(row.mostrar_en_catalogo || row.Mostrar_En_Catalogo || row.MOSTRAR_EN_CATALOGO || row.mostrarEnCatalogo || row.showInCatalog || row.ShowInCatalog || row.SHOW_IN_CATALOG || '').trim().toUpperCase()
+          if (rawValue === 'SI' || rawValue === 'SÍ' || rawValue === 'YES' || rawValue === '1' || rawValue === 'TRUE') return true
+          if (rawValue === 'NO' || rawValue === '0' || rawValue === 'FALSE') return false
+          return true // Por defecto SÍ mostrar en catálogo
+        })(),
         // Afectación IGV: GRAVADO (10), EXONERADO (20), INAFECTO (30)
         taxAffectation: (() => {
           const rawValue = String(row.afectacion_igv || row.Afectacion_Igv || row.AFECTACION_IGV || row.afectacionIgv || row.tax_affectation || row.taxAffectation || '').trim().toUpperCase()
@@ -361,6 +368,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: 0.95,
           stock: 500,
           trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
           subcategoria: 'Tabletas',
@@ -397,6 +405,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: 0.70,
           stock: 200,
           trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
           subcategoria: 'Cápsulas',
@@ -433,6 +442,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: '',
           stock: 100,
           trackStock: 'SI',
+          mostrar_en_catalogo: 'NO',
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
           subcategoria: '',
@@ -465,6 +475,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: 8.00,
           stock: 100,
           trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Categoría Ejemplo',
           subcategoria: 'Subcategoría Ejemplo',
@@ -508,6 +519,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: '',
           stock: '',
           trackStock: 'NO',
+          mostrar_en_catalogo: 'NO',
           unidad: 'SERVICIO',
           categoria: 'Servicios',
           subcategoria: '',
@@ -551,6 +563,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: 11.00,
           stock: 50,
           trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: '',
           subcategoria: '',
@@ -594,6 +607,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio4: '',
           stock: '',
           trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Ropa',
           subcategoria: '',
@@ -787,7 +801,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), unidad, categoria, afectacion_igv
+            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
           </p>
         </div>
 
