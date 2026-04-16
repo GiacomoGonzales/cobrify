@@ -579,7 +579,15 @@ export default function Products() {
     }
 
     // Load modifiers if product has them (restaurant mode)
-    setModifiers(product.modifiers || [])
+    // Asegurar que cada modificador y opción tenga un ID (fix para productos clonados sin IDs)
+    setModifiers((product.modifiers || []).map((mod, mi) => ({
+      ...mod,
+      id: mod.id || `mod-${Date.now()}-${mi}`,
+      options: (mod.options || []).map((opt, oi) => ({
+        ...opt,
+        id: opt.id || `opt-${Date.now()}-${mi}-${oi}`,
+      })),
+    })))
 
     // Load presentations if product has them (venta por presentaciones)
     setPresentations(product.presentations || [])
@@ -679,8 +687,15 @@ export default function Products() {
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
-    // Clonar modificadores (sin el id para evitar undefined en Firestore)
-    setModifiers((product.modifiers || []).map(({ id, ...rest }) => rest))
+    // Clonar modificadores con IDs nuevos para evitar conflictos
+    setModifiers((product.modifiers || []).map(mod => ({
+      ...mod,
+      id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      options: (mod.options || []).map(opt => ({
+        ...opt,
+        id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      })),
+    })))
 
     // Clonar presentaciones (sin el id para evitar undefined en Firestore)
     const clonedPresentations = (product.presentations || []).map(({ id, ...rest }) => rest)

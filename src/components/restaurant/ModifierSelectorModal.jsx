@@ -20,11 +20,29 @@ export default function ModifierSelectorModal({
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [errors, setErrors] = useState({})
 
+  // Asegurar que modificadores y opciones tengan IDs (fix para productos clonados sin IDs)
+  const normalizedProduct = (() => {
+    if (!product?.modifiers) return product
+    const needsFix = product.modifiers.some(m => !m.id || m.options?.some(o => !o.id))
+    if (!needsFix) return product
+    return {
+      ...product,
+      modifiers: product.modifiers.map((mod, mi) => ({
+        ...mod,
+        id: mod.id || `mod-fallback-${mi}`,
+        options: (mod.options || []).map((opt, oi) => ({
+          ...opt,
+          id: opt.id || `opt-fallback-${mi}-${oi}`,
+        })),
+      })),
+    }
+  })()
+
   // Inicializar estado cuando se abre el modal
   useEffect(() => {
-    if (isOpen && product?.modifiers) {
+    if (isOpen && normalizedProduct?.modifiers) {
       const initial = {}
-      product.modifiers.forEach(modifier => {
+      normalizedProduct.modifiers.forEach(modifier => {
         if (modifier.allowRepeat) {
           initial[modifier.id] = {} // { optionId: count }
         } else {
@@ -48,9 +66,9 @@ export default function ModifierSelectorModal({
 
   // Calcular precio total con ajustes de modificadores
   const calculateTotalPrice = () => {
-    let total = product._selectedPrice ?? product.price ?? 0
+    let total = normalizedProduct._selectedPrice ?? normalizedProduct.price ?? 0
 
-    product.modifiers.forEach(modifier => {
+    normalizedProduct.modifiers.forEach(modifier => {
       const sel = selectedModifiers[modifier.id]
       if (!sel) return
 
@@ -78,7 +96,7 @@ export default function ModifierSelectorModal({
 
   // Manejar selección de opción (modo normal - toggle)
   const handleOptionToggle = (modifierId, optionId) => {
-    const modifier = product.modifiers.find(m => m.id === modifierId)
+    const modifier = normalizedProduct.modifiers.find(m => m.id === modifierId)
     if (!modifier) return
 
     setSelectedModifiers(prev => {
@@ -106,7 +124,7 @@ export default function ModifierSelectorModal({
 
   // Manejar incremento (modo multi-opción)
   const handleRepeatIncrement = (modifierId, optionId) => {
-    const modifier = product.modifiers.find(m => m.id === modifierId)
+    const modifier = normalizedProduct.modifiers.find(m => m.id === modifierId)
     if (!modifier) return
 
     setSelectedModifiers(prev => {
@@ -154,7 +172,7 @@ export default function ModifierSelectorModal({
   const handleConfirm = () => {
     const newErrors = {}
 
-    product.modifiers.forEach(modifier => {
+    normalizedProduct.modifiers.forEach(modifier => {
       if (modifier.required) {
         const count = getSelectedCount(modifier)
         if (count === 0) {
@@ -169,7 +187,7 @@ export default function ModifierSelectorModal({
     }
 
     // Preparar datos de modificadores seleccionados
-    const modifiersData = product.modifiers
+    const modifiersData = normalizedProduct.modifiers
       .map(modifier => {
         const sel = selectedModifiers[modifier.id]
         if (!sel) return null
@@ -220,33 +238,33 @@ export default function ModifierSelectorModal({
     })
   }
 
-  if (!product || !product.modifiers || product.modifiers.length === 0) {
+  if (!normalizedProduct || !normalizedProduct.modifiers || normalizedProduct.modifiers.length === 0) {
     return null
   }
 
   const totalPrice = calculateTotalPrice()
-  const basePrice = product._selectedPrice ?? product.price ?? 0
+  const basePrice = normalizedProduct._selectedPrice ?? normalizedProduct.price ?? 0
   const priceAdjustment = totalPrice - basePrice
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Personaliza: ${product.name}`}
+      title={`Personaliza: ${normalizedProduct.name}`}
       size="md"
     >
       <div className="space-y-4">
         {/* Info del producto base */}
         <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center">
-            <span className="font-medium text-gray-900">{product.name}</span>
+            <span className="font-medium text-gray-900">{normalizedProduct.name}</span>
             <span className="text-gray-600">{formatCurrency(basePrice)}</span>
           </div>
         </div>
 
         {/* Lista de modificadores */}
         <div className="space-y-4 max-h-96 overflow-y-auto">
-          {product.modifiers.map((modifier) => {
+          {normalizedProduct.modifiers.map((modifier) => {
             const selectedCount = getSelectedCount(modifier)
             const hasError = errors[modifier.id]
 
