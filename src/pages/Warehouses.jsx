@@ -85,6 +85,10 @@ export default function Warehouses() {
   const [allProducts, setAllProducts] = useState([])
   const [repairWarehouseId, setRepairWarehouseId] = useState('')
   const [isRepairing, setIsRepairing] = useState(false)
+  const [productsWithIssues, setProductsWithIssues] = useState([])
+  const [selectedForRepair, setSelectedForRepair] = useState([])
+  const [isScanning, setIsScanning] = useState(false)
+  const [bulkRepairWarehouse, setBulkRepairWarehouse] = useState('')
 
   const {
     register,
@@ -724,6 +728,150 @@ export default function Warehouses() {
       toast.error('Error al reparar lotes')
     } finally {
       setIsRepairing(false)
+    }
+  }
+
+  // Escanear todos los productos y encontrar los que tienen lotes sin almacén
+  const scanAllProductsForIssues = async () => {
+    setIsScanning(true)
+    setProductsWithIssues([])
+    setSelectedForRepair([])
+    try {
+      const businessId = getBusinessId()
+      const result = await getProducts(businessId)
+      if (result.success) {
+        const allProds = result.data || []
+        setAllProducts(allProds)
+
+        // Filtrar productos con lotes sin almacén
+        const withIssues = allProds.filter(product => {
+          if (!product.batches || product.batches.length === 0) return false
+          const batchesWithoutWarehouse = product.batches.filter(b => !b.warehouseId && b.quantity > 0)
+          return batchesWithoutWarehouse.length > 0
+        }).map(product => {
+          const batchesWithoutWarehouse = product.batches.filter(b => !b.warehouseId && b.quantity > 0)
+          const totalUnassigned = batchesWithoutWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+          return {
+            ...product,
+            batchesWithoutWarehouse,
+            unassignedBatchCount: batchesWithoutWarehouse.length,
+            unassignedTotal: totalUnassigned
+          }
+        })
+
+        setProductsWithIssues(withIssues)
+        if (withIssues.length === 0) {
+          toast.success('¡Todos los productos están correctos! No hay lotes sin almacén.')
+        } else {
+          toast.info(`Se encontraron ${withIssues.length} productos con lotes sin almacén asignado`)
+        }
+      }
+    } catch (error) {
+      console.error('Error al escanear productos:', error)
+      toast.error('Error al escanear productos')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  // Reparar masivamente los productos seleccionados
+  const handleBulkRepair = async () => {
+    if (!bulkRepairWarehouse) {
+      toast.error('Selecciona un almacén destino')
+      return
+    }
+    if (selectedForRepair.length === 0) {
+      toast.error('Selecciona al menos un producto')
+      return
+    }
+
+    setIsRepairing(true)
+    let repaired = 0
+    let errors = 0
+
+    try {
+      const businessId = getBusinessId()
+
+      for (const productId of selectedForRepair) {
+        const product = productsWithIssues.find(p => p.id === productId)
+        if (!product) continue
+
+        try {
+          // Actualizar lotes sin almacén
+          const repairedBatches = product.batches.map(batch => {
+            if (!batch.warehouseId && batch.quantity > 0) {
+              return { ...batch, warehouseId: bulkRepairWarehouse }
+            }
+            return batch
+          })
+
+          // Recalcular warehouseStocks
+          const stockByWarehouse = {}
+          repairedBatches.forEach(batch => {
+            if (batch.warehouseId && batch.quantity > 0) {
+              stockByWarehouse[batch.warehouseId] = (stockByWarehouse[batch.warehouseId] || 0) + batch.quantity
+            }
+          })
+
+          const newWarehouseStocks = Object.entries(stockByWarehouse).map(([warehouseId, stock]) => ({
+            warehouseId,
+            stock,
+            minStock: product.warehouseStocks?.find(ws => ws.warehouseId === warehouseId)?.minStock || 0
+          }))
+
+          const updateData = {
+            batches: repairedBatches,
+            warehouseStocks: newWarehouseStocks,
+            stock: repairedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+          }
+
+          const result = await updateProduct(businessId, product.id, updateData)
+          if (result.success) {
+            repaired++
+          } else {
+            errors++
+          }
+        } catch (err) {
+          console.error(`Error reparando ${product.name}:`, err)
+          errors++
+        }
+      }
+
+      if (repaired > 0) {
+        toast.success(`${repaired} producto(s) reparados exitosamente`)
+      }
+      if (errors > 0) {
+        toast.error(`${errors} producto(s) no se pudieron reparar`)
+      }
+
+      // Refrescar la lista
+      await scanAllProductsForIssues()
+      setSelectedForRepair([])
+      setBulkRepairWarehouse('')
+
+    } catch (error) {
+      console.error('Error en reparación masiva:', error)
+      toast.error('Error en reparación masiva')
+    } finally {
+      setIsRepairing(false)
+    }
+  }
+
+  // Toggle selección de producto para reparar
+  const toggleProductSelection = (productId) => {
+    setSelectedForRepair(prev =>
+      prev.includes(productId)
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    )
+  }
+
+  // Seleccionar/deseleccionar todos
+  const toggleSelectAll = () => {
+    if (selectedForRepair.length === productsWithIssues.length) {
+      setSelectedForRepair([])
+    } else {
+      setSelectedForRepair(productsWithIssues.map(p => p.id))
     }
   }
 
@@ -1490,11 +1638,127 @@ export default function Warehouses() {
           setSelectedProduct(null)
           setDiagnosticSearch('')
           setDiagnosticProducts([])
+          setProductsWithIssues([])
+          setSelectedForRepair([])
         }}
         title="Diagnóstico de Stock"
         size="xl"
       >
         <div className="space-y-4">
+          {/* Botón para escanear todos los productos */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={scanAllProductsForIssues}
+              disabled={isScanning}
+              className="flex-1 bg-amber-600 hover:bg-amber-700"
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Escaneando productos...
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Buscar Lotes sin Almacén
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Lista de productos con problemas */}
+          {productsWithIssues.length > 0 && (
+            <div className="space-y-3 border rounded-lg p-4 bg-amber-50">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-amber-900 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  {productsWithIssues.length} producto(s) con lotes sin almacén
+                </h4>
+                <button
+                  onClick={toggleSelectAll}
+                  className="text-sm text-amber-700 hover:text-amber-900 underline"
+                >
+                  {selectedForRepair.length === productsWithIssues.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                </button>
+              </div>
+
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {productsWithIssues.map((product) => (
+                  <label
+                    key={product.id}
+                    className={`flex items-center gap-3 p-3 bg-white rounded-lg border cursor-pointer transition-all ${
+                      selectedForRepair.includes(product.id)
+                        ? 'border-amber-500 ring-2 ring-amber-200'
+                        : 'border-gray-200 hover:border-amber-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedForRepair.includes(product.id)}
+                      onChange={() => toggleProductSelection(product.id)}
+                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{product.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {product.sku && `SKU: ${product.sku} • `}
+                        {product.unassignedBatchCount} lote(s), {product.unassignedTotal} uds sin almacén
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-amber-600">{product.unassignedTotal}</span>
+                      <p className="text-xs text-gray-400">sin asignar</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {/* Panel de reparación masiva */}
+              {selectedForRepair.length > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-amber-200">
+                  <select
+                    value={bulkRepairWarehouse}
+                    onChange={(e) => setBulkRepairWarehouse(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="">Seleccionar almacén destino...</option>
+                    {warehouses.filter(w => w.isActive || w.status === 'active').map(wh => (
+                      <option key={wh.id} value={wh.id}>
+                        {wh.name} {wh.isDefault ? '(Principal)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    onClick={handleBulkRepair}
+                    disabled={!bulkRepairWarehouse || isRepairing}
+                    className="whitespace-nowrap bg-green-600 hover:bg-green-700"
+                  >
+                    {isRepairing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Reparando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Reparar {selectedForRepair.length} seleccionado(s)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Separador */}
+          {productsWithIssues.length > 0 && (
+            <div className="flex items-center gap-4">
+              <div className="flex-1 border-t border-gray-200"></div>
+              <span className="text-xs text-gray-400">o buscar producto específico</span>
+              <div className="flex-1 border-t border-gray-200"></div>
+            </div>
+          )}
+
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               <strong>¿Por qué mi producto muestra stock pero los almacenes están en 0?</strong><br />
