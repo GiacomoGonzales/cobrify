@@ -2085,6 +2085,19 @@ export default function Warehouses() {
                           : getWarehouseName(batch.warehouseId))
                         : 'Sin almacén'
 
+                      // Formatear fecha de vencimiento (puede ser Timestamp de Firestore o string)
+                      const expDate = batch.expirationDate || batch.expiryDate
+                      const formatExpDate = (date) => {
+                        if (!date) return null
+                        try {
+                          const d = date.toDate ? date.toDate() : new Date(date)
+                          return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        } catch {
+                          return null
+                        }
+                      }
+                      const formattedExpDate = formatExpDate(expDate)
+
                       return (
                         <div
                           key={idx}
@@ -2092,10 +2105,10 @@ export default function Warehouses() {
                         >
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-medium text-sm">{batch.batchNumber || `Lote ${idx + 1}`}</p>
-                              {batch.expirationDate && (
+                              <p className="font-medium text-sm">{batch.lotNumber || batch.batchNumber || `Lote ${idx + 1}`}</p>
+                              {formattedExpDate && (
                                 <p className="text-xs text-gray-500">
-                                  Vence: {new Date(batch.expirationDate).toLocaleDateString('es-PE')}
+                                  Vence: {formattedExpDate}
                                 </p>
                               )}
                             </div>
