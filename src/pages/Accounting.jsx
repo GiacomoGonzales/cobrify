@@ -6,7 +6,6 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -15,6 +14,7 @@ import { getCompanySettings } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
 
 // Nombres de meses en español
 const MONTHS = [
@@ -430,34 +430,15 @@ export default function Accounting() {
         }
       }
 
-      // Agregar Excel
+      // Agregar Excel (con diseño y desglose tributario completo)
       setDownloadProgress('Generando Excel...')
-      const rows = [
-        ['REPORTE CONTABLE'],
-        ['Fecha:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
-        ['Total:', filtered.length],
-        [''],
-        ['Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión', 'Total', 'Estado SUNAT', 'Tiene XML', 'Tiene CDR', 'Hash SUNAT']
-      ]
-      filtered.forEach(inv => {
-        rows.push([
-          inv.number || '-',
-          inv.documentType === 'factura' ? 'Factura' : 'Boleta',
-          inv.customer?.businessName || inv.customer?.name || '-',
-          inv.customer?.documentNumber || '-',
-          formatDate(getInvoiceDate(inv)),
-          inv.total || 0,
-          getSunatStatus(inv) === 'accepted' ? 'Aceptado' : getSunatStatus(inv) === 'rejected' ? 'Rechazado' : getSunatStatus(inv) === 'voided' ? 'Anulado' : 'Pendiente',
-          hasXml(inv) ? 'Sí' : 'No',
-          hasCdr(inv) ? 'Sí' : 'No',
-          inv.sunatResponse?.hash || inv.sunatHash || '-'
-        ])
-      })
-      const ws = XLSX.utils.aoa_to_sheet(rows)
-      ws['!cols'] = [{ width: 20 }, { width: 10 }, { width: 35 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 10 }, { width: 40 }]
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Contabilidad')
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const monthLabelForExcel = selectedMonth
+        ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label
+        : null
+      const periodLabelForExcel = monthLabelForExcel ? `${monthLabelForExcel} ${selectedYear}` : `Año ${selectedYear}`
+      const settingsResultForExcel = await getCompanySettings(getBusinessId())
+      const businessDataForExcel = settingsResultForExcel?.success ? settingsResultForExcel.data : null
+      const excelBuffer = generateAccountingExcelBuffer(filtered, businessDataForExcel, periodLabelForExcel)
       zip.file('Reporte_Contable.xlsx', excelBuffer)
 
       setDownloadProgress('Comprimiendo archivos...')
@@ -548,39 +529,29 @@ export default function Accounting() {
     withoutCdr: filtered.filter(i => !hasCdr(i)).length,
   }
 
-  // Export Excel
-  const handleExportExcel = () => {
+  // Export Excel (con diseño y desglose tributario completo)
+  const handleExportExcel = async () => {
     if (filtered.length === 0) {
       toast.error('No hay datos para exportar')
       return
     }
-    const rows = [
-      ['REPORTE CONTABLE'],
-      ['Fecha:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
-      ['Total:', filtered.length],
-      [''],
-      ['Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión', 'Total', 'Estado SUNAT', 'Tiene XML', 'Tiene CDR', 'Hash SUNAT']
-    ]
-    filtered.forEach(inv => {
-      rows.push([
-        inv.number || '-',
-        inv.documentType === 'factura' ? 'Factura' : 'Boleta',
-        inv.customer?.businessName || inv.customer?.name || '-',
-        inv.customer?.documentNumber || '-',
-        formatDate(getInvoiceDate(inv)),
-        inv.total || 0,
-        getSunatStatus(inv) === 'accepted' ? 'Aceptado' : getSunatStatus(inv) === 'rejected' ? 'Rechazado' : getSunatStatus(inv) === 'voided' ? 'Anulado' : 'Pendiente',
-        hasXml(inv) ? 'Sí' : 'No',
-        hasCdr(inv) ? 'Sí' : 'No',
-        inv.sunatResponse?.hash || inv.sunatHash || '-'
-      ])
-    })
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ width: 20 }, { width: 10 }, { width: 35 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 10 }, { width: 40 }]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Contabilidad')
-    XLSX.writeFile(wb, `Contabilidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
-    toast.success('Excel exportado')
+    try {
+      // Obtener datos del negocio para el encabezado del reporte
+      const settingsResult = await getCompanySettings(getBusinessId())
+      const businessData = settingsResult?.success ? settingsResult.data : null
+
+      // Construir etiqueta del período
+      const monthLabel = selectedMonth
+        ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label
+        : null
+      const periodLabel = monthLabel ? `${monthLabel} ${selectedYear}` : `Año ${selectedYear}`
+
+      await generateAccountingExcel(filtered, businessData, periodLabel)
+      toast.success('Excel exportado')
+    } catch (error) {
+      console.error('Error al exportar Excel:', error)
+      toast.error(error.message || 'Error al generar el Excel')
+    }
   }
 
   const StatusBadge = ({ inv }) => {
