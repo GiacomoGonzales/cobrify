@@ -287,9 +287,11 @@ export default function CreateCreditNote() {
     }
 
     // Validar formato de número de documento (Serie-Correlativo)
-    const docNumberPattern = /^[FB]\d{3}-\d{1,8}$/i
+    // Acepta series alfanuméricas de 4 caracteres: F001 (factura), B001 (boleta),
+    // E001 (factura emitida desde portal SUNAT SEE-SOL), EB01 (boleta SEE-SOL), etc.
+    const docNumberPattern = /^[A-Z0-9]{4}-\d{1,8}$/i
     if (!docNumberPattern.test(externalData.documentNumber)) {
-      setMessage({ type: 'error', text: 'El número de documento debe tener formato Serie-Correlativo (ej: F001-00001234)' })
+      setMessage({ type: 'error', text: 'El número de documento debe tener formato Serie-Correlativo (ej: F001-00001234 o E001-746)' })
       return
     }
 
@@ -966,10 +968,10 @@ export default function CreateCreditNote() {
                   <Input
                     value={externalData.documentNumber}
                     onChange={e => setExternalData(prev => ({ ...prev, documentNumber: e.target.value.toUpperCase() }))}
-                    placeholder="F001-00001234"
+                    placeholder="F001-00001234 o E001-746"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Formato: Serie-Correlativo (ej: F001-00001234)</p>
+                  <p className="text-xs text-gray-500 mt-1">Formato: Serie-Correlativo (ej: F001-00001234, E001-746 para facturas del portal SUNAT)</p>
                 </div>
               </div>
             </CardContent>

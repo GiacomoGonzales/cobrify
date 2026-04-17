@@ -199,6 +199,14 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
     }
 
     const recipe = recipeResult.data
+
+    // Si deductOnSale es false, los ingredientes se descuentan al PRODUCIR (no al vender).
+    // El stock se maneja a nivel del producto terminado, por lo que no hay que validar
+    // el stock de ingredientes aquí (eso rompería la venta del producto ya producido).
+    if (recipe.deductOnSale === false) {
+      return { success: true, hasStock: true, missingIngredients: [] }
+    }
+
     const missingIngredients = []
 
     for (const ingredient of recipe.ingredients) {
