@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText } from 'lucide-react'
+import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText, PackageMinus } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -27,15 +27,26 @@ export default function WarehouseExits() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all') // 'all' | 'project' | 'simple'
   const [expandedId, setExpandedId] = useState(null)
   const [guideReference, setGuideReference] = useState(null)
 
   // Estado del formulario
+  const [exitType, setExitType] = useState('project') // 'project' | 'simple'
   const [selectedProject, setSelectedProject] = useState('')
+  const [simpleReason, setSimpleReason] = useState('office_use')
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState([])
   const [productSearch, setProductSearch] = useState('')
+
+  // Motivos para salida simple (sin proyecto)
+  const SIMPLE_REASONS = [
+    { value: 'office_use', label: 'Uso en oficina' },
+    { value: 'employee_delivery', label: 'Entrega a trabajador' },
+    { value: 'internal_consumption', label: 'Consumo interno' },
+    { value: 'other', label: 'Otro' },
+  ]
 
   useEffect(() => {
     loadData()
@@ -67,8 +78,10 @@ export default function WarehouseExits() {
 
   const activeProjects = projects.filter(p => p.status === 'active')
 
-  const openCreateModal = () => {
+  const openCreateModal = (initialType = 'project') => {
+    setExitType(initialType)
     setSelectedProject('')
+    setSimpleReason('office_use')
     setSelectedWarehouse(warehouses.find(w => w.isDefault)?.id || warehouses[0]?.id || '')
     setNotes('')
     setItems([])
@@ -77,9 +90,63 @@ export default function WarehouseExits() {
   }
 
   const addProduct = (product) => {
-    if (items.find(i => i.productId === product.id)) {
-      // Ya existe, incrementar cantidad
-      setItems(items.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i))
+    // Producto con variantes: agregar una fila por cada variante con stock > 0
+    if (product.hasVariants && product.variants?.length > 0) {
+      const variantRows = product.variants
+        .filter(v => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === selectedWarehouse)
+          return ws && ws.stock > 0
+        })
+        .filter(v => !items.some(i => i.productId === product.id && i.variantSku === v.sku))
+        .map(v => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === selectedWarehouse)
+          const variantLabel = Object.values(v.attributes || {}).join(' / ')
+          return {
+            productId: product.id,
+            productName: product.name,
+            productCode: product.code || product.barcode || '',
+            quantity: 1,
+            unit: product.unit || 'und',
+            availableStock: ws?.stock || 0,
+            variantSku: v.sku,
+            variantLabel,
+            isVariant: true,
+          }
+        })
+
+      if (variantRows.length === 0) {
+        const anyVariantHasStock = product.variants.some(v =>
+          (v.warehouseStocks || []).some(s => s.warehouseId === selectedWarehouse && s.stock > 0)
+        )
+        if (!anyVariantHasStock) {
+          toast.error(`"${product.name}" no tiene variantes con stock en este almacén`)
+        } else {
+          toast.info(`Todas las variantes con stock de "${product.name}" ya están agregadas`)
+        }
+        setProductSearch('')
+        return
+      }
+      setItems([...items, ...variantRows])
+      setProductSearch('')
+      return
+    }
+
+    // Producto sin variantes: flujo normal
+    const stock = getProductStock(product)
+    if (stock <= 0) {
+      toast.error(`"${product.name}" no tiene stock disponible en este almacén`)
+      return
+    }
+    const existing = items.find(i => i.productId === product.id && !i.variantSku)
+    if (existing) {
+      // Ya existe, incrementar cantidad (con tope por stock)
+      if (existing.quantity >= stock) {
+        toast.error(`Ya agregaste el máximo disponible de "${product.name}" (${stock})`)
+        return
+      }
+      setItems(items.map(i => i.productId === product.id && !i.variantSku
+        ? { ...i, quantity: i.quantity + 1 }
+        : i))
     } else {
       setItems([...items, {
         productId: product.id,
@@ -87,29 +154,61 @@ export default function WarehouseExits() {
         productCode: product.code || product.barcode || '',
         quantity: 1,
         unit: product.unit || 'und',
-        availableStock: getProductStock(product),
+        availableStock: stock,
       }])
     }
     setProductSearch('')
   }
 
   const getProductStock = (product) => {
+    // Producto con variantes: sumar stock de todas las variantes en el almacén seleccionado
+    if (product.hasVariants && product.variants?.length > 0) {
+      if (!selectedWarehouse) {
+        return product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+      }
+      return product.variants.reduce((sum, v) => {
+        const ws = (v.warehouseStocks || []).find(s => s.warehouseId === selectedWarehouse)
+        return sum + (ws?.stock || 0)
+      }, 0)
+    }
+
+    // Producto sin variantes
     if (!selectedWarehouse) return product.stock || 0
     const ws = product.warehouseStocks?.find(w => w.warehouseId === selectedWarehouse)
     return ws ? ws.stock : (product.stock || 0)
   }
 
-  const updateItemQuantity = (productId, value) => {
+  // Matchear una fila por productId + variantSku (soporte para productos con variantes)
+  const rowMatches = (i, productId, variantSku) =>
+    i.productId === productId && (i.variantSku || null) === (variantSku || null)
+
+  const updateItemQuantity = (productId, variantSku, value) => {
     const raw = value === '' ? '' : parseInt(value) || ''
-    setItems(items.map(i => i.productId === productId ? { ...i, quantity: raw } : i))
+    setItems(items.map(i => {
+      if (!rowMatches(i, productId, variantSku)) return i
+      if (typeof raw === 'number' && raw > (i.availableStock || 0)) {
+        return { ...i, quantity: raw, exceedsStock: true }
+      }
+      return { ...i, quantity: raw, exceedsStock: false }
+    }))
   }
 
-  const finalizeItemQuantity = (productId) => {
-    setItems(items.map(i => i.productId === productId ? { ...i, quantity: Math.max(1, parseInt(i.quantity) || 1) } : i))
+  const finalizeItemQuantity = (productId, variantSku) => {
+    setItems(items.map(i => {
+      if (!rowMatches(i, productId, variantSku)) return i
+      const parsed = parseInt(i.quantity) || 1
+      const maxStock = i.availableStock || 0
+      const clamped = Math.max(1, Math.min(parsed, maxStock || parsed))
+      if (parsed > maxStock && maxStock > 0) {
+        const who = i.variantLabel ? `${i.productName} (${i.variantLabel})` : i.productName
+        toast.error(`Stock máximo de "${who}" es ${maxStock}. Se ajustó la cantidad.`)
+      }
+      return { ...i, quantity: clamped, exceedsStock: false }
+    }))
   }
 
-  const removeItem = (productId) => {
-    setItems(items.filter(i => i.productId !== productId))
+  const removeItem = (productId, variantSku) => {
+    setItems(items.filter(i => !rowMatches(i, productId, variantSku)))
   }
 
   const handleScanBarcode = async () => {
@@ -146,20 +245,33 @@ export default function WarehouseExits() {
   }
 
   const handleSubmit = async () => {
-    if (!selectedProject) { toast.error('Selecciona un proyecto'); return }
+    // Validaciones según tipo de salida
+    if (exitType === 'project' && !selectedProject) { toast.error('Selecciona un proyecto'); return }
+    if (exitType === 'simple' && !simpleReason) { toast.error('Selecciona un motivo'); return }
     if (!selectedWarehouse) { toast.error('Selecciona un almacén'); return }
     if (items.length === 0) { toast.error('Agrega al menos un producto'); return }
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
 
+    // Validar que ningún item exceda el stock disponible
+    const overStock = items.find(i => (parseInt(i.quantity) || 0) > (i.availableStock || 0))
+    if (overStock) {
+      toast.error(`Cantidad inválida: "${overStock.productName}" solicita ${overStock.quantity} pero hay ${overStock.availableStock} en stock.`)
+      return
+    }
+    // Validar que ningún item tenga cantidad < 1
+    const invalidQty = items.find(i => !i.quantity || parseInt(i.quantity) < 1)
+    if (invalidQty) {
+      toast.error(`Ingresa una cantidad válida para "${invalidQty.productName}"`)
+      return
+    }
+
     setIsSaving(true)
     try {
-      const project = projects.find(p => p.id === selectedProject)
       const warehouse = warehouses.find(w => w.id === selectedWarehouse)
 
-      const result = await createWarehouseExit(getBusinessId(), {
-        projectId: selectedProject,
-        projectName: project?.name || '',
-        projectCode: project?.code || '',
+      // Construir el payload según el tipo
+      const basePayload = {
+        exitType,
         warehouseId: selectedWarehouse,
         warehouseName: warehouse?.name || '',
         items: items.map(({ productId, productName, productCode, quantity, unit, variantSku }) => ({
@@ -168,7 +280,30 @@ export default function WarehouseExits() {
         notes,
         userId: user.uid,
         userName: user.displayName || user.email || '',
-      })
+      }
+
+      let payload
+      if (exitType === 'project') {
+        const project = projects.find(p => p.id === selectedProject)
+        payload = {
+          ...basePayload,
+          projectId: selectedProject,
+          projectName: project?.name || '',
+          projectCode: project?.code || '',
+        }
+      } else {
+        const reasonObj = SIMPLE_REASONS.find(r => r.value === simpleReason)
+        payload = {
+          ...basePayload,
+          projectId: null,
+          projectName: '',
+          projectCode: '',
+          reason: simpleReason,
+          reasonLabel: reasonObj?.label || 'Uso interno',
+        }
+      }
+
+      const result = await createWarehouseExit(getBusinessId(), payload)
 
       if (result.success) {
         toast.success('Salida registrada exitosamente')
@@ -193,11 +328,16 @@ export default function WarehouseExits() {
 
   // Filtrar salidas
   const filtered = exits.filter(e => {
+    // Filtro por tipo (default legacy: sin exitType = 'project')
+    const itemType = e.exitType || 'project'
+    if (typeFilter !== 'all' && itemType !== typeFilter) return false
+
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return e.projectName?.toLowerCase().includes(term) ||
       e.warehouseName?.toLowerCase().includes(term) ||
       e.userName?.toLowerCase().includes(term) ||
+      e.reasonLabel?.toLowerCase().includes(term) ||
       e.items?.some(i => i.productName?.toLowerCase().includes(term))
   })
 
@@ -219,26 +359,41 @@ export default function WarehouseExits() {
             <ArrowUpFromLine className="w-7 h-7 text-indigo-600" />
             Salidas de Almacén
           </h1>
-          <p className="text-gray-600 mt-1">Registra salidas de materiales y herramientas hacia obras</p>
+          <p className="text-gray-600 mt-1">Salidas hacia obras/proyectos o salidas simples para uso interno</p>
         </div>
-        <Button onClick={openCreateModal} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Salida
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => openCreateModal('simple')} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+            <PackageMinus className="w-4 h-4 mr-2" />
+            Salida Simple
+          </Button>
+          <Button onClick={() => openCreateModal('project')} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+            <HardHat className="w-4 h-4 mr-2" />
+            Salida a Obra
+          </Button>
+        </div>
       </div>
 
-      {/* Búsqueda */}
+      {/* Búsqueda y filtros */}
       <div className="flex flex-wrap gap-3">
         <div className="flex-1 min-w-[200px] relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por proyecto, almacén, producto..."
+            placeholder="Buscar por proyecto, motivo, almacén, producto..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
+        <select
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="all">Todos los tipos</option>
+          <option value="project">Solo a obras</option>
+          <option value="simple">Solo simples</option>
+        </select>
       </div>
 
       {/* Lista de salidas */}
@@ -254,7 +409,7 @@ export default function WarehouseExits() {
               {exits.length === 0 ? 'Sin salidas registradas' : 'Sin resultados'}
             </h3>
             <p className="text-gray-500 mb-4">
-              {exits.length === 0 ? 'Registra tu primera salida de materiales hacia una obra.' : 'Intenta con otros filtros.'}
+              {exits.length === 0 ? 'Registra tu primera salida a una obra o una salida simple para uso interno.' : 'Intenta con otros filtros.'}
             </p>
             {exits.length === 0 && (
               <Button onClick={openCreateModal} className="bg-indigo-600 hover:bg-indigo-700 text-white">
@@ -276,10 +431,29 @@ export default function WarehouseExits() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <HardHat className="w-4 h-4 text-indigo-600 flex-shrink-0" />
-                        {exit.number && <span className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{exit.number}</span>}
-                        <span className="font-semibold text-gray-900 truncate">{exit.projectName}</span>
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {(exit.exitType || 'project') === 'simple' ? (
+                          <PackageMinus className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                        ) : (
+                          <HardHat className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        )}
+                        {exit.number && (
+                          <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                            (exit.exitType || 'project') === 'simple'
+                              ? 'text-blue-600 bg-blue-50'
+                              : 'text-indigo-600 bg-indigo-50'
+                          }`}>{exit.number}</span>
+                        )}
+                        <span className="font-semibold text-gray-900 truncate">
+                          {(exit.exitType || 'project') === 'simple'
+                            ? (exit.reasonLabel || 'Salida simple')
+                            : exit.projectName}
+                        </span>
+                        {(exit.exitType || 'project') === 'simple' && (
+                          <span className="text-[10px] uppercase tracking-wide font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
+                            Simple
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
@@ -330,7 +504,9 @@ export default function WarehouseExits() {
                                 unit: i.unit || 'NIU',
                               })),
                               transferReason: '13',
-                              transferDescription: `Salida de almacén ${exit.number || ''} - Proyecto: ${exit.projectName}`,
+                              transferDescription: (exit.exitType || 'project') === 'simple'
+                                ? `Salida de almacén ${exit.number || ''} - ${exit.reasonLabel || 'Uso interno'}`
+                                : `Salida de almacén ${exit.number || ''} - Proyecto: ${exit.projectName}`,
                             })
                           }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
@@ -372,26 +548,73 @@ export default function WarehouseExits() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Nueva Salida de Almacén"
+        title={exitType === 'simple' ? 'Nueva Salida Simple' : 'Nueva Salida a Obra'}
         size="xl"
       >
         <div className="space-y-4">
-          {/* Proyecto y Almacén */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto / Obra *</label>
-              <select
-                value={selectedProject}
-                onChange={e => setSelectedProject(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          {/* Selector de tipo de salida */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de salida</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setExitType('project')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                  exitType === 'project'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
               >
-                <option value="">Seleccionar proyecto...</option>
-                {activeProjects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
-                ))}
-              </select>
-              {activeProjects.length === 0 && <p className="text-xs text-amber-600 mt-1">No hay proyectos activos. Crea uno primero.</p>}
+                <HardHat className="w-4 h-4" />
+                Salida a Obra
+              </button>
+              <button
+                type="button"
+                onClick={() => setExitType('simple')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                  exitType === 'simple'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <PackageMinus className="w-4 h-4" />
+                Salida Simple
+              </button>
             </div>
+          </div>
+
+          {/* Proyecto (solo si exitType=project) o Motivo (si exitType=simple) + Almacén */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {exitType === 'project' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto / Obra *</label>
+                <select
+                  value={selectedProject}
+                  onChange={e => setSelectedProject(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Seleccionar proyecto...</option>
+                  {activeProjects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
+                  ))}
+                </select>
+                {activeProjects.length === 0 && <p className="text-xs text-amber-600 mt-1">No hay proyectos activos. Crea uno primero.</p>}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
+                <select
+                  value={simpleReason}
+                  onChange={e => setSimpleReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {SIMPLE_REASONS.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Salida sin proyecto: para uso interno, oficina, consumo, etc.</p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Almacén de origen *</label>
               <select
@@ -459,25 +682,40 @@ export default function WarehouseExits() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map(item => (
-                    <tr key={item.productId} className="border-t border-gray-100">
+                  {items.map((item, idx) => (
+                    <tr key={`${item.productId}-${item.variantSku || 'nv'}-${idx}`} className="border-t border-gray-100">
                       <td className="py-2 px-3">
-                        <div className="font-medium text-gray-900">{item.productName}</div>
-                        {item.productCode && <div className="text-xs text-gray-500 font-mono">{item.productCode}</div>}
+                        <div className="font-medium text-gray-900">
+                          {item.productName}
+                          {item.variantLabel && (
+                            <span className="ml-1.5 text-xs font-normal text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                              {item.variantLabel}
+                            </span>
+                          )}
+                        </div>
+                        {item.productCode && <div className="text-xs text-gray-500 font-mono">{item.productCode}{item.variantSku ? ` · SKU ${item.variantSku}` : ''}</div>}
                       </td>
                       <td className="py-2 px-3 text-center text-xs text-gray-500">{item.availableStock}</td>
                       <td className="py-2 px-3 text-center">
                         <input
                           type="number"
                           min="1"
+                          max={item.availableStock}
                           value={item.quantity}
-                          onChange={e => updateItemQuantity(item.productId, e.target.value)}
-                          onBlur={() => finalizeItemQuantity(item.productId)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-indigo-500"
+                          onChange={e => updateItemQuantity(item.productId, item.variantSku, e.target.value)}
+                          onBlur={() => finalizeItemQuantity(item.productId, item.variantSku)}
+                          className={`w-20 px-2 py-1 border rounded text-sm text-center focus:ring-2 ${
+                            item.exceedsStock
+                              ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                              : 'border-gray-300 focus:ring-indigo-500'
+                          }`}
                         />
+                        {item.exceedsStock && (
+                          <div className="text-[10px] text-red-600 mt-0.5">Max: {item.availableStock}</div>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-center">
-                        <button onClick={() => removeItem(item.productId)} className="text-red-400 hover:text-red-600 p-1">
+                        <button onClick={() => removeItem(item.productId, item.variantSku)} className="text-red-400 hover:text-red-600 p-1">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </td>

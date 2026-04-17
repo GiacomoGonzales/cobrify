@@ -32,7 +32,7 @@ import { getMassTransfers } from '@/services/massTransferService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 
 export default function StockMovements() {
-  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode } = useAppContext()
   const toast = useToast()
   const [movements, setMovements] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -372,11 +372,11 @@ export default function StockMovements() {
         variant: 'default',
       },
       damage: {
-        label: 'Merma/Dañado',
+        label: businessMode === 'logistics' ? 'Salida' : 'Merma/Dañado',
         icon: AlertTriangle,
-        color: 'text-red-700',
-        bgColor: 'bg-red-100',
-        variant: 'danger',
+        color: businessMode === 'logistics' ? 'text-blue-700' : 'text-red-700',
+        bgColor: businessMode === 'logistics' ? 'bg-blue-100' : 'bg-red-100',
+        variant: businessMode === 'logistics' ? 'default' : 'danger',
       },
       production: {
         label: 'Producción',
@@ -842,7 +842,7 @@ export default function StockMovements() {
                 <option value="exits">Salidas (sin ventas)</option>
                 <option value="transfers">Transferencias</option>
                 <option value="adjustment">Ajustes</option>
-                <option value="damage">Merma/Dañado</option>
+                <option value="damage">{businessMode === 'logistics' ? 'Salida' : 'Merma/Dañado'}</option>
                 <option value="productions">Producción</option>
               </Select>
 

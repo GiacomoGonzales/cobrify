@@ -37,6 +37,7 @@ import {
   FlaskConical,
   CalendarClock,
   RefreshCw,
+  PackageMinus,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -59,6 +60,7 @@ import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
+import InventoryExportModal from '@/components/InventoryExportModal'
 import MassTransferModal from '@/components/MassTransferModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
@@ -460,48 +462,45 @@ export default function Inventory() {
     }
   }
 
-  const handleExportToExcel = async () => {
+  // Estado del modal de opciones de exportación
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleOpenExportModal = () => {
+    if (products.length === 0 && ingredients.length === 0) {
+      toast.error('No hay items en el inventario para exportar')
+      return
+    }
+    setShowExportModal(true)
+  }
+
+  const handleExportWithOptions = async (options) => {
     try {
-      if (products.length === 0) {
-        toast.error('No hay productos en el inventario para exportar');
-        return;
-      }
+      setIsExporting(true)
 
       // Obtener datos del negocio
-      const { getCompanySettings } = await import('@/services/firestoreService');
-      const settingsResult = await getCompanySettings(getBusinessId());
-      const businessData = settingsResult.success ? settingsResult.data : null;
+      const { getCompanySettings } = await import('@/services/firestoreService')
+      const settingsResult = await getCompanySettings(getBusinessId())
+      const businessData = settingsResult.success ? settingsResult.data : null
 
-      // Determinar nombre de sucursal filtrada
-      let branchLabel = null
-      if (filterBranch === 'main') {
-        branchLabel = 'Sucursal Principal'
-      } else if (filterBranch !== 'all') {
-        const branch = branches.find(b => b.id === filterBranch)
-        branchLabel = branch ? branch.name : null
-      }
+      // Importar y ejecutar el export
+      const { exportInventoryWithOptions } = await import('@/services/inventoryExportService')
+      const result = await exportInventoryWithOptions({
+        products,
+        ingredients,
+        categories: productCategories,
+        warehouses: filteredWarehouses,
+        businessData,
+        options,
+      })
 
-      // Determinar nombres de almacenes filtrados
-      let warehouseLabel = null
-      if (filterWarehouses.length > 0) {
-        const names = filterWarehouses
-          .map(wId => filteredWarehouses.find(w => w.id === wId)?.name)
-          .filter(Boolean)
-        warehouseLabel = names.join(', ')
-      }
-
-      // Preparar productos con stock ajustado según filtro de sucursal/almacén
-      const productsWithBranchStock = products.map(p => ({
-        ...p,
-        stock: getStockForBranch(p) ?? p.stock ?? 0,
-      }))
-
-      // Generar Excel
-      await generateProductsExcel(productsWithBranchStock, productCategories, businessData, branchLabel, warehouseLabel);
-      toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
+      toast.success(`${result.itemCount} item(s) exportado(s) exitosamente`)
+      setShowExportModal(false)
     } catch (error) {
-      console.error('Error al exportar inventario:', error);
-      toast.error('Error al generar el archivo Excel');
+      console.error('Error al exportar inventario:', error)
+      toast.error(error.message || 'Error al generar el archivo Excel')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -600,7 +599,7 @@ export default function Inventory() {
     })
   }
 
-  // Funciones para modal de merma/daños
+  // Funciones para modal de merma/daños (o salida simple en modo logística)
   const openDamageModal = (product) => {
     setDamageProduct(product)
     // Si solo hay un almacén, seleccionarlo automáticamente
@@ -609,7 +608,7 @@ export default function Inventory() {
     setDamageData({
       warehouseId: defaultWarehouseId,
       quantity: '',
-      reason: 'damaged',
+      reason: businessMode === 'logistics' ? 'office_use' : 'damaged',
       notes: '',
       selectedSerials: [],
       selectedVariantSku: '',
@@ -683,12 +682,18 @@ export default function Inventory() {
       const businessId = getBusinessId()
       const warehouseName = warehouses.find(w => w.id === damageData.warehouseId)?.name || ''
 
-      // Mapeo de razones
+      // Mapeo de razones (se comparten ambos modos para no romper datos históricos)
       const reasonLabels = {
+        // Motivos de merma/daño (modo normal)
         damaged: 'Producto dañado',
         expired: 'Producto expirado',
         lost: 'Pérdida/Extravío',
         theft: 'Robo',
+        // Motivos de salida simple (modo logística)
+        office_use: 'Uso en oficina',
+        employee_delivery: 'Entrega a trabajador',
+        internal_consumption: 'Consumo interno',
+        project_use: 'Uso en proyecto/obra',
         other: 'Otro'
       }
       const reasonLabel = reasonLabels[damageData.reason] || damageData.reason
@@ -703,7 +708,7 @@ export default function Inventory() {
         reason: reasonLabel,
         referenceType: 'damage_adjustment',
         userId: user.uid,
-        notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}${variantNote}`,
+        notes: damageData.notes || `${businessMode === 'logistics' ? 'Salida' : 'Merma'}: ${quantity} unidades - ${reasonLabel}${variantNote}`,
         ...(variantSku && { variantSku }),
       }
 
@@ -766,7 +771,8 @@ export default function Inventory() {
         }
       }
 
-      toast.success(`Merma registrada: ${quantity} ${damageProduct.isIngredient ? damageProduct.purchaseUnit : 'unidades'} de ${damageProduct.name}`)
+      const actionWord = businessMode === 'logistics' ? 'Salida' : 'Merma'
+      toast.success(`${actionWord} registrada: ${quantity} ${damageProduct.isIngredient ? damageProduct.purchaseUnit : 'unidades'} de ${damageProduct.name}`)
       closeDamageModal()
       if (damageProduct.isIngredient) {
         loadIngredients()
@@ -774,8 +780,9 @@ export default function Inventory() {
         loadProducts()
       }
     } catch (error) {
-      console.error('Error al registrar merma:', error)
-      toast.error('Error al registrar la merma')
+      const actionWordLower = businessMode === 'logistics' ? 'salida' : 'merma'
+      console.error(`Error al registrar ${actionWordLower}:`, error)
+      toast.error(`Error al registrar la ${actionWordLower}`)
     } finally {
       setIsProcessingDamage(false)
     }
@@ -1062,11 +1069,11 @@ export default function Inventory() {
         variant: 'default',
       },
       damage: {
-        label: 'Merma/Dañado',
+        label: businessMode === 'logistics' ? 'Salida' : 'Merma/Dañado',
         icon: AlertTriangle,
-        color: 'text-red-700',
-        bgColor: 'bg-red-100',
-        variant: 'danger',
+        color: businessMode === 'logistics' ? 'text-blue-700' : 'text-red-700',
+        bgColor: businessMode === 'logistics' ? 'bg-blue-100' : 'bg-red-100',
+        variant: businessMode === 'logistics' ? 'default' : 'danger',
       },
       production: {
         label: 'Producción',
@@ -1828,7 +1835,7 @@ export default function Inventory() {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleExportToExcel}
+            onClick={handleOpenExportModal}
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
@@ -3348,8 +3355,12 @@ export default function Inventory() {
                         disabled={noStock}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        <AlertTriangle className="w-4 h-4 text-red-600" />
-                        Registrar merma
+                        {businessMode === 'logistics' ? (
+                          <PackageMinus className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-600" />
+                        )}
+                        {businessMode === 'logistics' ? 'Registrar salida' : 'Registrar merma'}
                       </button>
                       <button
                         onClick={() => { openHistoryModal(menuItem); setOpenMenuId(null) }}
@@ -3878,16 +3889,20 @@ export default function Inventory() {
         </div>
       </Modal>
 
-      {/* Modal de Merma/Daños */}
+      {/* Modal de Merma/Daños (o Salida Simple en modo logística) */}
       <Modal
         isOpen={showDamageModal}
         onClose={closeDamageModal}
-        title="Registrar Merma o Daño"
+        title={businessMode === 'logistics' ? 'Registrar Salida de Almacén' : 'Registrar Merma o Daño'}
         size="md"
       >
         <div className="space-y-4">
           {damageProduct && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className={`p-4 rounded-lg border ${
+              businessMode === 'logistics'
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-red-50 border-red-200'
+            }`}>
               <p className="text-sm text-gray-600">Producto</p>
               <p className="font-semibold text-gray-900">{damageProduct.name}</p>
               <p className="text-sm text-gray-500">Código: {damageProduct.code}</p>
@@ -3944,11 +3959,23 @@ export default function Inventory() {
             value={damageData.reason}
             onChange={(e) => setDamageData({ ...damageData, reason: e.target.value })}
           >
-            <option value="damaged">Producto dañado</option>
-            <option value="expired">Producto expirado</option>
-            <option value="lost">Pérdida/Extravío</option>
-            <option value="theft">Robo</option>
-            <option value="other">Otro</option>
+            {businessMode === 'logistics' ? (
+              <>
+                <option value="office_use">Uso en oficina</option>
+                <option value="employee_delivery">Entrega a trabajador</option>
+                <option value="internal_consumption">Consumo interno</option>
+                <option value="project_use">Uso en proyecto/obra</option>
+                <option value="other">Otro</option>
+              </>
+            ) : (
+              <>
+                <option value="damaged">Producto dañado</option>
+                <option value="expired">Producto expirado</option>
+                <option value="lost">Pérdida/Extravío</option>
+                <option value="theft">Robo</option>
+                <option value="other">Otro</option>
+              </>
+            )}
           </Select>
 
           {/* Selección de series o cantidad */}
@@ -3961,10 +3988,14 @@ export default function Inventory() {
                 No hay series disponibles en este almacén.
               </div>
             )
+            const isLogistics = businessMode === 'logistics'
+            const selectedBg = isLogistics ? 'bg-blue-600 border-blue-600' : 'bg-red-600 border-red-600'
+            const hoverBorder = isLogistics ? 'hover:border-blue-400' : 'hover:border-red-400'
+            const countColor = isLogistics ? 'text-blue-600' : 'text-red-600'
             return (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Seleccionar series afectadas <span className="text-red-500">*</span>
+                  {isLogistics ? 'Seleccionar series a retirar' : 'Seleccionar series afectadas'} <span className="text-red-500">*</span>
                 </label>
                 <div className="flex flex-wrap gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg max-h-48 overflow-y-auto">
                   {availableSerials.map((s) => {
@@ -3982,8 +4013,8 @@ export default function Inventory() {
                         }}
                         className={`px-3 py-1.5 text-sm rounded-lg border-2 transition-colors ${
                           isSelected
-                            ? 'bg-red-600 text-white border-red-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:border-red-400'
+                            ? `${selectedBg} text-white`
+                            : `bg-white text-gray-700 border-gray-300 ${hoverBorder}`
                         }`}
                       >
                         {s.serialNumber}
@@ -3992,13 +4023,15 @@ export default function Inventory() {
                   })}
                 </div>
                 {(damageData.selectedSerials || []).length > 0 && (
-                  <p className="text-xs text-red-600 mt-1">{damageData.selectedSerials.length} serie(s) seleccionada(s) para merma</p>
+                  <p className={`text-xs ${countColor} mt-1`}>
+                    {damageData.selectedSerials.length} serie(s) seleccionada(s) para {isLogistics ? 'salida' : 'merma'}
+                  </p>
                 )}
               </div>
             )
           })() : (
             <Input
-              label="Cantidad a descontar"
+              label={businessMode === 'logistics' ? 'Cantidad a retirar' : 'Cantidad a descontar'}
               type="number"
               min="1"
               step="1"
@@ -4011,14 +4044,16 @@ export default function Inventory() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notas (opcional)
+              {businessMode === 'logistics' ? 'Destino / Notas (opcional)' : 'Notas (opcional)'}
             </label>
             <textarea
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               rows={3}
               value={damageData.notes}
               onChange={(e) => setDamageData({ ...damageData, notes: e.target.value })}
-              placeholder="Descripción del daño o motivo adicional..."
+              placeholder={businessMode === 'logistics'
+                ? 'Ej: Entregado a oficina de Juan Pérez, obra Lima Norte...'
+                : 'Descripción del daño o motivo adicional...'}
             />
           </div>
 
@@ -4031,7 +4066,7 @@ export default function Inventory() {
               Cancelar
             </Button>
             <Button
-              variant="danger"
+              variant={businessMode === 'logistics' ? 'primary' : 'danger'}
               onClick={handleDamage}
               disabled={isProcessingDamage}
             >
@@ -4042,8 +4077,12 @@ export default function Inventory() {
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  Registrar Merma
+                  {businessMode === 'logistics' ? (
+                    <PackageMinus className="w-4 h-4 mr-2" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                  )}
+                  {businessMode === 'logistics' ? 'Registrar Salida' : 'Registrar Merma'}
                 </>
               )}
             </Button>
@@ -4486,6 +4525,16 @@ export default function Inventory() {
       />
 
       {/* Modal de Recuento de Inventario */}
+      {/* Modal de opciones de exportación */}
+      <InventoryExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        warehouses={filteredWarehouses}
+        onExport={handleExportWithOptions}
+        isExporting={isExporting}
+        hasIngredients={ingredients.length > 0}
+      />
+
       <InventoryCountModal
         isOpen={showInventoryCountModal}
         onClose={() => setShowInventoryCountModal(false)}
