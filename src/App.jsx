@@ -23,6 +23,7 @@ import BusinessCreate from './pages/BusinessCreate'
 import CreateCreditNote from './pages/CreateCreditNote'
 import CreateDebitNote from './pages/CreateDebitNote'
 import Reports from './pages/Reports'
+import MetaAdsExport from './pages/MetaAdsExport'
 import Suppliers from './pages/Suppliers'
 import Purchases from './pages/Purchases'
 import CreatePurchase from './pages/CreatePurchase'
@@ -388,6 +389,7 @@ function App() {
               <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
+              <Route path="meta-ads" element={<MetaAdsExport />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
               <Route path="certificados" element={<Certificates />} />

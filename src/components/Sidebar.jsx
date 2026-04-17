@@ -65,6 +65,7 @@ import {
   Syringe,
   Heart,
   Bell,
+  Facebook,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -302,6 +303,14 @@ function Sidebar() {
       menuId: 'reports',
     },
     {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
+    },
+    {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
@@ -497,6 +506,14 @@ function Sidebar() {
       menuId: 'reports',
     },
     {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
+    },
+    {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
@@ -680,6 +697,14 @@ function Sidebar() {
       menuId: 'reports',
     },
     {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
+    },
+    {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
@@ -758,6 +783,14 @@ function Sidebar() {
       icon: BarChart3,
       label: 'Reportes',
       pageId: 'reports',
+    },
+    {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
     },
     {
       path: '/usuarios',
@@ -882,6 +915,14 @@ function Sidebar() {
       icon: BarChart3,
       label: 'Reportes',
       pageId: 'reports',
+    },
+    {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
     },
     {
       path: '/usuarios',
@@ -1020,6 +1061,14 @@ function Sidebar() {
       label: 'Reportes',
       pageId: 'reports',
       menuId: 'reports',
+    },
+    {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
     },
     {
       path: '/configuracion',
@@ -1167,6 +1216,14 @@ function Sidebar() {
       menuId: 'reports',
     },
     {
+      path: '/meta-ads',
+      icon: Facebook,
+      label: 'Meta Ads',
+      pageId: 'meta-ads',
+      menuId: 'meta-ads',
+      requiresMetaAds: true,
+    },
+    {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
@@ -1291,6 +1348,13 @@ function Sidebar() {
     if (item.requiresBatchControl) {
       const batchEnabled = businessSettings?.posCustomFields?.showBatchExpiryInPurchase
       if (!batchEnabled && !isDemoMode) return false
+    }
+
+    // Si requiere Meta Ads habilitado, verificar
+    if (item.requiresMetaAds) {
+      const metaAdsEnabled = businessSettings?.metaAdsEnabled === true
+      if (!metaAdsEnabled && !isDemoMode) return false
+      if (isDemoMode) return false // No mostrar en demo
     }
 
     // Si es solo para business owner y el usuario no lo es, no mostrar

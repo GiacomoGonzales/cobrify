@@ -156,6 +156,11 @@ export default function Settings() {
   // Estado para ocultar lote y vencimiento en comprobantes (PDF/ticket/impresora)
   const [hideBatchAndExpiryInDocuments, setHideBatchAndExpiryInDocuments] = useState(false)
 
+  // Estados para exportación a Meta Ads (Facebook Conversions API)
+  const [metaAdsEnabled, setMetaAdsEnabled] = useState(false)
+  const [metaAdsPhonePrefix, setMetaAdsPhonePrefix] = useState('+51')
+  const [metaAdsOrderIdPrefix, setMetaAdsOrderIdPrefix] = useState('')
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -809,6 +814,17 @@ export default function Settings() {
         // Cargar flag para ocultar lote y vencimiento en comprobantes
         if (businessData.hideBatchAndExpiryInDocuments !== undefined) {
           setHideBatchAndExpiryInDocuments(businessData.hideBatchAndExpiryInDocuments)
+        }
+
+        // Cargar configuración de Meta Ads
+        if (businessData.metaAdsEnabled !== undefined) {
+          setMetaAdsEnabled(businessData.metaAdsEnabled)
+        }
+        if (businessData.metaAdsPhonePrefix !== undefined) {
+          setMetaAdsPhonePrefix(businessData.metaAdsPhonePrefix)
+        }
+        if (businessData.metaAdsOrderIdPrefix !== undefined) {
+          setMetaAdsOrderIdPrefix(businessData.metaAdsOrderIdPrefix)
         }
 
         // Cargar cuentas bancarias estructuradas
@@ -2903,6 +2919,67 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Exportación Meta Ads */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Exportación para Meta Ads</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Habilita una página dedicada para exportar tus ventas en el formato del Administrador de Eventos de Meta (Facebook Conversions).
+                </p>
+
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={metaAdsEnabled}
+                    onChange={(e) => setMetaAdsEnabled(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Habilitar exportación para Meta Ads
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {metaAdsEnabled
+                        ? '✓ Habilitado: Se muestra una sección "Meta Ads" en el menú donde puedes ingresar manualmente la hora real de cada venta y exportar en el formato exacto de Meta (event_name, event_time, phone, value, currency, Order_id).'
+                        : '✗ Deshabilitado: No se mostrará la sección de exportación a Meta Ads.'}
+                    </p>
+                  </div>
+                </label>
+
+                {metaAdsEnabled && (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Prefijo de país (teléfono)
+                      </label>
+                      <Input
+                        value={metaAdsPhonePrefix}
+                        onChange={(e) => setMetaAdsPhonePrefix(e.target.value)}
+                        placeholder="+51"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Se antepone al teléfono del cliente (si no lo tiene ya). Ej: <code>+51</code>
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Prefijo del Order ID (opcional)
+                      </label>
+                      <Input
+                        value={metaAdsOrderIdPrefix}
+                        onChange={(e) => setMetaAdsOrderIdPrefix(e.target.value.toUpperCase())}
+                        placeholder="HDT"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        El Order ID se formará así: <code>{(metaAdsOrderIdPrefix || 'PREFIJO') + '_YYYYMMDD_NN'}</code>
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Personalización del Menú Lateral */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
@@ -3296,6 +3373,9 @@ export default function Settings() {
                       enableProductLocation: enableProductLocation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
+                      metaAdsEnabled: metaAdsEnabled,
+                      metaAdsPhonePrefix: metaAdsPhonePrefix,
+                      metaAdsOrderIdPrefix: metaAdsOrderIdPrefix,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     if (refreshBusinessSettings) await refreshBusinessSettings()
