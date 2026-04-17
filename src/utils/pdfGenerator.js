@@ -1172,6 +1172,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Detectar modo farmacia para mostrar columna LABORATORIO
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
   const hasBatchControl = isPharmacy || companySettings?.posCustomFields?.showBatchExpiryInPurchase
+  // Si el negocio ocultó lote/vencimiento en comprobantes, suprimir esa info en el PDF
+  const hideBatchAndExpiry = companySettings?.hideBatchAndExpiryInDocuments === true
 
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
   // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
@@ -1259,7 +1261,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       if (item.concentration) parts.push(`Conc: ${item.concentration}`)
       if (item.genericName) parts.push(`DCI: ${item.genericName}`)
       if (item.activeIngredient) parts.push(`P.A: ${item.activeIngredient}`)
-      if (item.batchBreakdown && item.batchBreakdown.length > 0) {
+      if (!hideBatchAndExpiry && item.batchBreakdown && item.batchBreakdown.length > 0) {
         // Desglose de múltiples lotes
         const lotParts = item.batchBreakdown.map(b => {
           let s = `Lote: ${b.lotNumber} (${b.quantity} und.)`
@@ -1274,7 +1276,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
           return s
         })
         parts.push(lotParts.join('  |  '))
-      } else if (item.batchNumber) {
+      } else if (!hideBatchAndExpiry && item.batchNumber) {
         let batchStr = `Lote: ${item.batchNumber}`
         if (item.batchExpiryDate) {
           let d

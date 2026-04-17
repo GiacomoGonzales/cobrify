@@ -153,6 +153,9 @@ export default function Settings() {
   const [pdfSpacious, setPdfSpacious] = useState(false)
   const [pdfA5, setPdfA5] = useState(false)
 
+  // Estado para ocultar lote y vencimiento en comprobantes (PDF/ticket/impresora)
+  const [hideBatchAndExpiryInDocuments, setHideBatchAndExpiryInDocuments] = useState(false)
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -803,6 +806,11 @@ export default function Settings() {
           setPdfA5(businessData.pdfA5)
         }
 
+        // Cargar flag para ocultar lote y vencimiento en comprobantes
+        if (businessData.hideBatchAndExpiryInDocuments !== undefined) {
+          setHideBatchAndExpiryInDocuments(businessData.hideBatchAndExpiryInDocuments)
+        }
+
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
           setBankAccounts(businessData.bankAccountsList)
@@ -1302,6 +1310,7 @@ export default function Settings() {
         showProductCodeInQuotation: showProductCodeInQuotation,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
+        hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -4518,6 +4527,32 @@ export default function Settings() {
                     </p>
                   </div>
                 </label>
+
+                {/* Ocultar lote y vencimiento en comprobantes */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
+                  <input
+                    type="checkbox"
+                    checked={hideBatchAndExpiryInDocuments}
+                    onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Ocultar lote y vencimiento en comprobantes
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {hideBatchAndExpiryInDocuments
+                        ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
+                        : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
+                    </p>
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
+                      </span>
+                    </div>
+                  </div>
+                </label>
               </div>
 
               {/* Divider */}
@@ -4868,6 +4903,7 @@ export default function Settings() {
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
+                      hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       exitNoteEnabled: exitNoteEnabled,
                       termsTemplates: termsTemplates,

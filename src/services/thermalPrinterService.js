@@ -751,7 +751,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         }
 
         // Línea 4: Información del lote si existe (modo farmacia)
-        if (item.batchNumber) {
+        if (item.batchNumber && !business?.hideBatchAndExpiryInDocuments) {
           let batchLine = `Lote: ${item.batchNumber}`;
           if (item.batchExpiryDate) {
             const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
@@ -799,7 +799,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         }
 
         // Línea 4: Información del lote si existe (modo farmacia)
-        if (item.batchNumber) {
+        if (item.batchNumber && !business?.hideBatchAndExpiryInDocuments) {
           let batchLine = `Lote: ${item.batchNumber}`;
           if (item.batchExpiryDate) {
             const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
@@ -2315,7 +2315,7 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       }
 
       // Información del lote si existe (modo farmacia)
-      if (item.batchNumber) {
+      if (item.batchNumber && !business?.hideBatchAndExpiryInDocuments) {
         let batchLine = `Lote: ${item.batchNumber}`;
         if (item.batchExpiryDate) {
           const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);

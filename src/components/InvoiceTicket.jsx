@@ -839,7 +839,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {item.code && (
                   <div className="item-code">Código: {item.code}</div>
                 )}
-                {item.batchNumber && (
+                {item.batchNumber && !companySettings?.hideBatchAndExpiryInDocuments && (
                   <div className="item-code">
                     Lote: {item.batchNumber}
                     {item.batchExpiryDate && (() => {
