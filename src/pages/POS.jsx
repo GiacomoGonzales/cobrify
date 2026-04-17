@@ -3151,6 +3151,12 @@ export default function POS() {
         // Solo verificar productos que no sean personalizados
         if (item.isCustom) continue
 
+        // Si la receta es modo "producción" (deductOnSale=false), los ingredientes
+        // ya se descontaron al producir y el stock se controla en el producto terminado.
+        // No validar stock de ingredientes aquí para no bloquear la venta del producto ya producido.
+        const recipeResult = await getRecipeByProductId(businessId, item.id)
+        if (recipeResult.success && recipeResult.data?.deductOnSale === false) continue
+
         const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
         if (stockCheck.success && !stockCheck.hasStock) {
           stockCheck.missingIngredients.forEach(ing => {
