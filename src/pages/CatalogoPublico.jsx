@@ -122,27 +122,28 @@ function ProductSkeleton() {
 const isProductOutOfStock = (product, ignoreStock = false) => {
   if (!product) return false
   if (ignoreStock) return false
-  // Productos sin control de stock siempre disponibles
+  // Productos con trackStock explícitamente desactivado siempre disponibles
   if (product.trackStock === false) return false
+
   // Producto con variantes: agotado solo si TODAS las variantes están agotadas
   if (product.hasVariants && product.variants?.length > 0) {
     return product.variants.every(v => {
-      // Verificar stock de variante en warehouseStocks
       if (v.warehouseStocks?.length > 0) {
-        const totalStock = v.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-        return totalStock <= 0
+        return v.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0) <= 0
       }
-      return v.stock !== null && v.stock !== undefined && v.stock <= 0
+      if (v.stock !== null && v.stock !== undefined) return v.stock <= 0
+      return false // Sin datos de stock = disponible
     })
   }
-  // Verificar stock en warehouseStocks si existe
+
+  // Verificar stock: prioridad warehouseStocks > stock directo
   if (product.warehouseStocks?.length > 0) {
-    const totalStock = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-    return totalStock <= 0
+    return product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0) <= 0
   }
-  // Si no tiene stock definido, mostrar como disponible
-  if (product.stock === null || product.stock === undefined) return false
-  return product.stock <= 0
+  if (typeof product.stock === 'number') return product.stock <= 0
+
+  // Sin datos de stock = disponible
+  return false
 }
 
 // Helper: obtener precios disponibles de un producto (mayorista, VIP, etc.)
