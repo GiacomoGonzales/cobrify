@@ -597,7 +597,7 @@ export const updateProduct = async (userId, productId, updates) => {
  * Actualizar stock de un producto usando transacción de Firestore (atómico)
  * Evita race conditions cuando dos ventas simultáneas descuentan stock del mismo producto
  */
-export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null) => {
+export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null, serialToMarkSold = null) => {
   try {
     const docRef = doc(db, 'businesses', userId, 'products', productId)
     await runTransaction(db, async (transaction) => {
@@ -606,6 +606,19 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
 
       const product = productDoc.data()
       if (product.trackStock === false) return
+
+      // Si hay que marcar una serie como vendida, computarlo desde el estado FRESCO del producto.
+      // Esto evita race conditions cuando múltiples transacciones concurrentes modifican distintas
+      // series del mismo producto (cada una reescribía el array completo y se pisaban entre sí).
+      let finalExtraUpdates = extraUpdates
+      if (serialToMarkSold && product.serials?.length > 0) {
+        const updatedSerials = product.serials.map(s =>
+          s.serialNumber === serialToMarkSold.serialNumber
+            ? { ...s, status: 'sold', saleId: serialToMarkSold.saleId || null, saleDate: serialToMarkSold.saleDate }
+            : s
+        )
+        finalExtraUpdates = { ...extraUpdates, serials: updatedSerials }
+      }
 
       // Producto con variantes: actualizar stock a nivel de variante
       if (product.hasVariants && variantSku && product.variants?.length > 0) {
@@ -632,7 +645,7 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
 
         transaction.update(docRef, {
           variants,
-          ...extraUpdates,
+          ...finalExtraUpdates,
           updatedAt: serverTimestamp(),
         })
         return
@@ -678,7 +691,7 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
       transaction.update(docRef, {
         stock: newStock,
         warehouseStocks: newWarehouseStocks,
-        ...extraUpdates,
+        ...finalExtraUpdates,
         updatedAt: serverTimestamp(),
       })
     })

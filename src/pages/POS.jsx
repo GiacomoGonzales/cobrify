@@ -4052,8 +4052,9 @@ export default function POS() {
               console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
             }
 
-            // 4. Actualizar stock en Firestore
+            // 4. Actualizar stock en Firestore (CRÍTICO - con detección específica de fallos)
             if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0)) {
+              try {
               // Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
 
@@ -4153,15 +4154,14 @@ export default function POS() {
                     batchBreakdownByItemId[item.cartId || item.id] = batchBreakdown
                   }
 
-                  // Actualizar serial a 'sold' si el item tiene serialNumber
-                  if (item.serialNumber && productData.serials?.length > 0) {
-                    const updatedSerials = productData.serials.map(s =>
-                      s.serialNumber === item.serialNumber
-                        ? { ...s, status: 'sold', saleId: bgInvoiceId || null, saleDate: Timestamp.fromDate(new Date()) }
-                        : s
-                    )
-                    extraUpdates.serials = updatedSerials
-                  }
+                  // Si el item tiene número de serie, pasar datos para que la transacción
+                  // marque la serie como 'sold' usando el estado FRESCO del producto (evita
+                  // race condition cuando hay varias series del mismo producto en el carrito).
+                  const serialToMarkSold = item.serialNumber ? {
+                    serialNumber: item.serialNumber,
+                    saleId: bgInvoiceId || null,
+                    saleDate: Timestamp.fromDate(new Date())
+                  } : null
 
                   // Usar transacción para evitar race conditions entre ventas simultáneas
                   return updateProductStockTransaction(
@@ -4169,7 +4169,8 @@ export default function POS() {
                     bgSelectedWarehouse?.id || '',
                     -quantityToDeduct,
                     extraUpdates,
-                    item.variantSku || null
+                    item.variantSku || null,
+                    serialToMarkSold
                   )
                 })
 
@@ -4243,6 +4244,10 @@ export default function POS() {
                     }
                   }
                 }
+              }
+              } catch (stockErr) {
+                console.error('❌ CRÍTICO: Error en descuento de stock:', stockErr)
+                toast.error('Venta guardada pero falló el descuento de stock. Revisa el inventario manualmente.', 10000)
               }
 
               // 4.5. Descontar ingredientes del inventario
@@ -4428,8 +4433,10 @@ export default function POS() {
           }
         }
 
-        // Ejecutar todo en background (fire & forget)
-        backgroundSave()
+        // Esperar a que terminen las operaciones complementarias (incluye descuento
+        // de stock). Si el usuario navega o cierra antes, se pierden, por eso awaiteamos.
+        // backgroundSave() tiene su propio try/catch interno, no lanza.
+        await backgroundSave()
       }
     } catch (error) {
       console.error('Error al procesar venta:', error)
