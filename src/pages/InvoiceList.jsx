@@ -844,14 +844,31 @@ Gracias por tu preferencia.`
       if (result.success || result.status === 'voided') {
         // Devolver el stock de los productos (igual que notas de venta)
         if (voidingSunatInvoice.items && voidingSunatInvoice.items.length > 0) {
-          const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
+          const { updateWarehouseStock, createStockMovement, getStockMovements } = await import('@/services/warehouseService')
           const { getProducts, updateProduct } = await import('@/services/firestoreService')
 
           const productsResult = await getProducts(businessId)
           const products = productsResult.success ? productsResult.data : []
           const warehouseId = voidingSunatInvoice.warehouseId || ''
 
-          for (const item of voidingSunatInvoice.items) {
+          // Idempotencia: solo devolver stock si la venta original registró movimientos.
+          // Si no los registró (por bug o conversión desde nota de venta sin mov.), devolver
+          // stock generaría un descuadre — mejor saltar y avisar al usuario.
+          const movementsResult = await getStockMovements(businessId)
+          const allMovements = movementsResult.success ? movementsResult.data : []
+          const hasSaleMovements = allMovements.some(m =>
+            m.referenceId === voidingSunatInvoice.id && m.type === 'sale'
+          )
+
+          if (!hasSaleMovements) {
+            console.warn(`⚠️ Venta ${voidingSunatInvoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
+            toast.warning(
+              'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
+              8000
+            )
+          }
+
+          for (const item of hasSaleMovements ? voidingSunatInvoice.items : []) {
             if (item.productId) {
               try {
                 const productData = products.find(p => p.id === item.productId)
