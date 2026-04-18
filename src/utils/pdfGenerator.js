@@ -1178,7 +1178,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const unitPrice = it.unitPrice || it.price || 0
     const qty = it.quantity || 1
     const perUnitDiscount = (it.itemDiscount || 0) / qty
-    const key = `${it.id || it.productId || it.cartId}|${unitPrice}|${perUnitDiscount}|${it.batchNumber || ''}`
+    // productId primero para cubrir casos donde id es único por línea (guías/items editados)
+    const key = `${it.productId || it.id || it.cartId}|${unitPrice}|${perUnitDiscount}|${it.batchNumber || ''}`
     const existing = serialGroupMap.get(key)
     if (existing) {
       existing.quantity += qty

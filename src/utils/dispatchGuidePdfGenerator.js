@@ -743,7 +743,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       return
     }
     const qty = it.quantity || 1
-    const key = `${it.id || it.productId || it.cartId}|${it.batchNumber || ''}`
+    // productId primero: en guías de remisión cada fila tiene id único (Date.now()),
+    // pero comparten productId cuando son el mismo producto.
+    const key = `${it.productId || it.id || it.cartId}|${it.batchNumber || ''}`
     const existing = serialGroupMap.get(key)
     if (existing) {
       existing.quantity += qty
