@@ -1164,7 +1164,33 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const lineHeight = (spacious ? 10 : 9) * S // Altura por línea de texto
 
   // Solo mostrar las filas que tienen productos (sin filas vacías)
-  const items = invoice.items || []
+  const rawItems = invoice.items || []
+
+  // Agrupar unidades con número de serie del mismo producto (mismo precio/descuento/lote)
+  // en una sola fila, concatenando las series. Items sin serialNumber no se modifican.
+  const items = []
+  const serialGroupMap = new Map()
+  rawItems.forEach((it) => {
+    if (!it.serialNumber) {
+      items.push(it)
+      return
+    }
+    const unitPrice = it.unitPrice || it.price || 0
+    const qty = it.quantity || 1
+    const perUnitDiscount = (it.itemDiscount || 0) / qty
+    const key = `${it.id || it.productId || it.cartId}|${unitPrice}|${perUnitDiscount}|${it.batchNumber || ''}`
+    const existing = serialGroupMap.get(key)
+    if (existing) {
+      existing.quantity += qty
+      existing.itemDiscount = (existing.itemDiscount || 0) + (it.itemDiscount || 0)
+      existing.serialNumbers.push(it.serialNumber)
+    } else {
+      const grouped = { ...it, serialNumbers: [it.serialNumber] }
+      delete grouped.serialNumber
+      serialGroupMap.set(key, grouped)
+      items.push(grouped)
+    }
+  })
 
   // Verificar si algún item tiene descuento para mostrar la columna DCTO
   const hasAnyItemDiscount = items.some(item => (item.itemDiscount || 0) > 0)
@@ -1250,8 +1276,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
 
-    // Línea de número de serie (productos con trackSerials)
-    let serialLine = item.serialNumber ? `S/N: ${item.serialNumber}` : null
+    // Línea(s) de número de serie (productos con trackSerials)
+    // Soporta múltiples series agrupadas (serialNumbers: array) o una sola (serialNumber: string)
+    let serialLines = []
+    const serialText = (Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0)
+      ? `S/N: ${item.serialNumbers.join(', ')}`
+      : (item.serialNumber ? `S/N: ${item.serialNumber}` : null)
+    if (serialText) {
+      doc.setFontSize(7)
+      serialLines = doc.splitTextToSize(serialText, descWidth)
+      doc.setFontSize(8)
+    }
 
     // Líneas de detalle farmacéutico/lotes (farmacia o retail con batch control)
     let pharmaLines = []
@@ -1297,10 +1332,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       }
     }
 
-    const totalLines = descLines.length + (serialLine ? 1 : 0) + pharmaLines.length
+    const totalLines = descLines.length + serialLines.length + pharmaLines.length
     const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6) * S
     const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
-    return { height: calculatedHeight, descLines, pharmaLines, serialLine }
+    return { height: calculatedHeight, descLines, pharmaLines, serialLines }
   }
 
   // Calcular alturas de todos los items
@@ -1360,7 +1395,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   })
 
   for (let i = 0; i < items.length; i++) {
-    const { height: rowHeight, descLines, pharmaLines, serialLine } = itemHeights[i]
+    const { height: rowHeight, descLines, pharmaLines, serialLines } = itemHeights[i]
 
     // Verificar si la fila cabe en la página actual, si no → nueva página
     if (dataRowY + rowHeight > currentPageBottomLimit) {
@@ -1422,16 +1457,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
 
-    // Número de serie debajo de la descripción
+    // Número(s) de serie debajo de la descripción
     let serialLinesCount = 0
-    if (serialLine) {
+    if (serialLines && serialLines.length > 0) {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(7)
       doc.setTextColor(80, 80, 80)
-      doc.text(serialLine, cols.desc + 4, descStartY + (descLines.length * lineHeight))
+      serialLines.forEach((line, idx) => {
+        doc.text(line, cols.desc + 4, descStartY + ((descLines.length + idx) * lineHeight))
+      })
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(...BLACK)
-      serialLinesCount = 1
+      serialLinesCount = serialLines.length
     }
 
     // Líneas farmacéuticas debajo de la descripción y serial
