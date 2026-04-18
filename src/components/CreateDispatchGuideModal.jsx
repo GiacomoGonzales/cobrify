@@ -909,11 +909,33 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     setItems(items.filter(item => item.id !== id))
   }
 
-  // Actualizar item
+  // Eliminar todos los items de un grupo de series
+  const removeItemGroup = (ids) => {
+    const idSet = new Set(ids)
+    setItems(items.filter(item => !idSet.has(item.id)))
+  }
+
+  // Actualizar item. Si el item pertenece a un grupo de series (mismo producto+lote
+  // con serialNumber), propaga el cambio a todos los miembros del grupo — excepto en
+  // campos individuales (serialNumber, searchTerm, quantity).
   const updateItem = (id, field, value) => {
-    setItems(items.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ))
+    const target = items.find(item => item.id === id)
+    const isIndividualField = field === 'serialNumber' || field === 'searchTerm' || field === 'quantity'
+    const isSerialGroupMember = !isIndividualField && target?.serialNumber && target?.productId
+
+    if (!isSerialGroupMember) {
+      setItems(items.map(item =>
+        item.id === id ? { ...item, [field]: value } : item
+      ))
+      return
+    }
+
+    setItems(items.map(item => {
+      const isSibling = item.serialNumber
+        && item.productId === target.productId
+        && (item.batchNumber || '') === (target.batchNumber || '')
+      return isSibling ? { ...item, [field]: value } : item
+    }))
   }
 
   // Buscar datos del transportista por RUC
@@ -2062,14 +2084,39 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             </div>
 
             <div className="space-y-3">
-              {items.map((item, index) => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+              {(() => {
+                // Agrupar items con serialNumber por producto+lote (igual que el POS).
+                // Items sin serie o sin producto seleccionado se renderizan individualmente.
+                const groups = []
+                const seen = new Map()
+                items.forEach(it => {
+                  if (it.serialNumber && it.productId) {
+                    const key = `g|${it.productId}|${it.batchNumber || ''}`
+                    const existing = seen.get(key)
+                    if (existing) {
+                      existing.members.push(it)
+                    } else {
+                      const g = { key, members: [it] }
+                      seen.set(key, g)
+                      groups.push(g)
+                    }
+                  } else {
+                    groups.push({ key: `s|${it.id}`, members: [it] })
+                  }
+                })
+                return groups.map((group, index) => {
+                  const item = group.members[0]
+                  const memberIds = group.members.map(m => m.id)
+                  const isGroup = group.members.length > 1
+                  return (
+                <div key={group.key} className="border border-gray-200 rounded-lg p-3 bg-white">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-500">ITEM {index + 1}</span>
                     <button
                       type="button"
-                      onClick={() => removeItem(item.id)}
+                      onClick={() => isGroup ? removeItemGroup(memberIds) : removeItem(item.id)}
                       className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                      title={isGroup ? 'Quitar grupo completo' : 'Quitar'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -2179,11 +2226,13 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       <label className="block text-xs text-gray-500 mb-0.5">Cantidad</label>
                       <input
                         type="number"
-                        value={item.quantity}
+                        value={isGroup ? group.members.length : item.quantity}
                         onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        className={`w-full px-2 py-1 border border-gray-300 rounded text-sm ${isGroup ? 'bg-gray-100' : ''}`}
                         min="0.01"
                         step="0.01"
+                        readOnly={isGroup}
+                        title={isGroup ? 'Cantidad determinada por las series' : ''}
                       />
                     </div>
                     <div>
@@ -2250,6 +2299,34 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
                     {/* Selección de número de serie */}
                     {item.trackSerials && item.productId && (() => {
+                      // Si es un grupo de series (mismo producto+lote con varias series), mostrar chips
+                      if (isGroup) {
+                        return (
+                          <div className="col-span-2">
+                            <label className="block text-xs text-gray-500 mb-0.5">
+                              Números de Serie ({group.members.length})
+                            </label>
+                            <div className="flex flex-wrap gap-1">
+                              {group.members.map(m => (
+                                <span
+                                  key={m.id}
+                                  className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-green-50 text-green-700 text-xs rounded-full border border-green-300"
+                                >
+                                  <span className="font-medium">{m.serialNumber}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeItem(m.id)}
+                                    className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
+                                    title="Quitar esta serie"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      }
                       // Si ya viene un serialNumber pre-llenado (desde factura/boleta), mostrarlo como texto fijo
                       if (item.serialNumber && referenceInvoice) {
                         return (
@@ -2317,7 +2394,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                     </div>
                   </div>
                 </div>
-              ))}
+                  )
+                })
+              })()}
             </div>
 
             <Button
