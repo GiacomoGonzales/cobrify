@@ -731,7 +731,31 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Filas de datos con altura dinámica y PAGINACIÓN
-  const items = guide.items || []
+  const rawItems = guide.items || []
+
+  // Agrupar unidades con número de serie del mismo producto (mismo lote) en una
+  // sola fila, concatenando las series. Items sin serialNumber no se modifican.
+  const items = []
+  const serialGroupMap = new Map()
+  rawItems.forEach((it) => {
+    if (!it.serialNumber) {
+      items.push(it)
+      return
+    }
+    const qty = it.quantity || 1
+    const key = `${it.id || it.productId || it.cartId}|${it.batchNumber || ''}`
+    const existing = serialGroupMap.get(key)
+    if (existing) {
+      existing.quantity += qty
+      existing.serialNumbers.push(it.serialNumber)
+    } else {
+      const grouped = { ...it, serialNumbers: [it.serialNumber] }
+      delete grouped.serialNumber
+      serialGroupMap.set(key, grouped)
+      items.push(grouped)
+    }
+  })
+
   const minRowHeight = spacious ? 26 : 20
   const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
 
@@ -773,11 +797,21 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       doc.setFontSize(8)
     }
 
-    const serialLine = item.serialNumber ? `S/N: ${item.serialNumber}` : ''
-    const totalLines = descLines.length + (batchLine ? 1 : 0) + (serialLine ? 1 : 0)
+    // Línea(s) de número de serie — soporta múltiples series agrupadas o una sola
+    let serialLines = []
+    const serialText = (Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0)
+      ? `S/N: ${item.serialNumbers.join(', ')}`
+      : (item.serialNumber ? `S/N: ${item.serialNumber}` : '')
+    if (serialText) {
+      doc.setFontSize(7)
+      serialLines = doc.splitTextToSize(serialText, colWidths.desc - 10)
+      doc.setFontSize(8)
+    }
+
+    const totalLines = descLines.length + (batchLine ? 1 : 0) + serialLines.length
     const pharmacyExtraHeight = isPharmacy ? Math.max(marcaLineCount, labLineCount) * pharmacyLineH : 0
     const calculatedHeight = Math.max(minRowHeight, totalLines * lineHeight + (spacious ? 12 : 8), pharmacyExtraHeight + (spacious ? 12 : 8))
-    return { height: calculatedHeight, descLines, batchLine, serialLine }
+    return { height: calculatedHeight, descLines, batchLine, serialLines }
   }
 
   // Función para dibujar el encabezado de la tabla (se usa en cada página)
@@ -829,7 +863,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Función para dibujar una fila de item
-  const drawItemRow = (item, index, rowHeight, descLines, batchLine, serialLine) => {
+  const drawItemRow = (item, index, rowHeight, descLines, batchLine, serialLines) => {
     const centerYRow = currentY + rowHeight / 2 + 3
 
     // Fondo de la fila
@@ -907,13 +941,15 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       extraLinesDrawn++
     }
 
-    // Número de serie debajo de descripción/lote
-    if (serialLine) {
+    // Número(s) de serie debajo de descripción/lote
+    if (serialLines && serialLines.length > 0) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
       doc.setTextColor(100, 100, 100)
-      const serialY = descStartY + ((descLines.length + extraLinesDrawn) * lineHeight)
-      doc.text(serialLine, itemColX + 5, serialY)
+      const serialStartY = descStartY + ((descLines.length + extraLinesDrawn) * lineHeight)
+      serialLines.forEach((line, idx) => {
+        doc.text(line, itemColX + 5, serialStartY + (idx * lineHeight))
+      })
       doc.setTextColor(...BLACK)
       doc.setFontSize(8)
     }
@@ -941,7 +977,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFontSize(8)
 
   items.forEach((item, index) => {
-    const { height: rowHeight, descLines, batchLine, serialLine } = calculateItemHeight(item)
+    const { height: rowHeight, descLines, batchLine, serialLines } = calculateItemHeight(item)
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
@@ -952,7 +988,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       drawTableHeader()
     }
 
-    drawItemRow(item, index, rowHeight, descLines, batchLine, serialLine)
+    drawItemRow(item, index, rowHeight, descLines, batchLine, serialLines)
   })
 
   // Si no hay items, dibujar un espacio mínimo
