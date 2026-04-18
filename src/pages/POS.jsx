@@ -1983,7 +1983,7 @@ export default function POS() {
         s.status === 'available' && (!s.warehouseId || s.warehouseId === selectedWarehouse?.id)
       )
       // Excluir los que ya están en el carrito
-      const serialsInCart = cart.filter(item => item.productId === product.id && item.serialNumber).map(item => item.serialNumber)
+      const serialsInCart = cart.filter(item => (item.id === product.id || item.productId === product.id) && item.serialNumber).map(item => item.serialNumber)
       const filteredSerials = availableSerials.filter(s => !serialsInCart.includes(s.serialNumber))
 
       if (filteredSerials.length === 0) {
@@ -2621,6 +2621,21 @@ export default function POS() {
     setEditingPriceWithoutIgv(false)
   }
 
+  // Devuelve los cartIds de todos los ítems del mismo grupo de series que el itemId dado.
+  // Un "grupo" son varias unidades del mismo producto (+mismo lote) con números de serie.
+  // Si el ítem no tiene serialNumber, retorna solo su propio cartId.
+  const getSerialGroupCartIds = (itemId) => {
+    const target = cart.find(i => (i.cartId || i.id) === itemId)
+    if (!target || !target.serialNumber) return [itemId]
+    const targetProductId = target.id || target.productId
+    const targetBatch = target.batchNumber || ''
+    return cart
+      .filter(o => o.serialNumber
+        && ((o.id || o.productId) === targetProductId)
+        && (o.batchNumber || '') === targetBatch)
+      .map(o => o.cartId || o.id)
+  }
+
   const saveEditedPrice = (itemId) => {
     let newPrice = parseFloat(editingPrice)
 
@@ -2635,9 +2650,11 @@ export default function POS() {
       newPrice = parseFloat((newPrice * (1 + igvRate / 100)).toFixed(2))
     }
 
+    // Propagar el precio a todos los miembros del grupo de series (si aplica)
+    const groupIds = new Set(getSerialGroupCartIds(itemId))
     setCart(cart.map(item => {
       const currentItemId = item.cartId || item.id
-      if (currentItemId === itemId) {
+      if (groupIds.has(currentItemId)) {
         return { ...item, price: newPrice }
       }
       return item
@@ -2650,14 +2667,16 @@ export default function POS() {
   }
 
   // Actualizar observaciones de un item (IMEI, placa, serie, etc.)
+  // Si el ítem pertenece a un grupo de series, aplica a todos los miembros del grupo.
   const updateItemObservations = (itemId, observations) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    const groupIds = new Set(getSerialGroupCartIds(itemId))
     setCart(cart.map(item => {
       const matchId = item.cartId || item.id
-      if (matchId === itemId) {
+      if (groupIds.has(matchId)) {
         return { ...item, observations }
       }
       return item
@@ -2665,17 +2684,46 @@ export default function POS() {
   }
 
   // Actualizar nombre de un item en el carrito
+  // Si el ítem pertenece a un grupo de series, aplica a todos los miembros del grupo.
   const updateItemName = (itemId, name) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    const groupIds = new Set(getSerialGroupCartIds(itemId))
     setCart(cart.map(item => {
       const matchId = item.cartId || item.id
-      if (matchId === itemId) {
+      if (groupIds.has(matchId)) {
         return { ...item, name }
       }
       return item
+    }))
+  }
+
+  // Eliminar todos los miembros de un grupo de series (botón de basura del grupo)
+  const removeSerialGroup = (itemId) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+    const groupIds = new Set(getSerialGroupCartIds(itemId))
+    setCart(cart.filter(item => !groupIds.has(item.cartId || item.id)))
+  }
+
+  // Actualizar descuento TOTAL de un grupo de series: se prorratea entre los miembros
+  const updateGroupDiscount = (itemId, totalValue) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+    const total = parseFloat(totalValue) || 0
+    const groupIds = new Set(getSerialGroupCartIds(itemId))
+    const perMember = groupIds.size > 0 ? total / groupIds.size : 0
+    setCart(cart.map(item => {
+      const matchId = item.cartId || item.id
+      if (!groupIds.has(matchId)) return item
+      const maxDiscount = item.price * item.quantity
+      return { ...item, itemDiscount: Math.min(Math.max(0, perMember), maxDiscount) }
     }))
   }
 
@@ -6172,10 +6220,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <p className="text-base">No hay productos en el carrito</p>
                   </div>
                 ) : (
-                  cart.map(item => {
-                    const itemId = item.cartId || item.id
-                    return (
-                      <div key={itemId} className="p-2 sm:p-3 xl:p-4 bg-gray-50 rounded-xl space-y-2 xl:space-y-3 overflow-hidden min-w-0">
+                  (() => {
+                    // Agrupar ítems con número de serie del mismo producto+lote en una sola fila.
+                    // Ítems sin serie quedan como grupos de 1 miembro (render igual que siempre).
+                    const groups = []
+                    const seen = new Map()
+                    cart.forEach(it => {
+                      if (it.serialNumber) {
+                        const gKey = `g|${it.id || it.productId}|${it.batchNumber || ''}`
+                        const existing = seen.get(gKey)
+                        if (existing) {
+                          existing.members.push(it)
+                          return
+                        }
+                        const g = { key: gKey, isSerial: true, members: [it] }
+                        seen.set(gKey, g)
+                        groups.push(g)
+                      } else {
+                        groups.push({ key: `s|${it.cartId || it.id}`, isSerial: false, members: [it] })
+                      }
+                    })
+                    return groups.map(group => {
+                      const item = group.members[0]
+                      const itemId = item.cartId || item.id
+                      const isSerialGroup = group.isSerial && group.members.length > 1
+                      const displayQty = isSerialGroup ? group.members.length : item.quantity
+                      const displayDiscount = isSerialGroup
+                        ? group.members.reduce((s, m) => s + (m.itemDiscount || 0), 0)
+                        : (item.itemDiscount || 0)
+                      return (
+                      <div key={group.key} className="p-2 sm:p-3 xl:p-4 bg-gray-50 rounded-xl space-y-2 xl:space-y-3 overflow-hidden min-w-0">
                         {/* Fila 1: Imagen + Nombre + Eliminar */}
                         <div className="flex gap-2 xl:gap-3 min-w-0">
                           {/* Product thumbnail */}
@@ -6228,7 +6302,26 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   Sin lote asignado
                                 </p>
                               )}
-                              {item.serialNumber && (
+                              {isSerialGroup ? (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {group.members.map(m => (
+                                    <span
+                                      key={m.cartId || m.id}
+                                      className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200"
+                                    >
+                                      <span className="font-medium">{m.serialNumber}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeFromCart(m.cartId || m.id)}
+                                        className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                                        title="Quitar esta serie"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : item.serialNumber && (
                                 <p className="text-xs text-blue-600 mt-0.5">
                                   S/N: {item.serialNumber}
                                 </p>
@@ -6249,8 +6342,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               )}
                             </div>
                             <button
-                              onClick={() => removeFromCart(itemId)}
+                              onClick={() => isSerialGroup ? removeSerialGroup(itemId) : removeFromCart(itemId)}
                               className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1.5 transition-colors flex-shrink-0"
+                              title={isSerialGroup ? 'Quitar todas las series' : 'Quitar'}
                             >
                               <Trash2 className="w-5 h-5" />
                             </button>
@@ -6272,10 +6366,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <input
                               type="number"
                               placeholder="Dcto"
-                              value={item.itemDiscount || ''}
-                              onChange={(e) => updateItemDiscount(itemId, e.target.value)}
+                              value={isSerialGroup ? (displayDiscount || '') : (item.itemDiscount || '')}
+                              onChange={(e) => isSerialGroup ? updateGroupDiscount(itemId, e.target.value) : updateItemDiscount(itemId, e.target.value)}
                               min="0"
-                              max={item.price * item.quantity}
+                              max={isSerialGroup ? (item.price * displayQty) : (item.price * item.quantity)}
                               step="0.01"
                               className="w-16 xl:w-20 text-xs xl:text-sm px-1.5 xl:px-2 py-1.5 xl:py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
@@ -6286,7 +6380,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         {/* Fila 3: Cantidad + Precio (ancho completo) */}
                         <div className="flex items-center justify-between min-w-0">
                               <div className="flex items-center space-x-2">
-                                {item.allowDecimalQuantity ? (
+                                {isSerialGroup ? (
+                                  <span className="text-sm font-semibold text-gray-700">
+                                    {displayQty} {displayQty === 1 ? 'unidad' : 'unidades'}
+                                  </span>
+                                ) : item.allowDecimalQuantity ? (
                                   /* Input editable para productos por peso/monto */
                                   <div className="flex items-center gap-1.5">
                                     <input
@@ -6449,23 +6547,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ) : (
                                   <div className="flex items-center gap-1">
                                     <div className="text-right">
-                                      {item.quantity > 1 && (
+                                      {displayQty > 1 && (
                                         <p className="text-sm text-gray-500">
-                                          {item.quantity} x {formatCurrency(item.price)}
+                                          {displayQty} x {formatCurrency(item.price)}
                                         </p>
                                       )}
-                                      {item.itemDiscount > 0 ? (
+                                      {displayDiscount > 0 ? (
                                         <>
                                           <p className="text-sm text-gray-400 line-through">
-                                            {formatCurrency(item.price * item.quantity)}
+                                            {formatCurrency(item.price * displayQty)}
                                           </p>
                                           <p className="font-bold text-orange-600 text-base xl:text-lg">
-                                            {formatCurrency((item.price * item.quantity) - item.itemDiscount)}
+                                            {formatCurrency((item.price * displayQty) - displayDiscount)}
                                           </p>
                                         </>
                                       ) : (
                                         <p className="font-bold text-gray-900 text-base xl:text-lg">
-                                          {formatCurrency(item.price * item.quantity)}
+                                          {formatCurrency(item.price * displayQty)}
                                         </p>
                                       )}
                                     </div>
@@ -6483,8 +6581,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </div>
                         </div>
                       </div>
-                    )
-                  })
+                      )
+                    })
+                  })()
                 )}
               </div>
 
@@ -7620,7 +7719,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           const availableSerials = (productForSerialSelection.serials || []).filter(s =>
             s.status === 'available' && (!s.warehouseId || s.warehouseId === selectedWarehouse?.id)
           )
-          const serialsInCart = cart.filter(item => item.productId === productForSerialSelection.id && item.serialNumber).map(item => item.serialNumber)
+          const serialsInCart = cart.filter(item => (item.id === productForSerialSelection.id || item.productId === productForSerialSelection.id) && item.serialNumber).map(item => item.serialNumber)
           const filteredSerials = availableSerials.filter(s => !serialsInCart.includes(s.serialNumber))
 
           return (
