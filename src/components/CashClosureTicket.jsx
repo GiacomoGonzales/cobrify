@@ -13,7 +13,7 @@ const CashClosureTicket = forwardRef(({
   paperWidth = 80,
   branchName = null,
   printMargins = 8,
-  simplePrint = false
+  simplePrint = false,
 }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
