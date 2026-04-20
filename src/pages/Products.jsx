@@ -1705,6 +1705,10 @@ export default function Products() {
               updates.laboratoryId = product.laboratoryId
               updates.laboratoryName = product.laboratoryName || ''
             }
+            // Código de barras (campo `code`) — también se actualiza en reimports
+            if (product.code) updates.code = product.code
+            // Mostrar en catálogo público — el parser siempre lo setea (default true)
+            if (product.showInCatalog !== undefined) updates.showInCatalog = product.showInCatalog
 
             // Actualizar stock si corresponde
             if (product.trackStock && targetWarehouse) {

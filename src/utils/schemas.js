@@ -57,8 +57,8 @@ export const customerSchema = z.object({
     weight: z.string().optional().or(z.literal('')),
     notes: z.string().optional().or(z.literal('')),
   })).optional(),
-  // Nivel de precio para sistema de múltiples precios
-  priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
+  // Nivel de precio para sistema de múltiples precios. Acepta '' para "sin nivel".
+  priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable().or(z.literal('')),
   // Campos de suscripción
   subscriptionPlan: z.string().optional().or(z.literal('')),
   subscriptionPrice: z.union([z.string(), z.number()]).optional().or(z.literal('')),
