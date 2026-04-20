@@ -157,8 +157,12 @@ const getSunatStatus = (inv) => {
   return 'pending'
 }
 
-const hasXml = (inv) => !!(inv.xmlUrl || inv.xmlStorageUrl || inv.sunatResponse?.xmlStorageUrl || inv.xmlData)
 const hasCdr = (inv) => !!(inv.cdrUrl || inv.cdrStorageUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl || inv.cdrData || inv.sunatResponse?.cdrData)
+// XML disponible: URL guardada o, si SUNAT dio CDR, se puede regenerar on-the-fly
+const hasXml = (inv) => {
+  if (inv.xmlUrl || inv.xmlStorageUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl || inv.xmlData) return true
+  return hasCdr(inv)
+}
 
 /**
  * Construye el workbook con estilos. Retorna el workbook listo para escribir.

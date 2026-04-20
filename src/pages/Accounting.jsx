@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck } from 'lucide-react'
+import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -11,10 +11,13 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { prepareInvoiceXML } from '@/services/sunatService'
 import { getCompanySettings } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
+import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
+import { useBranding } from '@/contexts/BrandingContext'
 
 // Nombres de meses en español
 const MONTHS = [
@@ -35,6 +38,7 @@ const MONTHS = [
 export default function Accounting() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
   const toast = useToast()
+  const { branding } = useBranding()
 
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +48,8 @@ export default function Accounting() {
   const [filterCdr, setFilterCdr] = useState('all') // all, with, without
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [branches, setBranches] = useState([])
+  const [generatingPdf, setGeneratingPdf] = useState(null)
 
   // Selector de mes rápido
   const currentYear = new Date().getFullYear()
@@ -57,7 +63,18 @@ export default function Accounting() {
 
   useEffect(() => {
     loadInvoices()
+    loadBranches()
   }, [user])
+
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) setBranches(result.data || [])
+    } catch (error) {
+      console.error('Error cargando sucursales:', error)
+    }
+  }
 
   const loadInvoices = async () => {
     if (!user?.uid || isDemoMode) {
@@ -117,8 +134,17 @@ export default function Accounting() {
     return !!(inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl || inv.cdrData || inv.sunatResponse?.cdrData)
   }
 
-  const hasXml = (inv) => {
+  const hasStoredXml = (inv) => {
     return !!(inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl)
+  }
+
+  // XML disponible: URL guardada o, si fue aceptado por SUNAT, podemos regenerarlo on-the-fly
+  const hasXml = (inv) => {
+    if (hasStoredXml(inv)) return true
+    // Si tiene CDR válido, implícitamente tuvo un XML firmado aceptado por SUNAT
+    const cdrUrl = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+    const cdrData = inv.cdrData || inv.sunatResponse?.cdrData
+    return !!(cdrUrl || cdrData)
   }
 
   const getSunatStatus = (inv) => {
@@ -209,6 +235,30 @@ export default function Accounting() {
     }
   }
 
+  // Descargar PDF del comprobante
+  const downloadPdf = async (inv) => {
+    setGeneratingPdf(inv.id)
+    try {
+      const businessId = getBusinessId()
+      const settingsResult = await getCompanySettings(businessId)
+      if (!settingsResult.success) {
+        toast.error('Error al cargar datos de la empresa')
+        return
+      }
+      const result = await generateInvoicePDF(inv, settingsResult.data, true, branding, branches)
+      if (result?.fileName) {
+        toast.success(`PDF guardado: ${result.fileName}`)
+      } else {
+        toast.success('PDF descargado')
+      }
+    } catch (error) {
+      console.error('Error generando PDF:', error)
+      toast.error('Error al generar el PDF')
+    } finally {
+      setGeneratingPdf(null)
+    }
+  }
+
   // Manejar selección de mes
   const handleMonthSelect = (month) => {
     setSelectedMonth(month)
@@ -249,6 +299,10 @@ export default function Accounting() {
       const zip = new JSZip()
       let downloaded = 0
 
+      // Cargar settings una sola vez para generar XMLs on-the-fly si hace falta
+      const settingsResult = await getCompanySettings(getBusinessId())
+      const companySettingsData = settingsResult.success ? settingsResult.data : null
+
       for (const inv of invoicesWithXml) {
         const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
         if (url) {
@@ -260,6 +314,18 @@ export default function Accounting() {
             setDownloadProgress(`Descargando XMLs: ${downloaded}/${invoicesWithXml.length}`)
           } catch (e) {
             console.warn(`Error descargando XML de ${inv.number}:`, e)
+          }
+        } else if (companySettingsData) {
+          // Sin URL guardada: generar XML on-the-fly (p.ej. notas de crédito sin xmlStorageUrl)
+          try {
+            const result = await prepareInvoiceXML(inv, companySettingsData)
+            if (result.success) {
+              zip.file(result.fileName || `${inv.number || inv.id}.xml`, result.xml)
+              downloaded++
+              setDownloadProgress(`Descargando XMLs: ${downloaded}/${invoicesWithXml.length}`)
+            }
+          } catch (e) {
+            console.warn(`Error generando XML de ${inv.number}:`, e)
           }
         }
       }
@@ -389,8 +455,14 @@ export default function Accounting() {
       const zip = new JSZip()
       const xmlFolder = zip.folder('XMLs')
       const cdrFolder = zip.folder('CDRs')
+      const pdfFolder = zip.folder('PDFs')
       let xmlCount = 0
       let cdrCount = 0
+      let pdfCount = 0
+
+      // Cargar settings una sola vez para generar XMLs y PDFs on-the-fly
+      const settingsResultForXml = await getCompanySettings(getBusinessId())
+      const companySettingsForXml = settingsResultForXml.success ? settingsResultForXml.data : null
 
       // Descargar XMLs
       const invoicesWithXml = filtered.filter(inv => hasXml(inv))
@@ -405,6 +477,17 @@ export default function Accounting() {
             xmlCount++
           } catch (e) {
             console.warn(`Error descargando XML de ${inv.number}:`, e)
+          }
+        } else if (companySettingsForXml) {
+          try {
+            setDownloadProgress(`Generando XML: ${inv.number}`)
+            const result = await prepareInvoiceXML(inv, companySettingsForXml)
+            if (result.success) {
+              xmlFolder.file(result.fileName || `${inv.number || inv.id}.xml`, result.xml)
+              xmlCount++
+            }
+          } catch (e) {
+            console.warn(`Error generando XML de ${inv.number}:`, e)
           }
         }
       }
@@ -427,6 +510,20 @@ export default function Accounting() {
           const data = inv.cdrData || inv.sunatResponse.cdrData
           cdrFolder.file(`CDR-${inv.number || inv.id}.xml`, data)
           cdrCount++
+        }
+      }
+
+      // Generar PDFs de todos los comprobantes
+      if (companySettingsForXml) {
+        for (const inv of filtered) {
+          try {
+            setDownloadProgress(`Generando PDF: ${inv.number}`)
+            const pdfBlob = await getInvoicePDFBlob(inv, companySettingsForXml, branding, branches)
+            pdfFolder.file(`${(inv.number || inv.id).replace(/\//g, '-')}.pdf`, pdfBlob)
+            pdfCount++
+          } catch (e) {
+            console.warn(`Error generando PDF de ${inv.number}:`, e)
+          }
         }
       }
 
@@ -480,7 +577,7 @@ export default function Accounting() {
         URL.revokeObjectURL(a.href)
       }
 
-      toast.success(`Descarga completa: ${xmlCount} XMLs, ${cdrCount} CDRs, 1 Excel`)
+      toast.success(`Descarga completa: ${xmlCount} XMLs, ${cdrCount} CDRs, ${pdfCount} PDFs, 1 Excel`)
     } catch (error) {
       console.error('Error en descarga completa:', error)
       toast.error('Error al generar el ZIP')
@@ -829,8 +926,16 @@ export default function Accounting() {
                     </div>
                     <div className="flex items-center gap-1">
                       <button
+                        onClick={() => downloadPdf(inv)}
+                        title="Descargar PDF"
+                        disabled={generatingPdf === inv.id}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                      >
+                        {generatingPdf === inv.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                      </button>
+                      <button
                         onClick={() => downloadXml(inv)}
-                        title={hasXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
+                        title={hasStoredXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
                         disabled={generatingXml === inv.id}
                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
                       >
@@ -906,8 +1011,20 @@ export default function Accounting() {
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
+                            onClick={() => downloadPdf(inv)}
+                            title="Descargar PDF"
+                            disabled={generatingPdf === inv.id}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                          >
+                            {generatingPdf === inv.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FileDown className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
                             onClick={() => downloadXml(inv)}
-                            title={hasXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
+                            title={hasStoredXml(inv) ? 'Descargar XML firmado' : 'Generar y descargar XML'}
                             disabled={generatingXml === inv.id}
                             className="p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
                           >
