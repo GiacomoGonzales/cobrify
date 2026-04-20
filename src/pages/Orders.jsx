@@ -1,21 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getCompanySettings, getProductCategories, savePrecuentaSnapshot } from '@/services/firestoreService'
 import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
+import IndividualPaymentModal from '@/components/restaurant/IndividualPaymentModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { Capacitor } from '@capacitor/core'
@@ -69,6 +71,9 @@ export default function Orders() {
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
   const [orderToClose, setOrderToClose] = useState(null)
   const [isClosingOrder, setIsClosingOrder] = useState(false)
+  const [showCloseWithoutReceipt, setShowCloseWithoutReceipt] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
+  const [isIndividualPaymentModalOpen, setIsIndividualPaymentModalOpen] = useState(false)
 
   // Menú de acciones (ID de la orden con menú abierto)
   const [openMenuOrderId, setOpenMenuOrderId] = useState(null)
@@ -452,17 +457,41 @@ export default function Orders() {
   const handleCloseWithoutReceipt = async () => {
     if (!orderToClose) return
 
+    // Si no está pagada, exigir motivo
+    if (!orderToClose.paid && !closeReason.trim()) {
+      toast.error('Debes ingresar el motivo de cierre sin comprobante')
+      return
+    }
+
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       setShowCloseOrderModal(false)
       setOrderToClose(null)
+      setShowCloseWithoutReceipt(false)
+      setCloseReason('')
       return
     }
 
     setIsClosingOrder(true)
     try {
-      const result = await completeOrder(getBusinessId(), orderToClose.id)
+      const businessId = getBusinessId()
+      const result = await completeOrder(businessId, orderToClose.id)
       if (result.success) {
+        // Registrar auditoría si fue cierre sin comprobante con motivo
+        if (!orderToClose.paid && closeReason.trim()) {
+          addDoc(collection(db, 'businesses', businessId, 'tableCloseWithoutReceipt'), {
+            tableId: orderToClose.tableId || null,
+            tableNumber: orderToClose.tableNumber || null,
+            orderId: orderToClose.id,
+            orderNumber: orderToClose.orderNumber || null,
+            amount: orderToClose.total || 0,
+            items: (orderToClose.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+            reason: closeReason.trim(),
+            closedBy: user.uid,
+            closedByName: user.displayName || user.email || 'Usuario',
+            createdAt: serverTimestamp(),
+          }).catch(err => console.error('Error al registrar cierre sin comprobante:', err))
+        }
         toast.success(`Orden #${orderToClose.orderNumber} cerrada exitosamente`)
       } else {
         toast.error('Error al cerrar la orden: ' + result.error)
@@ -474,7 +503,36 @@ export default function Orders() {
       setIsClosingOrder(false)
       setShowCloseOrderModal(false)
       setOrderToClose(null)
+      setShowCloseWithoutReceipt(false)
+      setCloseReason('')
     }
+  }
+
+  // Cobro Individual: abre modal para seleccionar items a cobrar
+  const handleIndividualPayment = () => {
+    setShowCloseOrderModal(false)
+    setIsIndividualPaymentModalOpen(true)
+  }
+
+  const handleConfirmIndividualPayment = (selectedItems, remainingItems) => {
+    if (!orderToClose) return
+    appNavigate('pos', {
+      state: {
+        fromOrder: true,
+        partialClose: true,
+        orderId: orderToClose.id,
+        orderNumber: orderToClose.orderNumber,
+        orderType: orderToClose.orderType,
+        tableId: orderToClose.tableId || null,
+        tableNumber: orderToClose.tableNumber || null,
+        items: selectedItems,
+        remainingItems,
+        waiterId: orderToClose.waiterId || null,
+        waiterName: orderToClose.waiterName || null,
+        markAsPaidOnComplete: true,
+      },
+    })
+    setIsIndividualPaymentModalOpen(false)
   }
 
   // Construir objeto tipo "mesa" a partir de una orden (para reutilizar utilidades de precuenta)
@@ -1352,137 +1410,153 @@ export default function Orders() {
                     </div>
                   )}
 
-                  {/* Menú de acciones */}
-                  <div className="mt-3 relative">
-                    <Button
-                      onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
-                      variant="outline"
-                      size="sm"
-                      className="w-full flex items-center justify-center gap-2"
-                      disabled={isUpdating}
-                    >
-                      {isUpdating ? (
-                        <>
+                  {/* Botones de acción: primario + Cobrar + menú "+" */}
+                  <div className="mt-3 flex gap-2 items-stretch">
+                    {/* Botón primario según estado */}
+                    {order.status === 'pending' && (
+                      <Button
+                        onClick={() => handleStatusChange(order.id, 'pending', order)}
+                        disabled={isUpdating || (requirePaymentBeforeKitchen && !order.paid)}
+                        size="sm"
+                        className="flex-1"
+                      >
+                        {isUpdating ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Actualizando...
-                        </>
-                      ) : (
+                        ) : (
+                          <>
+                            <ChevronRight className="w-4 h-4 mr-1" />
+                            En Preparación
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {order.status === 'preparing' && (
+                      <Button
+                        onClick={() => handleStatusChange(order.id, 'preparing', order)}
+                        disabled={isUpdating}
+                        size="sm"
+                        className="flex-1"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Marcar Lista
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {order.status === 'ready' && order.tableNumber && (
+                      <Button
+                        onClick={() => handleCloseOrder(order)}
+                        variant="success"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <Receipt className="w-4 h-4 mr-1" />
+                        Cerrar Cuenta
+                      </Button>
+                    )}
+                    {order.status === 'ready' && !order.tableNumber && (
+                      <Button
+                        onClick={() => handleStatusChange(order.id, 'ready', order)}
+                        disabled={isUpdating}
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <PackageCheck className="w-4 h-4 mr-1" />
+                            Despachar
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {order.status === 'dispatched' && (
+                      <Button
+                        onClick={() => handleMarkAsDelivered(order.id)}
+                        variant="success"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Marcar Entregada
+                      </Button>
+                    )}
+
+                    {/* Cobrar (si no pagada) */}
+                    {!order.paid && order.status !== 'delivered' && (
+                      <Button
+                        onClick={() => handleGoToPayment(order)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                      >
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        Cobrar
+                      </Button>
+                    )}
+
+                    {/* Menú "+" con acciones secundarias */}
+                    <div className="relative">
+                      <Button
+                        onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
+                        variant="outline"
+                        size="sm"
+                        className="px-3"
+                        title="Más acciones"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+
+                      {openMenuOrderId === order.id && (
                         <>
-                          <MoreVertical className="w-4 h-4" />
-                          Acciones
-                          <ChevronDown className={`w-4 h-4 transition-transform ${openMenuOrderId === order.id ? 'rotate-180' : ''}`} />
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenMenuOrderId(null)}
+                          />
+                          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden min-w-[200px]">
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handlePrintPreBill(order)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <FileText className="w-4 h-4 text-gray-600" />
+                              <span className="font-medium text-gray-900">Imprimir Precuenta</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleSplitBill(order)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <Split className="w-4 h-4 text-gray-600" />
+                              <span className="font-medium text-gray-900">Dividir Cuenta</span>
+                            </button>
+                            {/* Cerrar Cuenta secundario: en ready sin mesa (delivery/takeout), por si se necesita cerrar sin despachar */}
+                            {order.status === 'ready' && !order.tableNumber && (
+                              <button
+                                onClick={() => {
+                                  setOpenMenuOrderId(null)
+                                  handleCloseOrder(order)
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
+                              >
+                                <Receipt className="w-4 h-4 text-green-600" />
+                                <span className="font-medium text-gray-900">Cerrar Cuenta</span>
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
-                    </Button>
-
-                    {openMenuOrderId === order.id && (
-                      <>
-                        {/* Backdrop para cerrar al hacer clic fuera */}
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setOpenMenuOrderId(null)}
-                        />
-                        {/* Menú */}
-                        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden">
-                          {/* Avanzar estado (pending / preparing) */}
-                          {order.status !== 'delivered' && order.status !== 'ready' && order.status !== 'dispatched' && (
-                            <button
-                              onClick={() => {
-                                setOpenMenuOrderId(null)
-                                handleStatusChange(order.id, order.status, order)
-                              }}
-                              disabled={order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <ChevronRight className="w-4 h-4 text-primary-600" />
-                              <span className="font-medium text-gray-900">
-                                Marcar como {getStatusConfig(order.status === 'pending' ? 'preparing' : 'ready').label}
-                              </span>
-                            </button>
-                          )}
-
-                          {/* Despachar (ready + sin mesa) */}
-                          {order.status === 'ready' && !order.tableNumber && (
-                            <button
-                              onClick={() => {
-                                setOpenMenuOrderId(null)
-                                handleStatusChange(order.id, 'ready', order)
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-purple-50 flex items-center gap-3"
-                            >
-                              <PackageCheck className="w-4 h-4 text-purple-600" />
-                              <span className="font-medium text-gray-900">Despachar</span>
-                            </button>
-                          )}
-
-                          {/* Marcar Entregada (dispatched) */}
-                          {order.status === 'dispatched' && (
-                            <button
-                              onClick={() => {
-                                setOpenMenuOrderId(null)
-                                handleMarkAsDelivered(order.id)
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3"
-                            >
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                              <span className="font-medium text-gray-900">Marcar Entregada</span>
-                            </button>
-                          )}
-
-                          {/* Cobrar */}
-                          {!order.paid && order.status !== 'delivered' && (
-                            <button
-                              onClick={() => {
-                                setOpenMenuOrderId(null)
-                                handleGoToPayment(order)
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3"
-                            >
-                              <DollarSign className="w-4 h-4 text-green-600" />
-                              <span className="font-medium text-gray-900">Cobrar</span>
-                            </button>
-                          )}
-
-                          {/* Imprimir Precuenta */}
-                          <button
-                            onClick={() => {
-                              setOpenMenuOrderId(null)
-                              handlePrintPreBill(order)
-                            }}
-                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
-                          >
-                            <FileText className="w-4 h-4 text-gray-600" />
-                            <span className="font-medium text-gray-900">Imprimir Precuenta</span>
-                          </button>
-
-                          {/* Dividir Cuenta */}
-                          <button
-                            onClick={() => {
-                              setOpenMenuOrderId(null)
-                              handleSplitBill(order)
-                            }}
-                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
-                          >
-                            <Split className="w-4 h-4 text-gray-600" />
-                            <span className="font-medium text-gray-900">Dividir Cuenta</span>
-                          </button>
-
-                          {/* Cerrar Cuenta (ready) */}
-                          {order.status === 'ready' && (
-                            <button
-                              onClick={() => {
-                                setOpenMenuOrderId(null)
-                                handleCloseOrder(order)
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
-                            >
-                              <Receipt className="w-4 h-4 text-green-600" />
-                              <span className="font-medium text-gray-900">Cerrar Cuenta</span>
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1624,9 +1698,11 @@ export default function Orders() {
         onClose={() => {
           setShowCloseOrderModal(false)
           setOrderToClose(null)
+          setShowCloseWithoutReceipt(false)
+          setCloseReason('')
         }}
         title={`Cerrar Cuenta - Orden #${orderToClose?.orderNumber || ''}`}
-        size="md"
+        size="lg"
       >
         {orderToClose && (
           <div className="space-y-6">
@@ -1678,8 +1754,7 @@ export default function Orders() {
                   <Button
                     onClick={handleCloseWithoutReceipt}
                     disabled={isClosingOrder}
-                    className="flex-1"
-                    variant="success"
+                    className="flex-1 bg-green-600 hover:bg-green-700"
                   >
                     {isClosingOrder ? (
                       <>
@@ -1698,47 +1773,88 @@ export default function Orders() {
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     ¿Cómo desea cerrar la cuenta?
                   </label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                     <button
                       onClick={handleCloseWithReceipt}
-                      className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
+                      className="w-full flex items-center gap-3 p-3 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
                     >
-                      <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-primary-600" />
-                      <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
-                      <div className="text-xs text-gray-600">
-                        Ir al POS para generar Boleta, Factura o Nota de Venta
+                      <ShoppingCart className="w-8 h-8 flex-shrink-0 text-primary-600" />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">Crear Comprobante</div>
+                        <div className="text-xs text-gray-500">Ir al POS para generar Boleta, Factura o Nota de Venta</div>
                       </div>
                     </button>
                     <button
-                      onClick={handleCloseWithoutReceipt}
-                      disabled={isClosingOrder}
-                      className="p-6 border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={handleIndividualPayment}
+                      className="w-full flex items-center gap-3 p-3 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors text-left"
                     >
-                      {isClosingOrder ? (
-                        <Loader2 className="w-10 h-10 mx-auto mb-3 text-gray-600 animate-spin" />
-                      ) : (
-                        <X className="w-10 h-10 mx-auto mb-3 text-gray-600" />
-                      )}
-                      <div className="font-semibold text-gray-900 mb-1">
-                        {isClosingOrder ? 'Cerrando...' : 'Cerrar sin Comprobante'}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        Marcar la orden como completada sin generar comprobante
+                      <UserMinus className="w-8 h-8 flex-shrink-0 text-orange-600" />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">Cobro Individual</div>
+                        <div className="text-xs text-gray-500">Cobrar items parciales, orden sigue abierta</div>
                       </div>
                     </button>
                   </div>
                 </div>
 
-                {/* Botón cancelar */}
-                <div className="flex gap-3 pt-4 border-t">
+                {/* Confirmación de cerrar sin comprobante */}
+                {showCloseWithoutReceipt && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-red-800">Cerrar sin comprobante</p>
+                        <p className="text-xs text-red-600 mt-0.5">Esta acción quedará registrada. Ingrese el motivo:</p>
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="Ej: Cortesía, error en pedido, cliente se fue..."
+                      value={closeReason}
+                      onChange={e => setCloseReason(e.target.value)}
+                      required
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setShowCloseWithoutReceipt(false); setCloseReason('') }}
+                        className="flex-1"
+                        disabled={isClosingOrder}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleCloseWithoutReceipt}
+                        disabled={isClosingOrder || !closeReason.trim()}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        {isClosingOrder ? 'Cerrando...' : 'Confirmar'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer: Cancelar + link sutil */}
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setShowCloseWithoutReceipt(!showCloseWithoutReceipt)}
+                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    disabled={isClosingOrder}
+                  >
+                    Cerrar sin comprobante
+                  </button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
                       setShowCloseOrderModal(false)
                       setOrderToClose(null)
+                      setShowCloseWithoutReceipt(false)
+                      setCloseReason('')
                     }}
-                    className="w-full"
+                    size="sm"
                     disabled={isClosingOrder}
                   >
                     Cancelar
@@ -1750,12 +1866,25 @@ export default function Orders() {
         )}
       </Modal>
 
+      {/* Modal para cobro individual (parcial) */}
+      <IndividualPaymentModal
+        isOpen={isIndividualPaymentModalOpen}
+        onClose={() => {
+          setIsIndividualPaymentModalOpen(false)
+          setShowCloseOrderModal(true)
+        }}
+        table={orderToClose ? getPseudoTable(orderToClose) : null}
+        order={orderToClose}
+        onConfirm={handleConfirmIndividualPayment}
+      />
+
       {/* Modal para dividir la cuenta */}
       <SplitBillModal
         isOpen={isSplitBillModalOpen}
         onClose={() => {
           setIsSplitBillModalOpen(false)
-          setSelectedOrderForAction(null)
+          // No reseteamos selectedOrderForAction: el PrintSplitModal lo necesita tras confirmar.
+          // El reset ocurre al cerrar el PrintSplitModal.
         }}
         table={selectedOrderForAction ? getPseudoTable(selectedOrderForAction) : null}
         order={selectedOrderForAction}
