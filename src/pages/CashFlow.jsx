@@ -521,16 +521,33 @@ export default function CashFlow() {
       .filter(m => m.type === 'expense' && !m.sessionId && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
-    // 4. Cuotas de préstamos pagadas (filtradas por sucursal)
+    // 4. Abonos a cuotas de préstamos (incluye pagos parciales, filtrados por sucursal)
     const paidLoanInstallments = []
     loans.filter(loan => filterByBranch(loan, 'loan')).forEach(loan => {
       (loan.installments || []).forEach(inst => {
-        if (inst.status === 'paid' && inst.paidAt && isInDateRange(inst.paidAt, dateRange.startDate, dateRange.endDate)) {
+        // Iterar por historial de abonos individuales (soporta parciales y múltiples abonos)
+        if (Array.isArray(inst.payments) && inst.payments.length > 0) {
+          inst.payments.forEach(p => {
+            if (p.date && isInDateRange(p.date, dateRange.startDate, dateRange.endDate)) {
+              paidLoanInstallments.push({
+                loanId: loan.id,
+                lenderName: loan.lenderName,
+                loanType: loan.type,
+                number: inst.number,
+                amount: inst.amount,
+                paidAmount: p.amount || 0,
+                paidAt: p.date,
+                isPartial: inst.status !== 'paid',
+              })
+            }
+          })
+        } else if (inst.status === 'paid' && inst.paidAt && isInDateRange(inst.paidAt, dateRange.startDate, dateRange.endDate)) {
+          // Cuotas pagadas antes de existir historial de abonos (legacy)
           paidLoanInstallments.push({
             ...inst,
             loanId: loan.id,
             lenderName: loan.lenderName,
-            loanType: loan.type
+            loanType: loan.type,
           })
         }
       })
@@ -1292,7 +1309,7 @@ export default function CashFlow() {
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">Préstamos</p>
-                          <p className="text-xs text-gray-500">{cashFlowData.paidLoanInstallments.length} cuota(s)</p>
+                          <p className="text-xs text-gray-500">{cashFlowData.paidLoanInstallments.length} abono(s)</p>
                         </div>
                       </div>
                       <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</span>
@@ -1418,7 +1435,7 @@ export default function CashFlow() {
                             <span className="font-medium">Pago de Préstamos</span>
                           </div>
                         </td>
-                        <td className="py-3 text-gray-600">{cashFlowData.paidLoanInstallments.length} cuota(s) pagada(s)</td>
+                        <td className="py-3 text-gray-600">{cashFlowData.paidLoanInstallments.length} abono(s) a cuota(s)</td>
                         <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</td>
                       </tr>
                     )}

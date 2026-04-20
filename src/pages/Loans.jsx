@@ -1196,6 +1196,19 @@ export default function Loans() {
                             Abonado: {formatCurrency(inst.paidAmount || 0)} — Saldo: {formatCurrency(inst.amount - (inst.paidAmount || 0))}
                           </p>
                         )}
+                        {/* Historial de abonos con fecha (pagos parciales o cuotas pagadas con múltiples abonos) */}
+                        {Array.isArray(inst.payments) && inst.payments.length > 0 && (inst.status === 'partial' || inst.payments.length > 1) && (
+                          <ul className="text-xs text-gray-600 mt-1 space-y-0.5">
+                            {inst.payments.map((p, i) => (
+                              <li key={i} className="flex items-center gap-1">
+                                <span className="text-gray-400">•</span>
+                                <span>{formatDate(new Date(p.date))}</span>
+                                <span className="text-gray-400">—</span>
+                                <span className="font-medium">{formatCurrency(p.amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
