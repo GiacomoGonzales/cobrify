@@ -172,8 +172,15 @@ export default function Quotations() {
           quotation.status !== 'rejected'
         ) {
           const expiryDate = getDateFromTimestamp(quotation.expiryDate)
+          // Comparar contra el FINAL del día de vencimiento (no la hora exacta).
+          // Antes: "validez 1 día" emitida hoy tenía expiryDate = mañana 00:00,
+          // entonces a las 00:01 del día siguiente ya aparecía vencida, sin
+          // poder convertirse. Ahora la cotización queda vigente hasta las 23:59
+          // del día de vencimiento.
+          const expiryEnd = new Date(expiryDate)
+          expiryEnd.setHours(23, 59, 59, 999)
 
-          if (expiryDate < now) {
+          if (expiryEnd < now) {
             updateQuotationStatus(getBusinessId(), quotation.id, 'expired')
           }
         }

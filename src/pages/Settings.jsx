@@ -149,6 +149,9 @@ export default function Settings() {
   // Estado para mostrar códigos de producto en cotizaciones PDF
   const [showProductCodeInQuotation, setShowProductCodeInQuotation] = useState(false)
 
+  // Estado para mostrar descripción de producto en cotizaciones PDF
+  const [showProductDescriptionInQuotation, setShowProductDescriptionInQuotation] = useState(true)
+
   // Estado para espaciado amplio en PDF
   const [pdfSpacious, setPdfSpacious] = useState(false)
   const [pdfA5, setPdfA5] = useState(false)
@@ -803,6 +806,11 @@ export default function Settings() {
           setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
         }
 
+        // Cargar flag de descripción de producto en cotizaciones (default true: retrocompatibilidad)
+        if (businessData.showProductDescriptionInQuotation !== undefined) {
+          setShowProductDescriptionInQuotation(businessData.showProductDescriptionInQuotation)
+        }
+
         // Cargar flag de espaciado amplio en PDF
         if (businessData.pdfSpacious !== undefined) {
           setPdfSpacious(businessData.pdfSpacious)
@@ -1324,6 +1332,7 @@ export default function Settings() {
         pdfAccentColor: pdfAccentColor,
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
+        showProductDescriptionInQuotation: showProductDescriptionInQuotation,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
@@ -4568,6 +4577,26 @@ export default function Settings() {
                   </div>
                 </label>
 
+                {/* Descripción de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductDescriptionInQuotation}
+                    onChange={(e) => setShowProductDescriptionInQuotation(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar descripción del producto en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductDescriptionInQuotation
+                        ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
+                    </p>
+                  </div>
+                </label>
+
                 {/* Espaciado amplio en PDF */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                   <input
@@ -4981,6 +5010,7 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
                       showProductCodeInQuotation: showProductCodeInQuotation,
+                      showProductDescriptionInQuotation: showProductDescriptionInQuotation,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,

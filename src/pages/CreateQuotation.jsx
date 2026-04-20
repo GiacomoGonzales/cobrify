@@ -155,7 +155,7 @@ export default function CreateQuotation() {
   const [sellers, setSellers] = useState([])
   const [selectedSeller, setSelectedSeller] = useState(null)
   const [quotationItems, setQuotationItems] = useState([
-    { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
+    { productId: '', name: '', quantity: '', unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
   ])
 
   // Buscador de productos
@@ -372,7 +372,7 @@ export default function CreateQuotation() {
   const addItem = () => {
     setQuotationItems([
       ...quotationItems,
-      { productId: '', name: '', description: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
+      { productId: '', name: '', description: '', quantity: '', unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
     ])
   }
 
@@ -1364,7 +1364,7 @@ export default function CreateQuotation() {
                                   className="fixed inset-0 z-10"
                                   onClick={() => setShowProductSearch(null)}
                                 />
-                                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                <div className="absolute z-20 left-0 w-full min-w-[450px] max-w-[90vw] mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                   {getFilteredProducts(item.searchTerm).length > 0 ? (
                                     getFilteredProducts(item.searchTerm).map(product => {
                                       const hasPresentations = businessSettings?.presentationsEnabled &&
@@ -1539,7 +1539,7 @@ export default function CreateQuotation() {
                             className="fixed inset-0 z-10"
                             onClick={() => setShowProductSearch(null)}
                           />
-                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          <div className="absolute z-20 left-0 w-full min-w-[450px] max-w-[90vw] mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {getFilteredProducts(item.searchTerm).length > 0 ? (
                               getFilteredProducts(item.searchTerm).map(product => {
                                 const hasPresentations = businessSettings?.presentationsEnabled &&

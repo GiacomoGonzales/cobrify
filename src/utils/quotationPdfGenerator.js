@@ -753,6 +753,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // Flag para mostrar códigos de producto (configurable por empresa, por defecto NO se muestran)
   const showProductCode = companySettings?.showProductCodeInQuotation === true
+  // Flag para mostrar descripción del producto (configurable, por defecto SÍ se muestra por retrocompatibilidad)
+  const showProductDescription = companySettings?.showProductDescriptionInQuotation !== false
 
   const colWidths = {
     cant: CONTENT_WIDTH * 0.07,
@@ -786,7 +788,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     const itemDesc = (showProductCode && isValidCode) ? `${rawCode} - ${itemName}` : itemName
     // La descripción adicional del producto (no mostrar si es igual al nombre)
-    const rawDescription = item.description || ''
+    // Si el negocio desactivó "Mostrar descripción del producto en cotizaciones", omitirla.
+    const rawDescription = showProductDescription ? (item.description || '') : ''
     const productDescription = rawDescription.trim().toLowerCase() === itemName.trim().toLowerCase() ? '' : rawDescription
 
     // Calcular líneas necesarias para el nombre (usar mismo tamaño que al renderizar: 8pt)
