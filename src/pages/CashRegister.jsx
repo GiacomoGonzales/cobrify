@@ -819,6 +819,13 @@ export default function CashRegister() {
   }
 
   const handlePrintTicket = () => {
+    // En app nativa (Android/iOS), window.print() no hace nada útil en el WebView.
+    // Delegamos al flujo de impresora térmica, que si no hay impresora muestra un
+    // toast claro ("No hay impresora conectada. Configúrala en Ajustes.").
+    if (isNative) {
+      handlePrintThermal()
+      return
+    }
     // Configurar datos para impresión del cierre actual
     setPrintSessionData(closedSessionData)
     setPrintMovements(movements)
@@ -829,6 +836,11 @@ export default function CashRegister() {
   }
 
   const handlePrintHistoryTicket = async () => {
+    // En nativo, delegar al flujo de impresora térmica (ver comentario en handlePrintTicket)
+    if (isNative) {
+      handlePrintThermalHistory()
+      return
+    }
     try {
       // Cargar datos del negocio si no están cargados
       if (!companySettings) {
