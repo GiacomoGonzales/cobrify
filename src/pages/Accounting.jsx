@@ -71,7 +71,7 @@ export default function Accounting() {
       const snapshot = await getDocs(ref)
       const data = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(inv => inv.documentType === 'factura' || inv.documentType === 'boleta')
+        .filter(inv => inv.documentType === 'factura' || inv.documentType === 'boleta' || inv.documentType === 'nota_credito')
         .sort((a, b) => {
           const dateA = a.emissionDate ? new Date(a.emissionDate) : (a.createdAt?.toDate?.() || new Date(0))
           const dateB = b.emissionDate ? new Date(b.emissionDate) : (b.createdAt?.toDate?.() || new Date(0))
@@ -522,6 +522,7 @@ export default function Accounting() {
     total: filtered.length,
     facturas: filtered.filter(i => i.documentType === 'factura').length,
     boletas: filtered.filter(i => i.documentType === 'boleta').length,
+    notasCredito: filtered.filter(i => i.documentType === 'nota_credito').length,
     accepted: filtered.filter(i => getSunatStatus(i) === 'accepted').length,
     pending: filtered.filter(i => getSunatStatus(i) === 'pending').length,
     rejected: filtered.filter(i => getSunatStatus(i) === 'rejected').length,
@@ -690,6 +691,10 @@ export default function Accounting() {
           <p className="text-xs text-gray-500">Boletas</p>
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
+          <p className="text-xl font-bold text-orange-600">{stats.notasCredito}</p>
+          <p className="text-xs text-gray-500">Notas de Crédito</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3 text-center">
           <p className="text-xl font-bold text-green-600">{stats.accepted}</p>
           <p className="text-xs text-gray-500">Aceptados</p>
         </CardContent></Card>
@@ -730,6 +735,7 @@ export default function Accounting() {
               <option value="all">Todos</option>
               <option value="factura">Facturas</option>
               <option value="boleta">Boletas</option>
+              <option value="nota_credito">Notas de Crédito</option>
             </select>
             <select value={filterSunat} onChange={e => setFilterSunat(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg">
@@ -789,8 +795,14 @@ export default function Accounting() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <span className="font-medium text-primary-600 text-sm">{inv.number || '-'}</span>
-                      <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${inv.documentType === 'factura' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                        {inv.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                      <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        inv.documentType === 'factura' ? 'bg-blue-100 text-blue-700'
+                        : inv.documentType === 'nota_credito' ? 'bg-orange-100 text-orange-700'
+                        : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {inv.documentType === 'factura' ? 'Factura'
+                          : inv.documentType === 'nota_credito' ? 'Nota de Crédito'
+                          : 'Boleta'}
                       </span>
                     </div>
                     <span className="font-semibold text-sm">S/ {(inv.total || 0).toFixed(2)}</span>
@@ -862,8 +874,14 @@ export default function Accounting() {
                     <tr key={inv.id} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-4 font-medium text-primary-600">{inv.number || '-'}</td>
                       <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${inv.documentType === 'factura' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                          {inv.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          inv.documentType === 'factura' ? 'bg-blue-100 text-blue-700'
+                          : inv.documentType === 'nota_credito' ? 'bg-orange-100 text-orange-700'
+                          : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {inv.documentType === 'factura' ? 'Factura'
+                            : inv.documentType === 'nota_credito' ? 'Nota de Crédito'
+                            : 'Boleta'}
                         </span>
                       </td>
                       <td className="py-3 px-4 max-w-[200px] truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</td>
