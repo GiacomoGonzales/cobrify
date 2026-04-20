@@ -3284,21 +3284,23 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .text(format.separator + '\n');
 
     // ========== FOOTER ==========
-    // NOTA: .feed(N) no está implementado en Android para este plugin (tira
-    // "CapacitorThermalPrinter.feed() is not implemented on android") y corta
-    // la cadena antes del .cut() / .write() → el ticket queda sin enviarse a
-    // la impresora física. Usamos saltos de línea como fallback.
     printer = printer
       .align('center')
       .text('Documento interno\n')
       .text('Sin valor tributario\n')
       .text('\n')
-      .text(formatDateTime(new Date()) + '\n')
-      .text('\n\n\n')
-      .cut();
+      .text(formatDateTime(new Date()) + '\n');
 
-    // Enviar a la impresora
-    await printer.write();
+    // Usar EXACTAMENTE el mismo patrón de finalización que printInvoiceTicket
+    // (que ya funciona en Android): .text('\n') en loop + .cutPaper() + .write().
+    // El .feed(N) y .cut() no están implementados en Android para este plugin.
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) {
+      printer = printer.text('\n');
+    }
+    await printer
+      .cutPaper()
+      .write();
 
     console.log('✅ Ticket de cierre de caja impreso correctamente');
     return { success: true };
