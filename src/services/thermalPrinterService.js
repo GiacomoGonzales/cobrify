@@ -3151,12 +3151,18 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     // ========== HEADER ==========
     printer = printer.align('center');
 
-    // Logo (si existe)
+    // Logo (si existe). Usar .image() en lugar de .bitmap() porque bitmap() no
+    // está implementado en Android para este plugin — tiraba
+    // "CapacitorThermalPrinter.bitmap() is not implemented on android" y
+    // abortaba la impresión del ticket de cierre silenciosamente.
     if (business?.logoUrl) {
       try {
         const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
-        if (logoConfig) {
-          printer = printer.bitmap(logoConfig.base64, logoConfig.width, logoConfig.height);
+        if (logoConfig?.ready && logoConfig.base64) {
+          const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
+          printer = printer.image(dataUrl);
+        } else if (logoConfig?.ready && logoConfig.url) {
+          printer = printer.image(logoConfig.url);
         }
       } catch (logoError) {
         console.warn('No se pudo cargar el logo:', logoError);
