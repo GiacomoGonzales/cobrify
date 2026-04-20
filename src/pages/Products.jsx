@@ -1938,13 +1938,47 @@ export default function Products() {
     const swapIdx = idx + direction
     if (swapIdx < 0 || swapIdx >= siblings.length) return
 
-    const updatedCategories = categories.map(c => {
-      if (c.id === siblings[idx].id) return { ...c, order: siblings[swapIdx].order ?? swapIdx }
-      if (c.id === siblings[swapIdx].id) return { ...c, order: siblings[idx].order ?? idx }
-      return c
-    })
+    // Intercambiar posiciones en el array local y reasignar order secuencialmente.
+    // El handler anterior solo intercambiaba los valores `order` de las 2 categorías;
+    // cuando muchas hermanas tenían order=undefined/999 (default), el swap no cambiaba
+    // nada visualmente. Reasignar 0..N-1 garantiza que siempre tome efecto.
+    const reordered = [...siblings]
+    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+    const newOrderById = new Map(reordered.map((s, i) => [s.id, i]))
+
+    const updatedCategories = categories.map(c =>
+      newOrderById.has(c.id) ? { ...c, order: newOrderById.get(c.id) } : c
+    )
     setCategories(updatedCategories)
     await saveProductCategories(getBusinessId(), updatedCategories)
+  }
+
+  // Ordenar todas las categorías y subcategorías alfabéticamente.
+  // Cada grupo de hermanas (mismo parentId) se ordena A-Z independientemente.
+  const handleSortCategoriesAlphabetically = async () => {
+    if (!categories.length) return
+    // Agrupar por parentId
+    const byParent = new Map()
+    categories.forEach(c => {
+      const key = c.parentId || 'root'
+      if (!byParent.has(key)) byParent.set(key, [])
+      byParent.get(key).push(c)
+    })
+    // Ordenar cada grupo y asignar order secuencial
+    const newOrderById = new Map()
+    byParent.forEach(group => {
+      const sorted = [...group].sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
+      )
+      sorted.forEach((c, i) => newOrderById.set(c.id, i))
+    })
+    const updatedCategories = categories.map(c => ({
+      ...c,
+      order: newOrderById.get(c.id) ?? c.order ?? 0
+    }))
+    setCategories(updatedCategories)
+    await saveProductCategories(getBusinessId(), updatedCategories)
+    toast.success('Categorías ordenadas alfabéticamente')
   }
 
   const handleDeleteCategory = async (categoryId) => {
@@ -5879,6 +5913,15 @@ export default function Products() {
                     : selectedCategories.size > 0
                       ? `${selectedCategories.size} seleccionada(s)`
                       : 'Seleccionar todas'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSortCategoriesAlphabetically}
+                  className="flex items-center gap-1.5 text-sm text-primary-700 hover:text-primary-900 hover:bg-primary-50 px-2 py-1 rounded transition-colors"
+                  title="Ordenar alfabéticamente (A-Z)"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  Ordenar A-Z
                 </button>
               </div>
               {selectedCategories.size > 0 && (
