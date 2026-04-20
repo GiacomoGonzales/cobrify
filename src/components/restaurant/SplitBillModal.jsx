@@ -84,18 +84,25 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   const handleSplitEqual = () => {
     const validPeople = parseInt(numberOfPeople) || 2
     const amountPerPerson = totalAmount / validPeople
-    const amounts = Array(validPeople).fill(amountPerPerson)
+    const amounts = Array(validPeople).fill(amountPerPerson.toFixed(2))
     setCustomAmounts(amounts)
   }
 
   const handleCustomAmountChange = (index, value) => {
+    // Aceptar escritura libre: permitir coma como decimal (se convierte a punto),
+    // solo dígitos y un único punto. Estado intermedio como "1." es válido.
+    let sanitized = value.replace(',', '.').replace(/[^\d.]/g, '')
+    const parts = sanitized.split('.')
+    if (parts.length > 2) {
+      sanitized = parts[0] + '.' + parts.slice(1).join('')
+    }
     const newAmounts = [...customAmounts]
-    newAmounts[index] = parseFloat(value) || 0
+    newAmounts[index] = sanitized
     setCustomAmounts(newAmounts)
   }
 
   const getTotalCustomAmount = () => {
-    return customAmounts.reduce((sum, amount) => sum + amount, 0)
+    return customAmounts.reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0)
   }
 
   const getRemainingAmount = () => {
@@ -153,7 +160,7 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
       } else {
         const amounts = splitMethod === 'equal'
           ? Array(validNumberOfPeople).fill(totalAmount / validNumberOfPeople)
-          : customAmounts
+          : customAmounts.map(a => parseFloat(a) || 0)
 
         splitData = {
           method: splitMethod,
@@ -240,7 +247,8 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
                 setItemAssignments({})
                 // Inicializar con 2 personas
                 if (customAmounts.length === 0) {
-                  setCustomAmounts([totalAmount / 2, totalAmount / 2])
+                  const half = (totalAmount / 2).toFixed(2)
+                  setCustomAmounts([half, half])
                 }
               }}
               className={`p-3 border-2 rounded-lg text-left transition-colors ${
@@ -321,7 +329,7 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setCustomAmounts([...customAmounts, 0])}
+                onClick={() => setCustomAmounts([...customAmounts, ''])}
               >
                 + Agregar Persona
               </Button>
@@ -337,11 +345,12 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
                       S/
                     </span>
                     <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={amount}
                       onChange={(e) => handleCustomAmountChange(index, e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      placeholder="0.00"
                       className="pl-10"
                     />
                   </div>
