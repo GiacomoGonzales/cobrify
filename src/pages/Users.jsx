@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -17,7 +17,6 @@ import {
   updateUserPermissions,
   updateUserData,
   toggleUserStatus,
-  deleteManagedUser,
   CATEGORY_NAMES,
 } from '@/services/userManagementService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -398,25 +397,6 @@ export default function Users() {
     }
   }
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('¿Estás seguro de eliminar este usuario?')) {
-      return
-    }
-
-    try {
-      const result = await deleteManagedUser(userId)
-      if (result.success) {
-        toast.success('Usuario eliminado')
-        loadUsers()
-      } else {
-        toast.error(result.error)
-      }
-    } catch (error) {
-      console.error('Error al eliminar usuario:', error)
-      toast.error('Error al eliminar usuario')
-    }
-  }
-
   // Solo Business Owners pueden ver esta página
   // Super Admins NO deben verla (ellos gestionan negocios, no usuarios de negocio)
   if (!isBusinessOwner || isAdmin) {
@@ -564,12 +544,6 @@ export default function Users() {
                     >
                       <Edit2 className="w-3.5 h-3.5" /> Editar
                     </button>
-                    <button
-                      onClick={() => handleDelete(userItem.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                    </button>
                   </div>
                 </div>
               ))}
@@ -660,13 +634,6 @@ export default function Users() {
                             title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(userItem.id)}
-                            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </TableCell>
