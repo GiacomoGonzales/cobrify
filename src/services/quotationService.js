@@ -256,13 +256,18 @@ export const convertToInvoice = async (userId, quotationId) => {
 
     const quotation = quotationSnap.data()
 
-    // Verificar que la cotización no esté vencida
+    // Verificar que la cotización no esté vencida.
+    // Comparar contra el FINAL del día de vencimiento, no la hora exacta,
+    // así una cotización con validez 1 día emitida hoy sigue siendo convertible
+    // todo el día siguiente.
     if (quotation.expiryDate) {
       const expiryDate = quotation.expiryDate.toDate ?
         quotation.expiryDate.toDate() :
         new Date(quotation.expiryDate)
+      const expiryEnd = new Date(expiryDate)
+      expiryEnd.setHours(23, 59, 59, 999)
 
-      if (expiryDate < new Date()) {
+      if (expiryEnd < new Date()) {
         return { success: false, error: 'La cotización está vencida' }
       }
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -161,12 +161,121 @@ export default function CreateQuotation() {
   // Buscador de productos
   const [showProductSearch, setShowProductSearch] = useState(null) // índice del item activo
 
+  // ===== Borrador automático en localStorage =====
+  // Evita perder trabajo si el usuario cambia de página o cierra el navegador.
+  const draftLoadedRef = useRef(false)
+  const getDraftKey = () => `quotation_draft_${getBusinessId()}`
+
+  const clearDraft = () => {
+    try { localStorage.removeItem(getDraftKey()) } catch (e) { /* ignore */ }
+  }
+
   // Auto-set hideIgv when businessSettings loads (only for new quotations)
   useEffect(() => {
     if (!quotationId && isIgvExempt) {
       setHideIgv(true)
     }
   }, [isIgvExempt, quotationId])
+
+  // Cargar borrador al montar (solo en modo creación nueva, no edición ni clonación)
+  useEffect(() => {
+    if (draftLoadedRef.current) return
+    if (quotationId || cloneId) {
+      draftLoadedRef.current = true
+      return
+    }
+    try {
+      const saved = localStorage.getItem(getDraftKey())
+      if (saved) {
+        const draft = JSON.parse(saved)
+        const age = Date.now() - (draft.timestamp || 0)
+        const maxAge = 24 * 60 * 60 * 1000 // 24h
+        if (age < maxAge) {
+          if (draft.quotationItems?.length) setQuotationItems(draft.quotationItems)
+          if (draft.selectedCustomer) setSelectedCustomer(draft.selectedCustomer)
+          if (draft.customerMode) setCustomerMode(draft.customerMode)
+          if (draft.manualCustomer) setManualCustomer(draft.manualCustomer)
+          if (draft.validityDays) setValidityDays(draft.validityDays)
+          if (draft.issueDate) setIssueDate(draft.issueDate)
+          if (draft.notes) setNotes(draft.notes)
+          if (draft.terms) setTerms(draft.terms)
+          if (draft.discount) setDiscount(draft.discount)
+          if (draft.discountType) setDiscountType(draft.discountType)
+          if (typeof draft.hideIgv === 'boolean') setHideIgv(draft.hideIgv)
+          if (draft.recipientName) setRecipientName(draft.recipientName)
+          if (draft.recipientPosition) setRecipientPosition(draft.recipientPosition)
+          if (draft.quotationItems?.some(i => i.name || i.productId)) {
+            toast.info('Borrador recuperado')
+          }
+        } else {
+          localStorage.removeItem(getDraftKey())
+        }
+      }
+    } catch (e) {
+      console.error('Error al cargar borrador:', e)
+    }
+    draftLoadedRef.current = true
+  }, [quotationId, cloneId])
+
+  // Guardar borrador cuando cambian datos importantes (debounced 500ms)
+  useEffect(() => {
+    if (!draftLoadedRef.current) return
+    if (quotationId) return
+
+    const hasData = (quotationItems.some(i => i.name || i.productId))
+      || !!selectedCustomer
+      || !!manualCustomer.documentNumber
+      || !!manualCustomer.name
+      || !!notes
+      || !!terms
+
+    if (!hasData) {
+      localStorage.removeItem(getDraftKey())
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      try {
+        const draft = {
+          quotationItems,
+          selectedCustomer,
+          customerMode,
+          manualCustomer,
+          validityDays,
+          issueDate,
+          notes,
+          terms,
+          discount,
+          discountType,
+          hideIgv,
+          recipientName,
+          recipientPosition,
+          timestamp: Date.now(),
+        }
+        localStorage.setItem(getDraftKey(), JSON.stringify(draft))
+      } catch (e) {
+        console.error('Error al guardar borrador:', e)
+      }
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [quotationItems, selectedCustomer, customerMode, manualCustomer, validityDays, issueDate, notes, terms, discount, discountType, hideIgv, recipientName, recipientPosition, quotationId])
+
+  // Alerta del navegador al cerrar pestaña si hay datos sin guardar
+  useEffect(() => {
+    const handler = (e) => {
+      const hasUnsavedData = !isSaving && (
+        quotationItems.some(i => i.name || i.productId)
+        || !!selectedCustomer
+        || !!manualCustomer.documentNumber
+      )
+      if (!hasUnsavedData) return
+      e.preventDefault()
+      e.returnValue = ''
+      return ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [quotationItems, selectedCustomer, manualCustomer, isSaving])
 
   useEffect(() => {
     loadData()
@@ -890,6 +999,8 @@ export default function CreateQuotation() {
         toast.success(`Cotización ${finalNumber} creada exitosamente`)
       }
 
+      clearDraft() // Borrador ya no hace falta
+
       setTimeout(() => {
         appNavigate('cotizaciones')
       }, 1500)
@@ -1481,6 +1592,17 @@ export default function CreateQuotation() {
                 </table>
               </div>
 
+              {/* Botón "Agregar producto" al final (estilo Odoo): útil cuando la lista
+                  crece y tener que scrollear hasta arriba cada vez es molesto. */}
+              <button
+                type="button"
+                onClick={addItem}
+                className="hidden lg:flex w-full items-center gap-2 px-4 py-2 mt-2 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar un producto
+              </button>
+
               {/* Móvil: Lista compacta */}
               <div className="lg:hidden divide-y divide-gray-200">
                 {quotationItems.map((item, index) => (
@@ -1644,6 +1766,16 @@ export default function CreateQuotation() {
                     </div>
                   </div>
                 ))}
+
+                {/* Botón "Agregar producto" al final en móvil */}
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar un producto
+                </button>
               </div>
             </CardContent>
           </Card>

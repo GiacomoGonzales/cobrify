@@ -909,6 +909,18 @@ export default function POS() {
             address: customer.address || '',
           })
         }
+        // También llenar el formulario (customerData): el formulario lee de customerData,
+        // no de selectedCustomer, así que sin esto los campos salen vacíos al convertir.
+        setCustomerData(prev => ({
+          ...prev,
+          documentType: inferDocumentType(customer.documentType, customer.documentNumber),
+          documentNumber: customer.documentNumber || '',
+          name: customer.name || '',
+          businessName: customer.businessName || '',
+          address: customer.address || '',
+          email: customer.email || '',
+          phone: customer.phone || '',
+        }))
       }
 
       // Cargar observaciones de la cotización
