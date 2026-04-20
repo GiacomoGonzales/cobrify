@@ -1,24 +1,26 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2 } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder } from '@/services/orderService'
+import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
+import { getCompanySettings, getProductCategories, savePrecuentaSnapshot } from '@/services/firestoreService'
 import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
+import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { Capacitor } from '@capacitor/core'
-import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations } from '@/services/thermalPrinterService'
+import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations, printPreBill as printPreBillThermal } from '@/services/thermalPrinterService'
+import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
 
 export default function Orders() {
@@ -67,6 +69,15 @@ export default function Orders() {
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
   const [orderToClose, setOrderToClose] = useState(null)
   const [isClosingOrder, setIsClosingOrder] = useState(false)
+
+  // Menú de acciones (ID de la orden con menú abierto)
+  const [openMenuOrderId, setOpenMenuOrderId] = useState(null)
+
+  // Dividir cuenta
+  const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
+  const [isPrintSplitModalOpen, setIsPrintSplitModalOpen] = useState(false)
+  const [splitData, setSplitData] = useState(null)
+  const [selectedOrderForAction, setSelectedOrderForAction] = useState(null)
 
   // Cargar configuración de impresora para webPrintLegible y compactPrint
   useEffect(() => {
@@ -463,6 +474,252 @@ export default function Orders() {
       setIsClosingOrder(false)
       setShowCloseOrderModal(false)
       setOrderToClose(null)
+    }
+  }
+
+  // Construir objeto tipo "mesa" a partir de una orden (para reutilizar utilidades de precuenta)
+  const getPseudoTable = (order) => {
+    if (order.tableNumber) {
+      return {
+        id: order.tableId || null,
+        number: order.tableNumber,
+        waiter: order.waiterName || 'N/A',
+      }
+    }
+    const typeLabel = order.orderType === 'delivery' ? 'DELIVERY' : 'PARA LLEVAR'
+    return {
+      id: null,
+      number: typeLabel,
+      waiter: order.waiterName || order.customerName || order.source || 'N/A',
+    }
+  }
+
+  // Obtener información del negocio y configuración de impuestos/recargo
+  const loadBusinessInfoForPreBill = async () => {
+    const businessId = getBusinessId()
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+
+    let businessInfo = { tradeName: 'RESTAURANTE', address: '', phone: '', logoUrl: '' }
+    let taxConfig = { igvRate: 18, igvExempt: false }
+    let recargoConsumoConfig = { enabled: false, rate: 10 }
+
+    if (businessSnap.exists()) {
+      const businessData = businessSnap.data()
+      businessInfo = {
+        tradeName: businessData.tradeName || businessData.name || 'RESTAURANTE',
+        address: businessData.address || '',
+        phone: businessData.phone || '',
+        logoUrl: businessData.logoUrl || '',
+      }
+      if (businessData.emissionConfig?.taxConfig) {
+        taxConfig = {
+          igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
+          igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false,
+        }
+      }
+      if (businessData.restaurantConfig) {
+        recargoConsumoConfig = {
+          enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,
+          rate: businessData.restaurantConfig.recargoConsumoRate ?? 10,
+        }
+      }
+    }
+    return { businessInfo, taxConfig, recargoConsumoConfig }
+  }
+
+  // Imprimir precuenta (completa o filtrada por items/override)
+  const handlePrintPreBill = async (order, itemFilter = null, personLabel = null, overrideTotal = null) => {
+    if (!order) {
+      toast.error('No se puede imprimir: orden no encontrada')
+      return
+    }
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    try {
+      const businessId = getBusinessId()
+
+      // Leer orden fresca de Firestore cuando es precuenta completa
+      let freshOrder = order
+      if (!itemFilter && !overrideTotal) {
+        const orderResult = await getOrder(businessId, order.id)
+        if (orderResult.success) freshOrder = orderResult.data
+      }
+
+      const pseudoTable = getPseudoTable(freshOrder)
+
+      // Snapshot de auditoría solo para precuenta completa
+      if (!itemFilter && !overrideTotal) {
+        savePrecuentaSnapshot(businessId, {
+          orderId: freshOrder.id,
+          tableNumber: pseudoTable.number,
+          items: (freshOrder.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          total: freshOrder.total || 0,
+          subtotal: freshOrder.subtotal || 0,
+          tax: freshOrder.tax || 0,
+          printedBy: user.uid,
+          printedByName: user.displayName || user.email || 'Usuario',
+        }).catch(err => console.error('Error al guardar snapshot de precuenta:', err))
+      }
+
+      const { businessInfo, taxConfig, recargoConsumoConfig } = await loadBusinessInfoForPreBill()
+      const isNative = Capacitor.isNativePlatform()
+
+      // Térmica solo para precuenta completa
+      if (isNative && !itemFilter && !overrideTotal) {
+        try {
+          const printerConfigResult = await getPrinterConfig(businessId)
+          if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+            await connectPrinter(printerConfigResult.config.address)
+            const result = await printPreBillThermal(freshOrder, pseudoTable, businessInfo, taxConfig, printerConfigResult.config?.paperWidth || 58, recargoConsumoConfig)
+            if (result.success) {
+              toast.success('Precuenta impresa en ticketera')
+              return
+            }
+            toast.info('Usando impresión estándar...')
+          }
+        } catch (error) {
+          console.error('Error al imprimir en ticketera:', error)
+          toast.info('Usando impresión estándar...')
+        }
+      }
+
+      // Fallback HTML
+      const printerConfigResult = await getPrinterConfig(businessId)
+      const webPrintLegibleCfg = printerConfigResult.config?.webPrintLegible || false
+      const paperWidth = printerConfigResult.config?.paperWidth || 80
+      const compactPrintValue = printerConfigResult.config?.compactPrint || false
+      printPreBill(pseudoTable, freshOrder, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal)
+      toast.success('Imprimiendo precuenta...')
+    } catch (error) {
+      console.error('Error al imprimir precuenta:', error)
+      toast.error('Error al imprimir precuenta')
+    }
+  }
+
+  // Abrir modal para dividir cuenta
+  const handleSplitBill = (order) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    setSelectedOrderForAction(order)
+    setIsSplitBillModalOpen(true)
+  }
+
+  // Confirmar división de cuenta (recibido desde SplitBillModal)
+  const handleConfirmSplit = (splitDataResult) => {
+    if (!selectedOrderForAction) return
+
+    if (splitDataResult.method === 'items') {
+      setSplitData(splitDataResult)
+    } else if (splitDataResult.method === 'equal') {
+      const amountPerPerson = splitDataResult.total / splitDataResult.numberOfPeople
+      const persons = Array.from({ length: splitDataResult.numberOfPeople }, (_, i) => ({
+        personNumber: i + 1,
+        items: selectedOrderForAction?.items || [],
+        total: amountPerPerson,
+      }))
+      setSplitData({ ...splitDataResult, persons })
+    } else if (splitDataResult.method === 'custom') {
+      const persons = splitDataResult.amounts.map((amount, i) => ({
+        personNumber: i + 1,
+        items: selectedOrderForAction?.items || [],
+        total: amount,
+      }))
+      setSplitData({ ...splitDataResult, persons })
+    }
+
+    setIsSplitBillModalOpen(false)
+    setIsPrintSplitModalOpen(true)
+    toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas. Selecciona qué precuenta imprimir.`)
+  }
+
+  // Imprimir precuenta de una persona específica
+  const handlePrintPersonPreBill = async (personData, totalPersons) => {
+    if (!selectedOrderForAction || !splitData) return
+    const isNative = Capacitor.isNativePlatform()
+    const pseudoTable = getPseudoTable(selectedOrderForAction)
+
+    if (isNative) {
+      try {
+        const businessId = getBusinessId()
+        const { businessInfo, taxConfig, recargoConsumoConfig } = await loadBusinessInfoForPreBill()
+        const printerConfigResult = await getPrinterConfig(businessId)
+        const paperWidth = printerConfigResult.config?.paperWidth || 58
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          await connectPrinter(printerConfigResult.config.address)
+          const personIndex = splitData.persons.findIndex(p => p.personNumber === personData.personNumber)
+          const { printSplitPreBillThermal } = await import('@/services/thermalPrinterService')
+          const result = await printSplitPreBillThermal(selectedOrderForAction, pseudoTable, businessInfo, taxConfig, paperWidth, recargoConsumoConfig, splitData, personIndex)
+          if (result.success) {
+            toast.success(`Precuenta Persona ${personData.personNumber} impresa`)
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir precuenta dividida en térmica:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    const personLabel = `Persona ${personData.personNumber} de ${totalPersons}`
+    if (splitData?.method === 'items') {
+      await handlePrintPreBill(selectedOrderForAction, personData.items, personLabel)
+    } else {
+      await handlePrintPreBill(selectedOrderForAction, null, personLabel, personData.total)
+    }
+  }
+
+  // Imprimir todas las precuentas divididas
+  const handlePrintAllSplitPreBills = async () => {
+    if (!selectedOrderForAction || !splitData) return
+    try {
+      const businessId = getBusinessId()
+      const pseudoTable = getPseudoTable(selectedOrderForAction)
+
+      savePrecuentaSnapshot(businessId, {
+        orderId: selectedOrderForAction.id,
+        tableNumber: pseudoTable.number,
+        items: (selectedOrderForAction.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        total: selectedOrderForAction.total || 0,
+        subtotal: selectedOrderForAction.subtotal || 0,
+        tax: selectedOrderForAction.tax || 0,
+        printedBy: user.uid,
+        printedByName: user.displayName || user.email || 'Usuario',
+      }).catch(err => console.error('Error al guardar snapshot de precuenta:', err))
+
+      const { businessInfo, taxConfig, recargoConsumoConfig } = await loadBusinessInfoForPreBill()
+      const printerConfigResult = await getPrinterConfig(businessId)
+      const paperWidth = printerConfigResult.config?.paperWidth || 80
+      const isNative = Capacitor.isNativePlatform()
+
+      if (isNative && printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+        try {
+          await connectPrinter(printerConfigResult.config.address)
+          const { printSplitPreBillThermal } = await import('@/services/thermalPrinterService')
+          const result = await printSplitPreBillThermal(selectedOrderForAction, pseudoTable, businessInfo, taxConfig, paperWidth, recargoConsumoConfig, splitData)
+          if (result.success) {
+            toast.success('Precuentas divididas impresas en ticketera')
+            return
+          }
+        } catch (error) {
+          console.error('Error al imprimir en térmica:', error)
+          toast.info('Usando impresión estándar...')
+        }
+      }
+
+      const webPrintLegibleCfg = printerConfigResult.config?.webPrintLegible || false
+      const compactPrintValue = printerConfigResult.config?.compactPrint || false
+      printAllSplitPreBills(pseudoTable, selectedOrderForAction, splitData, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, recargoConsumoConfig, compactPrintValue)
+      toast.success('Imprimiendo precuentas divididas...')
+    } catch (error) {
+      console.error('Error al imprimir precuentas divididas:', error)
+      toast.error('Error al imprimir precuentas divididas')
     }
   }
 
@@ -1095,89 +1352,136 @@ export default function Orders() {
                     </div>
                   )}
 
-                  {/* Botones de acción */}
-                  <div className="flex gap-2 mt-3 flex-wrap">
-                    {/* Botón de cerrar cuenta (solo para órdenes listas) */}
-                    {order.status === 'ready' && (
-                      <Button
-                        onClick={() => handleCloseOrder(order)}
-                        variant="success"
-                        className="flex-1"
-                        size="sm"
-                      >
-                        <Receipt className="w-4 h-4 mr-2" />
-                        Cerrar Cuenta
-                      </Button>
-                    )}
-
-                    {/* Botón de despachar (para órdenes listas - delivery/para llevar) */}
-                    {order.status === 'ready' && !order.tableNumber && (
-                      <Button
-                        onClick={() => handleStatusChange(order.id, 'ready', order)}
-                        disabled={isUpdating}
-                        variant="outline"
-                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50"
-                        size="sm"
-                      >
-                        {isUpdating ? (
+                  {/* Menú de acciones */}
+                  <div className="mt-3 relative">
+                    <Button
+                      onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full flex items-center justify-center gap-2"
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? (
+                        <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <PackageCheck className="w-4 h-4 mr-2" />
-                            Despachar
-                          </>
-                        )}
-                      </Button>
-                    )}
+                          Actualizando...
+                        </>
+                      ) : (
+                        <>
+                          <MoreVertical className="w-4 h-4" />
+                          Acciones
+                          <ChevronDown className={`w-4 h-4 transition-transform ${openMenuOrderId === order.id ? 'rotate-180' : ''}`} />
+                        </>
+                      )}
+                    </Button>
 
-                    {/* Botón de Cobrar (para órdenes no pagadas en cualquier estado activo) */}
-                    {!order.paid && order.status !== 'delivered' && (
-                      <Button
-                        onClick={() => handleGoToPayment(order)}
-                        variant="outline"
-                        className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
-                        size="sm"
-                      >
-                        <DollarSign className="w-4 h-4 mr-2" />
-                        Cobrar
-                      </Button>
-                    )}
+                    {openMenuOrderId === order.id && (
+                      <>
+                        {/* Backdrop para cerrar al hacer clic fuera */}
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setOpenMenuOrderId(null)}
+                        />
+                        {/* Menú */}
+                        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden">
+                          {/* Avanzar estado (pending / preparing) */}
+                          {order.status !== 'delivered' && order.status !== 'ready' && order.status !== 'dispatched' && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleStatusChange(order.id, order.status, order)
+                              }}
+                              disabled={order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <ChevronRight className="w-4 h-4 text-primary-600" />
+                              <span className="font-medium text-gray-900">
+                                Marcar como {getStatusConfig(order.status === 'pending' ? 'preparing' : 'ready').label}
+                              </span>
+                            </button>
+                          )}
 
-                    {/* Botón de Marcar Entregada (para órdenes despachadas) */}
-                    {order.status === 'dispatched' && (
-                      <Button
-                        onClick={() => handleMarkAsDelivered(order.id)}
-                        variant="success"
-                        className="flex-1"
-                        size="sm"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Marcar Entregada
-                      </Button>
-                    )}
+                          {/* Despachar (ready + sin mesa) */}
+                          {order.status === 'ready' && !order.tableNumber && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleStatusChange(order.id, 'ready', order)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-purple-50 flex items-center gap-3"
+                            >
+                              <PackageCheck className="w-4 h-4 text-purple-600" />
+                              <span className="font-medium text-gray-900">Despachar</span>
+                            </button>
+                          )}
 
-                    {/* Botón de avanzar estado (para pending y preparing) */}
-                    {order.status !== 'delivered' && order.status !== 'ready' && order.status !== 'dispatched' && (
-                      <Button
-                        onClick={() => handleStatusChange(order.id, order.status, order)}
-                        disabled={isUpdating || (order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid)}
-                        className="flex-1"
-                        size="sm"
-                      >
-                        {isUpdating ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Actualizando...
-                          </>
-                        ) : (
-                          <>
-                            Marcar como {getStatusConfig(
-                              order.status === 'pending' ? 'preparing' : 'ready'
-                            ).label}
-                            <ChevronRight className="w-4 h-4 ml-1" />
-                          </>
-                        )}
-                      </Button>
+                          {/* Marcar Entregada (dispatched) */}
+                          {order.status === 'dispatched' && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleMarkAsDelivered(order.id)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3"
+                            >
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span className="font-medium text-gray-900">Marcar Entregada</span>
+                            </button>
+                          )}
+
+                          {/* Cobrar */}
+                          {!order.paid && order.status !== 'delivered' && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleGoToPayment(order)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3"
+                            >
+                              <DollarSign className="w-4 h-4 text-green-600" />
+                              <span className="font-medium text-gray-900">Cobrar</span>
+                            </button>
+                          )}
+
+                          {/* Imprimir Precuenta */}
+                          <button
+                            onClick={() => {
+                              setOpenMenuOrderId(null)
+                              handlePrintPreBill(order)
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <FileText className="w-4 h-4 text-gray-600" />
+                            <span className="font-medium text-gray-900">Imprimir Precuenta</span>
+                          </button>
+
+                          {/* Dividir Cuenta */}
+                          <button
+                            onClick={() => {
+                              setOpenMenuOrderId(null)
+                              handleSplitBill(order)
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <Split className="w-4 h-4 text-gray-600" />
+                            <span className="font-medium text-gray-900">Dividir Cuenta</span>
+                          </button>
+
+                          {/* Cerrar Cuenta (ready) */}
+                          {order.status === 'ready' && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuOrderId(null)
+                                handleCloseOrder(order)
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
+                            >
+                              <Receipt className="w-4 h-4 text-green-600" />
+                              <span className="font-medium text-gray-900">Cerrar Cuenta</span>
+                            </button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -1444,6 +1748,103 @@ export default function Orders() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Modal para dividir la cuenta */}
+      <SplitBillModal
+        isOpen={isSplitBillModalOpen}
+        onClose={() => {
+          setIsSplitBillModalOpen(false)
+          setSelectedOrderForAction(null)
+        }}
+        table={selectedOrderForAction ? getPseudoTable(selectedOrderForAction) : null}
+        order={selectedOrderForAction}
+        onConfirm={handleConfirmSplit}
+      />
+
+      {/* Modal para imprimir precuenta dividida */}
+      <Modal
+        isOpen={isPrintSplitModalOpen}
+        onClose={() => {
+          setIsPrintSplitModalOpen(false)
+          setSplitData(null)
+          setSelectedOrderForAction(null)
+        }}
+        title={
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            <span>Imprimir Precuentas - Orden #{selectedOrderForAction?.orderNumber || ''}</span>
+          </div>
+        }
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Selecciona qué precuenta deseas imprimir:
+          </p>
+
+          {splitData?.persons?.map((person) => (
+            <button
+              key={person.personNumber}
+              onClick={() => handlePrintPersonPreBill(person, splitData.numberOfPeople)}
+              className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center font-bold text-lg">
+                    {person.personNumber}
+                  </span>
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      Persona {person.personNumber}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {person.items.length} {person.items.length === 1 ? 'item' : 'items'}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-gray-900">
+                    S/ {person.total.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+
+          <div className="border-t pt-4 mt-4 space-y-3">
+            <button
+              onClick={handlePrintAllSplitPreBills}
+              className="w-full p-3 border-2 border-primary-500 bg-primary-50 rounded-lg hover:border-primary-600 hover:bg-primary-100 transition-colors text-center"
+            >
+              <span className="text-primary-700 font-medium">
+                Imprimir Todas las Precuentas Divididas
+              </span>
+            </button>
+            <button
+              onClick={() => handlePrintPreBill(selectedOrderForAction)}
+              className="w-full p-3 border-2 border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"
+            >
+              <span className="text-gray-700 font-medium">
+                Imprimir Precuenta Completa (S/ {splitData?.total?.toFixed(2)})
+              </span>
+            </button>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPrintSplitModalOpen(false)
+                setSplitData(null)
+                setSelectedOrderForAction(null)
+              }}
+              className="flex-1"
+            >
+              Cerrar
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
