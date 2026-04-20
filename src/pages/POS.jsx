@@ -1653,6 +1653,9 @@ export default function POS() {
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {
     return products.filter(p => {
+      // Excluir productos desactivados (isActive === false).
+      // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
+      if (p.isActive === false) return false
       // Dividir búsqueda en palabras individuales para búsqueda flexible
       const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
 
@@ -1744,6 +1747,7 @@ export default function POS() {
       const searchLower = searchTerm.toLowerCase()
       const searchNoHyphens = searchLower.replace(/-/g, '')
       const exactMatches = products.filter(p => {
+        if (p.isActive === false) return false
         const code = p.code?.toLowerCase() || ''
         const sku = p.sku?.toLowerCase() || ''
         return code === searchLower || sku === searchLower ||

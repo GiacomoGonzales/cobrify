@@ -641,11 +641,13 @@ export default function CreateQuotation() {
 
   // Filtrar productos según búsqueda
   const getFilteredProducts = (searchTerm) => {
-    if (!searchTerm) return products.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
+    // Excluir productos desactivados (isActive === false) de las búsquedas.
+    const activeProducts = products.filter(p => p.isActive !== false)
+    if (!searchTerm) return activeProducts.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
 
     // Dividir búsqueda en palabras individuales para búsqueda flexible
     const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-    return products
+    return activeProducts
       .filter(p => {
         const searchableText = [p.name || '', p.code || '', p.sku || ''].join(' ').toLowerCase()
         // Verificar que TODAS las palabras estén presentes (en cualquier orden)

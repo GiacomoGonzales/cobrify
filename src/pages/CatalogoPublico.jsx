@@ -2169,6 +2169,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
+      // Excluir productos desactivados (isActive === false) del catálogo público.
+      if (product.isActive === false) return false
+
       const matchesSearch = !searchQuery ||
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description?.toLowerCase().includes(searchQuery.toLowerCase())
