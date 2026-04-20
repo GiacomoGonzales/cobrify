@@ -14,7 +14,7 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { updateTableAmount } from './tableService'
+import { updateTableAmount, updateTableServedStatus } from './tableService'
 import { getPrecuentaSnapshot, saveOrderModification } from './firestoreService'
 
 /**
@@ -328,6 +328,15 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
       updatedAt: serverTimestamp(),
     })
 
+    // Al agregar ítems nuevos (status 'pending'), la mesa deja de estar "todo servido"
+    if (orderData.tableId) {
+      try {
+        await updateTableServedStatus(businessId, orderData.tableId, false)
+      } catch (err) {
+        console.warn('No se pudo resetear allItemsServed de la mesa:', err)
+      }
+    }
+
     // Actualizar el monto en la mesa si existe tableId
     if (orderData.tableId) {
       const updateTableResult = await updateTableAmount(businessId, orderData.tableId, total)
@@ -391,7 +400,7 @@ export const updateItemStatus = async (businessId, orderId, itemId, newStatus) =
     })
 
     // Calcular el overallStatus basado en los estados de todos los items
-    const allDelivered = updatedItems.every(item => item.status === 'delivered')
+    const allDelivered = updatedItems.length > 0 && updatedItems.every(item => item.status === 'delivered')
     const overallStatus = allDelivered ? 'completed' : 'active'
 
     // Actualizar la orden
@@ -400,6 +409,15 @@ export const updateItemStatus = async (businessId, orderId, itemId, newStatus) =
       overallStatus,
       updatedAt: serverTimestamp(),
     })
+
+    // Reflejar en la mesa: allItemsServed para que la grilla muestre el indicador
+    if (orderData.tableId) {
+      try {
+        await updateTableServedStatus(businessId, orderData.tableId, allDelivered)
+      } catch (err) {
+        console.warn('No se pudo actualizar allItemsServed de la mesa:', err)
+      }
+    }
 
     return { success: true, overallStatus }
   } catch (error) {
@@ -457,6 +475,13 @@ export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy
       const updateTableResult = await updateTableAmount(businessId, orderData.tableId, total)
       if (!updateTableResult.success) {
         console.warn('No se pudo actualizar el monto de la mesa:', updateTableResult.error)
+      }
+      // Recalcular allItemsServed tras eliminar ítem
+      try {
+        const allDelivered = updatedItems.length > 0 && updatedItems.every(i => i.status === 'delivered')
+        await updateTableServedStatus(businessId, orderData.tableId, allDelivered)
+      } catch (err) {
+        console.warn('No se pudo actualizar allItemsServed de la mesa:', err)
       }
     }
 

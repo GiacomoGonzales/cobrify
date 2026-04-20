@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -23,6 +23,8 @@ export default function TableActionModal({
   onSplitTable,
   onPrintPreBill,
   onPrintKitchenTicket,
+  onToggleItemServed,
+  onMarkAllServed,
   waiters = [],
   availableTables = [],
 }) {
@@ -270,38 +272,83 @@ export default function TableActionModal({
                   </div>
                 </div>
 
-                {/* Vista previa del pedido */}
-                {order?.items?.length > 0 && (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => setShowOrderPreview(!showOrderPreview)}
-                      className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
-                    >
-                      <span className="text-gray-600 font-medium">
-                        Pedido ({order.items.length} {order.items.length === 1 ? 'item' : 'items'})
-                      </span>
-                      {showOrderPreview
-                        ? <ChevronUp className="w-4 h-4 text-gray-400" />
-                        : <ChevronDown className="w-4 h-4 text-gray-400" />
-                      }
-                    </button>
-                    {showOrderPreview && (
-                      <div className="px-3 py-2 max-h-40 overflow-y-auto divide-y divide-gray-100">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between py-1.5 text-sm">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-gray-400 font-medium shrink-0">{item.quantity}x</span>
-                              <span className="text-gray-700 truncate">{item.name}</span>
+                {/* Vista previa del pedido con tracking de "Servido" */}
+                {order?.items?.length > 0 && (() => {
+                  const servedCount = order.items.filter(i => i.status === 'delivered').length
+                  const totalCount = order.items.length
+                  const allServed = servedCount === totalCount && totalCount > 0
+                  return (
+                    <div className={`border rounded-lg overflow-hidden transition-colors ${allServed ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                      <button
+                        onClick={() => setShowOrderPreview(!showOrderPreview)}
+                        className={`w-full flex items-center justify-between px-3 py-2 transition-colors text-sm ${allServed ? 'bg-blue-50 hover:bg-blue-100' : 'bg-gray-50 hover:bg-gray-100'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-700 font-medium">
+                            Pedido ({totalCount} {totalCount === 1 ? 'item' : 'items'})
+                          </span>
+                          <Badge variant={allServed ? 'success' : servedCount > 0 ? 'warning' : 'default'} className="text-xs">
+                            Servidos: {servedCount}/{totalCount}
+                          </Badge>
+                        </div>
+                        {showOrderPreview
+                          ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                          : <ChevronDown className="w-4 h-4 text-gray-400" />
+                        }
+                      </button>
+                      {showOrderPreview && (
+                        <div>
+                          {/* Barra de progreso + botón marcar todos */}
+                          {!allServed && onMarkAllServed && (
+                            <div className="px-3 py-2 bg-white border-t border-gray-200 flex items-center justify-between gap-2">
+                              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-green-500 transition-all"
+                                  style={{ width: `${totalCount > 0 ? (servedCount / totalCount) * 100 : 0}%` }}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={onMarkAllServed}
+                                className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors whitespace-nowrap"
+                              >
+                                <Check className="w-3 h-3 inline mr-0.5" /> Marcar todos
+                              </button>
                             </div>
-                            <span className="text-gray-600 shrink-0 ml-2">
-                              S/ {((item.quantity || 1) * (item.price || item.unitPrice || 0)).toFixed(2)}
-                            </span>
+                          )}
+                          <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                            {order.items.map((item, idx) => {
+                              const isServed = item.status === 'delivered'
+                              return (
+                                <label
+                                  key={item.itemId || idx}
+                                  className={`flex items-center gap-2 py-2 px-3 text-sm cursor-pointer transition-colors ${isServed ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isServed}
+                                    onChange={() => onToggleItemServed && onToggleItemServed(item.itemId, isServed)}
+                                    disabled={!onToggleItemServed || !item.itemId}
+                                    className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 shrink-0"
+                                  />
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className={`font-medium shrink-0 ${isServed ? 'text-green-600' : 'text-gray-400'}`}>{item.quantity}x</span>
+                                    <span className={`truncate ${isServed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                                      {item.name}
+                                    </span>
+                                  </div>
+                                  <span className={`shrink-0 ml-2 ${isServed ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
+                                    S/ {((item.quantity || 1) * (item.price || item.unitPrice || 0)).toFixed(2)}
+                                  </span>
+                                </label>
+                              )
+                            })}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button

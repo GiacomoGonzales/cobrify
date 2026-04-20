@@ -36,7 +36,7 @@ import {
   splitTableItems,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
-import { getOrder, updateOrder } from '@/services/orderService'
+import { getOrder, updateOrder, updateItemStatus } from '@/services/orderService'
 import { getCompanySettings, getProductCategories, savePrecuentaSnapshot } from '@/services/firestoreService'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -524,6 +524,40 @@ export default function Tables() {
 
   const handleEditOrder = () => {
     setIsEditOrderModalOpen(true)
+  }
+
+  // Marcar/desmarcar un ítem como servido al cliente
+  const handleToggleItemServed = async (itemId, currentlyServed) => {
+    if (!selectedOrder?.id || !itemId) return
+    const newStatus = currentlyServed ? 'ready' : 'delivered'
+    try {
+      const result = await updateItemStatus(getBusinessId(), selectedOrder.id, itemId, newStatus)
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo actualizar el ítem')
+      }
+      // No hace falta refrescar manualmente: el onSnapshot de la orden actualiza el estado
+    } catch (err) {
+      console.error('Error toggling served:', err)
+      toast.error('Error al marcar como servido')
+    }
+  }
+
+  // Marcar TODOS los ítems pendientes como servidos
+  const handleMarkAllServed = async () => {
+    if (!selectedOrder?.id || !selectedOrder.items?.length) return
+    const pending = selectedOrder.items.filter(i => i.status !== 'delivered')
+    if (pending.length === 0) return
+    try {
+      await Promise.all(
+        pending.map(item =>
+          updateItemStatus(getBusinessId(), selectedOrder.id, item.itemId, 'delivered')
+        )
+      )
+      toast.success(`${pending.length} ítem(s) marcado(s) como servidos`)
+    } catch (err) {
+      console.error('Error marking all served:', err)
+      toast.error('Error al marcar todos como servidos')
+    }
   }
 
   const handleSplitBill = () => {
@@ -1357,9 +1391,11 @@ export default function Tables() {
                       <div key={table.id} className="relative group">
                         <div
                           onClick={() => handleTableClick(table)}
-                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all min-h-[180px] flex flex-col ${getStatusColor(
-                            table.status
-                          )}`}
+                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all min-h-[180px] flex flex-col ${
+                            table.status === 'occupied' && table.allItemsServed
+                              ? 'bg-blue-100 border-blue-400 hover:border-blue-500'
+                              : getStatusColor(table.status)
+                          }`}
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
@@ -1378,13 +1414,17 @@ export default function Tables() {
                             variant={
                               table.status === 'available'
                                 ? 'success'
+                                : table.status === 'occupied' && table.allItemsServed
+                                ? 'info'
                                 : table.status === 'occupied'
                                 ? 'danger'
                                 : 'warning'
                             }
                             className="mb-2 w-full justify-center"
                           >
-                            {getStatusText(table.status)}
+                            {table.status === 'occupied' && table.allItemsServed
+                              ? '✓ Todo servido'
+                              : getStatusText(table.status)}
                           </Badge>
 
                           {/* Mostrar nombre del mozo de forma prominente cuando la mesa está ocupada */}
@@ -1570,6 +1610,8 @@ export default function Tables() {
         onSplitTable={handleSplitTable}
         onPrintPreBill={handlePrintPreBill}
         onPrintKitchenTicket={handlePrintKitchenTicket}
+        onToggleItemServed={handleToggleItemServed}
+        onMarkAllServed={handleMarkAllServed}
       />
 
       {/* Modal para agregar items a la orden */}

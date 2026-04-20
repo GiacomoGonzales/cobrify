@@ -325,6 +325,25 @@ export const updateTableAmount = async (businessId, tableId, amount) => {
 }
 
 /**
+ * Actualizar el estado de "todos los platos servidos" de una mesa.
+ * Usado para que la grilla muestre un indicador visual cuando el mesero
+ * marcó todos los ítems del pedido como servidos.
+ */
+export const updateTableServedStatus = async (businessId, tableId, allItemsServed) => {
+  try {
+    const tableRef = doc(db, 'businesses', businessId, 'tables', tableId)
+    await updateDoc(tableRef, {
+      allItemsServed: !!allItemsServed,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar estado de servido:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Mover una orden a otra mesa
  */
 export const moveOrderToTable = async (businessId, sourceTableId, destinationTableId) => {
