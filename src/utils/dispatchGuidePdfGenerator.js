@@ -249,7 +249,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
-  const spacious = companySettings?.pdfSpacious === true
+  // Puede ser desactivado automáticamente si los items no caben en una sola hoja con espaciado
+  let spacious = companySettings?.pdfSpacious === true
 
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
@@ -758,8 +759,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     }
   })
 
-  const minRowHeight = spacious ? 26 : 20
-  const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
+  let minRowHeight = spacious ? 26 : 20
+  let lineHeight = spacious ? 10 : 9 // Altura por línea de texto
 
   // Función para calcular altura dinámica de cada item
   const pharmacyFontSize = 6
@@ -817,8 +818,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // Función para dibujar el encabezado de la tabla (se usa en cada página)
-  const tableHeaderHeight = spacious ? 22 : 18
-  const tableHeaderTextY = spacious ? 15 : 12
+  let tableHeaderHeight = spacious ? 22 : 18
+  let tableHeaderTextY = spacious ? 15 : 12
   const drawTableHeader = () => {
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(tableX, currentY, tableWidth, tableHeaderHeight, 'F')
@@ -969,6 +970,52 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text(item.unit || 'UNIDAD', itemColX + colWidths.unit/2, centerYRow, { align: 'center' })
 
     currentY += rowHeight
+  }
+
+  // Auto-ajuste de espaciado: si con "spacious" se requieren más páginas que con compacto,
+  // desactivar spacious para ahorrar hoja.
+  if (spacious && items.length > 0) {
+    const reservedBelowTable = 150 // transporte/observaciones + footer QR
+    const maxY = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT
+    const continuationHeaderOffset = 35 // header "(Continuación - Página N)" + separador
+
+    const estimatePages = () => {
+      let pages = 1
+      let y = currentY + tableHeaderHeight
+      const nextPageTop = MARGIN_TOP + continuationHeaderOffset + tableHeaderHeight
+      for (const it of items) {
+        const h = calculateItemHeight(it).height
+        if (y + h + 20 > maxY) {
+          pages++
+          y = nextPageTop
+        }
+        y += h
+      }
+      // Si no queda espacio para observaciones/transporte/QR en la última página → página extra
+      if (y + reservedBelowTable > maxY) pages++
+      return pages
+    }
+
+    const pagesSpacious = estimatePages()
+
+    // Simular modo compacto
+    spacious = false
+    minRowHeight = 20
+    lineHeight = 9
+    tableHeaderHeight = 18
+    tableHeaderTextY = 12
+
+    const pagesCompact = estimatePages()
+
+    if (pagesCompact >= pagesSpacious) {
+      // No gana páginas → revertir a spacious (preferencia del usuario)
+      spacious = true
+      minRowHeight = 26
+      lineHeight = 10
+      tableHeaderHeight = 22
+      tableHeaderTextY = 15
+    }
+    // Si pagesCompact < pagesSpacious, queda en compacto para este PDF (ahorra hojas)
   }
 
   // Dibujar el encabezado de la tabla inicial
