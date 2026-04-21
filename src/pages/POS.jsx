@@ -793,6 +793,8 @@ export default function POS() {
   const folioLoadedRef = useRef(false)
   // IDs de cargos del folio pendientes de marcar como facturados (persiste aunque el cart cambie)
   const pendingFolioChargeIdsRef = useRef([])
+  // Evita que loadBusinessData sobrescriba el documentType después de que el usuario lo cambió manualmente
+  const userChangedDocTypeRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -1503,7 +1505,10 @@ export default function POS() {
           const savedDraft = localStorage.getItem(draftKey)
           const hasDraft = savedDraft && JSON.parse(savedDraft)?.cart?.length > 0
 
-          if (!hasDraft && businessData.defaultDocumentType) {
+          // Solo aplicar el default si el usuario aún no cambió manualmente el tipo de documento.
+          // Evita race condition: el usuario abre el POS, cambia a "Factura", y cuando termina
+          // el fetch async de businessData se pisaba con "boleta" (default).
+          if (!hasDraft && businessData.defaultDocumentType && !userChangedDocTypeRef.current) {
             setDocumentType(businessData.defaultDocumentType)
           }
         }
@@ -2819,6 +2824,7 @@ export default function POS() {
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
+    userChangedDocTypeRef.current = false
     setDocumentType(companySettings?.defaultDocumentType || 'boleta')
     setOrderType('takeaway')
     setCustomerData({
@@ -5334,6 +5340,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <select
                     value={documentType}
                     onChange={e => {
+                      userChangedDocTypeRef.current = true
                       setDocumentType(e.target.value)
                       if (e.target.value !== 'nota_venta') {
                         setEnablePartialPayment(false)
