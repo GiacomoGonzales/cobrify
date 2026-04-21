@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -12,7 +12,7 @@ import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
-import { updateDispatchGuide } from '@/services/firestoreService'
+import { updateDispatchGuide, deleteDispatchGuide } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
 
 const TRANSFER_REASONS = {
@@ -86,7 +86,7 @@ const DEMO_GUIDES = [
 
 export default function DispatchGuides() {
   const navigate = useNavigate()
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user, businessMode } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
 
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
@@ -114,6 +114,8 @@ export default function DispatchGuides() {
 
   // Estado para anulación de guías
   const [voidingGuide, setVoidingGuide] = useState(null) // Guía seleccionada para anular
+  const [deletingGuide, setDeletingGuide] = useState(null) // Guía seleccionada para eliminar
+  const [isDeletingGuide, setIsDeletingGuide] = useState(false)
   const [isVoidingGuide, setIsVoidingGuide] = useState(false) // Proceso en curso
 
   // Helper para forzar descarga de archivos desde URL (XML, CDR)
@@ -522,6 +524,33 @@ export default function DispatchGuides() {
       setVoidingGuide(null)
       setVoidGuideReason('ANULACION DE GUIA DE REMISION')
       setIsVoidingGuide(false)
+    }
+  }
+
+  // Eliminar guía (solo si allowDeleteInvoices está activado y la guía NO fue aceptada por SUNAT)
+  const handleDeleteGuide = async () => {
+    if (!deletingGuide || isDeletingGuide) return
+    setIsDeletingGuide(true)
+    try {
+      if (isDemoMode) {
+        setGuides(prev => prev.filter(g => g.id !== deletingGuide.id))
+        toast.success(`Guía ${deletingGuide.number} eliminada (Demo)`)
+        return
+      }
+      const businessId = getBusinessId()
+      const result = await deleteDispatchGuide(businessId, deletingGuide.id)
+      if (result.success) {
+        setGuides(prev => prev.filter(g => g.id !== deletingGuide.id))
+        toast.success(`Guía ${deletingGuide.number} eliminada`)
+      } else {
+        toast.error(result.error || 'Error al eliminar la guía')
+      }
+    } catch (error) {
+      console.error('Error al eliminar guía:', error)
+      toast.error(`Error: ${error.message}`)
+    } finally {
+      setDeletingGuide(null)
+      setIsDeletingGuide(false)
     }
   }
 
@@ -1293,6 +1322,23 @@ export default function DispatchGuides() {
                       <span>Anular guía</span>
                     </button>
                   )}
+
+                  {/* Eliminar - Solo si está habilitado en Configuración Y NO fue aceptada por SUNAT */}
+                  {businessSettings?.allowDeleteInvoices && guide.sunatStatus !== 'accepted' && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setDeletingGuide(guide)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Eliminar</span>
+                      </button>
+                    </>
+                  )}
                 </>
               )
             })()}
@@ -1471,6 +1517,60 @@ export default function DispatchGuides() {
                   <>
                     <Ban className="w-4 h-4" />
                     Marcar como anulada
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Guide Modal */}
+      {deletingGuide && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Trash2 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Eliminar Guía de Remisión</h2>
+                  <p className="text-red-100 text-sm">{deletingGuide.number}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700">
+                Esta acción eliminará permanentemente la guía <strong>{deletingGuide.number}</strong>. No se podrá recuperar.
+              </p>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <strong>Importante:</strong> Eliminar el registro no revierte el descuento de stock si ya se había aplicado.
+                Si necesitás devolver el stock, usá la opción "Anular guía" o "Revertir descuento" antes de eliminar.
+              </div>
+            </div>
+            <div className="border-t px-6 py-4 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setDeletingGuide(null)}
+                disabled={isDeletingGuide}
+              >
+                Cancelar
+              </Button>
+              <button
+                onClick={handleDeleteGuide}
+                disabled={isDeletingGuide}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+              >
+                {isDeletingGuide ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
                   </>
                 )}
               </button>

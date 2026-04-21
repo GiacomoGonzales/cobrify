@@ -31,7 +31,7 @@ const formatTransferDate = (dateString) => {
 }
 
 export default function CarrierDispatchGuides() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [guides, setGuides] = useState([])
@@ -285,22 +285,27 @@ export default function CarrierDispatchGuides() {
     }
   }
 
-  // Eliminar borrador
+  // Eliminar guía (borrador o emitida no aceptada por SUNAT)
   const handleDeleteDraft = async (guide) => {
-    if (!confirm('¿Estás seguro de eliminar este borrador? Esta acción no se puede deshacer.')) return
+    const isDraft = guide.status === 'draft'
+    const label = isDraft ? 'borrador' : `la guía ${guide.number || ''}`
+    const confirmMsg = isDraft
+      ? '¿Estás seguro de eliminar este borrador? Esta acción no se puede deshacer.'
+      : `¿Estás seguro de eliminar ${label}? Esta acción no se puede deshacer y no revertirá descuentos de stock si los hubiera.`
+    if (!confirm(confirmMsg)) return
 
     try {
       const businessId = getBusinessId()
       const result = await deleteCarrierDispatchGuide(businessId, guide.id)
       if (result.success) {
-        toast.success('Borrador eliminado')
+        toast.success(isDraft ? 'Borrador eliminado' : 'Guía eliminada')
         setGuides(prev => prev.filter(g => g.id !== guide.id))
       } else {
         throw new Error(result.error || 'Error al eliminar')
       }
     } catch (error) {
-      console.error('Error al eliminar borrador:', error)
-      toast.error(error.message || 'Error al eliminar el borrador')
+      console.error('Error al eliminar:', error)
+      toast.error(error.message || 'Error al eliminar')
     }
   }
 
@@ -895,8 +900,8 @@ export default function CarrierDispatchGuides() {
                     </>
                   )}
 
-                  {/* Eliminar borrador */}
-                  {guide.status === 'draft' && (
+                  {/* Eliminar - siempre para borradores; para emitidas solo si está habilitado en Configuración y NO fue aceptada por SUNAT */}
+                  {(guide.status === 'draft' || (businessSettings?.allowDeleteInvoices && guide.sunatStatus !== 'accepted')) && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
                       <button
@@ -907,7 +912,7 @@ export default function CarrierDispatchGuides() {
                         className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
                       >
                         <Trash2 className="w-4 h-4" />
-                        <span>Eliminar borrador</span>
+                        <span>{guide.status === 'draft' ? 'Eliminar borrador' : 'Eliminar'}</span>
                       </button>
                     </>
                   )}
