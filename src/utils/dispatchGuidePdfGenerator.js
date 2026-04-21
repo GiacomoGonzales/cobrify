@@ -975,7 +975,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Auto-ajuste de espaciado: si con "spacious" se requieren más páginas que con compacto,
   // desactivar spacious para ahorrar hoja.
   if (spacious && items.length > 0) {
-    const reservedBelowTable = 150 // transporte/observaciones + footer QR
+    // Espacio requerido debajo del último item: transporte + observaciones + footer QR.
+    // En modo compacto el contenido de abajo ocupa menos (~120pt vs ~150pt en spacious).
+    const getReservedBelow = () => (spacious ? 150 : 120)
     const maxY = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT
     const continuationHeaderOffset = 35 // header "(Continuación - Página N)" + separador
 
@@ -983,16 +985,17 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       let pages = 1
       let y = currentY + tableHeaderHeight
       const nextPageTop = MARGIN_TOP + continuationHeaderOffset + tableHeaderHeight
-      for (const it of items) {
-        const h = calculateItemHeight(it).height
-        if (y + h + 20 > maxY) {
+      const reservedBelow = getReservedBelow()
+      for (let i = 0; i < items.length; i++) {
+        const h = calculateItemHeight(items[i]).height
+        const isLast = i === items.length - 1
+        const needed = h + 20 + (isLast ? reservedBelow : 0)
+        if (y + needed > maxY) {
           pages++
           y = nextPageTop
         }
         y += h
       }
-      // Si no queda espacio para observaciones/transporte/QR en la última página → página extra
-      if (y + reservedBelowTable > maxY) pages++
       return pages
     }
 
@@ -1030,7 +1033,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
-    const reserveSpace = isLastItem ? 150 : 0 // Solo transporte/observaciones, FOOTER_HEIGHT ya se maneja en checkPageBreak
+    // En compacto el bloque transporte+observaciones ocupa menos → reserva menor
+    const reserveSpace = isLastItem ? (spacious ? 150 : 120) : 0 // FOOTER_HEIGHT ya se maneja en checkPageBreak
 
     if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
       // Nueva página - redibujar encabezado de tabla
