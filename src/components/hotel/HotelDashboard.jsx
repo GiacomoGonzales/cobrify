@@ -266,14 +266,14 @@ export default function HotelDashboard({ getBusinessId, getRoutePrefix, isDemoMo
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
-        <Link to={`${routePrefix}/hotel-rooms`}>
+        <Link to={`${routePrefix}/habitaciones`}>
           <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors">
             <Home className="w-4 h-4" />
             Ir a Habitaciones
             <ArrowRight className="w-4 h-4" />
           </button>
         </Link>
-        <Link to={`${routePrefix}/hotel-reservations`}>
+        <Link to={`${routePrefix}/reservas`}>
           <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors">
             <ClipboardList className="w-4 h-4" />
             Ir a Reservas

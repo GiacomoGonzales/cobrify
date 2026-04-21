@@ -324,7 +324,7 @@ export default function HotelReservations() {
     setProcessingId(reservation.id)
     try {
       const businessId = getBusinessId()
-      const result = await checkIn(businessId, reservation.id)
+      const result = await checkIn(businessId, reservation.id, reservation.roomId)
       if (result.success) {
         toast.success(`Check-in realizado: ${reservation.guestName}`)
         loadData()
@@ -349,7 +349,7 @@ export default function HotelReservations() {
     setProcessingId(reservation.id)
     try {
       const businessId = getBusinessId()
-      const result = await checkOut(businessId, reservation.id)
+      const result = await checkOut(businessId, reservation.id, reservation.roomId)
       if (result.success) {
         toast.success(`Check-out realizado: ${reservation.guestName}`)
         loadData()
@@ -404,11 +404,15 @@ export default function HotelReservations() {
     setIsAddingCharge(true)
     try {
       const businessId = getBusinessId()
-      const result = await addCharge(businessId, folioReservation.id, {
+      const result = await addCharge(businessId, {
+        reservationId: folioReservation.id,
+        roomId: folioReservation.roomId,
+        roomNumber: folioReservation.roomNumber,
+        guestName: folioReservation.guestName,
+        chargeType: 'other',
         description: chargeDescription.trim(),
         amount: parseFloat(chargeAmount),
-        type: 'extra',
-        userId: user.uid,
+        createdBy: user?.uid || '',
       })
       if (result.success) {
         toast.success('Cargo agregado')
