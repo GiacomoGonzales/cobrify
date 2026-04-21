@@ -162,15 +162,13 @@ export default function HotelReservations() {
   const nights = calculateNights(watchCheckIn, watchCheckOut)
   const estimatedTotal = nights * (watchRate || 0)
 
-  // Auto-cargar tarifa al seleccionar habitación (si no se está editando o el usuario no ha tocado la tarifa)
+  // Auto-cargar tarifa al seleccionar habitación (se puede editar después para aplicar descuentos/promos)
   useEffect(() => {
     if (!watchRoomId) return
     const room = rooms.find(r => r.id === watchRoomId)
     if (!room) return
-    const roomRate = room.rate ?? room.ratePerNight ?? 0
-    if (roomRate > 0) {
-      setValue('ratePerNight', roomRate, { shouldValidate: true })
-    }
+    const roomRate = Number(room.rate ?? room.ratePerNight ?? 0)
+    setValue('ratePerNight', roomRate, { shouldValidate: true })
   }, [watchRoomId, rooms, setValue])
 
   // Búsqueda de cliente por DNI/RUC
@@ -907,14 +905,17 @@ export default function HotelReservations() {
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Tarifa por noche"
-                type="number"
-                step="0.01"
-                required
-                {...register('ratePerNight')}
-                error={errors.ratePerNight?.message}
-              />
+              <div>
+                <Input
+                  label="Tarifa por noche"
+                  type="number"
+                  step="0.01"
+                  required
+                  {...register('ratePerNight')}
+                  error={errors.ratePerNight?.message}
+                />
+                <p className="text-xs text-gray-400 mt-1">Se carga de la habitación. Editá para aplicar descuento o promo.</p>
+              </div>
               <div className="flex flex-col justify-end">
                 <p className="text-sm text-gray-500">
                   {nights > 0 ? `${nights} noche${nights > 1 ? 's' : ''}` : 'Seleccione fechas'}
