@@ -43,6 +43,7 @@ import {
   getReservationTotal,
 } from '@/services/hotelService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { upsertCustomerFromSale } from '@/services/firestoreService'
 
 // Schema
 const reservationSchema = z.object({
@@ -374,6 +375,17 @@ export default function HotelReservations() {
       }
 
       if (result.success) {
+        // Guardar/actualizar huésped en la base de clientes (solo en alta o edición con documento)
+        if (data.documentNumber?.trim()) {
+          upsertCustomerFromSale(businessId, {
+            documentType: data.documentType === 'RUC' ? 'RUC' : 'DNI',
+            documentNumber: data.documentNumber.trim(),
+            name: data.guestName || '',
+            businessName: data.documentType === 'RUC' ? data.guestName : '',
+            email: data.email || '',
+            phone: data.phone || '',
+          }).catch(err => console.warn('No se pudo sincronizar huésped:', err))
+        }
         toast.success(editingReservation ? 'Reserva actualizada' : 'Reserva creada')
         setIsModalOpen(false)
         loadData()
