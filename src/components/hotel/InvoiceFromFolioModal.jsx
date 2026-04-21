@@ -106,16 +106,19 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
       if (customerDocType === 'DNI' && customerDocNumber.length === 8) {
         const result = await consultarDNI(customerDocNumber)
         if (result.success && result.data) {
-          setCustomerName(result.data.nombre_completo || result.data.nombre || '')
+          const name = result.data.nombreCompleto
+            || `${result.data.nombres || ''} ${result.data.apellidoPaterno || ''} ${result.data.apellidoMaterno || ''}`.trim()
+          setCustomerName(name)
         } else {
           toast.error(result.error || 'No se encontró el DNI')
         }
       } else if (customerDocType === 'RUC' && customerDocNumber.length === 11) {
         const result = await consultarRUC(customerDocNumber)
         if (result.success && result.data) {
-          setCustomerBusinessName(result.data.razon_social || result.data.nombre_o_razon_social || '')
-          setCustomerName(result.data.razon_social || result.data.nombre_o_razon_social || '')
-          setCustomerAddress(result.data.direccion || result.data.direccion_completa || '')
+          const name = result.data.razonSocial || result.data.nombreComercial || ''
+          setCustomerBusinessName(name)
+          setCustomerName(name)
+          setCustomerAddress(result.data.direccion || '')
         } else {
           toast.error(result.error || 'No se encontró el RUC')
         }

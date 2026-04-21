@@ -184,18 +184,27 @@ export default function HotelReservations() {
       if (watchDocType === 'DNI' && watchDocNumber.length === 8) {
         const result = await consultarDNI(watchDocNumber)
         if (result.success && result.data) {
-          const name = result.data.nombre_completo || result.data.nombre || ''
-          setValue('guestName', name, { shouldValidate: true })
-          toast.success('Huésped encontrado')
+          const name = result.data.nombreCompleto
+            || `${result.data.nombres || ''} ${result.data.apellidoPaterno || ''} ${result.data.apellidoMaterno || ''}`.trim()
+          if (name) {
+            setValue('guestName', name, { shouldValidate: true })
+            toast.success('Huésped encontrado')
+          } else {
+            toast.error('No se pudo obtener el nombre del DNI')
+          }
         } else {
           toast.error(result.error || 'No se encontró el DNI')
         }
       } else if (watchDocType === 'RUC' && watchDocNumber.length === 11) {
         const result = await consultarRUC(watchDocNumber)
         if (result.success && result.data) {
-          const name = result.data.razon_social || result.data.nombre_o_razon_social || ''
-          setValue('guestName', name, { shouldValidate: true })
-          toast.success('Empresa encontrada')
+          const name = result.data.razonSocial || result.data.nombreComercial || ''
+          if (name) {
+            setValue('guestName', name, { shouldValidate: true })
+            toast.success('Empresa encontrada')
+          } else {
+            toast.error('No se pudo obtener la razón social del RUC')
+          }
         } else {
           toast.error(result.error || 'No se encontró el RUC')
         }
