@@ -95,19 +95,39 @@ export const updateRoomStatus = async (businessId, roomId, status) => {
 export const createReservation = async (businessId, reservationData) => {
   try {
     const reservationsRef = collection(db, 'businesses', businessId, 'hotelReservations')
+    // Aceptar tanto nombres canónicos (guestDocument/checkIn) como los del form (documentNumber/checkInDate)
+    const guestDocument = reservationData.guestDocument || reservationData.documentNumber || ''
+    const guestDocumentType = reservationData.guestDocumentType || reservationData.documentType || 'DNI'
+    const guestPhone = reservationData.guestPhone || reservationData.phone || ''
+    const guestEmail = reservationData.guestEmail || reservationData.email || ''
+    const checkIn = reservationData.checkIn || reservationData.checkInDate || ''
+    const checkOut = reservationData.checkOut || reservationData.checkOutDate || ''
+    const totalAmount = reservationData.totalAmount || reservationData.total || 0
+
     const newReservation = {
       guestName: reservationData.guestName || '',
-      guestDocument: reservationData.guestDocument || '',
-      guestDocumentType: reservationData.guestDocumentType || 'DNI',
-      guestPhone: reservationData.guestPhone || '',
-      guestEmail: reservationData.guestEmail || '',
+      // Canónico
+      guestDocument,
+      guestDocumentType,
+      guestPhone,
+      guestEmail,
+      checkIn,
+      checkOut,
+      // Alias form-friendly (para que la UI pueda leer cualquiera de los dos)
+      documentNumber: guestDocument,
+      documentType: guestDocumentType,
+      phone: guestPhone,
+      email: guestEmail,
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      // Resto
       roomId: reservationData.roomId || '',
       roomNumber: reservationData.roomNumber || '',
-      checkIn: reservationData.checkIn || '',
-      checkOut: reservationData.checkOut || '',
+      roomName: reservationData.roomName || '',
       nights: reservationData.nights || 0,
       ratePerNight: reservationData.ratePerNight || 0,
-      totalAmount: reservationData.totalAmount || 0,
+      totalAmount,
+      total: totalAmount,
       status: 'confirmed', // confirmed, checked_in, checked_out, cancelled, no_show
       notes: reservationData.notes || '',
       extras: reservationData.extras || [],

@@ -328,18 +328,17 @@ export default function HotelReservations() {
   // Open edit modal
   const openEditModal = (reservation) => {
     setEditingReservation(reservation)
-    const ciDate = reservation.checkInDate?.toDate
-      ? reservation.checkInDate.toDate().toISOString().split('T')[0]
-      : reservation.checkInDate
-    const coDate = reservation.checkOutDate?.toDate
-      ? reservation.checkOutDate.toDate().toISOString().split('T')[0]
-      : reservation.checkOutDate
+    // Soportar dos formatos: nombres del form (checkInDate/documentNumber/...) y nombres del service (checkIn/guestDocument/...)
+    const rawCheckIn = reservation.checkInDate ?? reservation.checkIn
+    const rawCheckOut = reservation.checkOutDate ?? reservation.checkOut
+    const ciDate = rawCheckIn?.toDate ? rawCheckIn.toDate().toISOString().split('T')[0] : rawCheckIn
+    const coDate = rawCheckOut?.toDate ? rawCheckOut.toDate().toISOString().split('T')[0] : rawCheckOut
     reset({
       guestName: reservation.guestName || '',
-      documentType: reservation.documentType || 'DNI',
-      documentNumber: reservation.documentNumber || '',
-      phone: reservation.phone || '',
-      email: reservation.email || '',
+      documentType: reservation.documentType || reservation.guestDocumentType || 'DNI',
+      documentNumber: reservation.documentNumber || reservation.guestDocument || '',
+      phone: reservation.phone || reservation.guestPhone || '',
+      email: reservation.email || reservation.guestEmail || '',
       roomId: reservation.roomId || '',
       checkInDate: ciDate || '',
       checkOutDate: coDate || '',
@@ -358,12 +357,34 @@ export default function HotelReservations() {
       const businessId = getBusinessId()
       const room = rooms.find(r => r.id === data.roomId)
       const nightsCount = calculateNights(data.checkInDate, data.checkOutDate)
+      const totalAmount = nightsCount * data.ratePerNight
+      // Mapear al formato que espera el service (guestDocument, checkIn, ...) manteniendo también los nombres del form
       const payload = {
-        ...data,
+        // Form-friendly (para display/edit sin re-mapear)
+        guestName: data.guestName,
+        documentType: data.documentType,
+        documentNumber: data.documentNumber,
+        phone: data.phone || '',
+        email: data.email || '',
+        checkInDate: data.checkInDate,
+        checkOutDate: data.checkOutDate,
+        // Service-friendly (lo que createReservation/folio esperan)
+        guestDocument: data.documentNumber,
+        guestDocumentType: data.documentType,
+        guestPhone: data.phone || '',
+        guestEmail: data.email || '',
+        checkIn: data.checkInDate,
+        checkOut: data.checkOutDate,
+        // Room info
+        roomId: data.roomId,
         roomName: room?.name || '',
         roomNumber: room?.number || '',
+        // Totals
         nights: nightsCount,
-        total: nightsCount * data.ratePerNight,
+        ratePerNight: data.ratePerNight,
+        totalAmount,
+        total: totalAmount,
+        notes: data.notes || '',
         status: editingReservation?.status || 'confirmed',
       }
 
