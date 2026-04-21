@@ -131,6 +131,10 @@ export default function HotelReservations() {
   // Document lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
 
+  // Flujo guiado de cobro antes del check-out
+  const [pendingCheckOut, setPendingCheckOut] = useState(null) // { reservation, charges, total }
+  const [showInvoiceBeforeCheckout, setShowInvoiceBeforeCheckout] = useState(false)
+
   const {
     register,
     handleSubmit,
@@ -447,8 +451,8 @@ export default function HotelReservations() {
     }
   }
 
-  // Check-out
-  const handleCheckOut = async (reservation) => {
+  // Ejecuta el check-out real (después de cobrar o si no hay cargos)
+  const executeCheckOut = async (reservation) => {
     if (isDemoMode) {
       setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, status: 'checked_out' } : r))
       toast.success(`Check-out realizado: ${reservation.guestName} (DEMO)`)
@@ -470,6 +474,62 @@ export default function HotelReservations() {
     } finally {
       setProcessingId(null)
     }
+  }
+
+  // Check-out guiado: si hay cargos pendientes, cobrar primero
+  const handleCheckOut = async (reservation) => {
+    setProcessingId(reservation.id)
+    try {
+      // Cargar cargos del folio
+      let charges = []
+      let total = 0
+      if (isDemoMode) {
+        charges = (demoData?.hotelFolioCharges || []).filter(c => c.reservationId === reservation.id)
+        total = charges.reduce((s, c) => s + (c.amount || 0), 0)
+      } else {
+        const businessId = getBusinessId()
+        const [chargesResult, totalResult] = await Promise.all([
+          getChargesByReservation(businessId, reservation.id),
+          getReservationTotal(businessId, reservation.id),
+        ])
+        if (chargesResult.success) charges = chargesResult.data || []
+        if (totalResult.success) total = totalResult.data || 0
+      }
+
+      if (charges.length > 0 && total > 0) {
+        // Hay cargos pendientes → abrir modal para cobrar
+        setPendingCheckOut({ reservation, charges, total })
+        setShowInvoiceBeforeCheckout(true)
+        setProcessingId(null)
+        return
+      }
+
+      // Sin cargos → confirmar y hacer check-out directo
+      setProcessingId(null)
+      if (!window.confirm(`No hay cargos pendientes en el folio de ${reservation.guestName}. ¿Confirmar check-out?`)) {
+        return
+      }
+      setProcessingId(reservation.id)
+      await executeCheckOut(reservation)
+    } catch (error) {
+      console.error('Error en check-out guiado:', error)
+      toast.error('Error al preparar check-out')
+      setProcessingId(null)
+    }
+  }
+
+  // Después de generar comprobante → ejecutar check-out
+  const handleInvoiceCreatedBeforeCheckout = async () => {
+    if (!pendingCheckOut) return
+    setShowInvoiceBeforeCheckout(false)
+    const { reservation } = pendingCheckOut
+    await executeCheckOut(reservation)
+    setPendingCheckOut(null)
+  }
+
+  const handleCancelInvoiceBeforeCheckout = () => {
+    setShowInvoiceBeforeCheckout(false)
+    setPendingCheckOut(null)
   }
 
   // Open folio
@@ -1118,6 +1178,16 @@ export default function HotelReservations() {
         onInvoiceCreated={() => {
           setShowInvoiceModal(false)
         }}
+      />
+
+      {/* Modal de cobro antes del check-out */}
+      <InvoiceFromFolioModal
+        isOpen={showInvoiceBeforeCheckout}
+        onClose={handleCancelInvoiceBeforeCheckout}
+        reservation={pendingCheckOut?.reservation}
+        charges={pendingCheckOut?.charges || []}
+        total={pendingCheckOut?.total || 0}
+        onInvoiceCreated={handleInvoiceCreatedBeforeCheckout}
       />
     </div>
   )

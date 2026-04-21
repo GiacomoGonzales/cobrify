@@ -8,7 +8,8 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut } from '@/services/hotelService'
+import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut, getChargesByReservation, getReservationTotal } from '@/services/hotelService'
+import InvoiceFromFolioModal from '@/components/hotel/InvoiceFromFolioModal'
 
 const STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'bg-green-500', bg: 'bg-green-50 border-green-300', text: 'text-green-700', icon: CheckCircle, iconColor: 'text-green-500' },
@@ -56,6 +57,9 @@ export default function HotelRooms() {
   const [selectedRoom, setSelectedRoom] = useState(null)
   const [isChangingStatus, setIsChangingStatus] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  // Flujo guiado de cobro antes del check-out
+  const [pendingCheckOut, setPendingCheckOut] = useState(null) // { reservation, roomId, charges, total }
+  const [showInvoiceBeforeCheckout, setShowInvoiceBeforeCheckout] = useState(false)
   // Modal de configuración (crear/editar)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState(null)
@@ -143,38 +147,95 @@ export default function HotelRooms() {
     appNavigate('/pos')
   }
 
-  // Check-out desde el detalle de habitación
-  const handleQuickCheckOut = async (guest) => {
-    if (!selectedRoom || !guest) return
-    if (!window.confirm(`¿Confirmar check-out de ${guest.guestName}? La habitación pasará a limpieza.`)) return
-
+  // Ejecutar el check-out real (después de cobrar o si no hay cargos)
+  const executeCheckOut = async (guest, roomId) => {
     setIsCheckingOut(true)
     try {
       if (isDemoMode) {
         setRooms(prev => prev.map(r =>
-          r.id === selectedRoom.id ? { ...r, status: 'cleaning' } : r
+          r.id === roomId ? { ...r, status: 'cleaning' } : r
         ))
         setActiveReservations(prev => prev.map(r =>
           r.id === guest.id ? { ...r, status: 'checked_out' } : r
         ))
-        setSelectedRoom(prev => ({ ...prev, status: 'cleaning' }))
+        setSelectedRoom(prev => prev && prev.id === roomId ? { ...prev, status: 'cleaning' } : prev)
         toast.success(`Check-out realizado: ${guest.guestName} (DEMO)`)
-        return
+        return true
       }
       const businessId = getBusinessId()
-      const result = await checkOut(businessId, guest.id, selectedRoom.id)
+      const result = await checkOut(businessId, guest.id, roomId)
       if (result.success) {
         toast.success(`Check-out realizado: ${guest.guestName}`)
         await loadRooms()
-        setSelectedRoom(prev => ({ ...prev, status: 'cleaning' }))
+        setSelectedRoom(prev => prev && prev.id === roomId ? { ...prev, status: 'cleaning' } : prev)
+        return true
       } else {
         toast.error(result.error || 'Error en check-out')
+        return false
       }
     } catch (error) {
       toast.error('Error en check-out')
+      return false
     } finally {
       setIsCheckingOut(false)
     }
+  }
+
+  // Check-out guiado: si hay cargos pendientes, cobrar primero; si no, confirmar y hacer check-out
+  const handleQuickCheckOut = async (guest) => {
+    if (!selectedRoom || !guest) return
+    setIsCheckingOut(true)
+    try {
+      // Cargar cargos del folio
+      let charges = []
+      let total = 0
+      if (isDemoMode) {
+        charges = (demoData?.hotelFolioCharges || []).filter(c => c.reservationId === guest.id)
+        total = charges.reduce((s, c) => s + (c.amount || 0), 0)
+      } else {
+        const businessId = getBusinessId()
+        const [chargesResult, totalResult] = await Promise.all([
+          getChargesByReservation(businessId, guest.id),
+          getReservationTotal(businessId, guest.id),
+        ])
+        if (chargesResult.success) charges = chargesResult.data || []
+        if (totalResult.success) total = totalResult.data || 0
+      }
+
+      if (charges.length > 0 && total > 0) {
+        // Hay cargos pendientes → abrir modal para cobrar
+        setPendingCheckOut({ reservation: guest, roomId: selectedRoom.id, charges, total })
+        setShowInvoiceBeforeCheckout(true)
+        setIsCheckingOut(false)
+        return
+      }
+
+      // Sin cargos → confirmar y hacer check-out directo
+      if (!window.confirm(`No hay cargos pendientes en el folio de ${guest.guestName}. ¿Confirmar check-out?`)) {
+        setIsCheckingOut(false)
+        return
+      }
+      await executeCheckOut(guest, selectedRoom.id)
+    } catch (error) {
+      console.error('Error en check-out guiado:', error)
+      toast.error('Error al preparar check-out')
+      setIsCheckingOut(false)
+    }
+  }
+
+  // Después de generar el comprobante → ejecutar check-out
+  const handleInvoiceCreatedBeforeCheckout = async () => {
+    if (!pendingCheckOut) return
+    setShowInvoiceBeforeCheckout(false)
+    const { reservation, roomId } = pendingCheckOut
+    await executeCheckOut(reservation, roomId)
+    setPendingCheckOut(null)
+  }
+
+  // Cancelar el flujo de cobro (cierra modal sin hacer check-out)
+  const handleCancelInvoiceBeforeCheckout = () => {
+    setShowInvoiceBeforeCheckout(false)
+    setPendingCheckOut(null)
   }
 
   const handleStatusChange = async (newStatus) => {
@@ -727,6 +788,16 @@ export default function HotelRooms() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de cobro antes del check-out */}
+      <InvoiceFromFolioModal
+        isOpen={showInvoiceBeforeCheckout}
+        onClose={handleCancelInvoiceBeforeCheckout}
+        reservation={pendingCheckOut?.reservation}
+        charges={pendingCheckOut?.charges || []}
+        total={pendingCheckOut?.total || 0}
+        onInvoiceCreated={handleInvoiceCreatedBeforeCheckout}
+      />
     </div>
   )
 }
