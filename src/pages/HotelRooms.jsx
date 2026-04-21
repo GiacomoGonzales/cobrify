@@ -8,10 +8,10 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut, getChargesByReservation, getReservationTotal, createReservation, checkIn } from '@/services/hotelService'
-import InvoiceFromFolioModal from '@/components/hotel/InvoiceFromFolioModal'
-import { upsertCustomerFromSale } from '@/services/firestoreService'
+import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut, getChargesByReservation, getReservationTotal, createReservation, checkIn, deleteCharge } from '@/services/hotelService'
+import { upsertCustomerFromSale, getCustomerByDocumentNumber } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { formatCurrency } from '@/lib/utils'
 
 const STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'bg-green-500', bg: 'bg-green-50 border-green-300', text: 'text-green-700', icon: CheckCircle, iconColor: 'text-green-500' },
@@ -59,9 +59,11 @@ export default function HotelRooms() {
   const [selectedRoom, setSelectedRoom] = useState(null)
   const [isChangingStatus, setIsChangingStatus] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  // Folio del huésped (se carga al abrir el detalle de una habitación ocupada)
+  const [roomFolioCharges, setRoomFolioCharges] = useState([])
+  const [roomFolioTotal, setRoomFolioTotal] = useState(0)
+  const [isFolioLoading, setIsFolioLoading] = useState(false)
   // Flujo guiado de cobro antes del check-out
-  const [pendingCheckOut, setPendingCheckOut] = useState(null) // { reservation, roomId, charges, total }
-  const [showInvoiceBeforeCheckout, setShowInvoiceBeforeCheckout] = useState(false)
   // Check-in rápido
   const [isQuickCheckInOpen, setIsQuickCheckInOpen] = useState(false)
   const [quickForm, setQuickForm] = useState({
@@ -110,6 +112,45 @@ export default function HotelRooms() {
   useEffect(() => {
     loadRooms()
   }, [user, isDemoMode])
+
+  // Cargar folio cuando se abre una habitación ocupada
+  useEffect(() => {
+    if (!selectedRoom || selectedRoom.status !== 'occupied') {
+      setRoomFolioCharges([])
+      setRoomFolioTotal(0)
+      return
+    }
+    const guest = getGuestForRoom(selectedRoom.id)
+    if (!guest) {
+      setRoomFolioCharges([])
+      setRoomFolioTotal(0)
+      return
+    }
+
+    const loadFolio = async () => {
+      setIsFolioLoading(true)
+      try {
+        if (isDemoMode) {
+          const charges = (demoData?.hotelFolioCharges || []).filter(c => c.reservationId === guest.id)
+          setRoomFolioCharges(charges)
+          setRoomFolioTotal(charges.reduce((s, c) => s + (c.amount || 0), 0))
+          return
+        }
+        const businessId = getBusinessId()
+        const [chargesResult, totalResult] = await Promise.all([
+          getChargesByReservation(businessId, guest.id),
+          getReservationTotal(businessId, guest.id),
+        ])
+        if (chargesResult.success) setRoomFolioCharges(chargesResult.data || [])
+        if (totalResult.success) setRoomFolioTotal(totalResult.data || 0)
+      } catch (error) {
+        console.error('Error al cargar folio de habitación:', error)
+      } finally {
+        setIsFolioLoading(false)
+      }
+    }
+    loadFolio()
+  }, [selectedRoom, activeReservations]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadRooms = async () => {
     if (!user?.uid && !isDemoMode) return
@@ -174,35 +215,55 @@ export default function HotelRooms() {
     setIsQuickCheckInOpen(false)
   }
 
-  // Búsqueda de huésped por DNI/RUC
+  // Búsqueda de huésped: primero en Clientes registrados, luego RENIEC/SUNAT
   const handleQuickLookup = async () => {
-    if (!quickForm.documentNumber) {
+    const docNumber = quickForm.documentNumber?.trim()
+    if (!docNumber) {
       toast.error('Ingrese el número de documento')
       return
     }
     setIsLookingUp(true)
     try {
-      if (quickForm.documentType === 'DNI' && quickForm.documentNumber.length === 8) {
-        const result = await consultarDNI(quickForm.documentNumber)
+      // 1. Buscar primero en clientes locales
+      if (!isDemoMode && user?.uid) {
+        const businessId = getBusinessId()
+        const localResult = await getCustomerByDocumentNumber(businessId, docNumber)
+        if (localResult.success && localResult.data) {
+          const c = localResult.data
+          setQuickForm(prev => ({
+            ...prev,
+            guestName: c.businessName || c.name || prev.guestName,
+            phone: c.phone || prev.phone,
+            email: c.email || prev.email,
+            documentType: c.documentType || prev.documentType,
+          }))
+          toast.success('Huésped ya registrado, datos cargados')
+          return
+        }
+      }
+
+      // 2. Si no existe localmente, consultar RENIEC/SUNAT
+      if (quickForm.documentType === 'DNI' && docNumber.length === 8) {
+        const result = await consultarDNI(docNumber)
         if (result.success && result.data) {
           const name = result.data.nombreCompleto
             || `${result.data.nombres || ''} ${result.data.apellidoPaterno || ''} ${result.data.apellidoMaterno || ''}`.trim()
           if (name) {
             setQuickForm(prev => ({ ...prev, guestName: name }))
-            toast.success('Huésped encontrado')
+            toast.success('Huésped encontrado en RENIEC')
           } else {
             toast.error('No se pudo obtener el nombre del DNI')
           }
         } else {
           toast.error(result.error || 'No se encontró el DNI')
         }
-      } else if (quickForm.documentType === 'RUC' && quickForm.documentNumber.length === 11) {
-        const result = await consultarRUC(quickForm.documentNumber)
+      } else if (quickForm.documentType === 'RUC' && docNumber.length === 11) {
+        const result = await consultarRUC(docNumber)
         if (result.success && result.data) {
           const name = result.data.razonSocial || result.data.nombreComercial || ''
           if (name) {
             setQuickForm(prev => ({ ...prev, guestName: name }))
-            toast.success('Empresa encontrada')
+            toast.success('Empresa encontrada en SUNAT')
           } else {
             toast.error('No se pudo obtener la razón social')
           }
@@ -212,7 +273,8 @@ export default function HotelRooms() {
       } else {
         toast.error(quickForm.documentType === 'DNI' ? 'DNI debe tener 8 dígitos' : quickForm.documentType === 'RUC' ? 'RUC debe tener 11 dígitos' : 'Búsqueda solo disponible para DNI o RUC')
       }
-    } catch {
+    } catch (error) {
+      console.error('Error al buscar huésped:', error)
       toast.error('Error al consultar documento')
     } finally {
       setIsLookingUp(false)
@@ -346,37 +408,64 @@ export default function HotelRooms() {
     }
   }
 
-  // Check-out guiado: si hay cargos pendientes, cobrar primero; si no, confirmar y hacer check-out
+  // Check-out guiado: preguntar qué hacer con cargos pendientes (cobrar o descartar)
   const handleQuickCheckOut = async (guest) => {
     if (!selectedRoom || !guest) return
     setIsCheckingOut(true)
     try {
       // Cargar cargos del folio
       let charges = []
-      let total = 0
       if (isDemoMode) {
         charges = (demoData?.hotelFolioCharges || []).filter(c => c.reservationId === guest.id)
-        total = charges.reduce((s, c) => s + (c.amount || 0), 0)
       } else {
         const businessId = getBusinessId()
-        const [chargesResult, totalResult] = await Promise.all([
-          getChargesByReservation(businessId, guest.id),
-          getReservationTotal(businessId, guest.id),
-        ])
+        const chargesResult = await getChargesByReservation(businessId, guest.id)
         if (chargesResult.success) charges = chargesResult.data || []
-        if (totalResult.success) total = totalResult.data || 0
       }
 
-      if (charges.length > 0 && total > 0) {
-        // Hay cargos pendientes → abrir modal para cobrar
-        setPendingCheckOut({ reservation: guest, roomId: selectedRoom.id, charges, total })
-        setShowInvoiceBeforeCheckout(true)
-        setIsCheckingOut(false)
+      const pending = charges.filter(c => !c.invoiceId)
+      const pendingTotal = pending.reduce((s, c) => s + (c.amount || 0), 0)
+
+      if (pending.length > 0 && pendingTotal > 0) {
+        const summary = pending.map(c => `• ${c.description}: S/ ${(c.amount || 0).toFixed(2)}`).join('\n')
+        const msg = `Hay ${pending.length} cargo(s) sin cobrar por S/ ${pendingTotal.toFixed(2)}:\n\n${summary}\n\n¿Cobrarlos ahora en el POS?\n\n[Aceptar] → Ir al POS\n[Cancelar] → Descartar del folio y hacer check-out`
+        const goToPOS = window.confirm(msg)
+        if (goToPOS) {
+          setIsCheckingOut(false)
+          setSelectedRoom(null)
+          appNavigate('/pos', {
+            state: {
+              fromFolio: true,
+              reservationId: guest.id,
+              items: pending,
+              customer: {
+                documentType: guest.documentType || guest.guestDocumentType || 'DNI',
+                documentNumber: guest.documentNumber || guest.guestDocument || '',
+                name: guest.guestName || '',
+                email: guest.email || guest.guestEmail || '',
+                phone: guest.phone || guest.guestPhone || '',
+              },
+              reservationNote: `Folio de ${guest.guestName} · Hab. ${selectedRoom.number}`,
+            },
+          })
+          return
+        }
+        // Descartar del folio
+        if (!isDemoMode) {
+          const businessId = getBusinessId()
+          for (const c of pending) {
+            try { await deleteCharge(businessId, c.id) } catch (e) { console.warn('No se pudo eliminar cargo', c.id, e) }
+          }
+        }
+        await executeCheckOut(guest, selectedRoom.id)
         return
       }
 
-      // Sin cargos → confirmar y hacer check-out directo
-      if (!window.confirm(`No hay cargos pendientes en el folio de ${guest.guestName}. ¿Confirmar check-out?`)) {
+      // Sin pendientes → confirmar y check-out directo
+      const confirmMsg = charges.length > 0
+        ? `Todos los cargos ya fueron facturados. ¿Confirmar check-out de ${guest.guestName}?`
+        : `No hay cargos registrados en el folio de ${guest.guestName}. ¿Confirmar check-out?`
+      if (!window.confirm(confirmMsg)) {
         setIsCheckingOut(false)
         return
       }
@@ -386,21 +475,6 @@ export default function HotelRooms() {
       toast.error('Error al preparar check-out')
       setIsCheckingOut(false)
     }
-  }
-
-  // Después de generar el comprobante → ejecutar check-out
-  const handleInvoiceCreatedBeforeCheckout = async () => {
-    if (!pendingCheckOut) return
-    setShowInvoiceBeforeCheckout(false)
-    const { reservation, roomId } = pendingCheckOut
-    await executeCheckOut(reservation, roomId)
-    setPendingCheckOut(null)
-  }
-
-  // Cancelar el flujo de cobro (cierra modal sin hacer check-out)
-  const handleCancelInvoiceBeforeCheckout = () => {
-    setShowInvoiceBeforeCheckout(false)
-    setPendingCheckOut(null)
   }
 
   const handleStatusChange = async (newStatus) => {
@@ -648,24 +722,43 @@ export default function HotelRooms() {
                 {/* Status indicator dot */}
                 <div className={`absolute top-2.5 right-2.5 w-3 h-3 rounded-full ${statusCfg.color} ring-2 ring-white`} />
 
-                {/* Room number */}
+                {/* Room number + name */}
                 <p className="text-2xl font-bold text-gray-800 leading-none">{room.number}</p>
+                {room.name && (
+                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">{room.name}</p>
+                )}
 
-                {/* Type */}
-                <p className="text-xs font-medium text-gray-500 mt-1">{typeLabel}</p>
+                {/* Type · Piso · Capacidad */}
+                <div className="flex items-center flex-wrap gap-x-1.5 mt-1 text-[11px] text-gray-500">
+                  <span className="font-medium">{typeLabel}</span>
+                  {room.floor && <span>· Piso {room.floor}</span>}
+                  {room.capacity && (
+                    <span className="flex items-center gap-0.5">
+                      · <Users className="w-3 h-3" />{room.capacity}
+                    </span>
+                  )}
+                </div>
 
-                {/* Guest name if occupied */}
+                {/* Huésped + fecha salida si ocupada */}
                 {guest && (
-                  <div className="flex items-center gap-1 mt-2 bg-white/60 rounded px-1.5 py-0.5">
-                    <User className="w-3 h-3 text-gray-500 flex-shrink-0" />
-                    <p className="text-[11px] text-gray-700 font-medium truncate">{guest.guestName}</p>
+                  <div className="mt-2 bg-white/70 rounded px-1.5 py-1 space-y-0.5">
+                    <div className="flex items-center gap-1">
+                      <User className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                      <p className="text-[11px] text-gray-800 font-semibold truncate">{guest.guestName}</p>
+                    </div>
+                    {(guest.checkOut || guest.checkOutDate) && (
+                      <p className="text-[10px] text-gray-500 flex items-center gap-0.5">
+                        <LogOut className="w-2.5 h-2.5" />
+                        Sale: {formatDate(guest.checkOut || guest.checkOutDate)}
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {/* Rate */}
-                <p className="text-xs font-semibold text-gray-600 mt-2">
+                {/* Tarifa */}
+                <p className="text-xs font-semibold text-gray-700 mt-2">
                   S/ {(room.rate || room.ratePerNight || 0).toFixed(0)}
-                  <span className="font-normal text-gray-400"> /n</span>
+                  <span className="font-normal text-gray-400"> /noche</span>
                 </p>
 
                 {/* Status badge */}
@@ -756,42 +849,86 @@ export default function HotelRooms() {
                 </div>
               )}
 
-              {/* Acciones rápidas para habitación ocupada */}
+              {/* Detalle del folio */}
+              {guest && (
+                <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detalle del folio</p>
+                    <span className="text-xs text-gray-400">
+                      {roomFolioCharges.length} cargo{roomFolioCharges.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {isFolioLoading ? (
+                    <div className="flex items-center justify-center py-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    </div>
+                  ) : roomFolioCharges.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">Sin cargos registrados aún</p>
+                  ) : (
+                    <div className="max-h-44 overflow-y-auto divide-y text-sm">
+                      {roomFolioCharges.map(charge => (
+                        <div key={charge.id} className="flex items-start justify-between py-1.5 gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-gray-800 truncate">{charge.description}</p>
+                            {charge.date && (
+                              <p className="text-[10px] text-gray-400">{charge.date}</p>
+                            )}
+                          </div>
+                          <span className="text-xs font-semibold text-gray-900 flex-shrink-0">
+                            {formatCurrency(charge.amount || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center border-t pt-2">
+                    <span className="text-sm font-semibold text-gray-700">Total folio</span>
+                    <span className="text-base font-bold text-gray-900">{formatCurrency(roomFolioTotal)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Acciones para habitación ocupada */}
               {selectedRoom.status === 'occupied' && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Acciones rápidas</p>
-                  <div className={`grid gap-2 ${guest ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                    {guest && (
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Acciones</p>
+                  {guest ? (
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handleGoToFolio(guest)}
                         className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all hover:scale-[1.03] active:scale-95"
                       >
                         <Receipt className="w-5 h-5 text-emerald-600" />
-                        <span className="text-xs font-semibold text-emerald-700">Cobrar / Folio</span>
+                        <span className="text-xs font-semibold text-emerald-700">Ver folio / Cargos</span>
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleQuickCheckOut(guest)}
+                        disabled={isCheckingOut}
+                        className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isCheckingOut ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
+                        ) : (
+                          <LogOut className="w-5 h-5 text-orange-600" />
+                        )}
+                        <span className="text-xs font-semibold text-orange-700">Check-out</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Sin huésped (habitación marcada como ocupada manualmente): solo liberar */
                     <button
-                      onClick={() => guest ? handleQuickCheckOut(guest) : handleStatusChange('cleaning')}
-                      disabled={isCheckingOut || isChangingStatus}
-                      className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleStatusChange('cleaning')}
+                      disabled={isChangingStatus}
+                      className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all active:scale-95 disabled:opacity-50"
                     >
-                      {(isCheckingOut || isChangingStatus) ? (
+                      {isChangingStatus ? (
                         <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
                       ) : (
                         <LogOut className="w-5 h-5 text-orange-600" />
                       )}
-                      <span className="text-xs font-semibold text-orange-700">
-                        {guest ? 'Check-out' : 'Liberar'}
-                      </span>
+                      <span className="text-sm font-semibold text-orange-700">Liberar habitación</span>
                     </button>
-                    <button
-                      onClick={handleGoToPOS}
-                      className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 transition-all hover:scale-[1.03] active:scale-95"
-                    >
-                      <ShoppingCart className="w-5 h-5 text-primary-600" />
-                      <span className="text-xs font-semibold text-primary-700">Punto de Venta</span>
-                    </button>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -810,7 +947,8 @@ export default function HotelRooms() {
                 </div>
               )}
 
-              {/* Cambiar estado */}
+              {/* Cambiar estado (solo si NO está ocupada — la liberación se hace con Check-out o Liberar) */}
+              {selectedRoom.status !== 'occupied' && (
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cambiar estado</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -839,6 +977,7 @@ export default function HotelRooms() {
                   })}
                 </div>
               </div>
+              )}
 
               {/* Footer con botón de configuración */}
               <div className="flex items-center justify-between pt-3 border-t">
@@ -965,16 +1104,6 @@ export default function HotelRooms() {
         </div>
       </Modal>
 
-      {/* Modal de cobro antes del check-out */}
-      <InvoiceFromFolioModal
-        isOpen={showInvoiceBeforeCheckout}
-        onClose={handleCancelInvoiceBeforeCheckout}
-        reservation={pendingCheckOut?.reservation}
-        charges={pendingCheckOut?.charges || []}
-        total={pendingCheckOut?.total || 0}
-        onInvoiceCreated={handleInvoiceCreatedBeforeCheckout}
-      />
-
       {/* Modal Check-in rápido */}
       <Modal
         isOpen={isQuickCheckInOpen}
@@ -986,37 +1115,37 @@ export default function HotelRooms() {
           <p className="text-xs text-gray-500">Se creará la reserva y se hará check-in en un solo paso.</p>
 
           {/* Documento */}
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Tipo de documento"
-              value={quickForm.documentType}
-              onChange={e => setQuickForm(prev => ({ ...prev, documentType: e.target.value }))}
-            >
-              <option value="DNI">DNI</option>
-              <option value="RUC">RUC</option>
-              <option value="CE">CE</option>
-              <option value="Pasaporte">Pasaporte</option>
-            </Select>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nro. documento *</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="flex-1 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-                  value={quickForm.documentNumber}
-                  onChange={e => setQuickForm(prev => ({ ...prev, documentNumber: e.target.value }))}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleQuickLookup}
-                  disabled={isLookingUp || (quickForm.documentType !== 'DNI' && quickForm.documentType !== 'RUC')}
-                  className="px-3"
-                >
-                  {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                </Button>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Documento *</label>
+            <div className="flex gap-2">
+              <select
+                className="w-28 flex-shrink-0 h-10 px-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500"
+                value={quickForm.documentType}
+                onChange={e => setQuickForm(prev => ({ ...prev, documentType: e.target.value }))}
+              >
+                <option value="DNI">DNI</option>
+                <option value="RUC">RUC</option>
+                <option value="CE">CE</option>
+                <option value="Pasaporte">Pasaporte</option>
+              </select>
+              <input
+                type="text"
+                placeholder={quickForm.documentType === 'DNI' ? '8 dígitos' : quickForm.documentType === 'RUC' ? '11 dígitos' : 'Número'}
+                className="flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                value={quickForm.documentNumber}
+                onChange={e => setQuickForm(prev => ({ ...prev, documentNumber: e.target.value }))}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleQuickLookup}
+                disabled={isLookingUp || !quickForm.documentNumber?.trim()}
+                className="flex-shrink-0 px-3"
+                title="Buscar en Clientes o RENIEC/SUNAT"
+              >
+                {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
             </div>
           </div>
 

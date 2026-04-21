@@ -168,9 +168,9 @@ function HotelServices() {
   const getTypeConfig = (type) => SERVICE_TYPES[type] || SERVICE_TYPES.other
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ConciergeBell className="w-7 h-7 text-amber-600" />

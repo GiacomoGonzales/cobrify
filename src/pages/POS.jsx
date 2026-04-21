@@ -53,7 +53,7 @@ import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { getDoc, doc, Timestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
-import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge } from '@/services/hotelService'
+import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge, markChargesAsInvoiced } from '@/services/hotelService'
 import {
   getProducts,
   getCustomers,
@@ -582,8 +582,8 @@ export default function POS() {
   useEffect(() => {
     if (!user?.uid || draftLoadedRef.current) return
 
-    // No cargar borrador si viene de una mesa, orden o nota de venta
-    if (location.state?.fromTable || location.state?.fromOrder || location.state?.fromNotaVenta) return
+    // No cargar borrador si viene de una mesa, orden, nota de venta o folio de hotel
+    if (location.state?.fromTable || location.state?.fromOrder || location.state?.fromNotaVenta || location.state?.fromFolio) return
 
     try {
       const savedDraft = localStorage.getItem(getDraftKey())
@@ -790,6 +790,9 @@ export default function POS() {
   const quotationLoadedRef = useRef(false)
   const notaVentaLoadedRef = useRef(false)
   const dispatchGuideLoadedRef = useRef(false)
+  const folioLoadedRef = useRef(false)
+  // IDs de cargos del folio pendientes de marcar como facturados (persiste aunque el cart cambie)
+  const pendingFolioChargeIdsRef = useRef([])
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -823,6 +826,57 @@ export default function POS() {
       }
 
       // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    // Detectar si viene del Folio de una reserva de hotel y cargar cargos como items
+    if (location.state?.fromFolio && !folioLoadedRef.current) {
+      const folioInfo = location.state
+      folioLoadedRef.current = true
+
+      // Cargar items al carrito (cada cargo del folio = un item con precio = amount y quantity = 1)
+      if (Array.isArray(folioInfo.items) && folioInfo.items.length > 0) {
+        const cartItems = folioInfo.items.map((ch, idx) => ({
+          id: `folio-${ch.id || idx}`,
+          productId: null,
+          code: '',
+          name: ch.description || 'Cargo',
+          price: Number(ch.amount || 0),
+          quantity: 1,
+          unit: 'ZZ',
+          stock: null,
+          fromFolio: true,
+          folioChargeId: ch.id,
+        }))
+        setCart(cartItems)
+        // Guardar los IDs de cargo en una ref independiente del cart (sobrevive a edits)
+        pendingFolioChargeIdsRef.current = folioInfo.items
+          .map(ch => ch.id)
+          .filter(Boolean)
+      }
+
+      // Precargar datos del cliente (huésped)
+      if (folioInfo.customer) {
+        const c = folioInfo.customer
+        setCustomerData(prev => ({
+          ...prev,
+          documentType: c.documentType || prev.documentType,
+          documentNumber: c.documentNumber || '',
+          name: c.name || '',
+          businessName: c.businessName || '',
+          email: c.email || '',
+          phone: c.phone || '',
+          address: c.address || '',
+        }))
+      }
+
+      // Nota con referencia a la reserva
+      if (folioInfo.reservationNote) {
+        toast.success(folioInfo.reservationNote)
+      } else if (folioInfo.items?.length > 0) {
+        toast.success(`Folio cargado · ${folioInfo.items.length} cargo${folioInfo.items.length > 1 ? 's' : ''}`)
+      }
+
       navigate(location.pathname, { replace: true, state: null })
     }
 
@@ -3907,6 +3961,28 @@ export default function POS() {
         setLastInvoiceNumber(numberResult.number)
         setLastInvoiceData(invoiceData)
         setSaleCompleted(true)
+
+        // Si la venta vino de un folio de hotel, marcar esos cargos como facturados
+        // Usamos la ref (sobrevive a edits del cart) + fallback al cart
+        const refIds = pendingFolioChargeIdsRef.current || []
+        const cartIds = cart.filter(item => item.fromFolio && item.folioChargeId).map(item => item.folioChargeId)
+        const allFolioChargeIds = Array.from(new Set([...refIds, ...cartIds]))
+        if (allFolioChargeIds.length > 0) {
+          console.log('📘 Marcando cargos del folio como facturados:', allFolioChargeIds, '→ invoice', invoiceId, numberResult.number)
+          try {
+            const markResult = await markChargesAsInvoiced(businessId, allFolioChargeIds, invoiceId, numberResult.number)
+            if (markResult.success) {
+              console.log('✅ Cargos marcados:', markResult.updated)
+              pendingFolioChargeIdsRef.current = []
+            } else {
+              console.error('❌ Error al marcar cargos:', markResult.error)
+              toast.error('Venta guardada, pero no se pudo marcar el folio como facturado: ' + (markResult.error || ''), 6000)
+            }
+          } catch (err) {
+            console.error('❌ Excepción al marcar cargos:', err)
+            toast.error('Venta guardada, pero falló el marcado del folio: ' + (err.message || ''), 6000)
+          }
+        }
 
         // Mostrar "Gracias por su compra" en pantalla de cliente
         if (companySettings?.enableCustomerDisplay) {

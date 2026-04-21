@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -18,6 +19,7 @@ import {
   DollarSign,
   Trash2,
   Receipt,
+  X,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -29,7 +31,6 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
-import InvoiceFromFolioModal from '@/components/hotel/InvoiceFromFolioModal'
 import {
   createReservation,
   getReservations,
@@ -41,9 +42,11 @@ import {
   addCharge,
   getChargesByReservation,
   getReservationTotal,
+  getServices,
+  deleteCharge,
 } from '@/services/hotelService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
-import { upsertCustomerFromSale } from '@/services/firestoreService'
+import { upsertCustomerFromSale, getProducts, getCustomerByDocumentNumber } from '@/services/firestoreService'
 
 // Schema
 const reservationSchema = z.object({
@@ -100,6 +103,7 @@ export default function HotelReservations() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
+  const appNavigate = useAppNavigate()
 
   // Data
   const [reservations, setReservations] = useState([])
@@ -122,18 +126,21 @@ export default function HotelReservations() {
   const [isFolioLoading, setIsFolioLoading] = useState(false)
   const [chargeDescription, setChargeDescription] = useState('')
   const [chargeAmount, setChargeAmount] = useState('')
+  const [chargeQuantity, setChargeQuantity] = useState(1)
+  const [itemSearch, setItemSearch] = useState('')
+  const [showItemDropdown, setShowItemDropdown] = useState(false)
   const [isAddingCharge, setIsAddingCharge] = useState(false)
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  // Carrito local: items que se cargarán juntos al folio
+  const [pendingItems, setPendingItems] = useState([]) // [{ key, kind, name, price, quantity, chargeType }]
+  // Catálogos para el folio (productos + servicios del hotel)
+  const [products, setProducts] = useState([])
+  const [hotelServices, setHotelServices] = useState([])
 
   // Processing actions
   const [processingId, setProcessingId] = useState(null)
 
   // Document lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
-
-  // Flujo guiado de cobro antes del check-out
-  const [pendingCheckOut, setPendingCheckOut] = useState(null) // { reservation, charges, total }
-  const [showInvoiceBeforeCheckout, setShowInvoiceBeforeCheckout] = useState(false)
 
   const {
     register,
@@ -176,35 +183,54 @@ export default function HotelReservations() {
     setValue('ratePerNight', roomRate, { shouldValidate: true })
   }, [watchRoomId, rooms, setValue])
 
-  // Búsqueda de cliente por DNI/RUC
+  // Búsqueda de cliente: primero en Clientes registrados, luego RENIEC/SUNAT
   const handleDocumentLookup = async () => {
-    if (!watchDocNumber) {
+    const docNumber = watchDocNumber?.trim()
+    if (!docNumber) {
       toast.error('Ingrese el número de documento')
       return
     }
     setIsLookingUp(true)
     try {
-      if (watchDocType === 'DNI' && watchDocNumber.length === 8) {
-        const result = await consultarDNI(watchDocNumber)
+      // 1. Buscar primero en clientes locales
+      if (!isDemoMode && user?.uid) {
+        const businessId = getBusinessId()
+        const localResult = await getCustomerByDocumentNumber(businessId, docNumber)
+        if (localResult.success && localResult.data) {
+          const c = localResult.data
+          setValue('guestName', c.businessName || c.name || '', { shouldValidate: true })
+          if (c.phone) setValue('phone', c.phone, { shouldValidate: true })
+          if (c.email) setValue('email', c.email, { shouldValidate: true })
+          if (c.documentType && (c.documentType === 'DNI' || c.documentType === 'RUC')) {
+            setValue('documentType', c.documentType, { shouldValidate: true })
+          }
+          toast.success('Cliente ya registrado, datos cargados')
+          return
+        }
+      }
+
+      // 2. Si no existe localmente, consultar RENIEC/SUNAT
+      if (watchDocType === 'DNI' && docNumber.length === 8) {
+        const result = await consultarDNI(docNumber)
         if (result.success && result.data) {
           const name = result.data.nombreCompleto
             || `${result.data.nombres || ''} ${result.data.apellidoPaterno || ''} ${result.data.apellidoMaterno || ''}`.trim()
           if (name) {
             setValue('guestName', name, { shouldValidate: true })
-            toast.success('Huésped encontrado')
+            toast.success('Huésped encontrado en RENIEC')
           } else {
             toast.error('No se pudo obtener el nombre del DNI')
           }
         } else {
           toast.error(result.error || 'No se encontró el DNI')
         }
-      } else if (watchDocType === 'RUC' && watchDocNumber.length === 11) {
-        const result = await consultarRUC(watchDocNumber)
+      } else if (watchDocType === 'RUC' && docNumber.length === 11) {
+        const result = await consultarRUC(docNumber)
         if (result.success && result.data) {
           const name = result.data.razonSocial || result.data.nombreComercial || ''
           if (name) {
             setValue('guestName', name, { shouldValidate: true })
-            toast.success('Empresa encontrada')
+            toast.success('Empresa encontrada en SUNAT')
           } else {
             toast.error('No se pudo obtener la razón social del RUC')
           }
@@ -214,7 +240,8 @@ export default function HotelReservations() {
       } else {
         toast.error(watchDocType === 'DNI' ? 'DNI debe tener 8 dígitos' : watchDocType === 'RUC' ? 'RUC debe tener 11 dígitos' : 'Búsqueda solo disponible para DNI o RUC')
       }
-    } catch {
+    } catch (error) {
+      console.error('Error al buscar cliente:', error)
       toast.error('Error al consultar documento')
     } finally {
       setIsLookingUp(false)
@@ -233,16 +260,22 @@ export default function HotelReservations() {
       if (isDemoMode && demoData) {
         setReservations(demoData.hotelReservations || [])
         setRooms(demoData.hotelRooms || [])
+        setProducts(demoData.products || [])
+        setHotelServices(demoData.hotelServices || [])
         setIsLoading(false)
         return
       }
       const businessId = getBusinessId()
-      const [resResult, roomsResult] = await Promise.all([
+      const [resResult, roomsResult, productsResult, servicesResult] = await Promise.all([
         getReservations(businessId),
         getRooms(businessId),
+        getProducts(businessId),
+        getServices(businessId),
       ])
       if (resResult.success) setReservations(resResult.data || [])
       if (roomsResult.success) setRooms(roomsResult.data || [])
+      if (productsResult.success) setProducts(productsResult.data || [])
+      if (servicesResult.success) setHotelServices(servicesResult.data || [])
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast.error('Error al cargar reservas')
@@ -482,33 +515,45 @@ export default function HotelReservations() {
     try {
       // Cargar cargos del folio
       let charges = []
-      let total = 0
       if (isDemoMode) {
         charges = (demoData?.hotelFolioCharges || []).filter(c => c.reservationId === reservation.id)
-        total = charges.reduce((s, c) => s + (c.amount || 0), 0)
       } else {
         const businessId = getBusinessId()
-        const [chargesResult, totalResult] = await Promise.all([
-          getChargesByReservation(businessId, reservation.id),
-          getReservationTotal(businessId, reservation.id),
-        ])
+        const chargesResult = await getChargesByReservation(businessId, reservation.id)
         if (chargesResult.success) charges = chargesResult.data || []
-        if (totalResult.success) total = totalResult.data || 0
       }
 
-      if (charges.length > 0 && total > 0) {
-        // Hay cargos pendientes → abrir modal para cobrar
-        setPendingCheckOut({ reservation, charges, total })
-        setShowInvoiceBeforeCheckout(true)
+      const pending = charges.filter(c => !c.invoiceId)
+      const pendingTotal = pending.reduce((s, c) => s + (c.amount || 0), 0)
+
+      if (pending.length > 0 && pendingTotal > 0) {
+        // Hay cargos sin cobrar. Preguntar: ir al POS o descartar del folio
+        const summary = pending.map(c => `• ${c.description}: S/ ${(c.amount || 0).toFixed(2)}`).join('\n')
+        const msg = `Hay ${pending.length} cargo(s) sin cobrar por S/ ${pendingTotal.toFixed(2)}:\n\n${summary}\n\n¿Cobrarlos ahora en el POS?\n\n[Aceptar] → Ir al POS\n[Cancelar] → Descartar del folio y hacer check-out`
+        const goToPOS = window.confirm(msg)
+        if (goToPOS) {
+          setProcessingId(null)
+          goToPOSWithFolio(reservation, pending)
+          return
+        }
+        // Descartar pendientes: eliminar del folio
+        if (!isDemoMode) {
+          const businessId = getBusinessId()
+          for (const c of pending) {
+            try { await deleteCharge(businessId, c.id) } catch (e) { console.warn('No se pudo eliminar cargo', c.id, e) }
+          }
+        }
+        await executeCheckOut(reservation)
         setProcessingId(null)
         return
       }
 
-      // Sin cargos → confirmar y hacer check-out directo
+      // No hay pendientes → confirmar y check-out directo
       setProcessingId(null)
-      if (!window.confirm(`No hay cargos pendientes en el folio de ${reservation.guestName}. ¿Confirmar check-out?`)) {
-        return
-      }
+      const confirmMsg = charges.length > 0
+        ? `Todos los cargos ya fueron facturados. ¿Confirmar check-out de ${reservation.guestName}?`
+        : `No hay cargos registrados en el folio de ${reservation.guestName}. ¿Confirmar check-out?`
+      if (!window.confirm(confirmMsg)) return
       setProcessingId(reservation.id)
       await executeCheckOut(reservation)
     } catch (error) {
@@ -518,20 +563,6 @@ export default function HotelReservations() {
     }
   }
 
-  // Después de generar comprobante → ejecutar check-out
-  const handleInvoiceCreatedBeforeCheckout = async () => {
-    if (!pendingCheckOut) return
-    setShowInvoiceBeforeCheckout(false)
-    const { reservation } = pendingCheckOut
-    await executeCheckOut(reservation)
-    setPendingCheckOut(null)
-  }
-
-  const handleCancelInvoiceBeforeCheckout = () => {
-    setShowInvoiceBeforeCheckout(false)
-    setPendingCheckOut(null)
-  }
-
   // Open folio
   const openFolio = async (reservation) => {
     setFolioReservation(reservation)
@@ -539,6 +570,10 @@ export default function HotelReservations() {
     setFolioTotal(0)
     setChargeDescription('')
     setChargeAmount('')
+    setChargeQuantity(1)
+    setItemSearch('')
+    setShowItemDropdown(false)
+    setPendingItems([])
     setIsFolioLoading(true)
     try {
       if (isDemoMode && demoData?.hotelFolioCharges) {
@@ -563,42 +598,190 @@ export default function HotelReservations() {
     }
   }
 
-  // Add charge to folio
-  const handleAddCharge = async () => {
-    if (!chargeDescription.trim() || !chargeAmount) {
+  // Catálogo unificado de productos + servicios para el buscador
+  const catalogItems = useMemo(() => {
+    const items = []
+    hotelServices.forEach(s => {
+      if (s.active === false || s.status === 'inactive') return
+      items.push({
+        kind: 'service',
+        id: s.id,
+        name: s.name || 'Servicio',
+        code: '',
+        price: Number(s.rate ?? s.pricePerUnit ?? 0),
+        badge: 'Servicio',
+      })
+    })
+    products.forEach(p => {
+      items.push({
+        kind: 'product',
+        id: p.id,
+        name: p.name || 'Producto',
+        code: p.code || '',
+        price: Number(p.price ?? p.rate ?? 0),
+        badge: p.category || 'Producto',
+      })
+    })
+    return items
+  }, [hotelServices, products])
+
+  // Items filtrados por el término de búsqueda (limitado a 25 resultados)
+  const filteredCatalog = useMemo(() => {
+    const term = itemSearch.trim().toLowerCase()
+    if (!term) return catalogItems.slice(0, 25)
+    return catalogItems.filter(i =>
+      i.name.toLowerCase().includes(term)
+      || i.code?.toLowerCase().includes(term)
+      || i.badge?.toLowerCase().includes(term)
+    ).slice(0, 25)
+  }, [itemSearch, catalogItems])
+
+  // Deducir chargeType para un item del catálogo
+  const getChargeTypeForCatalogItem = (item) => {
+    if (item.kind === 'service') {
+      const s = hotelServices.find(x => x.id === item.id)
+      return s?.type || 'service'
+    }
+    if (item.kind === 'product') {
+      const cat = (item.badge || '').toLowerCase()
+      if (cat.includes('minibar')) return 'minibar'
+      if (cat.includes('restaurant') || cat.includes('comida')) return 'restaurant'
+      if (cat.includes('lavand')) return 'laundry'
+    }
+    return 'other'
+  }
+
+  // Al seleccionar del dropdown → suma al carrito (si ya está, aumenta cantidad)
+  const selectCatalogItem = (item) => {
+    const key = `${item.kind}:${item.id}`
+    setPendingItems(prev => {
+      const existing = prev.find(p => p.key === key)
+      if (existing) {
+        return prev.map(p => p.key === key ? { ...p, quantity: p.quantity + 1 } : p)
+      }
+      return [...prev, {
+        key,
+        kind: item.kind,
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+        chargeType: getChargeTypeForCatalogItem(item),
+      }]
+    })
+    setItemSearch('')
+    setShowItemDropdown(false)
+  }
+
+  // Actualizar cantidad de un item del carrito
+  const updateItemQuantity = (key, delta) => {
+    setPendingItems(prev => prev
+      .map(p => p.key === key ? { ...p, quantity: p.quantity + delta } : p)
+      .filter(p => p.quantity > 0)
+    )
+  }
+
+  // Editar precio unitario de un item del carrito
+  const updateItemPrice = (key, newPrice) => {
+    const price = parseFloat(newPrice) || 0
+    setPendingItems(prev => prev.map(p => p.key === key ? { ...p, price } : p))
+  }
+
+  // Eliminar item del carrito
+  const removeItemFromCart = (key) => {
+    setPendingItems(prev => prev.filter(p => p.key !== key))
+  }
+
+  // Agregar cargo manual al carrito (no al folio directo)
+  const addManualToCart = () => {
+    const qty = Number(chargeQuantity) || 1
+    const unit = parseFloat(chargeAmount) || 0
+    if (!chargeDescription.trim() || unit <= 0) {
       toast.error('Ingrese descripción y monto')
+      return
+    }
+    const key = `manual:${Date.now()}`
+    setPendingItems(prev => [...prev, {
+      key,
+      kind: 'manual',
+      name: chargeDescription.trim(),
+      price: unit,
+      quantity: qty,
+      chargeType: 'other',
+    }])
+    setChargeDescription('')
+    setChargeAmount('')
+    setChargeQuantity(1)
+  }
+
+  // Subtotal del carrito
+  const pendingTotal = useMemo(
+    () => pendingItems.reduce((s, p) => s + p.price * p.quantity, 0),
+    [pendingItems]
+  )
+
+  // Navegar al POS con los cargos del folio precargados
+  const goToPOSWithFolio = (reservation, charges) => {
+    appNavigate('/pos', {
+      state: {
+        fromFolio: true,
+        reservationId: reservation.id,
+        items: charges,
+        customer: {
+          documentType: reservation.documentType || reservation.guestDocumentType || 'DNI',
+          documentNumber: reservation.documentNumber || reservation.guestDocument || '',
+          name: reservation.guestName || '',
+          businessName: (reservation.documentType || reservation.guestDocumentType) === 'RUC' ? (reservation.guestName || '') : '',
+          email: reservation.email || reservation.guestEmail || '',
+          phone: reservation.phone || reservation.guestPhone || '',
+        },
+        reservationNote: `Folio de ${reservation.guestName} · Hab. ${reservation.roomNumber}`,
+      },
+    })
+  }
+
+  // Enviar todos los items del carrito al folio (una llamada por item)
+  const handleSubmitCart = async () => {
+    if (pendingItems.length === 0) {
+      toast.error('Agregá al menos un ítem al carrito')
       return
     }
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setIsAddingCharge(true)
     try {
       const businessId = getBusinessId()
-      const result = await addCharge(businessId, {
-        reservationId: folioReservation.id,
-        roomId: folioReservation.roomId,
-        roomNumber: folioReservation.roomNumber,
-        guestName: folioReservation.guestName,
-        chargeType: 'other',
-        description: chargeDescription.trim(),
-        amount: parseFloat(chargeAmount),
-        createdBy: user?.uid || '',
-      })
-      if (result.success) {
-        toast.success('Cargo agregado')
-        setChargeDescription('')
-        setChargeAmount('')
-        // Reload charges
+      let successCount = 0
+      for (const item of pendingItems) {
+        const amount = item.price * item.quantity
+        const description = item.quantity > 1 ? `${item.name} x${item.quantity}` : item.name
+        const result = await addCharge(businessId, {
+          reservationId: folioReservation.id,
+          roomId: folioReservation.roomId,
+          roomNumber: folioReservation.roomNumber,
+          guestName: folioReservation.guestName,
+          chargeType: item.chargeType || 'other',
+          description,
+          amount,
+          createdBy: user?.uid || '',
+        })
+        if (result.success) successCount++
+      }
+      if (successCount > 0) {
+        toast.success(`${successCount} cargo${successCount > 1 ? 's' : ''} agregado${successCount > 1 ? 's' : ''} al folio`)
+        // Limpiar carrito y recargar folio
+        setPendingItems([])
         const [chargesResult, totalResult] = await Promise.all([
           getChargesByReservation(businessId, folioReservation.id),
           getReservationTotal(businessId, folioReservation.id),
         ])
         if (chargesResult.success) setFolioCharges(chargesResult.data || [])
         if (totalResult.success) setFolioTotal(totalResult.data || 0)
-      } else {
-        toast.error(result.error || 'Error al agregar cargo')
+      }
+      if (successCount < pendingItems.length) {
+        toast.error(`${pendingItems.length - successCount} cargo(s) fallaron`)
       }
     } catch (error) {
-      toast.error('Error al agregar cargo')
+      console.error('Error al agregar cargos:', error)
+      toast.error('Error al agregar cargos')
     } finally {
       setIsAddingCharge(false)
     }
@@ -769,11 +952,10 @@ export default function HotelReservations() {
                       <span className="text-sm font-medium text-gray-900">
                         {reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)} noches - {formatCurrency(reservation.total || 0)}
                       </span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         {reservation.status === 'confirmed' && (
                           <Button
                             size="sm"
-                            variant="outline"
                             onClick={() => handleCheckIn(reservation)}
                             disabled={processingId === reservation.id}
                           >
@@ -783,19 +965,23 @@ export default function HotelReservations() {
                         {reservation.status === 'checked_in' && (
                           <Button
                             size="sm"
-                            variant="outline"
                             onClick={() => handleCheckOut(reservation)}
                             disabled={processingId === reservation.id}
                           >
                             <LogOut className="w-3 h-3" />
                           </Button>
                         )}
-                        <Button size="sm" variant="outline" onClick={() => openEditModal(reservation)}>
-                          <Edit className="w-3 h-3" />
-                        </Button>
                         <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
                           <Eye className="w-3 h-3" />
                         </Button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(reservation)}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
+                          title="Editar"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -837,11 +1023,11 @@ export default function HotelReservations() {
                         </TableCell>
                         <TableCell>{getStatusBadge(reservation.status)}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
+                            {/* Acción primaria según estado */}
                             {reservation.status === 'confirmed' && (
                               <Button
                                 size="sm"
-                                variant="outline"
                                 onClick={() => handleCheckIn(reservation)}
                                 disabled={processingId === reservation.id}
                               >
@@ -855,7 +1041,6 @@ export default function HotelReservations() {
                             {reservation.status === 'checked_in' && (
                               <Button
                                 size="sm"
-                                variant="outline"
                                 onClick={() => handleCheckOut(reservation)}
                                 disabled={processingId === reservation.id}
                               >
@@ -866,12 +1051,21 @@ export default function HotelReservations() {
                                 )}
                               </Button>
                             )}
-                            <Button size="sm" variant="outline" onClick={() => openEditModal(reservation)}>
-                              <Edit className="w-3 h-3" />
-                            </Button>
+
+                            {/* Folio (siempre disponible) */}
                             <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
                               <Eye className="w-3 h-3 mr-1" /> Folio
                             </Button>
+
+                            {/* Editar (icono sutil al final) */}
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(reservation)}
+                              className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Editar reserva"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1095,15 +1289,25 @@ export default function HotelReservations() {
               ) : (
                 <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
                   {folioCharges.map((charge, idx) => (
-                    <div key={charge.id || idx} className="flex items-center justify-between px-4 py-2.5">
-                      <div>
-                        <p className="text-sm font-medium">{charge.description}</p>
+                    <div
+                      key={charge.id || idx}
+                      className={`flex items-center justify-between px-4 py-2.5 ${charge.invoiceId ? 'bg-green-50' : ''}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{charge.description}</p>
+                          {charge.invoiceId && (
+                            <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                              Facturado {charge.invoiceNumber || ''}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
-                          {getChargeTypeLabel(charge.type)}
-                          {charge.createdAt && ` - ${formatDate(charge.createdAt)}`}
+                          {getChargeTypeLabel(charge.chargeType || charge.type)}
+                          {charge.date && ` · ${charge.date}`}
                         </p>
                       </div>
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className={`text-sm font-medium flex-shrink-0 ml-2 ${charge.invoiceId ? 'text-green-700 line-through opacity-70' : 'text-gray-900'}`}>
                         {formatCurrency(charge.amount || 0)}
                       </span>
                     </div>
@@ -1112,38 +1316,174 @@ export default function HotelReservations() {
               )}
             </div>
 
-            {/* Add charge */}
+            {/* Add charge (estilo carrito tipo POS) */}
             {folioReservation?.status === 'checked_in' && (
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Agregar cargo</h4>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Descripción"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    value={chargeDescription}
-                    onChange={(e) => setChargeDescription(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Monto"
-                    className="w-28 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    value={chargeAmount}
-                    onChange={(e) => setChargeAmount(e.target.value)}
-                  />
+              <div className="border-t pt-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Agregar cargos al folio</h4>
+
+                {/* Buscador con dropdown */}
+                <div className="relative">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Buscar producto o servicio..."
+                      className="w-full h-10 pl-9 pr-9 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={itemSearch}
+                      onChange={(e) => { setItemSearch(e.target.value); setShowItemDropdown(true) }}
+                      onFocus={() => setShowItemDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowItemDropdown(false), 150)}
+                    />
+                    {itemSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setItemSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                        title="Limpiar"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {showItemDropdown && filteredCatalog.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      {filteredCatalog.map(item => (
+                        <button
+                          key={`${item.kind}-${item.id}`}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectCatalogItem(item) }}
+                          className="w-full text-left px-3 py-2 hover:bg-primary-50 border-b last:border-b-0 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {item.badge}{item.code ? ` · ${item.code}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+                            {formatCurrency(item.price)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {showItemDropdown && itemSearch && filteredCatalog.length === 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                      Sin coincidencias
+                    </div>
+                  )}
+                </div>
+
+                {/* Carrito local */}
+                {pendingItems.length > 0 && (
+                  <div className="border rounded-lg divide-y bg-gray-50">
+                    {pendingItems.map(item => (
+                      <div key={item.key} className="flex items-center gap-2 px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.price}
+                              onChange={(e) => updateItemPrice(item.key, e.target.value)}
+                              className="w-20 h-6 px-1 text-xs border border-gray-300 rounded"
+                              title="Precio unitario"
+                            />
+                            <span className="text-xs text-gray-400">c/u</span>
+                          </div>
+                        </div>
+                        {/* Controles de cantidad */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => updateItemQuantity(item.key, -1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          >−</button>
+                          <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateItemQuantity(item.key, 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          >+</button>
+                        </div>
+                        {/* Subtotal y eliminar */}
+                        <span className="w-20 text-right text-sm font-semibold text-gray-800 flex-shrink-0">
+                          {formatCurrency(item.price * item.quantity)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeItemFromCart(item.key)}
+                          className="p-1 text-red-500 hover:text-red-700 flex-shrink-0"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-100 rounded-b-lg">
+                      <span className="text-sm font-semibold text-gray-700">
+                        Subtotal ({pendingItems.length} ítem{pendingItems.length > 1 ? 's' : ''})
+                      </span>
+                      <span className="text-base font-bold text-gray-900">{formatCurrency(pendingTotal)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cargo manual (opcional) */}
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-gray-500 hover:text-gray-700 py-1">+ Agregar cargo manual</summary>
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Descripción"
+                      className="flex-1 min-w-0 h-10 px-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={chargeDescription}
+                      onChange={(e) => setChargeDescription(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="Cant."
+                      className="w-16 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={chargeQuantity}
+                      onChange={(e) => setChargeQuantity(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Precio"
+                      className="w-24 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={chargeAmount}
+                      onChange={(e) => setChargeAmount(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addManualToCart}
+                      className="flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </details>
+
+                {/* Botón confirmar carga al folio */}
+                {pendingItems.length > 0 && (
                   <Button
-                    onClick={handleAddCharge}
+                    onClick={handleSubmitCart}
                     disabled={isAddingCharge}
-                    size="sm"
+                    className="w-full"
                   >
                     {isAddingCharge ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Procesando...</>
                     ) : (
-                      <><Plus className="w-4 h-4 mr-1" /> Agregar</>
+                      <><Plus className="w-4 h-4 mr-1" /> Cargar {pendingItems.length} ítem{pendingItems.length > 1 ? 's' : ''} al folio · {formatCurrency(pendingTotal)}</>
                     )}
                   </Button>
-                </div>
+                )}
               </div>
             )}
 
@@ -1155,8 +1495,8 @@ export default function HotelReservations() {
 
             {/* Actions */}
             <div className="flex justify-end gap-2 pt-2">
-              {folioCharges.length > 0 && (
-                <Button onClick={() => setShowInvoiceModal(true)}>
+              {folioCharges.some(c => !c.invoiceId) && (
+                <Button onClick={() => goToPOSWithFolio(folioReservation, folioCharges.filter(c => !c.invoiceId))}>
                   <Receipt className="w-4 h-4 mr-1" /> Generar Comprobante
                 </Button>
               )}
@@ -1167,28 +1507,6 @@ export default function HotelReservations() {
           </div>
         )}
       </Modal>
-
-      {/* Invoice from Folio Modal */}
-      <InvoiceFromFolioModal
-        isOpen={showInvoiceModal}
-        onClose={() => setShowInvoiceModal(false)}
-        reservation={folioReservation}
-        charges={folioCharges}
-        total={folioTotal}
-        onInvoiceCreated={() => {
-          setShowInvoiceModal(false)
-        }}
-      />
-
-      {/* Modal de cobro antes del check-out */}
-      <InvoiceFromFolioModal
-        isOpen={showInvoiceBeforeCheckout}
-        onClose={handleCancelInvoiceBeforeCheckout}
-        reservation={pendingCheckOut?.reservation}
-        charges={pendingCheckOut?.charges || []}
-        total={pendingCheckOut?.total || 0}
-        onInvoiceCreated={handleInvoiceCreatedBeforeCheckout}
-      />
     </div>
   )
 }

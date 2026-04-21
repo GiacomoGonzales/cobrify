@@ -196,16 +196,68 @@ export const deleteReservation = async (businessId, reservationId) => {
   }
 }
 
+// Genera array de fechas ISO (YYYY-MM-DD) para cada noche entre checkIn y checkOut (exclusivo)
+const getNightDateRange = (checkInStr, checkOutStr) => {
+  const dates = []
+  if (!checkInStr || !checkOutStr) return dates
+  const start = new Date(checkInStr + 'T12:00:00')
+  const end = new Date(checkOutStr + 'T12:00:00')
+  const cur = new Date(start)
+  while (cur < end) {
+    dates.push(cur.toISOString().split('T')[0])
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
 export const checkIn = async (businessId, reservationId, roomId) => {
   try {
-    // Update reservation status
+    // Obtener datos de la reserva para generar cargos de noche
     const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
+    const reservationSnap = await getDoc(reservationRef)
+    if (reservationSnap.exists()) {
+      const reservation = reservationSnap.data()
+      const checkInDate = reservation.checkIn || reservation.checkInDate
+      const checkOutDate = reservation.checkOut || reservation.checkOutDate
+      const baseRate = Number(reservation.ratePerNight || 0)
+      const guestName = reservation.guestName || ''
+      const roomNumber = reservation.roomNumber || ''
+
+      if (checkInDate && checkOutDate && baseRate > 0) {
+        // Revisar cargos existentes para no duplicar
+        const existingResult = await getChargesByReservation(businessId, reservationId)
+        const existingDates = new Set(
+          (existingResult.data || [])
+            .filter(c => c.chargeType === 'room_night')
+            .map(c => c.date)
+        )
+
+        const dates = getNightDateRange(checkInDate, checkOutDate)
+        const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
+        for (const date of dates) {
+          if (existingDates.has(date)) continue
+          const rate = await getEffectiveRate(businessId, roomId, date, baseRate)
+          await addDoc(chargesRef, {
+            reservationId,
+            roomId,
+            roomNumber,
+            guestName,
+            chargeType: 'room_night',
+            description: `Noche ${date}`,
+            amount: rate,
+            date,
+            createdBy: 'checkin',
+            createdAt: serverTimestamp(),
+          })
+        }
+      }
+    }
+
+    // Actualizar estado de reserva y habitación
     await updateDoc(reservationRef, {
       status: 'checked_in',
       updatedAt: serverTimestamp()
     })
-
-    // Update room status to occupied
     const roomRef = doc(db, 'businesses', businessId, 'hotelRooms', roomId)
     await updateDoc(roomRef, {
       status: 'occupied',
@@ -221,7 +273,18 @@ export const checkIn = async (businessId, reservationId, roomId) => {
 
 export const checkOut = async (businessId, reservationId, roomId) => {
   try {
-    // Get folio charges total
+    // Eliminar cargos de noches futuras no utilizadas y no facturadas (early check-out)
+    const today = new Date().toISOString().split('T')[0]
+    const existingResult = await getChargesByReservation(businessId, reservationId)
+    const toDelete = (existingResult.data || []).filter(c =>
+      c.chargeType === 'room_night' && !c.invoiceId && c.date >= today
+    )
+    for (const charge of toDelete) {
+      const ref = doc(db, 'businesses', businessId, 'hotelFolioCharges', charge.id)
+      await deleteDoc(ref)
+    }
+
+    // Recalcular total después de eliminaciones
     const totalResult = await getReservationTotal(businessId, reservationId)
     const chargesTotal = totalResult.success ? totalResult.data : 0
 
@@ -338,16 +401,41 @@ export const addCharge = async (businessId, chargeData) => {
 export const getChargesByReservation = async (businessId, reservationId) => {
   try {
     const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
-    const q = query(
-      chargesRef,
-      where('reservationId', '==', reservationId),
-      orderBy('createdAt', 'asc')
-    )
+    // Sin orderBy para no requerir índice compuesto; ordenamos en memoria
+    const q = query(chargesRef, where('reservationId', '==', reservationId))
     const snapshot = await getDocs(q)
-    const charges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    const charges = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const aTime = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() ?? 0
+        const bTime = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() ?? 0
+        return aTime - bTime
+      })
     return { success: true, data: charges }
   } catch (error) {
     console.error('Error al obtener cargos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Marca un conjunto de cargos del folio como facturados, vinculándolos a una invoice
+export const markChargesAsInvoiced = async (businessId, chargeIds, invoiceId, invoiceNumber = '') => {
+  try {
+    if (!Array.isArray(chargeIds) || chargeIds.length === 0) {
+      return { success: true, updated: 0 }
+    }
+    const updates = chargeIds.map(id => {
+      const ref = doc(db, 'businesses', businessId, 'hotelFolioCharges', id)
+      return updateDoc(ref, {
+        invoiceId,
+        invoiceNumber,
+        invoicedAt: serverTimestamp(),
+      })
+    })
+    await Promise.all(updates)
+    return { success: true, updated: chargeIds.length }
+  } catch (error) {
+    console.error('Error al marcar cargos como facturados:', error)
     return { success: false, error: error.message }
   }
 }
