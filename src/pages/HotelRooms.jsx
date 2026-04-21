@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, BedDouble, Loader2, Trash2, Users, CheckCircle, AlertTriangle, Wrench, Edit, X, User, Calendar, DollarSign, Wifi, Phone, Clock, Settings, Receipt, LogOut, ShoppingCart } from 'lucide-react'
+import { Plus, BedDouble, Loader2, Trash2, Users, CheckCircle, AlertTriangle, Wrench, Edit, X, User, Calendar, DollarSign, Wifi, Phone, Clock, Settings, Receipt, LogOut, ShoppingCart, LogIn, Search } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
@@ -8,8 +8,10 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut, getChargesByReservation, getReservationTotal } from '@/services/hotelService'
+import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut, getChargesByReservation, getReservationTotal, createReservation, checkIn } from '@/services/hotelService'
 import InvoiceFromFolioModal from '@/components/hotel/InvoiceFromFolioModal'
+import { upsertCustomerFromSale } from '@/services/firestoreService'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 const STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'bg-green-500', bg: 'bg-green-50 border-green-300', text: 'text-green-700', icon: CheckCircle, iconColor: 'text-green-500' },
@@ -60,6 +62,21 @@ export default function HotelRooms() {
   // Flujo guiado de cobro antes del check-out
   const [pendingCheckOut, setPendingCheckOut] = useState(null) // { reservation, roomId, charges, total }
   const [showInvoiceBeforeCheckout, setShowInvoiceBeforeCheckout] = useState(false)
+  // Check-in rápido
+  const [isQuickCheckInOpen, setIsQuickCheckInOpen] = useState(false)
+  const [quickForm, setQuickForm] = useState({
+    documentType: 'DNI',
+    documentNumber: '',
+    guestName: '',
+    phone: '',
+    email: '',
+    checkInDate: '',
+    checkOutDate: '',
+    ratePerNight: 0,
+    notes: '',
+  })
+  const [isSavingQuickCheckIn, setIsSavingQuickCheckIn] = useState(false)
+  const [isLookingUp, setIsLookingUp] = useState(false)
   // Modal de configuración (crear/editar)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState(null)
@@ -132,6 +149,154 @@ export default function HotelRooms() {
 
   const closeRoomDetail = () => {
     setSelectedRoom(null)
+  }
+
+  // Abrir modal de check-in rápido
+  const openQuickCheckIn = () => {
+    if (!selectedRoom) return
+    const today = new Date().toISOString().split('T')[0]
+    setQuickForm({
+      documentType: 'DNI',
+      documentNumber: '',
+      guestName: '',
+      phone: '',
+      email: '',
+      checkInDate: today,
+      checkOutDate: '',
+      ratePerNight: Number(selectedRoom.rate ?? selectedRoom.ratePerNight ?? 0),
+      notes: '',
+    })
+    setIsQuickCheckInOpen(true)
+  }
+
+  const closeQuickCheckIn = () => {
+    if (isSavingQuickCheckIn) return
+    setIsQuickCheckInOpen(false)
+  }
+
+  // Búsqueda de huésped por DNI/RUC
+  const handleQuickLookup = async () => {
+    if (!quickForm.documentNumber) {
+      toast.error('Ingrese el número de documento')
+      return
+    }
+    setIsLookingUp(true)
+    try {
+      if (quickForm.documentType === 'DNI' && quickForm.documentNumber.length === 8) {
+        const result = await consultarDNI(quickForm.documentNumber)
+        if (result.success && result.data) {
+          const name = result.data.nombreCompleto
+            || `${result.data.nombres || ''} ${result.data.apellidoPaterno || ''} ${result.data.apellidoMaterno || ''}`.trim()
+          if (name) {
+            setQuickForm(prev => ({ ...prev, guestName: name }))
+            toast.success('Huésped encontrado')
+          } else {
+            toast.error('No se pudo obtener el nombre del DNI')
+          }
+        } else {
+          toast.error(result.error || 'No se encontró el DNI')
+        }
+      } else if (quickForm.documentType === 'RUC' && quickForm.documentNumber.length === 11) {
+        const result = await consultarRUC(quickForm.documentNumber)
+        if (result.success && result.data) {
+          const name = result.data.razonSocial || result.data.nombreComercial || ''
+          if (name) {
+            setQuickForm(prev => ({ ...prev, guestName: name }))
+            toast.success('Empresa encontrada')
+          } else {
+            toast.error('No se pudo obtener la razón social')
+          }
+        } else {
+          toast.error(result.error || 'No se encontró el RUC')
+        }
+      } else {
+        toast.error(quickForm.documentType === 'DNI' ? 'DNI debe tener 8 dígitos' : quickForm.documentType === 'RUC' ? 'RUC debe tener 11 dígitos' : 'Búsqueda solo disponible para DNI o RUC')
+      }
+    } catch {
+      toast.error('Error al consultar documento')
+    } finally {
+      setIsLookingUp(false)
+    }
+  }
+
+  // Guardar check-in rápido: crear reserva + check-in + sync huésped
+  const handleQuickCheckInSave = async () => {
+    if (!selectedRoom) return
+    const { documentNumber, guestName, checkInDate, checkOutDate, ratePerNight } = quickForm
+    if (!documentNumber?.trim()) { toast.error('Ingrese el número de documento'); return }
+    if (!guestName?.trim()) { toast.error('Ingrese el nombre del huésped'); return }
+    if (!checkInDate) { toast.error('Seleccione fecha de check-in'); return }
+    if (!checkOutDate) { toast.error('Seleccione fecha de check-out'); return }
+    if (new Date(checkOutDate) <= new Date(checkInDate)) { toast.error('Check-out debe ser posterior al check-in'); return }
+
+    const nights = Math.max(Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)), 1)
+    const totalAmount = nights * Number(ratePerNight || 0)
+
+    setIsSavingQuickCheckIn(true)
+    try {
+      if (isDemoMode) {
+        toast.error('No disponible en modo demo')
+        return
+      }
+      const businessId = getBusinessId()
+
+      // 1. Crear reserva
+      const reservationPayload = {
+        guestName: guestName.trim(),
+        documentType: quickForm.documentType,
+        documentNumber: documentNumber.trim(),
+        guestDocument: documentNumber.trim(),
+        guestDocumentType: quickForm.documentType,
+        phone: quickForm.phone || '',
+        guestPhone: quickForm.phone || '',
+        email: quickForm.email || '',
+        guestEmail: quickForm.email || '',
+        roomId: selectedRoom.id,
+        roomNumber: selectedRoom.number || '',
+        roomName: selectedRoom.name || '',
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        checkInDate,
+        checkOutDate,
+        nights,
+        ratePerNight: Number(ratePerNight || 0),
+        totalAmount,
+        total: totalAmount,
+        notes: quickForm.notes || '',
+        userId: user.uid,
+      }
+      const createResult = await createReservation(businessId, reservationPayload)
+      if (!createResult.success) {
+        toast.error(createResult.error || 'Error al crear reserva')
+        return
+      }
+
+      // 2. Check-in inmediato
+      const checkInResult = await checkIn(businessId, createResult.data.id, selectedRoom.id)
+      if (!checkInResult.success) {
+        toast.warning('Reserva creada pero falló el check-in. Haz check-in desde Reservas.')
+      }
+
+      // 3. Sincronizar huésped a Clientes
+      upsertCustomerFromSale(businessId, {
+        documentType: quickForm.documentType === 'RUC' ? 'RUC' : 'DNI',
+        documentNumber: documentNumber.trim(),
+        name: guestName.trim(),
+        businessName: quickForm.documentType === 'RUC' ? guestName.trim() : '',
+        email: quickForm.email || '',
+        phone: quickForm.phone || '',
+      }).catch(err => console.warn('No se pudo sincronizar huésped:', err))
+
+      toast.success(`Check-in realizado: ${guestName}`)
+      setIsQuickCheckInOpen(false)
+      setSelectedRoom(null)
+      await loadRooms()
+    } catch (error) {
+      console.error('Error en check-in rápido:', error)
+      toast.error('Error al realizar check-in')
+    } finally {
+      setIsSavingQuickCheckIn(false)
+    }
   }
 
   // Ir al folio de la reserva de esta habitación
@@ -537,6 +702,17 @@ export default function HotelRooms() {
                 </p>
               </div>
 
+              {/* Check-in rápido (solo si la habitación está disponible) */}
+              {selectedRoom.status === 'available' && (
+                <button
+                  onClick={openQuickCheckIn}
+                  className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-green-300 bg-green-50 hover:bg-green-100 transition-all active:scale-95 font-semibold text-green-700"
+                >
+                  <LogIn className="w-5 h-5" />
+                  Check-in rápido
+                </button>
+              )}
+
               {/* Huésped actual */}
               {guest && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
@@ -798,6 +974,127 @@ export default function HotelRooms() {
         total={pendingCheckOut?.total || 0}
         onInvoiceCreated={handleInvoiceCreatedBeforeCheckout}
       />
+
+      {/* Modal Check-in rápido */}
+      <Modal
+        isOpen={isQuickCheckInOpen}
+        onClose={closeQuickCheckIn}
+        title={`Check-in rápido · Hab. ${selectedRoom?.number || ''}`}
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">Se creará la reserva y se hará check-in en un solo paso.</p>
+
+          {/* Documento */}
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Tipo de documento"
+              value={quickForm.documentType}
+              onChange={e => setQuickForm(prev => ({ ...prev, documentType: e.target.value }))}
+            >
+              <option value="DNI">DNI</option>
+              <option value="RUC">RUC</option>
+              <option value="CE">CE</option>
+              <option value="Pasaporte">Pasaporte</option>
+            </Select>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nro. documento *</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                  value={quickForm.documentNumber}
+                  onChange={e => setQuickForm(prev => ({ ...prev, documentNumber: e.target.value }))}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleQuickLookup}
+                  disabled={isLookingUp || (quickForm.documentType !== 'DNI' && quickForm.documentType !== 'RUC')}
+                  className="px-3"
+                >
+                  {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Nombre */}
+          <Input
+            label="Nombre completo *"
+            value={quickForm.guestName}
+            onChange={e => setQuickForm(prev => ({ ...prev, guestName: e.target.value }))}
+          />
+
+          {/* Teléfono / Email */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Teléfono"
+              type="tel"
+              value={quickForm.phone}
+              onChange={e => setQuickForm(prev => ({ ...prev, phone: e.target.value }))}
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={quickForm.email}
+              onChange={e => setQuickForm(prev => ({ ...prev, email: e.target.value }))}
+            />
+          </div>
+
+          {/* Fechas */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Check-in *"
+              type="date"
+              value={quickForm.checkInDate}
+              onChange={e => setQuickForm(prev => ({ ...prev, checkInDate: e.target.value }))}
+            />
+            <Input
+              label="Check-out *"
+              type="date"
+              value={quickForm.checkOutDate}
+              onChange={e => setQuickForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
+            />
+          </div>
+
+          {/* Tarifa */}
+          <Input
+            label="Tarifa por noche (S/)"
+            type="number"
+            step="0.01"
+            value={quickForm.ratePerNight}
+            onChange={e => setQuickForm(prev => ({ ...prev, ratePerNight: e.target.value }))}
+          />
+
+          {/* Notas */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+            <textarea
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+              value={quickForm.notes}
+              onChange={e => setQuickForm(prev => ({ ...prev, notes: e.target.value }))}
+              placeholder="Notas adicionales..."
+            />
+          </div>
+
+          {/* Acciones */}
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <Button variant="outline" onClick={closeQuickCheckIn} disabled={isSavingQuickCheckIn}>
+              Cancelar
+            </Button>
+            <Button onClick={handleQuickCheckInSave} disabled={isSavingQuickCheckIn}>
+              {isSavingQuickCheckIn ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Procesando...</>
+              ) : (
+                <><LogIn className="w-4 h-4 mr-2" /> Confirmar Check-in</>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
