@@ -41,6 +41,7 @@ import {
   getChargesByReservation,
   getReservationTotal,
 } from '@/services/hotelService'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 // Schema
 const reservationSchema = z.object({
@@ -124,6 +125,9 @@ export default function HotelReservations() {
   // Processing actions
   const [processingId, setProcessingId] = useState(null)
 
+  // Document lookup
+  const [isLookingUp, setIsLookingUp] = useState(false)
+
   const {
     register,
     handleSubmit,
@@ -150,8 +154,58 @@ export default function HotelReservations() {
   const watchCheckIn = watch('checkInDate')
   const watchCheckOut = watch('checkOutDate')
   const watchRate = watch('ratePerNight')
+  const watchRoomId = watch('roomId')
+  const watchDocType = watch('documentType')
+  const watchDocNumber = watch('documentNumber')
   const nights = calculateNights(watchCheckIn, watchCheckOut)
   const estimatedTotal = nights * (watchRate || 0)
+
+  // Auto-cargar tarifa al seleccionar habitación (si no se está editando o el usuario no ha tocado la tarifa)
+  useEffect(() => {
+    if (!watchRoomId) return
+    const room = rooms.find(r => r.id === watchRoomId)
+    if (!room) return
+    const roomRate = room.rate ?? room.ratePerNight ?? 0
+    if (roomRate > 0) {
+      setValue('ratePerNight', roomRate, { shouldValidate: true })
+    }
+  }, [watchRoomId, rooms, setValue])
+
+  // Búsqueda de cliente por DNI/RUC
+  const handleDocumentLookup = async () => {
+    if (!watchDocNumber) {
+      toast.error('Ingrese el número de documento')
+      return
+    }
+    setIsLookingUp(true)
+    try {
+      if (watchDocType === 'DNI' && watchDocNumber.length === 8) {
+        const result = await consultarDNI(watchDocNumber)
+        if (result.success && result.data) {
+          const name = result.data.nombre_completo || result.data.nombre || ''
+          setValue('guestName', name, { shouldValidate: true })
+          toast.success('Huésped encontrado')
+        } else {
+          toast.error(result.error || 'No se encontró el DNI')
+        }
+      } else if (watchDocType === 'RUC' && watchDocNumber.length === 11) {
+        const result = await consultarRUC(watchDocNumber)
+        if (result.success && result.data) {
+          const name = result.data.razon_social || result.data.nombre_o_razon_social || ''
+          setValue('guestName', name, { shouldValidate: true })
+          toast.success('Empresa encontrada')
+        } else {
+          toast.error(result.error || 'No se encontró el RUC')
+        }
+      } else {
+        toast.error(watchDocType === 'DNI' ? 'DNI debe tener 8 dígitos' : watchDocType === 'RUC' ? 'RUC debe tener 11 dígitos' : 'Búsqueda solo disponible para DNI o RUC')
+      }
+    } catch {
+      toast.error('Error al consultar documento')
+    } finally {
+      setIsLookingUp(false)
+    }
+  }
 
   // Load data
   useEffect(() => {
@@ -726,12 +780,6 @@ export default function HotelReservations() {
           {/* Guest info */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700">Datos del huésped</h4>
-            <Input
-              label="Nombre completo"
-              required
-              {...register('guestName')}
-              error={errors.guestName?.message}
-            />
             <div className="grid grid-cols-2 gap-3">
               <Select
                 label="Tipo de documento"
@@ -744,13 +792,39 @@ export default function HotelReservations() {
                 <option value="CE">CE</option>
                 <option value="Pasaporte">Pasaporte</option>
               </Select>
-              <Input
-                label="Nro. documento"
-                required
-                {...register('documentNumber')}
-                error={errors.documentNumber?.message}
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nro. documento <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    {...register('documentNumber')}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDocumentLookup}
+                    disabled={isLookingUp || (watchDocType !== 'DNI' && watchDocType !== 'RUC')}
+                    title="Buscar por DNI/RUC"
+                    className="px-3"
+                  >
+                    {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </Button>
+                </div>
+                {errors.documentNumber && (
+                  <p className="mt-1 text-xs text-red-600">{errors.documentNumber.message}</p>
+                )}
+              </div>
             </div>
+            <Input
+              label="Nombre completo"
+              required
+              {...register('guestName')}
+              error={errors.guestName?.message}
+            />
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Teléfono"
@@ -782,11 +856,14 @@ export default function HotelReservations() {
                   {editingReservation.roomName || editingReservation.roomNumber} (actual)
                 </option>
               )}
-              {availableRooms.map(room => (
-                <option key={room.id} value={room.id}>
-                  {room.name || room.number} - {room.type || 'Estándar'} ({formatCurrency(room.ratePerNight || 0)}/noche)
-                </option>
-              ))}
+              {availableRooms.map(room => {
+                const roomRate = room.rate ?? room.ratePerNight ?? 0
+                return (
+                  <option key={room.id} value={room.id}>
+                    {room.name || room.number} - {room.type || 'Estándar'} ({formatCurrency(roomRate)}/noche)
+                  </option>
+                )
+              })}
             </Select>
             <div className="grid grid-cols-2 gap-3">
               <Input
