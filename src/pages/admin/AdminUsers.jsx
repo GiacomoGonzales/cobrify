@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
@@ -230,6 +230,11 @@ export default function AdminUsers() {
   // Planes personalizados
   const [customPlans, setCustomPlans] = useState({})
 
+  // Subscriptions huérfanas (sin user doc ni business asociado)
+  const [orphanSubscriptions, setOrphanSubscriptions] = useState([])
+  const [showOrphansModal, setShowOrphansModal] = useState(false)
+  const [deletingOrphanId, setDeletingOrphanId] = useState(null)
+
   useEffect(() => {
     loadUsers()
     loadCustomPlansData()
@@ -313,6 +318,7 @@ export default function AdminUsers() {
       })
 
       const usersData = []
+      const orphans = []
       const now = new Date()
 
       subscriptionsSnapshot.forEach(doc => {
@@ -322,7 +328,31 @@ export default function AdminUsers() {
         if (data.ownerId) return
         if (usersMap[doc.id]?.ownerId) return
         // Si tiene documento en users pero no es business owner y no tiene negocio, es sub-usuario huérfano
-        if (usersMap[doc.id] && !usersMap[doc.id]?.isBusinessOwner && !businessesMap[doc.id]) return
+        if (usersMap[doc.id] && !usersMap[doc.id]?.isBusinessOwner && !businessesMap[doc.id]) {
+          orphans.push({
+            id: doc.id,
+            email: data.email || usersMap[doc.id]?.email || '',
+            displayName: usersMap[doc.id]?.displayName || '',
+            plan: data.plan || '',
+            status: data.status || '',
+            createdAt: data.createdAt?.toDate?.() || data.startDate?.toDate?.() || null,
+            reason: 'Tiene user doc sin isBusinessOwner y sin negocio',
+          })
+          return
+        }
+        // Subscription huérfana: sin doc en users y sin negocio asociado -> sub-usuario cuyo doc fue eliminado
+        if (!usersMap[doc.id] && !businessesMap[doc.id]) {
+          orphans.push({
+            id: doc.id,
+            email: data.email || '',
+            displayName: data.businessName || '',
+            plan: data.plan || '',
+            status: data.status || '',
+            createdAt: data.createdAt?.toDate?.() || data.startDate?.toDate?.() || null,
+            reason: 'Sin doc en users y sin negocio',
+          })
+          return
+        }
 
         // Obtener datos del negocio
         const business = businessesMap[doc.id] || {}
@@ -415,10 +445,26 @@ export default function AdminUsers() {
       })
 
       setUsers(usersData)
+      setOrphanSubscriptions(orphans)
     } catch (error) {
       console.error('Error loading users:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Eliminar subscription huérfana
+  const handleDeleteOrphanSubscription = async (subscriptionId) => {
+    if (!window.confirm('¿Eliminar esta subscription huérfana? Esta acción no se puede deshacer.')) return
+    setDeletingOrphanId(subscriptionId)
+    try {
+      await deleteDoc(doc(db, 'subscriptions', subscriptionId))
+      setOrphanSubscriptions(prev => prev.filter(o => o.id !== subscriptionId))
+    } catch (error) {
+      console.error('Error eliminando subscription huérfana:', error)
+      alert('Error al eliminar: ' + error.message)
+    } finally {
+      setDeletingOrphanId(null)
     }
   }
 
@@ -1980,6 +2026,20 @@ export default function AdminUsers() {
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar</span>
+            </button>
+
+            <button
+              onClick={() => setShowOrphansModal(true)}
+              className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm ${
+                orphanSubscriptions.length > 0
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Revisar subscriptions sin usuario ni negocio"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden sm:inline">Huérfanas</span>
+              <span className="font-semibold">{orphanSubscriptions.length}</span>
             </button>
           </div>
         </div>
@@ -4323,6 +4383,96 @@ export default function AdminUsers() {
                 ) : (
                   <><Check className="w-4 h-4" /> Guardar</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Subscriptions Huérfanas */}
+      {showOrphansModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Subscriptions Huérfanas ({orphanSubscriptions.length})
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Subscriptions sin negocio o sin user doc — probablemente sub-usuarios mal creados
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOrphansModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {orphanSubscriptions.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No hay subscriptions huérfanas</p>
+              ) : (
+                <div className="space-y-2">
+                  {orphanSubscriptions.map(orphan => (
+                    <div key={orphan.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-900 text-sm truncate">
+                              {orphan.email || orphan.displayName || '(sin email)'}
+                            </span>
+                            {orphan.plan && (
+                              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                {orphan.plan}
+                              </span>
+                            )}
+                            {orphan.status && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
+                                {orphan.status}
+                              </span>
+                            )}
+                          </div>
+                          {orphan.displayName && orphan.email && orphan.displayName !== orphan.email && (
+                            <p className="text-xs text-gray-600 mt-0.5">{orphan.displayName}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1 font-mono">UID: {orphan.id}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{orphan.reason}</p>
+                          {orphan.createdAt && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Creada: {orphan.createdAt.toLocaleDateString('es-PE')}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteOrphanSubscription(orphan.id)}
+                          disabled={deletingOrphanId === orphan.id}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-100 text-red-700 hover:bg-red-200 rounded disabled:opacity-50"
+                        >
+                          {deletingOrphanId === orphan.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 p-4 flex justify-end">
+              <button
+                onClick={() => setShowOrphansModal(false)}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg"
+              >
+                Cerrar
               </button>
             </div>
           </div>
