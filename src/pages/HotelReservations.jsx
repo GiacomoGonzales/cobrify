@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -97,6 +98,7 @@ function isToday(date) {
 export default function HotelReservations() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Data
   const [reservations, setReservations] = useState([])
@@ -262,6 +264,19 @@ export default function HotelReservations() {
 
     return { reservationsToday, arrivalsToday, departuresToday, occupancy }
   }, [reservations, rooms])
+
+  // Abrir folio automáticamente si llega ?folio=<reservationId>
+  useEffect(() => {
+    const folioId = searchParams.get('folio')
+    if (!folioId || reservations.length === 0 || folioReservation) return
+    const reservation = reservations.find(r => r.id === folioId)
+    if (reservation) {
+      openFolio(reservation)
+      // Limpiar el query param para evitar reabrir al navegar
+      searchParams.delete('folio')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [reservations, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtered reservations
   const filteredReservations = useMemo(() => {

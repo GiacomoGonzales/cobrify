@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Plus, BedDouble, Loader2, Trash2, Users, CheckCircle, AlertTriangle, Wrench, Edit, X, User, Calendar, DollarSign, Wifi, Phone, Clock, Settings } from 'lucide-react'
+import { Plus, BedDouble, Loader2, Trash2, Users, CheckCircle, AlertTriangle, Wrench, Edit, X, User, Calendar, DollarSign, Wifi, Phone, Clock, Settings, Receipt, LogOut, ShoppingCart } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus } from '@/services/hotelService'
+import { createRoom, getRooms, updateRoom, deleteRoom, updateRoomStatus, getActiveReservations, checkOut } from '@/services/hotelService'
 
 const STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'bg-green-500', bg: 'bg-green-50 border-green-300', text: 'text-green-700', icon: CheckCircle, iconColor: 'text-green-500' },
@@ -45,13 +46,16 @@ const STATUS_TRANSITIONS = {
 
 export default function HotelRooms() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const appNavigate = useAppNavigate()
   const toast = useToast()
 
   const [rooms, setRooms] = useState([])
+  const [activeReservations, setActiveReservations] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   // Panel de detalle operativo
   const [selectedRoom, setSelectedRoom] = useState(null)
   const [isChangingStatus, setIsChangingStatus] = useState(false)
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
   // Modal de configuración (crear/editar)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState(null)
@@ -76,10 +80,10 @@ export default function HotelRooms() {
 
   // Obtener huésped actual de una habitación ocupada
   const getGuestForRoom = (roomId) => {
-    if (!demoData?.hotelReservations) return null
-    return demoData.hotelReservations.find(
-      r => r.roomId === roomId && r.status === 'checked_in'
-    )
+    const source = isDemoMode
+      ? (demoData?.hotelReservations || [])
+      : activeReservations
+    return source.find(r => r.roomId === roomId && r.status === 'checked_in')
   }
 
   useEffect(() => {
@@ -92,15 +96,22 @@ export default function HotelRooms() {
     try {
       if (isDemoMode && demoData?.hotelRooms) {
         setRooms(demoData.hotelRooms)
+        setActiveReservations(demoData.hotelReservations || [])
         setIsLoading(false)
         return
       }
       const businessId = getBusinessId()
-      const result = await getRooms(businessId)
-      if (result.success) {
-        setRooms(result.data)
+      const [roomsResult, reservationsResult] = await Promise.all([
+        getRooms(businessId),
+        getActiveReservations(businessId),
+      ])
+      if (roomsResult.success) {
+        setRooms(roomsResult.data)
       } else {
         toast.error('Error al cargar habitaciones')
+      }
+      if (reservationsResult.success) {
+        setActiveReservations(reservationsResult.data || [])
       }
     } catch (error) {
       toast.error('Error al cargar habitaciones')
@@ -117,6 +128,53 @@ export default function HotelRooms() {
 
   const closeRoomDetail = () => {
     setSelectedRoom(null)
+  }
+
+  // Ir al folio de la reserva de esta habitación
+  const handleGoToFolio = (guest) => {
+    if (!guest) return
+    setSelectedRoom(null)
+    appNavigate(`/reservas?folio=${guest.id}`)
+  }
+
+  // Ir al Punto de Venta
+  const handleGoToPOS = () => {
+    setSelectedRoom(null)
+    appNavigate('/pos')
+  }
+
+  // Check-out desde el detalle de habitación
+  const handleQuickCheckOut = async (guest) => {
+    if (!selectedRoom || !guest) return
+    if (!window.confirm(`¿Confirmar check-out de ${guest.guestName}? La habitación pasará a limpieza.`)) return
+
+    setIsCheckingOut(true)
+    try {
+      if (isDemoMode) {
+        setRooms(prev => prev.map(r =>
+          r.id === selectedRoom.id ? { ...r, status: 'cleaning' } : r
+        ))
+        setActiveReservations(prev => prev.map(r =>
+          r.id === guest.id ? { ...r, status: 'checked_out' } : r
+        ))
+        setSelectedRoom(prev => ({ ...prev, status: 'cleaning' }))
+        toast.success(`Check-out realizado: ${guest.guestName} (DEMO)`)
+        return
+      }
+      const businessId = getBusinessId()
+      const result = await checkOut(businessId, guest.id, selectedRoom.id)
+      if (result.success) {
+        toast.success(`Check-out realizado: ${guest.guestName}`)
+        await loadRooms()
+        setSelectedRoom(prev => ({ ...prev, status: 'cleaning' }))
+      } else {
+        toast.error(result.error || 'Error en check-out')
+      }
+    } catch (error) {
+      toast.error('Error en check-out')
+    } finally {
+      setIsCheckingOut(false)
+    }
   }
 
   const handleStatusChange = async (newStatus) => {
@@ -458,6 +516,38 @@ export default function HotelRooms() {
                   {guest.notes && (
                     <p className="text-xs text-blue-700 italic">"{guest.notes}"</p>
                   )}
+                </div>
+              )}
+
+              {/* Acciones rápidas para habitación ocupada */}
+              {guest && (
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => handleGoToFolio(guest)}
+                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all hover:scale-[1.03] active:scale-95"
+                  >
+                    <Receipt className="w-5 h-5 text-emerald-600" />
+                    <span className="text-xs font-semibold text-emerald-700">Cobrar / Folio</span>
+                  </button>
+                  <button
+                    onClick={() => handleQuickCheckOut(guest)}
+                    disabled={isCheckingOut}
+                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCheckingOut ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
+                    ) : (
+                      <LogOut className="w-5 h-5 text-orange-600" />
+                    )}
+                    <span className="text-xs font-semibold text-orange-700">Check-out</span>
+                  </button>
+                  <button
+                    onClick={handleGoToPOS}
+                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 transition-all hover:scale-[1.03] active:scale-95"
+                  >
+                    <ShoppingCart className="w-5 h-5 text-primary-600" />
+                    <span className="text-xs font-semibold text-primary-700">Punto de Venta</span>
+                  </button>
                 </div>
               )}
 
