@@ -520,34 +520,41 @@ export default function HotelRooms() {
               )}
 
               {/* Acciones rápidas para habitación ocupada */}
-              {guest && (
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => handleGoToFolio(guest)}
-                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all hover:scale-[1.03] active:scale-95"
-                  >
-                    <Receipt className="w-5 h-5 text-emerald-600" />
-                    <span className="text-xs font-semibold text-emerald-700">Cobrar / Folio</span>
-                  </button>
-                  <button
-                    onClick={() => handleQuickCheckOut(guest)}
-                    disabled={isCheckingOut}
-                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isCheckingOut ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
-                    ) : (
-                      <LogOut className="w-5 h-5 text-orange-600" />
+              {selectedRoom.status === 'occupied' && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Acciones rápidas</p>
+                  <div className={`grid gap-2 ${guest ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {guest && (
+                      <button
+                        onClick={() => handleGoToFolio(guest)}
+                        className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all hover:scale-[1.03] active:scale-95"
+                      >
+                        <Receipt className="w-5 h-5 text-emerald-600" />
+                        <span className="text-xs font-semibold text-emerald-700">Cobrar / Folio</span>
+                      </button>
                     )}
-                    <span className="text-xs font-semibold text-orange-700">Check-out</span>
-                  </button>
-                  <button
-                    onClick={handleGoToPOS}
-                    className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 transition-all hover:scale-[1.03] active:scale-95"
-                  >
-                    <ShoppingCart className="w-5 h-5 text-primary-600" />
-                    <span className="text-xs font-semibold text-primary-700">Punto de Venta</span>
-                  </button>
+                    <button
+                      onClick={() => guest ? handleQuickCheckOut(guest) : handleStatusChange('cleaning')}
+                      disabled={isCheckingOut || isChangingStatus}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {(isCheckingOut || isChangingStatus) ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
+                      ) : (
+                        <LogOut className="w-5 h-5 text-orange-600" />
+                      )}
+                      <span className="text-xs font-semibold text-orange-700">
+                        {guest ? 'Check-out' : 'Liberar'}
+                      </span>
+                    </button>
+                    <button
+                      onClick={handleGoToPOS}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 transition-all hover:scale-[1.03] active:scale-95"
+                    >
+                      <ShoppingCart className="w-5 h-5 text-primary-600" />
+                      <span className="text-xs font-semibold text-primary-700">Punto de Venta</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
