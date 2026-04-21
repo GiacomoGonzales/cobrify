@@ -649,7 +649,20 @@ export default function CreateQuotation() {
     const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
     return activeProducts
       .filter(p => {
-        const searchableText = [p.name || '', p.code || '', p.sku || ''].join(' ').toLowerCase()
+        // Multi-campo (alineado con POS/Inventario): nombre, código/sku con y sin guiones, marca, laboratorio, descripción
+        const code = p.code || ''
+        const sku = p.sku || ''
+        const searchableText = [
+          p.name || '',
+          code,
+          code.replace(/-/g, ''),
+          sku,
+          sku.replace(/-/g, ''),
+          p.marca || '',
+          p.laboratoryName || '',
+          p.genericName || '',
+          p.description || '',
+        ].join(' ').toLowerCase()
         // Verificar que TODAS las palabras estén presentes (en cualquier orden)
         return searchWords.every(word => searchableText.includes(word))
       })

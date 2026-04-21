@@ -114,6 +114,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [transferDescription, setTransferDescription] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
   const [weightUnit, setWeightUnit] = useState('KGM')
+  const [weightManuallyEdited, setWeightManuallyEdited] = useState(false)
   const [isM1LVehicle, setIsM1LVehicle] = useState(false)
 
   // Datos del destinatario
@@ -207,6 +208,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       setRelatedDocuments([])
       setTransferDescription('')
       setTotalWeight('')
+      setWeightManuallyEdited(false)
       setDriverDocType('1')
       setDriverDocNumber('')
       setDriverName('')
@@ -539,6 +541,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     setTransferDescription(cloneData.transferDescription || '')
     setTotalWeight(cloneData.totalWeight ? String(cloneData.totalWeight) : '')
     setWeightUnit(cloneData.weightUnit || 'KGM')
+    // Preservar el peso clonado; el usuario puede reactivar auto-cálculo editando el campo
+    if (cloneData.totalWeight) setWeightManuallyEdited(true)
     setIsM1LVehicle(cloneData.isM1LVehicle || false)
     setAdditionalInfo(cloneData.additionalInfo || '')
 
@@ -648,6 +652,26 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       loadProducts()
     }
   }, [isOpen, referenceInvoice])
+
+  // Auto-calcular peso total a partir de items + peso unitario del producto
+  // Solo se actualiza si el usuario no editó el campo manualmente (evita pisar valores)
+  useEffect(() => {
+    if (weightManuallyEdited) return
+    if (!items || items.length === 0) return
+
+    const estimated = items.reduce((sum, item) => {
+      const product = item.productId ? productsMap[item.productId] : null
+      const unitWeight = Number(product?.weight || 0)
+      const qty = Number(item.quantity || 0)
+      return sum + (unitWeight * qty)
+    }, 0)
+
+    if (estimated > 0) {
+      // Redondear a 2 decimales
+      const rounded = Math.round(estimated * 100) / 100
+      setTotalWeight(String(rounded))
+    }
+  }, [items, productsMap, weightManuallyEdited])
 
   // Cargar configuración de envío automático al abrir el modal (no aplica para clonación)
   useEffect(() => {
@@ -785,13 +809,25 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     ))
   }
 
-  // Filtrar productos según búsqueda
+  // Filtrar productos según búsqueda (tokenizada y multi-campo, alineado con POS/Inventario)
   const getFilteredProducts = (searchTerm) => {
     if (!searchTerm) return productsList.slice(0, 8)
     const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(w => w.length > 0)
     return productsList
       .filter(p => {
-        const text = [p.name || '', p.code || '', p.sku || '', p.genericName || ''].join(' ').toLowerCase()
+        const code = p.code || ''
+        const sku = p.sku || ''
+        const text = [
+          p.name || '',
+          code,
+          code.replace(/-/g, ''),
+          sku,
+          sku.replace(/-/g, ''),
+          p.marca || '',
+          p.laboratoryName || '',
+          p.genericName || '',
+          p.description || '',
+        ].join(' ').toLowerCase()
         return searchWords.every(w => text.includes(w))
       })
       .slice(0, 10)
@@ -1685,7 +1721,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 placeholder="Ej: 25.5"
                 required
                 value={totalWeight}
-                onChange={(e) => setTotalWeight(e.target.value)}
+                onChange={(e) => {
+                  setTotalWeight(e.target.value)
+                  setWeightManuallyEdited(true)
+                }}
                 step="0.01"
                 min="0.01"
               />
