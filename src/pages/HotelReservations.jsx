@@ -877,14 +877,15 @@ export default function HotelReservations() {
               <option value="">Seleccionar habitación</option>
               {editingReservation && (
                 <option value={editingReservation.roomId}>
-                  {editingReservation.roomName || editingReservation.roomNumber} (actual)
+                  Hab. {editingReservation.roomNumber || '-'}{editingReservation.roomName ? ` - ${editingReservation.roomName}` : ''} (actual)
                 </option>
               )}
               {availableRooms.map(room => {
                 const roomRate = room.rate ?? room.ratePerNight ?? 0
+                const label = `Hab. ${room.number || '-'}${room.name ? ` - ${room.name}` : ''} · ${room.type || 'Estándar'} · ${formatCurrency(roomRate)}/noche`
                 return (
                   <option key={room.id} value={room.id}>
-                    {room.name || room.number} - {room.type || 'Estándar'} ({formatCurrency(roomRate)}/noche)
+                    {label}
                   </option>
                 )
               })}
