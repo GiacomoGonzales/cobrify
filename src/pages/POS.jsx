@@ -315,6 +315,16 @@ export default function POS() {
     return `${year}-${month}-${day}`
   }
   const [emissionDate, setEmissionDate] = useState(getLocalDateString()) // Fecha de emisión (por defecto hoy)
+  // Obtener fecha-hora local en formato YYYY-MM-DDTHH:mm (para inputs datetime-local)
+  const getLocalDateTimeString = (date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+  const [metaEventTime, setMetaEventTime] = useState(getLocalDateTimeString()) // Hora del evento para Meta Ads
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
@@ -1318,6 +1328,16 @@ export default function POS() {
         }
       }
 
+      // Cargar hora del evento (Meta Ads)
+      if (invoice.metaEventTime) {
+        const d = invoice.metaEventTime.toDate
+          ? invoice.metaEventTime.toDate()
+          : (invoice.metaEventTime.seconds ? new Date(invoice.metaEventTime.seconds * 1000) : new Date(invoice.metaEventTime))
+        if (!isNaN(d.getTime())) {
+          setMetaEventTime(getLocalDateTimeString(d))
+        }
+      }
+
       toast.info(`Editando ${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'} ${invoice.series}-${invoice.number}`)
 
       // Limpiar URL sin recargar
@@ -1423,6 +1443,8 @@ export default function POS() {
 
       // Usar fecha de HOY (no la del documento original)
       setEmissionDate(getLocalDateString())
+      // Usar hora actual para Meta Ads (no la del documento original)
+      setMetaEventTime(getLocalDateTimeString())
 
       const docName = invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
       toast.success(`Comprobante duplicado. Revisa los datos y emite el nuevo ${docName}.`)
@@ -2869,6 +2891,8 @@ export default function POS() {
     setGuideNumber('')
     setPurchaseOrderNumber('')
     setOrderNumber('')
+    // Reset hora del evento de Meta Ads
+    setMetaEventTime(getLocalDateTimeString())
     clearDraft() // Limpiar borrador de localStorage
   }
 
@@ -3559,6 +3583,10 @@ export default function POS() {
           sunatSentAt: null,
           createdAt: new Date(emissionDateToUse + 'T12:00:00'),
           emissionDate: emissionDateToUse,
+          // Hora del evento para Meta Ads (si está habilitado)
+          ...(businessSettings?.metaAdsEnabled && metaEventTime && {
+            metaEventTime: new Date(metaEventTime),
+          }),
         }
 
         setLastInvoiceNumber(demoNumber)
@@ -3778,6 +3806,10 @@ export default function POS() {
         sunatSentAt: null,
         // Fecha de emisión
         emissionDate: emissionDateToUse,
+        // Hora del evento para Meta Ads (si está habilitado)
+        ...(businessSettings?.metaAdsEnabled && metaEventTime && {
+          metaEventTime: new Date(metaEventTime),
+        }),
         // Información del vendedor
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
@@ -5392,6 +5424,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       return getLocalDateString(minDate)
                     })()}
                     onChange={e => setEmissionDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  />
+                </div>
+              )}
+
+              {/* 5b. Hora del evento (Meta Ads) */}
+              {businessSettings?.metaAdsEnabled && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Hora del evento (Meta Ads)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={metaEventTime}
+                    onChange={e => setMetaEventTime(e.target.value)}
                     className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                   />
                 </div>
