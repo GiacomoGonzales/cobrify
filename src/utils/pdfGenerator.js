@@ -667,7 +667,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   const lineSpacing = 10
   const totalTextHeight = totalLines * lineSpacing + 15
-  let infoY = currentY + (headerHeight - totalTextHeight) / 2 + 12
+  // Centrar verticalmente si el contenido cabe; si excede headerHeight, alinear arriba
+  // (evita que el nombre de la empresa se recorte por arriba cuando hay muchas sucursales)
+  const verticalOffset = Math.max(12, (headerHeight - totalTextHeight) / 2 + 12)
+  let infoY = currentY + verticalOffset
 
   // Dibujar nombre comercial (centrado)
   doc.setFontSize(11)
@@ -795,10 +798,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  // Asegurar que currentY esté siempre debajo del recuadro del documento
-  // El recuadro termina en MARGIN_TOP + headerHeight, sumar margen suficiente para que el texto no se cruce
+  // Asegurar que currentY esté siempre debajo del recuadro del documento Y
+  // debajo del texto de la empresa (cuando hay muchas sucursales el texto puede
+  // extenderse por debajo del headerHeight fijo)
   const docBoxBottomY = MARGIN_TOP + headerHeight + 18
-  currentY = Math.max(currentY + headerHeight + 5, docBoxBottomY)
+  currentY = Math.max(currentY + headerHeight + 5, docBoxBottomY, infoY + 8)
 
   // ========== ESLOGAN (centrado debajo del encabezado) ==========
   if (companySettings?.companySlogan) {
