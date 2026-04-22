@@ -579,16 +579,21 @@ export default function CashRegister() {
         const sessionOpenedAt = session.openedAt?.toDate
           ? session.openedAt.toDate()
           : new Date(session.openedAt)
-        const branchId = session.branchId || selectedBranch?.id || null
-        const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
-        if (invoicesResult.success) {
-          setHistoryInvoices(invoicesResult.data || [])
-        }
-
-        // Cargar cierres de mesa sin comprobante durante la sesión
         const sessionClosedAt = session.closedAt?.toDate
           ? session.closedAt.toDate()
           : session.closedAt ? new Date(session.closedAt) : new Date()
+        const branchId = session.branchId || selectedBranch?.id || null
+        const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
+        if (invoicesResult.success) {
+          // Cota superior: solo facturas emitidas antes del cierre de la sesión.
+          // Sin esto, sesiones antiguas mostraban comprobantes de sesiones posteriores.
+          const inSession = (invoicesResult.data || []).filter(inv => {
+            const ts = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+            if (!ts) return true
+            return ts <= sessionClosedAt
+          })
+          setHistoryInvoices(inSession)
+        }
         const closedResult = await getClosedWithoutReceipt(getBusinessId(), sessionOpenedAt, sessionClosedAt)
         if (closedResult.success) {
           setHistoryClosedWithoutReceipt(closedResult.data || [])
