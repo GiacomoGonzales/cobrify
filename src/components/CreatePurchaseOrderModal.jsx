@@ -779,7 +779,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
             </div>
 
             {/* Productos */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="flex items-center justify-between pb-2 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <Package className="w-5 h-5 text-gray-600" />
@@ -791,141 +791,275 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
                 </Button>
               </div>
 
-              <div className="space-y-4">
+              {/* Desktop: Tabla compacta */}
+              <div className="hidden lg:block">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-2 w-[38%]">Producto</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-2 w-[9%]">Cant.</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-2 w-[16%]">Unidad</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-2 w-[14%]">P. Unit.</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase px-3 py-2 w-[14%]">Subtotal</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-2 w-[5%]"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {items.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        {/* Producto - búsqueda inline */}
+                        <td className="px-3 py-2 align-top">
+                          <div className="relative">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                              <input
+                                type="text"
+                                value={item.productId ? item.name : item.searchTerm}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  if (item.productId) {
+                                    updateItem(item.id, 'name', val)
+                                  } else {
+                                    setItems(items.map(it =>
+                                      it.id === item.id ? { ...it, searchTerm: val, name: val } : it
+                                    ))
+                                    setShowProductSearch(item.id)
+                                  }
+                                }}
+                                onFocus={() => !item.productId && setShowProductSearch(item.id)}
+                                placeholder="Buscar producto o escribir nombre..."
+                                className={`w-full pl-7 pr-7 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                                  item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                                }`}
+                              />
+                              {item.productId && (
+                                <button
+                                  type="button"
+                                  onClick={() => clearProductSelection(item.id)}
+                                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {showProductSearch === item.id && !item.productId && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setShowProductSearch(null)} />
+                                <div className="absolute z-20 left-0 w-full min-w-[400px] max-w-[90vw] mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                  {getFilteredProducts(item.searchTerm).length > 0 ? (
+                                    getFilteredProducts(item.searchTerm).map(product => (
+                                      <button
+                                        key={product.id}
+                                        type="button"
+                                        onClick={() => selectProduct(item.id, product)}
+                                        className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-sm truncate">{product.name}</p>
+                                          {product.code && (
+                                            <p className="text-xs text-gray-500">{product.code}</p>
+                                          )}
+                                        </div>
+                                        <div className="text-right ml-2 flex-shrink-0">
+                                          {product.cost && (
+                                            <p className="text-[11px] text-gray-500">
+                                              Costo: {formatCurrency(product.cost, currency)}
+                                            </p>
+                                          )}
+                                          <p className="text-sm font-semibold text-primary-600">
+                                            {formatCurrency(product.price, currency)}
+                                          </p>
+                                        </div>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                      No se encontraron productos
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <select
+                            value={item.unit}
+                            onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
+                            className="w-full px-1 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                          >
+                            {UNITS.map(unit => (
+                              <option key={unit.value} value={unit.value}>{unit.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right align-middle">
+                          <span className="font-semibold text-sm text-gray-900">
+                            {formatCurrency(calculateItemTotal(item), currency)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-center align-middle">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            disabled={items.length === 1}
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="flex w-full items-center gap-2 px-4 py-2 mt-2 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar un producto
+                </button>
+              </div>
+
+              {/* Móvil: Lista compacta */}
+              <div className="lg:hidden divide-y divide-gray-200 border border-gray-200 rounded-lg">
                 {items.map((item, index) => (
-                  <div key={item.id} className="p-4 border border-gray-200 rounded-lg space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-medium text-gray-700">Item {index + 1}</h4>
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                  <div key={item.id} className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500">#{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                        disabled={items.length === 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={item.productId ? item.name : item.searchTerm}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (item.productId) {
+                              updateItem(item.id, 'name', val)
+                            } else {
+                              setItems(items.map(it =>
+                                it.id === item.id ? { ...it, searchTerm: val, name: val } : it
+                              ))
+                              setShowProductSearch(item.id)
+                            }
+                          }}
+                          onFocus={() => !item.productId && setShowProductSearch(item.id)}
+                          placeholder="Buscar producto o escribir nombre..."
+                          className={`w-full pl-8 pr-8 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                            item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          }`}
+                        />
+                        {item.productId && (
+                          <button
+                            type="button"
+                            onClick={() => clearProductSelection(item.id)}
+                            className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      {showProductSearch === item.id && !item.productId && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setShowProductSearch(null)} />
+                          <div className="absolute z-20 left-0 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {getFilteredProducts(item.searchTerm).length > 0 ? (
+                              getFilteredProducts(item.searchTerm).map(product => (
+                                <button
+                                  key={product.id}
+                                  type="button"
+                                  onClick={() => selectProduct(item.id, product)}
+                                  className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate">{product.name}</p>
+                                    {product.code && <p className="text-xs text-gray-500">{product.code}</p>}
+                                  </div>
+                                  <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
+                                    {formatCurrency(product.cost || product.price, currency)}
+                                  </span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                No se encontraron productos
+                              </div>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Buscador de productos */}
-                      <div className="sm:col-span-2 relative">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Buscar Producto
-                        </label>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            value={item.searchTerm}
-                            onChange={(e) => {
-                              updateItem(item.id, 'searchTerm', e.target.value)
-                              setShowProductSearch(item.id)
-                            }}
-                            onFocus={() => setShowProductSearch(item.id)}
-                            placeholder="Buscar por nombre o código..."
-                            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          {item.productId && (
-                            <button
-                              type="button"
-                              onClick={() => clearProductSelection(item.id)}
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
+                    <select
+                      value={item.unit}
+                      onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                    >
+                      {UNITS.map(unit => (
+                        <option key={unit.value} value={unit.value}>{unit.label}</option>
+                      ))}
+                    </select>
 
-                        {/* Dropdown de resultados */}
-                        {showProductSearch === item.id && !item.productId && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setShowProductSearch(null)}
-                            />
-                            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {getFilteredProducts(item.searchTerm).length > 0 ? (
-                                getFilteredProducts(item.searchTerm).map(product => (
-                                  <button
-                                    key={product.id}
-                                    type="button"
-                                    onClick={() => selectProduct(item.id, product)}
-                                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                                  >
-                                    <div>
-                                      <p className="font-medium text-sm">{product.name}</p>
-                                      {product.code && (
-                                        <p className="text-xs text-gray-500">Código: {product.code}</p>
-                                      )}
-                                    </div>
-                                    <div className="text-right">
-                                      {product.cost && (
-                                        <p className="text-xs text-gray-500">
-                                          Costo: {formatCurrency(product.cost, currency)}
-                                        </p>
-                                      )}
-                                      <p className="text-sm font-semibold text-primary-600">
-                                        {formatCurrency(product.price, currency)}
-                                      </p>
-                                    </div>
-                                  </button>
-                                ))
-                              ) : (
-                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                  No se encontraron productos
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Input
-                          label="Descripción del producto *"
-                          value={item.name}
-                          onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                          placeholder="Nombre o descripción del producto"
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Cant.</label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
-
-                      <Input
-                        type="number"
-                        label="Cantidad *"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
-                        min="0.01"
-                        step="0.01"
-                      />
-
-                      <Select
-                        label="Unidad"
-                        value={item.unit}
-                        onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
-                      >
-                        {UNITS.map(unit => (
-                          <option key={unit.value} value={unit.value}>
-                            {unit.label}
-                          </option>
-                        ))}
-                      </Select>
-
-                      <Input
-                        type="number"
-                        label="Precio Unitario"
-                        value={item.unitPrice}
-                        onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
-                        min="0"
-                        step="0.01"
-                      />
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Subtotal
-                        </label>
-                        <div className="h-10 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg flex items-center">
-                          <span className="font-semibold text-gray-900">
+                        <label className="block text-xs text-gray-500 mb-1">P. Unit.</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Subtotal</label>
+                        <div className="h-[34px] flex items-center justify-center bg-gray-50 border border-gray-200 rounded">
+                          <span className="font-semibold text-sm text-gray-900">
                             {formatCurrency(calculateItemTotal(item), currency)}
                           </span>
                         </div>
@@ -933,6 +1067,14 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
                     </div>
                   </div>
                 ))}
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm text-primary-600 hover:bg-primary-50 rounded-b-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar un producto
+                </button>
               </div>
             </div>
 

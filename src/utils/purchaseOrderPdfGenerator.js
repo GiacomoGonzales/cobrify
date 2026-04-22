@@ -253,57 +253,97 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     }
   }
 
-  // Datos de la empresa (centro)
+  // Datos de la empresa (centro) — mismo layout que la factura
   const infoColumnWidth = CONTENT_WIDTH - actualLogoWidth - docColumnWidth - 20
   const infoCenterX = MARGIN_LEFT + actualLogoWidth + 10 + (infoColumnWidth / 2)
 
   const companyName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
-  let infoY = currentY + 25
+  const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
+  const showBusinessName = businessName && businessName !== companyName
 
+  // Dirección completa (con distrito / provincia / departamento si están)
+  let fullAddress = ''
+  if (companySettings?.address) {
+    fullAddress = companySettings.address
+    const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+    if (locationParts.length > 0) fullAddress += ' - ' + locationParts.join(', ')
+    fullAddress = fullAddress.toUpperCase()
+  }
+  const phone = companySettings?.phone || ''
+  const email = companySettings?.email || ''
+  const website = companySettings?.website || ''
+
+  // Pre-calcular líneas para centrar verticalmente
+  const maxWidth = infoColumnWidth - 10
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  const nameLines = doc.splitTextToSize(companyName, maxWidth)
+
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  const businessNameLines = showBusinessName
+    ? doc.splitTextToSize(businessName, maxWidth).slice(0, 2)
+    : []
+  const addressLines = fullAddress
+    ? doc.splitTextToSize('DIRECCIÓN: ' + fullAddress, maxWidth).slice(0, 3)
+    : []
+
+  let totalLines = nameLines.length + businessNameLines.length + addressLines.length
+  if (phone) totalLines += 1
+  if (email) totalLines += 1
+  if (website) totalLines += 1
+
+  const lineSpacing = 10
+  const totalTextHeight = totalLines * lineSpacing + 15
+  let infoY = currentY + (headerHeight - totalTextHeight) / 2 + 12
+
+  // Nombre comercial (centrado)
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  const nameLines = doc.splitTextToSize(companyName, infoColumnWidth - 10)
   nameLines.forEach((line) => {
     doc.text(line, infoCenterX, infoY, { align: 'center' })
     infoY += 12
   })
 
-  if (companySettings?.address) {
+  // Razón social (si es diferente)
+  if (businessNameLines.length > 0) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...MEDIUM_GRAY)
-    const addrLines = doc.splitTextToSize(companySettings.address, infoColumnWidth - 10)
-    addrLines.slice(0, 2).forEach(line => {
-      doc.text(line, infoCenterX, infoY, { align: 'center' })
-      infoY += 9
+    doc.setTextColor(...DARK_GRAY)
+    businessNameLines.forEach((line, idx) => {
+      doc.text(line, infoCenterX, infoY + (idx * 9), { align: 'center' })
     })
+    infoY += businessNameLines.length * 9 + 1
   }
 
-  if (companySettings?.phone || companySettings?.email) {
-    doc.setFontSize(7)
-    let contactLine = ''
-    if (companySettings.phone) contactLine += `Tel: ${companySettings.phone}`
-    if (companySettings.phone && companySettings.email) contactLine += '  |  '
-    if (companySettings.email) contactLine += `Email: ${companySettings.email}`
-    doc.text(contactLine, infoCenterX, infoY, { align: 'center' })
+  // Dirección
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  addressLines.forEach((line) => {
+    doc.text(line, infoCenterX, infoY, { align: 'center' })
+    infoY += 9
+  })
+
+  // Teléfono
+  if (phone) {
+    doc.text('TELF: ' + phone.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+    infoY += 9
   }
 
-  // Eslogan debajo del logo
-  if (companySettings?.companySlogan) {
-    const slogan = companySettings.companySlogan.toUpperCase()
-    doc.setFontSize(8)
+  // Email
+  if (email) {
+    doc.text('EMAIL: ' + email.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+    infoY += 9
+  }
+
+  // Sitio web
+  if (website) {
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...BLACK)
-    const sloganMaxWidth = actualLogoWidth + infoColumnWidth - 10
-    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
-    const linesToShow = sloganLines.slice(0, 2)
-    const sloganCenterX = logoX + (sloganMaxWidth / 2)
-    const sloganY = currentY + headerHeight - 18
-    linesToShow.forEach((line, index) => {
-      doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
-    })
-    doc.setTextColor(...BLACK)
+    doc.setTextColor(...DARK_GRAY)
+    doc.text(website.toUpperCase(), infoCenterX, infoY, { align: 'center' })
+    infoY += 9
   }
 
   // Recuadro del documento
@@ -332,7 +372,27 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFontSize(12)
   doc.text(order.number || 'N/A', docBoxX + docColumnWidth / 2, docBoxY + rucSectionHeight + 38, { align: 'center' })
 
-  currentY += headerHeight + 15
+  // Bajar currentY asegurando que quede debajo del recuadro del documento
+  const docBoxBottomY = currentY + headerHeight + 10
+  currentY = Math.max(infoY + 5, docBoxBottomY)
+
+  // Eslogan centrado debajo del encabezado (mismo patrón que la factura)
+  if (companySettings?.companySlogan) {
+    const slogan = companySettings.companySlogan.toUpperCase()
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    const sloganMaxWidth = CONTENT_WIDTH - 20
+    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth).slice(0, 2)
+    const sloganCenterX = MARGIN_LEFT + CONTENT_WIDTH / 2
+    sloganLines.forEach((line) => {
+      doc.text(line, sloganCenterX, currentY, { align: 'center' })
+      currentY += 14
+    })
+    currentY += 5
+  } else {
+    currentY += 5
+  }
 
   // ========== DATOS DEL PROVEEDOR ==========
   doc.setFontSize(9)
@@ -388,8 +448,10 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.text('DIRECCIÓN:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   const addrLines = doc.splitTextToSize(supplierAddress, CONTENT_WIDTH * 0.4)
-  doc.text(addrLines[0], colLeftX + 65, leftY)
-  leftY += dataLineHeight
+  addrLines.forEach((line, idx) => {
+    doc.text(line, colLeftX + 65, leftY + (idx * dataLineHeight))
+  })
+  leftY += dataLineHeight * addrLines.length
 
   // Columna derecha
   let rightY = startY
@@ -425,7 +487,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     doc.setFont('helvetica', 'bold')
     doc.text('COND. PAGO:', colRightX, rightY)
     doc.setFont('helvetica', 'normal')
-    doc.text(paymentText, colRightX + 55, rightY)
+    doc.text(paymentText, colRightX + 70, rightY)
     rightY += dataLineHeight
   }
 
@@ -436,15 +498,29 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerRowHeight = 18
   const baseRowHeight = 15
 
-  // Detectar modo farmacia para mostrar columna LABORATORIO
+  // Detectar modo farmacia — en farmacia se muestran columnas CÓDIGO, LABORATORIO y MARCA
+  // y los detalles (presentación, concentración) se imprimen como sub-línea debajo de la descripción
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
 
-  const colWidths = {
+  // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT | IMPORTE
+  // Normal:   CANT | U.M. | DESCRIPCIÓN | P.UNIT | IMPORTE
+  const colWidths = isPharmacy ? {
+    cant: CONTENT_WIDTH * 0.05,
+    um: CONTENT_WIDTH * 0.05,
+    code: CONTENT_WIDTH * 0.10,
+    desc: CONTENT_WIDTH * 0.30,
+    lab: CONTENT_WIDTH * 0.13,
+    marca: CONTENT_WIDTH * 0.10,
+    pu: CONTENT_WIDTH * 0.13,
+    total: CONTENT_WIDTH * 0.14
+  } : {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.34 : CONTENT_WIDTH * 0.49,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.15 : CONTENT_WIDTH * 0.17,
+    code: 0,
+    desc: CONTENT_WIDTH * 0.49,
+    lab: 0,
+    marca: 0,
+    pu: CONTENT_WIDTH * 0.17,
     total: CONTENT_WIDTH * 0.18
   }
 
@@ -452,9 +528,11 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const cols = {
     cant: colX,
     um: colX += colWidths.cant,
-    desc: colX += colWidths.um,
+    code: colX += colWidths.um,
+    desc: colX += colWidths.code,
     lab: colX += colWidths.desc,
-    pu: colX += colWidths.lab,
+    marca: colX += colWidths.lab,
+    pu: colX += colWidths.marca,
     total: colX += colWidths.pu
   }
 
@@ -469,9 +547,13 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerTextY = tableY + 12
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
+  if (isPharmacy) {
+    doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
+  }
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
   if (isPharmacy) {
     doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+    doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
   }
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
@@ -483,23 +565,36 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
   const items = order.items || []
   const unitLabels = { 'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT', 'METRO': 'MT' }
+  const descLineHeight = 8 * 1.4 * 0.3528 // desc 8pt
+  const pharmaLineHeight = 6.5 * 1.4 * 0.3528 // sub-detalles 6.5pt
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
 
-    // Calcular líneas de descripción para determinar altura de fila
+    // Descripción principal — en farmacia, el código va en su propia columna
     const itemName = item.name || ''
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
-    // Agregar detalles farmacéuticos (presentación, concentración)
-    const pharmaDetails = [item.presentation, item.concentration].filter(Boolean).join(' | ')
-    if (pharmaDetails) itemDesc += `\n${pharmaDetails}`
+    const itemDesc = (isValidCode && !isPharmacy) ? `${rawCode} - ${itemName}` : itemName
     doc.setFontSize(8)
-    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    const lineHeight = 8 * 1.4 * 0.3528 // fontSize * lineHeightFactor * pt-to-mm
-    const extraLines = Math.max(0, descLines.length - 1)
-    const productRowHeight = baseRowHeight + (extraLines * lineHeight)
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 8)
+
+    // Sub-línea farmacéutica (presentación, concentración) en itálica, azul-gris
+    let pharmaLines = []
+    if (isPharmacy) {
+      const parts = []
+      if (item.presentation) parts.push(`Pres: ${item.presentation}`)
+      if (item.concentration) parts.push(`Conc: ${item.concentration}`)
+      if (parts.length > 0) {
+        doc.setFontSize(6.5)
+        pharmaLines = doc.splitTextToSize(parts.join('  |  '), colWidths.desc - 8)
+      }
+    }
+
+    // Altura de fila: 10mm desde el top hasta la primera línea de texto + alto del texto + separación desc/pharma + margen inferior
+    const pharmaGap = pharmaLines.length > 0 ? 2 : 0
+    const textContentHeight = (descLines.length * descLineHeight) + pharmaGap + (pharmaLines.length * pharmaLineHeight)
+    const productRowHeight = Math.max(baseRowHeight, 10 + textContentHeight + 4)
 
     if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248)
@@ -508,34 +603,68 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
     const precio = item.unitPrice || item.price || 0
     const importe = item.quantity * precio
-    const textY = dataRowY + 10
+    const centerY = dataRowY + productRowHeight / 2 + 3
 
+    doc.setTextColor(...BLACK)
+    doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
     const qtyText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
-    doc.text(qtyText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+    doc.text(qtyText, cols.cant + colWidths.cant / 2, centerY, { align: 'center' })
 
     const unitCode = item.unit || 'UNIDAD'
-    doc.text(unitLabels[unitCode] || unitCode, cols.um + colWidths.um / 2, textY, { align: 'center' })
+    doc.text(unitLabels[unitCode] || unitCode, cols.um + colWidths.um / 2, centerY, { align: 'center' })
 
+    // Código (solo farmacia)
+    if (isPharmacy && isValidCode) {
+      doc.setFontSize(6.5)
+      const codeLines = doc.splitTextToSize(rawCode, colWidths.code - 4)
+      doc.text(codeLines[0], cols.code + colWidths.code / 2, centerY, { align: 'center' })
+    }
+
+    // Descripción — múltiples líneas desde arriba
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    doc.text(descLines, cols.desc + 4, textY, { lineHeightFactor: 1.4 })
+    const descStartY = dataRowY + 10
+    descLines.forEach((line, idx) => {
+      doc.text(line, cols.desc + 4, descStartY + (idx * descLineHeight))
+    })
 
-    // Laboratorio (solo modo farmacia)
+    // Sub-detalles farmacéuticos debajo de la descripción (con un pequeño gap para no pegarse al nombre)
+    if (pharmaLines.length > 0) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(6.5)
+      doc.setTextColor(80, 100, 120)
+      const pharmaStartY = descStartY + (descLines.length * descLineHeight) + 2
+      pharmaLines.forEach((line, idx) => {
+        doc.text(line, cols.desc + 4, pharmaStartY + (idx * pharmaLineHeight))
+      })
+      doc.setTextColor(...BLACK)
+    }
+
+    // Laboratorio y Marca en columnas separadas (solo farmacia)
     if (isPharmacy) {
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      const labText = item.laboratoryName || item.marca || ''
+      doc.setFontSize(6)
+      const labText = item.laboratoryName || ''
       if (labText) {
-        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
-        doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 4)
+        labLines.slice(0, 3).forEach((line, idx) => {
+          doc.text(line, cols.lab + colWidths.lab / 2, descStartY + (idx * 7), { align: 'center' })
+        })
+      }
+      const marcaText = item.marca || ''
+      if (marcaText) {
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 4)
+        marcaLines.slice(0, 3).forEach((line, idx) => {
+          doc.text(line, cols.marca + colWidths.marca / 2, descStartY + (idx * 7), { align: 'center' })
+        })
       }
     }
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text(precio.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
-    doc.text(importe.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
+    doc.text(precio.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, centerY, { align: 'right' })
+    doc.text(importe.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
 
     dataRowY += productRowHeight
   }
