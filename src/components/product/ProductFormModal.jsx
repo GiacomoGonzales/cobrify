@@ -14,6 +14,7 @@ import Button from '@/components/ui/Button'
 import { productSchema } from '@/utils/schemas'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import { getNextSkuNumber } from '@/services/firestoreService'
+import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 export const UNITS = [
@@ -206,9 +207,8 @@ const ProductFormModal = ({
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
 
-  // Image state
-  const [productImage, setProductImage] = useState(null)
-  const [productImagePreview, setProductImagePreview] = useState(null)
+  // Image state (multi-imagen, máx 5)
+  const [productImages, setProductImages] = useState([])
   const [uploadingImage, setUploadingImage] = useState(false)
 
   // Presentations state
@@ -276,9 +276,7 @@ const ProductFormModal = ({
       setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
       setPresentations(initialData.presentations || [])
       setProductLocation(initialData.location || '')
-      if (initialData.imageUrl) {
-        setProductImagePreview(initialData.imageUrl)
-      }
+      setProductImages(productToImageItems(initialData))
     } else {
       // Create mode - reset to defaults
       reset({
@@ -305,8 +303,7 @@ const ProductFormModal = ({
       setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
       setWarehouseInitialStocks({})
       setPresentations([])
-      setProductImage(null)
-      setProductImagePreview(null)
+      setProductImages([])
       setPharmacyData({
         genericName: '',
         concentration: '',
@@ -325,14 +322,7 @@ const ProductFormModal = ({
     }
   }, [isOpen, initialData, reset])
 
-  // Cleanup image preview on unmount
-  useEffect(() => {
-    return () => {
-      if (productImagePreview && productImagePreview.startsWith('blob:')) {
-        revokeImagePreview(productImagePreview)
-      }
-    }
-  }, [productImagePreview])
+  // Cleanup: la limpieza de blobs la hace ProductImagesManager internamente
 
   // Barcode scanning
   const scanningRef = useRef(false)
@@ -401,70 +391,6 @@ const ProductFormModal = ({
     }
   }
 
-  // Image handling
-  const handleImageSelect = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!validTypes.includes(file.type)) {
-      toast.error('Formato no válido. Usa JPG, PNG, WebP o GIF')
-      return
-    }
-
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('La imagen no debe superar 5MB')
-      return
-    }
-
-    // Clear previous preview
-    if (productImagePreview && productImagePreview.startsWith('blob:')) {
-      revokeImagePreview(productImagePreview)
-    }
-
-    // Create preview and store file
-    setProductImage(file)
-    setProductImagePreview(createImagePreview(file))
-  }
-
-  const handleTakePhoto = async () => {
-    if (!Capacitor.isNativePlatform()) return
-
-    try {
-      const photo = await CapacitorCamera.getPhoto({
-        quality: 80,
-        allowEditing: false,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera,
-      })
-
-      if (photo.webPath) {
-        // Fetch the photo and convert to blob
-        const response = await fetch(photo.webPath)
-        const blob = await response.blob()
-        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
-
-        setProductImage(file)
-        setProductImagePreview(photo.webPath)
-      }
-    } catch (error) {
-      if (!error.message?.includes('cancelled')) {
-        console.error('Error taking photo:', error)
-        toast.error('Error al tomar foto')
-      }
-    }
-  }
-
-  const handleImageRemove = () => {
-    if (productImagePreview && productImagePreview.startsWith('blob:')) {
-      revokeImagePreview(productImagePreview)
-    }
-    setProductImage(null)
-    setProductImagePreview(null)
-  }
-
   // Form submission
   const handleFormSubmit = async (formData) => {
     // Build the complete product data
@@ -501,27 +427,29 @@ const ProductFormModal = ({
       productData.sanitaryRegistry = pharmacyData.sanitaryRegistry || null
     }
 
-    // Handle image upload if there's a new image
-    if (productImage && canUseProductImages) {
+    // Handle multi-image: upload pending files, preserve existing URLs
+    if (canUseProductImages) {
       try {
-        setUploadingImage(true)
+        const hasPending = productImages.some(img => img.file)
+        if (hasPending) setUploadingImage(true)
         const businessId = getBusinessId()
         if (!businessId) {
           throw new Error('No se pudo identificar el negocio')
         }
-        // Use existing product ID or generate a temporary one
         const tempProductId = initialData?.id || `temp_${Date.now()}`
-        const imageUrl = await uploadProductImage(businessId, tempProductId, productImage)
-        productData.imageUrl = imageUrl
+        const urls = await resolveImageUrls(productImages, (file) =>
+          uploadProductImage(businessId, tempProductId, file)
+        )
+        productData.imageUrls = urls
+        productData.imageUrl = urls[0] || null
       } catch (error) {
         console.error('Error uploading image:', error)
-        toast.error('Error al subir la imagen. El producto se guardará sin imagen.')
+        toast.error('Error al subir las imágenes. El producto se guardará sin imagen.')
+        productData.imageUrls = []
+        productData.imageUrl = null
       } finally {
         setUploadingImage(false)
       }
-    } else if (productImagePreview && !productImage) {
-      // Keep existing image URL
-      productData.imageUrl = productImagePreview
     }
 
     // Call parent onSubmit
@@ -529,10 +457,6 @@ const ProductFormModal = ({
   }
 
   const handleClose = () => {
-    // Cleanup
-    if (productImagePreview && productImagePreview.startsWith('blob:')) {
-      revokeImagePreview(productImagePreview)
-    }
     onClose()
   }
 
@@ -566,99 +490,38 @@ const ProductFormModal = ({
               {...register('name')}
             />
 
-            {/* Imagen y Descripción */}
-            <div className={`flex gap-4 ${Capacitor.isNativePlatform() && canUseProductImages ? 'flex-col' : 'flex-row'}`}>
-              {/* Image upload - only shown if feature is enabled */}
-              {canUseProductImages && (
-                <div className={Capacitor.isNativePlatform() ? 'w-full' : 'flex-shrink-0'}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
-                  <div className="relative">
-                    {productImagePreview ? (
-                      <div className={`relative rounded-lg overflow-hidden border border-gray-300 group ${Capacitor.isNativePlatform() ? 'w-full h-32' : 'w-24 h-24'}`}>
-                        <img
-                          src={productImagePreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleImageRemove}
-                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                        <label className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                          Cambiar
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : Capacitor.isNativePlatform() ? (
-                      <div className="flex gap-3">
-                        <label className="cursor-pointer flex-1 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                          <div className="text-center flex items-center gap-2">
-                            <Upload className="w-5 h-5 text-gray-400" />
-                            <span className="text-sm text-gray-500">Subir imagen</span>
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleTakePhoto}
-                          className="flex-1 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
-                        >
-                          <div className="text-center flex items-center gap-2">
-                            <Camera className="w-5 h-5 text-gray-400" />
-                            <span className="text-sm text-gray-500">Tomar foto</span>
-                          </div>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <label className="cursor-pointer block w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                          <div className="text-center flex flex-col items-center gap-1">
-                            <Upload className="w-5 h-5 text-gray-400" />
-                            <span className="text-xs text-gray-500">Subir</span>
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    )}
-                    {uploadingImage && (
-                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Descripción */}
-              <div className="flex-1">
+            {/* Imágenes (multi, máx 5) */}
+            {canUseProductImages && (
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción (Opcional)
+                  Imágenes <span className="text-xs font-normal text-gray-500">(máx 5, arrastra para reordenar)</span>
                 </label>
-                <textarea
-                  {...register('description')}
-                  rows={canUseProductImages && !Capacitor.isNativePlatform() ? 3 : 2}
-                  placeholder="Descripción breve del producto o servicio"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
-                />
+                <div className="relative">
+                  <ProductImagesManager
+                    images={productImages}
+                    onChange={setProductImages}
+                    maxImages={5}
+                  />
+                  {uploadingImage && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+                    </div>
+                  )}
+                </div>
               </div>
+            )}
+
+            {/* Descripción */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción (Opcional)
+              </label>
+              <textarea
+                {...register('description')}
+                rows={2}
+                placeholder="Descripción breve del producto o servicio"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+              />
             </div>
 
             {/* Marca - disponible en todos los modos */}

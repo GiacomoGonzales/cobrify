@@ -757,6 +757,7 @@ export default function CreatePurchase() {
         catalogVisible: data.catalogVisible || false,
         presentations: data.presentations || [],
         imageUrl: data.imageUrl || null,
+        imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : (data.imageUrl ? [data.imageUrl] : []),
       }
 
       // Include pharmacy fields if present

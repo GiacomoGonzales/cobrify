@@ -32,6 +32,7 @@ import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehou
 import { getActiveBranches } from '@/services/branchService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
+import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -312,8 +313,7 @@ export default function Products() {
   const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
 
   // Image upload state
-  const [productImage, setProductImage] = useState(null) // File object
-  const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
+  const [productImages, setProductImages] = useState([]) // Array de {id, file, previewUrl, uploadedUrl}
   const [uploadingImage, setUploadingImage] = useState(false)
 
   // Column visibility preferences (persisted in localStorage)
@@ -622,9 +622,8 @@ export default function Products() {
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
 
-    // Load product image if exists
-    setProductImage(null)
-    setProductImagePreview(product.imageUrl || null)
+    // Load product images (multi)
+    setProductImages(productToImageItems(product))
 
     // Format expiration date if exists (from Firestore Timestamp to YYYY-MM-DD)
     let formattedExpirationDate = ''
@@ -728,9 +727,8 @@ export default function Products() {
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
 
-    // No copiar la imagen (el usuario puede agregarla manualmente)
-    setProductImage(null)
-    setProductImagePreview(null)
+    // No copiar las imágenes (el usuario puede agregarlas manualmente)
+    setProductImages([])
 
     // Formatear fecha de expiración si existe
     let formattedExpirationDate = ''
@@ -776,12 +774,8 @@ export default function Products() {
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
     setNewPresentation({ name: '', factor: '', price: '' })
-    // Limpiar imagen
-    if (productImagePreview) {
-      revokeImagePreview(productImagePreview)
-    }
-    setProductImage(null)
-    setProductImagePreview(null)
+    // Limpiar imágenes
+    setProductImages([])
     reset()
   }
 
@@ -1018,26 +1012,26 @@ export default function Products() {
       productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
       productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
 
-      // Handle product image upload (only if feature is enabled)
-      if (canUseProductImages && productImage) {
+      // Handle product images (multi, máx 5): subir las nuevas, mantener las existentes
+      if (canUseProductImages) {
         try {
-          setUploadingImage(true)
+          const hasPending = productImages.some(img => img.file)
+          if (hasPending) setUploadingImage(true)
           const businessId = getBusinessId()
           const tempProductId = editingProduct?.id || `temp_${Date.now()}`
-          const imageUrl = await uploadProductImage(businessId, tempProductId, productImage)
-          productData.imageUrl = imageUrl
+          const urls = await resolveImageUrls(productImages, (file) =>
+            uploadProductImage(businessId, tempProductId, file)
+          )
+          productData.imageUrls = urls
+          productData.imageUrl = urls[0] || null
         } catch (imageError) {
-          console.error('Error al subir imagen:', imageError)
-          toast.error('Error al subir la imagen. El producto se guardará sin imagen.')
+          console.error('Error al subir imágenes:', imageError)
+          toast.error('Error al subir las imágenes. El producto se guardará sin imagen.')
+          productData.imageUrls = []
+          productData.imageUrl = null
         } finally {
           setUploadingImage(false)
         }
-      } else if (editingProduct?.imageUrl && !productImagePreview) {
-        // Si se eliminó la imagen, limpiar la URL
-        productData.imageUrl = null
-      } else if (editingProduct?.imageUrl && productImagePreview && !productImage) {
-        // Mantener la imagen existente si no se cambió
-        productData.imageUrl = editingProduct.imageUrl
       }
 
       let result
@@ -1182,105 +1176,7 @@ export default function Products() {
     }
   }
 
-  // Handle image selection
-  const handleImageSelect = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validar tipo (flexible para Android donde file.type puede estar vacío)
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-    const fileName = (file.name || '').toLowerCase()
-    const hasValidType = validTypes.includes(file.type)
-    const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext))
-    if (!hasValidType && !hasValidExt) {
-      toast.error('Tipo de archivo no válido. Use JPG, PNG, WebP o GIF.')
-      return
-    }
-
-    // Validar tamaño (max 5MB)
-    const maxSize = 5 * 1024 * 1024
-    if (file.size > maxSize) {
-      toast.error('La imagen es muy grande. Máximo 5MB.')
-      return
-    }
-
-    // Limpiar preview anterior
-    if (productImagePreview && productImagePreview.startsWith('blob:')) {
-      revokeImagePreview(productImagePreview)
-    }
-
-    // Crear preview
-    const previewUrl = createImagePreview(file)
-    setProductImage(file)
-    setProductImagePreview(previewUrl)
-  }
-
-  // Handle image removal
-  const handleImageRemove = () => {
-    if (productImagePreview && productImagePreview.startsWith('blob:')) {
-      revokeImagePreview(productImagePreview)
-    }
-    setProductImage(null)
-    setProductImagePreview(null)
-  }
-
-  // Handle taking photo with camera
-  const handleTakePhoto = async () => {
-    try {
-      // Solo funciona en dispositivos nativos
-      if (!Capacitor.isNativePlatform()) {
-        toast.info('La cámara solo está disponible en la app móvil')
-        return
-      }
-
-      // Solicitar permisos
-      const permissions = await CapacitorCamera.requestPermissions()
-      if (permissions.camera !== 'granted') {
-        toast.error('Se requiere permiso para usar la cámara')
-        return
-      }
-
-      // Tomar foto
-      const photo = await CapacitorCamera.getPhoto({
-        quality: 80,
-        allowEditing: false,
-        resultType: CameraResultType.Base64,
-        source: CameraSource.Camera,
-        width: 800,
-        height: 800,
-        correctOrientation: true
-      })
-
-      if (photo.base64String) {
-        // Convertir base64 a File para mantener compatibilidad con el flujo existente
-        const byteCharacters = atob(photo.base64String)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        const blob = new Blob([byteArray], { type: `image/${photo.format || 'jpeg'}` })
-        const file = new File([blob], `photo_${Date.now()}.${photo.format || 'jpg'}`, { type: `image/${photo.format || 'jpeg'}` })
-
-        // Limpiar preview anterior
-        if (productImagePreview && productImagePreview.startsWith('blob:')) {
-          revokeImagePreview(productImagePreview)
-        }
-
-        // Crear preview y guardar
-        const previewUrl = createImagePreview(file)
-        setProductImage(file)
-        setProductImagePreview(previewUrl)
-        toast.success('Foto capturada correctamente')
-      }
-    } catch (error) {
-      if (error.message !== 'User cancelled photos app') {
-        console.error('Error al tomar foto:', error)
-        toast.error('Error al tomar la foto')
-      }
-    }
-  }
+  // Manejo de imágenes: delegado a <ProductImagesManager />.
 
   const handleDelete = async () => {
     if (!deletingProduct || !user?.uid) return
@@ -4072,89 +3968,38 @@ export default function Products() {
               {...register('name')}
             />
 
-            {/* Imagen y Descripción en fila */}
-            <div className="flex gap-4 items-stretch">
-              {/* Image upload - only shown if feature is enabled */}
-              {canUseProductImages && (
-                <div className="flex-shrink-0 flex flex-col">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
-                  <div className="relative flex-1">
-                    {productImagePreview ? (
-                      <div className="relative w-24 h-full min-h-[6rem] rounded-lg overflow-hidden border border-gray-300 group">
-                        <img
-                          src={productImagePreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleImageRemove}
-                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                        {/* Botón para cambiar imagen */}
-                        <label className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                          Cambiar
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2 h-full">
-                        {/* Opción 1: Subir archivo */}
-                        <label className="cursor-pointer block w-24 flex-1 min-h-[3rem] rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                          <div className="text-center flex items-center gap-1.5">
-                            <Upload className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs text-gray-500">Subir</span>
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                          />
-                        </label>
-                        {/* Opción 2: Tomar foto (solo en app nativa) */}
-                        {Capacitor.isNativePlatform() && (
-                          <button
-                            type="button"
-                            onClick={handleTakePhoto}
-                            className="w-24 flex-1 min-h-[3rem] rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
-                          >
-                            <div className="text-center flex items-center gap-1.5">
-                              <Camera className="w-4 h-4 text-gray-400" />
-                              <span className="text-xs text-gray-500">Foto</span>
-                            </div>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {uploadingImage && (
-                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Descripción */}
-              <div className="flex-1">
+            {/* Imágenes (multi, máx 5) */}
+            {canUseProductImages && (
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción (Opcional)
+                  Imágenes <span className="text-xs font-normal text-gray-500">(máx 5, arrastra para reordenar)</span>
                 </label>
-                <textarea
-                  {...register('description')}
-                  rows={canUseProductImages ? 3 : 2}
-                  placeholder="Descripción breve del producto o servicio"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
-                />
+                <div className="relative">
+                  <ProductImagesManager
+                    images={productImages}
+                    onChange={setProductImages}
+                    maxImages={5}
+                  />
+                  {uploadingImage && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+                    </div>
+                  )}
+                </div>
               </div>
+            )}
+
+            {/* Descripción */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción (Opcional)
+              </label>
+              <textarea
+                {...register('description')}
+                rows={2}
+                placeholder="Descripción breve del producto o servicio"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+              />
             </div>
 
             {/* Marca - disponible en todos los modos excepto farmacia (que lo tiene en su sección) */}

@@ -285,6 +285,16 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [variantError, setVariantError] = useState(false)
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
+  const [activeImageIdx, setActiveImageIdx] = useState(0)
+
+  // Galería: usa imageUrls si existe, si no cae a imageUrl (legacy)
+  const productImages = useMemo(() => {
+    if (!product) return []
+    if (Array.isArray(product.imageUrls) && product.imageUrls.length > 0) {
+      return product.imageUrls
+    }
+    return product.imageUrl ? [product.imageUrl] : []
+  }, [product])
 
   // Inicializar modificadores cuando se abre el modal
   useEffect(() => {
@@ -293,6 +303,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
       setSelectedVariant(null)
       setVariantError(false)
       setSelectedPriceLevel('price1')
+      setActiveImageIdx(0)
       document.body.style.overflow = 'hidden'
       // Inicializar estado de modificadores
       if (product?.modifiers?.length > 0) {
@@ -537,24 +548,55 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           </div>
         )}
 
-        {/* Imagen cuadrada 1:1 */}
-        <div className="relative bg-gray-100 aspect-square">
-          {product.imageUrl ? (
-            <img
-              src={optimizeImageUrl(product.imageUrl, 'detail')}
-              alt={product.name}
-              className={`w-full h-full object-cover ${outOfStock ? 'opacity-50 grayscale' : ''}`}
-            />
-          ) : (
-            <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
-              <Package className="w-24 h-24 text-gray-300" />
-            </div>
-          )}
-          {outOfStock && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg tracking-wide">
-                AGOTADO
-              </span>
+        {/* Galería (tipo Amazon): imagen grande + thumbnails */}
+        <div className="bg-gray-100">
+          {/* Imagen principal cuadrada 1:1 */}
+          <div className="relative aspect-square">
+            {productImages.length > 0 ? (
+              <img
+                src={optimizeImageUrl(productImages[activeImageIdx] || productImages[0], 'detail')}
+                alt={product.name}
+                className={`w-full h-full object-cover ${outOfStock ? 'opacity-50 grayscale' : ''}`}
+              />
+            ) : (
+              <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
+                <Package className="w-24 h-24 text-gray-300" />
+              </div>
+            )}
+            {outOfStock && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg tracking-wide">
+                  AGOTADO
+                </span>
+              </div>
+            )}
+          </div>
+          {/* Thumbnails (solo si hay más de una) */}
+          {productImages.length > 1 && (
+            <div className="px-4 py-3 flex gap-2 overflow-x-auto catalog-scrollbar bg-white">
+              {productImages.map((url, idx) => {
+                const isActive = idx === activeImageIdx
+                return (
+                  <button
+                    key={`${url}-${idx}`}
+                    type="button"
+                    onClick={() => setActiveImageIdx(idx)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                      isActive
+                        ? 'ring-2 ring-offset-1'
+                        : 'border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100'
+                    }`}
+                    style={isActive ? { borderColor: business?.catalogColor || '#10B981' } : undefined}
+                    aria-label={`Ver imagen ${idx + 1}`}
+                  >
+                    <img
+                      src={optimizeImageUrl(url, 'thumbnail')}
+                      alt={`${product.name} ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
