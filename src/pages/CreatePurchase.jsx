@@ -91,6 +91,7 @@ export default function CreatePurchase() {
   const [message, setMessage] = useState(null)
   const [selectedSupplier, setSelectedSupplier] = useState(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [invoiceDocType, setInvoiceDocType] = useState('factura') // factura | boleta | guia_interna | dam | dua | otros
   // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -314,6 +315,7 @@ export default function CreatePurchase() {
 
           // Cargar datos básicos
           setInvoiceNumber(purchase.invoiceNumber || '')
+          setInvoiceDocType(purchase.invoiceDocType || 'factura')
           if (purchase.invoiceDate) {
             const invoiceDateObj = purchase.invoiceDate.toDate ? purchase.invoiceDate.toDate() : new Date(purchase.invoiceDate)
             setInvoiceDate(getLocalDateString(invoiceDateObj))
@@ -1012,6 +1014,7 @@ export default function CreatePurchase() {
           address: selectedSupplier.address || '',
         } : null,
         invoiceNumber: invoiceNumber.trim() || null,
+        invoiceDocType: invoiceDocType || 'factura',
         invoiceDate: parseLocalDate(invoiceDate), // Usar parseLocalDate para evitar problema de timezone
         // Almacén donde ingresa la mercadería
         warehouseId: selectedWarehouse?.id || null,
@@ -1448,6 +1451,7 @@ export default function CreatePurchase() {
             totalCost: grouped.totalCost,
             supplier: selectedSupplier?.businessName || '',
             invoiceNumber: invoiceNumber.trim() || '',
+            invoiceDocType: invoiceDocType || 'factura',
             purchaseDate: parseLocalDate(invoiceDate),
             warehouseId: selectedWarehouse?.id || null,
           })
@@ -1743,12 +1747,41 @@ export default function CreatePurchase() {
               </div>
             </div>
 
-            <Input
-              label="Número de Factura"
-              placeholder="001-123"
-              value={invoiceNumber}
-              onChange={e => setInvoiceNumber(e.target.value)}
-            />
+            {/* Documento de referencia: tipo + número */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Documento de Referencia
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={invoiceDocType}
+                  onChange={e => setInvoiceDocType(e.target.value)}
+                  className="w-40 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="factura">Factura</option>
+                  <option value="boleta">Boleta</option>
+                  <option value="guia_interna">Guía interna</option>
+                  <option value="dam">DAM</option>
+                  <option value="dua">DUA</option>
+                  <option value="nota_credito">Nota de Crédito</option>
+                  <option value="ticket">Ticket</option>
+                  <option value="otros">Otros</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder={
+                    invoiceDocType === 'factura' ? 'F001-00000123' :
+                    invoiceDocType === 'boleta' ? 'B001-00000123' :
+                    invoiceDocType === 'guia_interna' ? 'T001-00000001' :
+                    invoiceDocType === 'dam' || invoiceDocType === 'dua' ? 'Nº de declaración' :
+                    'Número del documento'
+                  }
+                  value={invoiceNumber}
+                  onChange={e => setInvoiceNumber(e.target.value)}
+                  className="flex-1 min-w-0 h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
 
             <Input
               label="Fecha de Factura"

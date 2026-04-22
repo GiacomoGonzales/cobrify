@@ -52,6 +52,21 @@ const parseLocalDate = (dateValue) => {
   return new Date(dateValue)
 }
 
+// Etiqueta corta según tipo de documento de la compra (factura/boleta/guía interna/DAM/DUA/etc.)
+const getInvoiceDocTypeLabel = (type) => {
+  switch (type) {
+    case 'factura': return 'Factura'
+    case 'boleta': return 'Boleta'
+    case 'guia_interna': return 'Guía interna'
+    case 'dam': return 'DAM'
+    case 'dua': return 'DUA'
+    case 'nota_credito': return 'Nota de Crédito'
+    case 'ticket': return 'Ticket'
+    case 'otros': return 'Otros'
+    default: return 'Factura'
+  }
+}
+
 export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
@@ -1059,8 +1074,9 @@ export default function Purchases() {
                     </button>
                   </div>
 
-                  {/* Fila 2: Factura + Fecha */}
+                  {/* Fila 2: Tipo + Nº documento + Fecha */}
                   <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    <span className="font-medium">{getInvoiceDocTypeLabel(purchase.invoiceDocType)}:</span>
                     <span>{purchase.invoiceNumber || 'S/N'}</span>
                     <span className="text-gray-300">•</span>
                     <span>
@@ -1104,7 +1120,7 @@ export default function Purchases() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>N° Factura</TableHead>
+                    <TableHead>Documento</TableHead>
                     <TableHead>
                       <button
                         onClick={() => handleSort('supplier')}
@@ -1140,7 +1156,14 @@ export default function Purchases() {
                 <TableBody>
                   {displayedPurchases.map(purchase => (
                     <TableRow key={purchase.id}>
-                      <TableCell className="font-medium">{purchase.invoiceNumber || '-'}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                            {getInvoiceDocTypeLabel(purchase.invoiceDocType)}
+                          </span>
+                          <span>{purchase.invoiceNumber || '-'}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{purchase.supplier?.businessName || 'N/A'}</p>

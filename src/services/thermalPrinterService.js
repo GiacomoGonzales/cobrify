@@ -1272,6 +1272,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .text(convertSpanishText('!Gracias por su preferencia!\n'))
       .clearFormatting();
 
+    // Mensaje personalizado al pie (configurado por el usuario)
+    if (business.ticketFooterMessage && business.ticketFooterMessage.trim()) {
+      printer = printer
+        .align('center')
+        .text('\n');
+      const footerLines = business.ticketFooterMessage.trim().split(/\r?\n/)
+      for (const line of footerLines) {
+        printer = printer.text(convertSpanishText(line + '\n'));
+      }
+    }
+
     // Website (si existe)
     if (business.website) {
       printer = printer
@@ -1765,6 +1776,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       notes: invoice.notes || '',
       sunatHash: invoice.sunatHash || '',
       qrCode: invoice.qrCode || '',
+
+      // Mensaje personalizado al pie del ticket (configurable en Settings)
+      ticketFooterMessage: business?.ticketFooterMessage || '',
 
       // Vendedor
       sellerName: invoice.sellerName || '',
@@ -2402,7 +2416,17 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       .text('!Gracias por su preferencia!')
       .newLine()
       .bold(false)
-      .feed(3)
+
+    // Mensaje personalizado al pie (configurado por el usuario)
+    if (business.ticketFooterMessage && business.ticketFooterMessage.trim()) {
+      builder.newLine()
+      const footerLines = business.ticketFooterMessage.trim().split(/\r?\n/)
+      for (const line of footerLines) {
+        builder.text(line).newLine()
+      }
+    }
+
+    builder.feed(3)
       .cut();
 
     return builder.toBase64();

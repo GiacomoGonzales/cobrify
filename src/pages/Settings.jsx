@@ -142,6 +142,7 @@ export default function Settings() {
 
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
+  const [ticketFooterMessage, setTicketFooterMessage] = useState('') // Mensaje personalizado al pie del ticket térmico
 
   // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
   const [companySlogan, setCompanySlogan] = useState('')
@@ -792,6 +793,7 @@ export default function Settings() {
         }
 
         // Cargar color de PDF
+        setTicketFooterMessage(businessData.ticketFooterMessage || '')
         if (businessData.pdfAccentColor) {
           setPdfAccentColor(businessData.pdfAccentColor)
         }
@@ -1330,6 +1332,7 @@ export default function Settings() {
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
         pdfAccentColor: pdfAccentColor,
+        ticketFooterMessage: ticketFooterMessage || '',
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
@@ -4557,6 +4560,28 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {/* Mensaje personalizado al pie del ticket térmico */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Mensaje al pie del ticket térmico
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto que se imprime después de "¡Gracias por su preferencia!" en los tickets de boletas, facturas y notas de venta. Útil para políticas de devolución o mensajes personalizados.
+                  </p>
+                  <textarea
+                    value={ticketFooterMessage}
+                    onChange={(e) => setTicketFooterMessage(e.target.value.slice(0, 300))}
+                    rows={3}
+                    maxLength={300}
+                    placeholder="Ej: Verifique el estado de su producto antes de retirarse de nuestra tienda. Una vez salida la mercadería no hay lugar a cambio ni devoluciones."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">Máx. 300 caracteres · Se imprime centrado en el ticket</span>
+                    <span className="text-xs text-gray-400">{ticketFooterMessage.length}/300</span>
+                  </div>
+                </div>
+
                 {/* Códigos de producto en cotizaciones */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
                   <input
@@ -5009,6 +5034,7 @@ export default function Settings() {
                     const businessRef = doc(db, 'businesses', getBusinessId())
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
+                      ticketFooterMessage: ticketFooterMessage || '',
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
                       pdfSpacious: pdfSpacious,

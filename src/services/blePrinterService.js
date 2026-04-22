@@ -1107,6 +1107,15 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.text('!Gracias por su preferencia!\n'));
     commands.push(ESCPOSCommands.bold(false));
 
+    // Mensaje personalizado al pie (configurable en Settings)
+    if (receiptData.ticketFooterMessage && receiptData.ticketFooterMessage.trim()) {
+      commands.push(ESCPOSCommands.text('\n'));
+      const footerLines = receiptData.ticketFooterMessage.trim().split(/\r?\n/);
+      for (const line of footerLines) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(line) + '\n'));
+      }
+    }
+
     // Website
     if (website) {
       commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));

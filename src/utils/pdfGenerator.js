@@ -2265,6 +2265,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += 15 + (maxLines * 8)
   }
 
+  // ========== MENSAJE PERSONALIZADO AL PIE (configurable en Settings) ==========
+  if (companySettings?.ticketFooterMessage && companySettings.ticketFooterMessage.trim()) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(80, 80, 80)
+    const msgLines = doc.splitTextToSize(companySettings.ticketFooterMessage.trim(), CONTENT_WIDTH - 20)
+    const maxMsgLines = Math.min(msgLines.length, 3) // Máximo 3 líneas para no romper layout
+    for (let i = 0; i < maxMsgLines; i++) {
+      doc.text(msgLines[i], MARGIN_LEFT + CONTENT_WIDTH / 2, footerY + 10 + (i * 8), { align: 'center' })
+    }
+    footerY += 10 + (maxMsgLines * 8)
+  }
+
   // ========== FOOTER FINAL ==========
 
   doc.setDrawColor(...MEDIUM_GRAY)

@@ -1093,6 +1093,22 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           ¡Gracias por su preferencia!
         </div>
 
+        {companySettings?.ticketFooterMessage && companySettings.ticketFooterMessage.trim() && (
+          <div
+            className="footer-text"
+            style={{
+              marginTop: '8px',
+              fontStyle: 'italic',
+              fontSize: '9px',
+              lineHeight: '1.3',
+              whiteSpace: 'pre-wrap',
+              padding: '0 4px',
+            }}
+          >
+            {companySettings.ticketFooterMessage}
+          </div>
+        )}
+
         {companySettings?.website && (
           <div className="footer-text">
             {companySettings.website}
