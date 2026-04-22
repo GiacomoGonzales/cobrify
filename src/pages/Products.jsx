@@ -3370,18 +3370,43 @@ export default function Products() {
                         </TableCell>
                         {visibleColumns.cost && (
                           <TableCell className="hidden xl:table-cell max-w-[90px]">
-                            {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
-                              <div>
-                                <span className="text-sm font-semibold text-green-600 truncate block">
-                                  {formatCurrency(product.price - product.cost)}
-                                </span>
-                                <p className="text-xs text-gray-500">
-                                  {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'}
-                                </p>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400">-</span>
-                            )}
+                            {(() => {
+                              if (product.cost === undefined || product.cost === null) {
+                                return <span className="text-xs text-gray-400">-</span>
+                              }
+                              // Variantes: rango mín–máx de utilidad usando el costo del producto padre
+                              if (product.hasVariants && product.variants?.length > 0) {
+                                const prices = product.variants.map(v => v.price).filter(p => typeof p === 'number')
+                                if (prices.length === 0) return <span className="text-xs text-gray-400">-</span>
+                                const margins = prices.map(p => p - product.cost)
+                                const minM = Math.min(...margins)
+                                const maxM = Math.max(...margins)
+                                const pcts = prices.filter(p => p > 0).map(p => ((p - product.cost) / p) * 100)
+                                const minP = pcts.length > 0 ? Math.min(...pcts) : 0
+                                const maxP = pcts.length > 0 ? Math.max(...pcts) : 0
+                                return (
+                                  <div>
+                                    <span className="text-sm font-semibold text-green-600 truncate block">
+                                      {minM === maxM ? formatCurrency(minM) : `${formatCurrency(minM)} – ${formatCurrency(maxM)}`}
+                                    </span>
+                                    <p className="text-xs text-gray-500">
+                                      {minP === maxP ? `${minP.toFixed(0)}%` : `${minP.toFixed(0)}% – ${maxP.toFixed(0)}%`}
+                                    </p>
+                                  </div>
+                                )
+                              }
+                              // Producto simple
+                              return (
+                                <div>
+                                  <span className="text-sm font-semibold text-green-600 truncate block">
+                                    {formatCurrency(product.price - product.cost)}
+                                  </span>
+                                  <p className="text-xs text-gray-500">
+                                    {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'}
+                                  </p>
+                                </div>
+                              )
+                            })()}
                           </TableCell>
                         )}
                         {visibleColumns.category && (
