@@ -1257,6 +1257,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     total: colX += colWidths.pu
   }
 
+  // Flag de configuración: mostrar código/SKU del producto en los comprobantes (default true)
+  const showProductCode = companySettings?.showProductCodeInInvoices !== false
+
   // Función para calcular altura dinámica de cada item
   const calculateItemHeight = (item) => {
     // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
@@ -1264,7 +1267,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     // En farmacia el código tiene su propia columna, no repetirlo en la descripción
-    let itemDesc = (isValidCode && !isPharmacy) ? `${rawCode} - ${itemName}` : itemName
+    let itemDesc = (showProductCode && isValidCode && !isPharmacy) ? `${rawCode} - ${itemName}` : itemName
     // Concatenar atributos de variante si existen (talla, color, etc.)
     if (item.isVariant && item.variantAttributes) {
       const attrs = Object.entries(item.variantAttributes)
@@ -1445,8 +1448,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const unitText = unitLabels[unitCode] || unitCode
     doc.text(unitText, cols.um + colWidths.um / 2, centerY, { align: 'center' })
 
-    // Código del producto (solo modo farmacia)
-    if (isPharmacy && colWidths.code > 0) {
+    // Código del producto (solo modo farmacia, y si el toggle de configuración lo permite)
+    if (isPharmacy && colWidths.code > 0 && showProductCode) {
       doc.setFontSize(6.5)
       const codeText = item.code || ''
       if (codeText) {

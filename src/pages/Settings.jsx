@@ -150,6 +150,9 @@ export default function Settings() {
   // Estado para mostrar códigos de producto en cotizaciones PDF
   const [showProductCodeInQuotation, setShowProductCodeInQuotation] = useState(false)
 
+  // Estado para mostrar códigos de producto en comprobantes (boletas/facturas/notas)
+  const [showProductCodeInInvoices, setShowProductCodeInInvoices] = useState(true)
+
   // Estado para mostrar descripción de producto en cotizaciones PDF
   const [showProductDescriptionInQuotation, setShowProductDescriptionInQuotation] = useState(true)
 
@@ -808,6 +811,11 @@ export default function Settings() {
           setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
         }
 
+        // Cargar flag de códigos de producto en comprobantes (default true: retrocompatibilidad)
+        if (businessData.showProductCodeInInvoices !== undefined) {
+          setShowProductCodeInInvoices(businessData.showProductCodeInInvoices)
+        }
+
         // Cargar flag de descripción de producto en cotizaciones (default true: retrocompatibilidad)
         if (businessData.showProductDescriptionInQuotation !== undefined) {
           setShowProductDescriptionInQuotation(businessData.showProductDescriptionInQuotation)
@@ -1335,6 +1343,7 @@ export default function Settings() {
         ticketFooterMessage: ticketFooterMessage || '',
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
+        showProductCodeInInvoices: showProductCodeInInvoices,
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
@@ -4602,6 +4611,26 @@ export default function Settings() {
                   </div>
                 </label>
 
+                {/* Códigos de producto en comprobantes (boletas/facturas/notas) */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductCodeInInvoices}
+                    onChange={(e) => setShowProductCodeInInvoices(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar códigos de producto en comprobantes
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductCodeInInvoices
+                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
+                    </p>
+                  </div>
+                </label>
+
                 {/* Descripción de producto en cotizaciones */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
                   <input
@@ -5036,6 +5065,7 @@ export default function Settings() {
                       pdfAccentColor: pdfAccentColor,
                       ticketFooterMessage: ticketFooterMessage || '',
                       showProductCodeInQuotation: showProductCodeInQuotation,
+                      showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
