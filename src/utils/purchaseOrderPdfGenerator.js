@@ -413,10 +413,19 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   rightY += dataLineHeight
 
   if (order.paymentCondition) {
+    const paymentLabels = {
+      contado: 'Contado',
+      credito_7: 'Crédito 7 días',
+      credito_15: 'Crédito 15 días',
+      credito_30: 'Crédito 30 días',
+      credito_45: 'Crédito 45 días',
+      credito_60: 'Crédito 60 días',
+    }
+    const paymentText = paymentLabels[order.paymentCondition] || order.paymentCondition
     doc.setFont('helvetica', 'bold')
     doc.text('COND. PAGO:', colRightX, rightY)
     doc.setFont('helvetica', 'normal')
-    doc.text(order.paymentCondition, colRightX + 55, rightY)
+    doc.text(paymentText, colRightX + 55, rightY)
     rightY += dataLineHeight
   }
 

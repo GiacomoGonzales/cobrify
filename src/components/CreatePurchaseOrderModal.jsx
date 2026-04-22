@@ -115,6 +115,10 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
             unit: item.unit || 'NIU',
             searchTerm: item.name || '',
             igvType: item.igvType || 'gravado',
+            laboratoryName: item.laboratoryName || '',
+            marca: item.marca || '',
+            presentation: item.presentation || '',
+            concentration: item.concentration || '',
           })))
         }
       } else {
@@ -429,6 +433,10 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         unit: item.unit,
         igvType: item.igvType || 'gravado',
         subtotal: calculateItemTotal(item),
+        laboratoryName: item.laboratoryName || '',
+        marca: item.marca || '',
+        presentation: item.presentation || '',
+        concentration: item.concentration || '',
       }))
 
       if (isEditing) {
