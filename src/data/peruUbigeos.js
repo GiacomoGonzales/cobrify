@@ -2377,6 +2377,7 @@ export const DISTRITOS = {
     { code: '04', name: 'SAMEGUA' },
     { code: '05', name: 'SAN CRISTÓBAL' },
     { code: '06', name: 'TORATA' },
+    { code: '07', name: 'SAN ANTONIO' }, // Creado por Ley N° 30375 (noviembre 2015)
   ],
   // MOQUEGUA - GENERAL SÁNCHEZ CERRO (1802)
   '1802': [
