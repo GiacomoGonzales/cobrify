@@ -565,8 +565,9 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
   const items = order.items || []
   const unitLabels = { 'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT', 'METRO': 'MT' }
-  const descLineHeight = 8 * 1.4 * 0.3528 // desc 8pt
-  const pharmaLineHeight = 6.5 * 1.4 * 0.3528 // sub-detalles 6.5pt
+  // Alturas de línea en puntos (el PDF está configurado en unit: 'pt')
+  const descLineHeight = 8 * 1.4 // desc 8pt con interlineado 1.4 → 11.2 pt
+  const pharmaLineHeight = 6.5 * 1.4 // sub-detalles 6.5pt → 9.1 pt
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
