@@ -3369,7 +3369,7 @@ export default function Products() {
                           )}
                         </TableCell>
                         {visibleColumns.cost && (
-                          <TableCell className="hidden xl:table-cell max-w-[90px]">
+                          <TableCell className="hidden xl:table-cell max-w-[140px]">
                             {(() => {
                               if (product.cost === undefined || product.cost === null) {
                                 return <span className="text-xs text-gray-400">-</span>
@@ -3384,13 +3384,23 @@ export default function Products() {
                                 const pcts = prices.filter(p => p > 0).map(p => ((p - product.cost) / p) * 100)
                                 const minP = pcts.length > 0 ? Math.min(...pcts) : 0
                                 const maxP = pcts.length > 0 ? Math.max(...pcts) : 0
+                                const amountText = minM === maxM
+                                  ? formatCurrency(minM)
+                                  // Omitimos "S/" en el segundo valor para que el rango quepa en la columna
+                                  : `${formatCurrency(minM)}–${maxM.toFixed(2)}`
+                                const pctText = minP === maxP
+                                  ? `${minP.toFixed(0)}%`
+                                  : `${minP.toFixed(0)}–${maxP.toFixed(0)}%`
+                                const tooltip = minM === maxM
+                                  ? `Utilidad: ${formatCurrency(minM)} (${minP.toFixed(0)}%)`
+                                  : `Utilidad: ${formatCurrency(minM)} a ${formatCurrency(maxM)} (${minP.toFixed(0)}% a ${maxP.toFixed(0)}%)`
                                 return (
-                                  <div>
-                                    <span className="text-sm font-semibold text-green-600 truncate block">
-                                      {minM === maxM ? formatCurrency(minM) : `${formatCurrency(minM)} – ${formatCurrency(maxM)}`}
+                                  <div title={tooltip}>
+                                    <span className="text-xs font-semibold text-green-600 whitespace-nowrap block leading-tight">
+                                      {amountText}
                                     </span>
-                                    <p className="text-xs text-gray-500">
-                                      {minP === maxP ? `${minP.toFixed(0)}%` : `${minP.toFixed(0)}% – ${maxP.toFixed(0)}%`}
+                                    <p className="text-[11px] text-gray-500 whitespace-nowrap leading-tight mt-0.5">
+                                      {pctText}
                                     </p>
                                   </div>
                                 )
