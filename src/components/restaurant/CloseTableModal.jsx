@@ -69,12 +69,14 @@ export default function CloseTableModal({
   }
 
   const handleCloseWithoutReceipt = async () => {
-    if (!closeReason.trim()) return
+    // Cuando la orden ya fue cobrada el input de motivo no se muestra, así que no se exige.
+    // Sólo exigir motivo cuando la mesa se cierra SIN emitir comprobante (flujo de cortesía/anulación).
+    if (!order.paid && !closeReason.trim()) return
     setIsProcessing(true)
     try {
       await onConfirm({
         generateReceipt: 'none',
-        reason: closeReason.trim(),
+        reason: order.paid ? 'Mesa liberada (orden ya cobrada)' : closeReason.trim(),
         amount: order.total || 0,
         items: order.items || [],
       })
