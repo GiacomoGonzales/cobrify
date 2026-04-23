@@ -178,6 +178,17 @@ function Sidebar() {
       pageId: 'sellers',
       menuId: 'sellers',
     },
+    // Control de Asistencia:
+    // - Sub-usuarios solo ven el link en la app nativa (donde pueden marcar con QR/GPS).
+    // - Owner/Admin lo ven siempre (en web gestionan configuración y marcaciones).
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
     {
       path: '/productos',
       icon: Package,
@@ -498,6 +509,15 @@ function Sidebar() {
       menuId: 'suppliers',
     },
     // --- Finanzas ---
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
     {
       path: '/reportes',
       icon: BarChart3,
@@ -689,6 +709,15 @@ function Sidebar() {
       menuId: 'loans',
       hideInDemo: true,
     },
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
     {
       path: '/reportes',
       icon: BarChart3,
@@ -778,6 +807,23 @@ function Sidebar() {
       label: 'Comisiones',
       pageId: 'commissions',
     },
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
+
     {
       path: '/reportes',
       icon: BarChart3,
@@ -910,6 +956,23 @@ function Sidebar() {
       pageId: 'expenses',
       menuId: 'expenses',
     }] : []),
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
+
     {
       path: '/reportes',
       icon: BarChart3,
@@ -1055,6 +1118,23 @@ function Sidebar() {
       pageId: 'suppliers',
       menuId: 'suppliers',
     },
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
+    {
+      path: '/contabilidad',
+      icon: FileCheck,
+      label: 'Contabilidad',
+      pageId: 'accounting',
+      menuId: 'accounting',
+    },
+
     {
       path: '/reportes',
       icon: BarChart3,
@@ -1208,6 +1288,15 @@ function Sidebar() {
       menuId: 'suppliers',
     },
     // --- Finanzas y reportes ---
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+      ? [{
+          path: '/asistencia',
+          icon: UserCheck,
+          label: 'Control de Asistencia',
+          menuId: 'attendance',
+        }]
+      : []),
+
     {
       path: '/reportes',
       icon: BarChart3,

@@ -69,6 +69,7 @@ import DemoVeterinaryLayout from './layouts/DemoVeterinaryLayout'
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
 import Sellers from './pages/Sellers'
+import Attendance from './pages/Attendance'
 import Orders from './pages/Orders'
 import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
@@ -377,6 +378,7 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="asistencia" element={<Attendance />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
