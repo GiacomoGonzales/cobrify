@@ -1283,6 +1283,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
+    // QR personalizado al pie (configurado por el usuario)
+    if (business.ticketQrEnabled && business.ticketQrContent && business.ticketQrContent.trim()) {
+      printer = printer
+        .align('center')
+        .text('\n')
+        .qr(business.ticketQrContent.trim());
+      if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+        printer = printer.text(convertSpanishText(business.ticketQrCaption.trim() + '\n'));
+      }
+    }
+
     // Website (si existe)
     if (business.website) {
       printer = printer
@@ -1779,6 +1790,11 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
 
       // Mensaje personalizado al pie del ticket (configurable en Settings)
       ticketFooterMessage: business?.ticketFooterMessage || '',
+
+      // QR personalizado al pie del ticket (configurable en Settings)
+      ticketQrEnabled: business?.ticketQrEnabled === true,
+      ticketQrContent: business?.ticketQrContent || '',
+      ticketQrCaption: business?.ticketQrCaption || '',
 
       // Vendedor
       sellerName: invoice.sellerName || '',
@@ -2423,6 +2439,15 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       const footerLines = business.ticketFooterMessage.trim().split(/\r?\n/)
       for (const line of footerLines) {
         builder.text(line).newLine()
+      }
+    }
+
+    // QR personalizado al pie (configurado por el usuario)
+    if (business.ticketQrEnabled && business.ticketQrContent && business.ticketQrContent.trim()) {
+      const paperWidth = business.ticketPaperWidth || 58
+      builder.newLine().alignCenter().qr(business.ticketQrContent.trim(), paperWidth === 58 ? 5 : 7)
+      if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+        builder.text(business.ticketQrCaption.trim()).newLine()
       }
     }
 

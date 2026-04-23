@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2 } from 'lucide-react'
 import QRCode from 'qrcode'
+import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
@@ -143,6 +144,10 @@ export default function Settings() {
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
   const [ticketFooterMessage, setTicketFooterMessage] = useState('') // Mensaje personalizado al pie del ticket térmico
+  // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
+  const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
+  const [ticketQrContent, setTicketQrContent] = useState('')
+  const [ticketQrCaption, setTicketQrCaption] = useState('')
 
   // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
   const [companySlogan, setCompanySlogan] = useState('')
@@ -797,6 +802,9 @@ export default function Settings() {
 
         // Cargar color de PDF
         setTicketFooterMessage(businessData.ticketFooterMessage || '')
+        setTicketQrEnabled(businessData.ticketQrEnabled === true)
+        setTicketQrContent(businessData.ticketQrContent || '')
+        setTicketQrCaption(businessData.ticketQrCaption || '')
         if (businessData.pdfAccentColor) {
           setPdfAccentColor(businessData.pdfAccentColor)
         }
@@ -1341,6 +1349,9 @@ export default function Settings() {
         logoUrl: uploadedLogoUrl || null,
         pdfAccentColor: pdfAccentColor,
         ticketFooterMessage: ticketFooterMessage || '',
+        ticketQrEnabled: ticketQrEnabled === true,
+        ticketQrContent: ticketQrContent || '',
+        ticketQrCaption: ticketQrCaption || '',
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
         showProductCodeInInvoices: showProductCodeInInvoices,
@@ -4611,6 +4622,94 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {/* QR personalizado al pie del ticket térmico */}
+                <div className="mb-6">
+                  <label className="flex items-start space-x-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={ticketQrEnabled}
+                      onChange={(e) => setTicketQrEnabled(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold text-gray-900 group-hover:text-primary-900">
+                        Imprimir código QR al pie del ticket
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        El sistema genera un QR automáticamente a partir del link o texto que pongas abajo y lo imprime en el ticket.
+                      </p>
+                    </div>
+                  </label>
+
+                  {ticketQrEnabled && (
+                    <div className="mt-3 ml-7">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900 flex gap-2">
+                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Cómo funciona:</strong> escribí a dónde querés que lleve el QR (por ejemplo, tu página web o un link de pago). Cuando tus clientes escaneen el QR impreso con la cámara del celular, se abrirá ese contenido. <strong>No hace falta subir una imagen</strong> — el ticket térmico imprime el QR solo.
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-start">
+                        {/* Inputs */}
+                        <div className="space-y-3 min-w-0">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              ¿A dónde debe llevar el QR cuando lo escaneen?
+                            </label>
+                            <textarea
+                              value={ticketQrContent}
+                              onChange={(e) => setTicketQrContent(e.target.value.slice(0, 500))}
+                              rows={3}
+                              maxLength={500}
+                              placeholder={'Ejemplos:\nhttps://mitienda.com\nhttps://wa.me/51987654321\nyape:987654321'}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                            />
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-xs text-gray-400">URL de tu web, link de WhatsApp, datos de pago, etc.</span>
+                              <span className="text-xs text-gray-400">{ticketQrContent.length}/500</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Texto debajo del QR <span className="text-gray-400">(opcional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={ticketQrCaption}
+                              onChange={(e) => setTicketQrCaption(e.target.value.slice(0, 60))}
+                              maxLength={60}
+                              placeholder='Ej: "Escaneá para pagar con Yape"'
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            />
+                            <span className="text-xs text-gray-400 mt-1 block">{ticketQrCaption.length}/60</span>
+                          </div>
+                        </div>
+
+                        {/* Preview */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col items-center md:w-[200px]">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-2">Vista previa</span>
+                          {ticketQrContent.trim() ? (
+                            <>
+                              <div className="bg-white p-2 rounded border border-gray-300">
+                                <QRCodeSVG value={ticketQrContent.trim()} size={140} level="M" includeMargin={false} />
+                              </div>
+                              {ticketQrCaption.trim() && (
+                                <p className="text-xs text-gray-700 mt-2 text-center font-medium">{ticketQrCaption.trim()}</p>
+                              )}
+                              <p className="text-[10px] text-gray-400 mt-2 text-center">Así se verá en el ticket</p>
+                            </>
+                          ) : (
+                            <div className="w-[140px] h-[140px] bg-gray-200 rounded flex items-center justify-center">
+                              <span className="text-xs text-gray-500 text-center px-2">Escribí un link para ver el QR</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Códigos de producto en cotizaciones */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
                   <input
@@ -5084,6 +5183,9 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
                       ticketFooterMessage: ticketFooterMessage || '',
+        ticketQrEnabled: ticketQrEnabled === true,
+        ticketQrContent: ticketQrContent || '',
+        ticketQrCaption: ticketQrCaption || '',
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,

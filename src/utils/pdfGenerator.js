@@ -2285,6 +2285,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += 10 + (maxMsgLines * 8)
   }
 
+  // ========== QR PERSONALIZADO AL PIE (configurable en Settings) ==========
+  if (companySettings?.ticketQrEnabled && companySettings.ticketQrContent && companySettings.ticketQrContent.trim()) {
+    try {
+      const customQrDataUrl = await QRCode.toDataURL(companySettings.ticketQrContent.trim(), {
+        width: 300,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      })
+      const qrSize = 60
+      const qrX = MARGIN_LEFT + (CONTENT_WIDTH - qrSize) / 2
+      doc.addImage(customQrDataUrl, 'PNG', qrX, footerY + 10, qrSize, qrSize)
+      footerY += 10 + qrSize + 4
+      if (companySettings.ticketQrCaption && companySettings.ticketQrCaption.trim()) {
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(80, 80, 80)
+        doc.text(companySettings.ticketQrCaption.trim(), MARGIN_LEFT + CONTENT_WIDTH / 2, footerY, { align: 'center' })
+        footerY += 8
+      }
+    } catch (error) {
+      console.error('Error generando QR personalizado del ticket:', error)
+    }
+  }
+
   // ========== FOOTER FINAL ==========
 
   doc.setDrawColor(...MEDIUM_GRAY)

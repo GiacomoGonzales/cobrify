@@ -1116,6 +1116,18 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       }
     }
 
+    // QR personalizado al pie (configurable en Settings)
+    if (receiptData.ticketQrEnabled && receiptData.ticketQrContent && receiptData.ticketQrContent.trim()) {
+      commands.push(ESCPOSCommands.text('\n'));
+      const customQrCmds = generateQRCommands(receiptData.ticketQrContent.trim(), paperWidth === 58 ? 5 : 7);
+      for (const cmd of customQrCmds) {
+        commands.push(cmd);
+      }
+      if (receiptData.ticketQrCaption && receiptData.ticketQrCaption.trim()) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(receiptData.ticketQrCaption.trim()) + '\n'));
+      }
+    }
+
     // Website
     if (website) {
       commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));

@@ -1109,6 +1109,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           </div>
         )}
 
+        {companySettings?.ticketQrEnabled && companySettings?.ticketQrContent && companySettings.ticketQrContent.trim() && (
+          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <QRCodeSVG value={companySettings.ticketQrContent.trim()} size={120} level="M" includeMargin={false} />
+            {companySettings.ticketQrCaption && companySettings.ticketQrCaption.trim() && (
+              <div style={{ marginTop: '4px', fontSize: '9px', fontWeight: 600 }}>
+                {companySettings.ticketQrCaption}
+              </div>
+            )}
+          </div>
+        )}
+
         {companySettings?.website && (
           <div className="footer-text">
             {companySettings.website}
