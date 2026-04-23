@@ -479,7 +479,12 @@ export default function CashFlow() {
     })
     const cashPurchasesTotal = paidCashPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
 
-    // B) Pagos parciales (abonos) de compras a crédito realizados en el período
+    // B) Pagos parciales (abonos) de compras a crédito realizados en el período.
+    //    Incluye dos mecanismos paralelos que existen en Purchases.jsx:
+    //      1) Abonos libres en `payments[]` (handleRegisterPayment).
+    //      2) Pago de cuotas del cronograma en `installments[]` con `status: 'paid'` + `paidAt`
+    //         (handlePayInstallment). Sin este segundo loop, quienes paguen por cuotas no ven
+    //         reflejado el egreso en Flujo de Caja.
     const purchasePayments = []
     purchases.filter(p => p.paymentType === 'credito' && filterByBranch(p, 'purchase')).forEach(purchase => {
       // Revisar el array de pagos parciales
@@ -494,16 +499,39 @@ export default function CashFlow() {
           })
         }
       })
+
+      // Cuotas pagadas del cronograma (installments). Evitamos duplicar si una misma cuota
+      // ya fue registrada como abono libre.
+      (purchase.installments || []).forEach((inst, idx) => {
+        if (inst.status !== 'paid') return
+        const paidAt = toDate(inst.paidAt)
+        if (!paidAt || !isInDateRange(paidAt, dateRange.startDate, dateRange.endDate)) return
+        const amount = inst.paidAmount || inst.amount || 0
+        if (amount <= 0) return
+        purchasePayments.push({
+          id: `installment-${purchase.id}-${idx}`,
+          amount,
+          date: inst.paidAt,
+          notes: `Cuota ${inst.number || idx + 1}`,
+          purchaseId: purchase.id,
+          supplierName: purchase.supplier?.businessName || 'Proveedor',
+          invoiceNumber: purchase.invoiceNumber,
+          fromInstallment: true,
+        })
+      })
     })
     const purchasePaymentsTotal = purchasePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
 
     // C) Compras a crédito pagadas completamente en el período (sin usar pagos parciales - legacy)
     // Solo para compras antiguas que se marcaron como pagadas sin usar el array de payments
+    // ni el cronograma de installments.
     const paidCreditPurchasesLegacy = purchases.filter(p => {
       if (p.paymentType !== 'credito' || p.paymentStatus !== 'paid') return false
       if (!filterByBranch(p, 'purchase')) return false
       // Si tiene payments array, ya se contó arriba
       if (p.payments && p.payments.length > 0) return false
+      // Si tiene cuotas pagadas en installments, ya se contó arriba (evitar doble conteo)
+      if (Array.isArray(p.installments) && p.installments.some(i => i.status === 'paid')) return false
       // Usar paidAt como fecha del pago
       const paidDate = p.paidAt
       if (!paidDate) return false
