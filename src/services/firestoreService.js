@@ -1596,6 +1596,43 @@ export const saveProductCategories = async (userId, categories) => {
   }
 }
 
+/**
+ * Obtener categorías de ingredientes (insumos)
+ */
+export const getIngredientCategories = async userId => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      const data = docSnap.data()
+      return { success: true, data: data.ingredientCategories || [] }
+    } else {
+      return { success: true, data: [] }
+    }
+  } catch (error) {
+    console.error('Error al obtener categorías de ingredientes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Guardar categorías de ingredientes (insumos)
+ */
+export const saveIngredientCategories = async (userId, categories) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    await updateDoc(docRef, {
+      ingredientCategories: categories,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar categorías de ingredientes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // ==================== CONTROL DE CAJA ====================
 
 /**

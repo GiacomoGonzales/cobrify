@@ -35,7 +35,13 @@ const saveAndShareExcel = async (workbook, fileName) => {
 /**
  * Generar reporte de ingredientes en Excel
  */
-export const generateIngredientsExcel = async (ingredients, businessData) => {
+export const generateIngredientsExcel = async (ingredients, businessData, categories = []) => {
+  // Mapa id→nombre para mostrar la categoría legible
+  const catMap = new Map(categories.map(c => [c.id, c.name]))
+  const resolveCategory = (c) => {
+    if (!c) return ''
+    return catMap.get(c) || (categories.find(cc => cc.name.toLowerCase() === String(c).toLowerCase())?.name || c)
+  }
   const workbook = XLSX.utils.book_new()
 
   // Preparar datos de los ingredientes
@@ -54,6 +60,7 @@ export const generateIngredientsExcel = async (ingredients, businessData) => {
   // Encabezados de la tabla
   ingredientData.push([
     'Nombre',
+    'Categoría',
     'Unidad de Compra',
     'Stock Actual',
     'Stock Mínimo',
@@ -84,6 +91,7 @@ export const generateIngredientsExcel = async (ingredients, businessData) => {
 
     ingredientData.push([
       ingredient.name || 'N/A',
+      resolveCategory(ingredient.category),
       ingredient.purchaseUnit || 'N/A',
       ingredient.currentStock || 0,
       ingredient.minimumStock || 0,
@@ -114,6 +122,7 @@ export const generateIngredientsExcel = async (ingredients, businessData) => {
   // Configurar anchos de columna
   worksheet['!cols'] = [
     { width: 30 },  // Nombre
+    { width: 20 },  // Categoría
     { width: 15 },  // Unidad de Compra
     { width: 12 },  // Stock Actual
     { width: 12 },  // Stock Mínimo
@@ -156,6 +165,7 @@ export const generateIngredientsTemplate = async () => {
   // Encabezados
   templateData.push([
     'Nombre (*)',
+    'Categoría',
     'Unidad de Compra (*)',
     'Stock Inicial',
     'Stock Mínimo',
@@ -165,6 +175,7 @@ export const generateIngredientsTemplate = async () => {
   // Ejemplos
   templateData.push([
     'Arroz',
+    'Granos y Cereales',
     'kg',
     '25',
     '5',
@@ -172,6 +183,7 @@ export const generateIngredientsTemplate = async () => {
   ])
   templateData.push([
     'Aceite Vegetal',
+    'Condimentos y Especias',
     'L',
     '10',
     '2',
@@ -179,6 +191,7 @@ export const generateIngredientsTemplate = async () => {
   ])
   templateData.push([
     'Sal',
+    'Condimentos y Especias',
     'kg',
     '5',
     '1',
@@ -191,6 +204,7 @@ export const generateIngredientsTemplate = async () => {
   // Configurar anchos de columna
   worksheet['!cols'] = [
     { width: 30 },  // Nombre
+    { width: 22 },  // Categoría
     { width: 20 },  // Unidad de Compra
     { width: 15 },  // Stock Inicial
     { width: 15 },  // Stock Mínimo

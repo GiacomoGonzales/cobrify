@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight, FolderPlus, ChevronUp, ChevronDown, SortAsc, Check, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -22,19 +22,22 @@ import {
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
 import { generateIngredientsExcel } from '@/services/ingredientExportService'
+import { getIngredientCategories, saveIngredientCategories } from '@/services/firestoreService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
-const CATEGORIES = [
-  { value: 'granos', label: 'Granos y Cereales' },
-  { value: 'carnes', label: 'Carnes' },
-  { value: 'vegetales', label: 'Vegetales y Frutas' },
-  { value: 'lacteos', label: 'Lácteos' },
-  { value: 'condimentos', label: 'Condimentos y Especias' },
-  { value: 'bebidas', label: 'Bebidas' },
-  { value: 'estetica', label: 'Estética y Belleza' },
-  { value: 'salud', label: 'Salud y Farmacia' },
-  { value: 'limpieza', label: 'Limpieza' },
-  { value: 'otros', label: 'Otros' }
+// Categorías por defecto cuando un negocio usa el módulo por primera vez.
+// Se auto-siembra una sola vez; luego el dueño puede editarlas/eliminarlas.
+const DEFAULT_CATEGORIES = [
+  { id: 'granos', name: 'Granos y Cereales', order: 0 },
+  { id: 'carnes', name: 'Carnes', order: 1 },
+  { id: 'vegetales', name: 'Vegetales y Frutas', order: 2 },
+  { id: 'lacteos', name: 'Lácteos', order: 3 },
+  { id: 'condimentos', name: 'Condimentos y Especias', order: 4 },
+  { id: 'bebidas', name: 'Bebidas', order: 5 },
+  { id: 'estetica', name: 'Estética y Belleza', order: 6 },
+  { id: 'salud', name: 'Salud y Farmacia', order: 7 },
+  { id: 'limpieza', name: 'Limpieza', order: 8 },
+  { id: 'otros', name: 'Otros', order: 9 },
 ]
 
 const UNITS = [
@@ -96,12 +99,20 @@ export default function Ingredients() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showManageCategoriesModal, setShowManageCategoriesModal] = useState(false)
+  const [editingCategoryId, setEditingCategoryId] = useState(null)
+  const [editingCategoryName, setEditingCategoryName] = useState('')
+  const [newCategoryName, setNewCategoryName] = useState('')
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
+
+  // Categorías dinámicas del negocio
+  const [categories, setCategories] = useState([])
 
   // Form data
   const [formData, setFormData] = useState({
@@ -120,7 +131,124 @@ export default function Ingredients() {
   useEffect(() => {
     loadIngredients()
     loadBranchesAndWarehouses()
+    loadCategories()
   }, [user])
+
+  const loadCategories = async () => {
+    if (!user?.uid) return
+    if (isDemoMode) {
+      setCategories(DEFAULT_CATEGORIES)
+      return
+    }
+    try {
+      const businessId = getBusinessId()
+      const result = await getIngredientCategories(businessId)
+      if (result.success) {
+        if (!result.data || result.data.length === 0) {
+          // Primera vez: sembrar con las categorías por defecto
+          const seeded = [...DEFAULT_CATEGORIES]
+          await saveIngredientCategories(businessId, seeded)
+          setCategories(seeded)
+        } else {
+          setCategories(result.data)
+        }
+      }
+    } catch (err) {
+      console.error('Error cargando categorías de ingredientes:', err)
+      setCategories(DEFAULT_CATEGORIES)
+    }
+  }
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim()
+    if (!name) return
+    // Evitar duplicados (case-insensitive)
+    const exists = categories.some(c => c.name.toLowerCase() === name.toLowerCase())
+    if (exists) {
+      toast.error('Ya existe una categoría con ese nombre')
+      return
+    }
+    const newCat = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      name,
+      order: categories.length,
+    }
+    const updated = [...categories, newCat]
+    setCategories(updated)
+    setFormData(prev => ({ ...prev, category: newCat.id }))
+    setNewCategoryName('')
+    setShowCategoryModal(false)
+    if (!isDemoMode) {
+      const result = await saveIngredientCategories(getBusinessId(), updated)
+      if (!result.success) {
+        toast.error('No se pudo guardar la categoría')
+      } else {
+        toast.success(`Categoría "${name}" creada`)
+      }
+    }
+  }
+
+  const persistCategories = async (updated) => {
+    setCategories(updated)
+    if (!isDemoMode) {
+      const result = await saveIngredientCategories(getBusinessId(), updated)
+      if (!result.success) {
+        toast.error('No se pudo guardar los cambios')
+        return false
+      }
+    }
+    return true
+  }
+
+  const handleRenameCategory = async (categoryId, newName) => {
+    const name = newName.trim()
+    if (!name) {
+      toast.error('El nombre no puede estar vacío')
+      return
+    }
+    const duplicate = categories.some(c => c.id !== categoryId && c.name.toLowerCase() === name.toLowerCase())
+    if (duplicate) {
+      toast.error('Ya existe una categoría con ese nombre')
+      return
+    }
+    const updated = categories.map(c => c.id === categoryId ? { ...c, name } : c)
+    const ok = await persistCategories(updated)
+    if (ok) toast.success('Categoría renombrada')
+  }
+
+  const handleDeleteCategory = async (categoryId) => {
+    const cat = categories.find(c => c.id === categoryId)
+    if (!cat) return
+    const inUse = ingredients.filter(i => i.category === categoryId).length
+    if (inUse > 0) {
+      toast.error(`No se puede eliminar: ${inUse} ingrediente(s) usan esta categoría`, 5000)
+      return
+    }
+    if (!window.confirm(`¿Eliminar categoría "${cat.name}"?`)) return
+    const updated = categories.filter(c => c.id !== categoryId)
+      .map((c, i) => ({ ...c, order: i }))
+    const ok = await persistCategories(updated)
+    if (ok) toast.success('Categoría eliminada')
+  }
+
+  const handleMoveCategory = async (categoryId, direction) => {
+    const sorted = [...categories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+    const idx = sorted.findIndex(c => c.id === categoryId)
+    const swapIdx = idx + direction
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return
+    ;[sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]]
+    const updated = sorted.map((c, i) => ({ ...c, order: i }))
+    await persistCategories(updated)
+  }
+
+  const handleSortCategoriesAlphabetically = async () => {
+    if (!categories.length) return
+    const sorted = [...categories]
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
+      .map((c, i) => ({ ...c, order: i }))
+    const ok = await persistCategories(sorted)
+    if (ok) toast.success('Categorías ordenadas alfabéticamente')
+  }
 
   const loadBranchesAndWarehouses = async () => {
     if (!user?.uid || isDemoMode) return
@@ -354,7 +482,7 @@ export default function Ingredients() {
   const resetForm = () => {
     setFormData({
       name: '',
-      category: 'otros',
+      category: categories[0]?.id || '',
       purchaseUnit: 'kg',
       currentStock: '',
       minimumStock: '',
@@ -373,7 +501,7 @@ export default function Ingredients() {
         name: user?.displayName || 'Mi Negocio',
         ruc: user?.ruc || 'N/A'
       }
-      await generateIngredientsExcel(filteredIngredients, businessData)
+      await generateIngredientsExcel(filteredIngredients, businessData, categories)
       toast.success('Excel exportado exitosamente')
     } catch (error) {
       console.error('Error al exportar:', error)
@@ -387,9 +515,48 @@ export default function Ingredients() {
     let successCount = 0
     const errors = []
 
+    // Resolver/auto-crear categorías nuevas del Excel
+    let updatedCategories = [...categories]
+    const newCategoryNames = new Set()
+    for (const ing of ingredientsToImport) {
+      const name = (ing.categoryName || '').trim()
+      if (!name) continue
+      const exists = updatedCategories.some(c => c.name.toLowerCase() === name.toLowerCase())
+      if (!exists) newCategoryNames.add(name)
+    }
+    if (newCategoryNames.size > 0) {
+      for (const name of newCategoryNames) {
+        updatedCategories.push({
+          id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          name,
+          order: updatedCategories.length,
+        })
+      }
+      if (!isDemoMode) {
+        await saveIngredientCategories(businessId, updatedCategories)
+      }
+      setCategories(updatedCategories)
+      toast.info(`${newCategoryNames.size} categoría(s) creada(s) desde Excel`)
+    }
+
     for (const ingredientData of ingredientsToImport) {
       try {
-        const result = await createIngredient(businessId, ingredientData)
+        // Mapear nombre de categoría a ID (existente o recién creada)
+        let categoryId = ''
+        const catName = (ingredientData.categoryName || '').trim()
+        if (catName) {
+          const match = updatedCategories.find(c => c.name.toLowerCase() === catName.toLowerCase())
+          if (match) categoryId = match.id
+        }
+        // Si no se especificó, usar la primera categoría disponible
+        if (!categoryId && updatedCategories.length > 0) {
+          categoryId = updatedCategories[0].id
+        }
+
+        const { categoryName, ...payload } = ingredientData
+        payload.category = categoryId
+
+        const result = await createIngredient(businessId, payload)
         if (result.success) {
           successCount++
         } else {
@@ -448,8 +615,15 @@ export default function Ingredients() {
   }, [ingredients, getStockForBranch])
 
   const getCategoryLabel = (category) => {
-    const cat = CATEGORIES.find(c => c.value === category)
-    return cat ? cat.label : category
+    if (!category) return ''
+    // Buscar por id primero (categorías nuevas/personalizadas)
+    const byId = categories.find(c => c.id === category)
+    if (byId) return byId.name
+    // Retrocompat: algunos ingredientes viejos guardaron el valor hardcoded como string directo
+    const byName = categories.find(c => c.name.toLowerCase() === String(category).toLowerCase())
+    if (byName) return byName.name
+    // Fallback: mostrar el string tal cual
+    return category
   }
 
   const getStockStatus = (ingredient) => {
@@ -502,6 +676,14 @@ export default function Ingredients() {
           >
             <Upload className="w-4 h-4 mr-2" />
             Importar Excel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowManageCategoriesModal(true)}
+            className="w-full sm:w-auto"
+          >
+            <FolderPlus className="w-4 h-4 mr-2" />
+            Categorías
           </Button>
           <Button
             variant="outline"
@@ -576,8 +758,8 @@ export default function Ingredients() {
             </div>
             <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
               <option value="all">Todas las categorías</option>
-              {CATEGORIES.map(cat => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </Select>
             {/* Filtro de Sucursal */}
@@ -831,15 +1013,28 @@ export default function Ingredients() {
             required
           />
 
-          <Select
-            label="Categoría"
-            value={formData.category}
-            onChange={e => setFormData({ ...formData, category: e.target.value })}
-          >
-            {CATEGORIES.map(cat => (
-              <option key={cat.value} value={cat.value}>{cat.label}</option>
-            ))}
-          </Select>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-gray-700">Categoría</label>
+              <button
+                type="button"
+                onClick={() => { setNewCategoryName(''); setShowCategoryModal(true) }}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+              >
+                <Plus className="w-3 h-3" />
+                Nueva categoría
+              </button>
+            </div>
+            <Select
+              value={formData.category}
+              onChange={e => setFormData({ ...formData, category: e.target.value })}
+            >
+              {categories.length === 0 && <option value="">Sin categoría</option>}
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </Select>
+          </div>
 
           <Select
             label="Unidad de Compra"
@@ -954,6 +1149,201 @@ export default function Ingredients() {
               ) : (
                 showEditModal ? 'Guardar Cambios' : texts.saveButton
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de nueva categoría (acceso rápido desde el formulario) */}
+      <Modal
+        isOpen={showCategoryModal}
+        onClose={() => { setShowCategoryModal(false); setNewCategoryName('') }}
+        title="Nueva categoría"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nombre de la categoría"
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+            placeholder="Ej: Panadería, Bebidas frías, Limpieza"
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setShowCategoryModal(false); setNewCategoryName('') }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim()}>
+              Crear
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de gestión de categorías (renombrar / eliminar / reordenar) */}
+      <Modal
+        isOpen={showManageCategoriesModal}
+        onClose={() => {
+          setShowManageCategoriesModal(false)
+          setEditingCategoryId(null)
+          setEditingCategoryName('')
+          setNewCategoryName('')
+        }}
+        title="Gestionar categorías"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Crear nueva */}
+          <div className="flex gap-2">
+            <Input
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+              placeholder="Nombre de nueva categoría"
+              className="flex-1"
+            />
+            <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim()}>
+              <Plus className="w-4 h-4 mr-1" />
+              Agregar
+            </Button>
+          </div>
+
+          {/* Acciones sobre la lista */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              {categories.length} categoría{categories.length !== 1 ? 's' : ''}
+            </p>
+            {categories.length > 1 && (
+              <Button variant="outline" size="sm" onClick={handleSortCategoriesAlphabetically}>
+                <SortAsc className="w-4 h-4 mr-1" />
+                Ordenar A-Z
+              </Button>
+            )}
+          </div>
+
+          {/* Lista */}
+          {categories.length === 0 ? (
+            <p className="text-center text-sm text-gray-500 py-8">
+              Aún no tienes categorías. Crea la primera arriba.
+            </p>
+          ) : (
+            <div className="border rounded-lg divide-y max-h-96 overflow-y-auto">
+              {[...categories]
+                .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+                .map((cat, idx, arr) => {
+                  const usageCount = ingredients.filter(i => i.category === cat.id).length
+                  const isEditing = editingCategoryId === cat.id
+                  return (
+                    <div key={cat.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                      {/* Flechas reorder */}
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        <button
+                          onClick={() => handleMoveCategory(cat.id, -1)}
+                          disabled={idx === 0}
+                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Subir"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveCategory(cat.id, 1)}
+                          disabled={idx === arr.length - 1}
+                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Bajar"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Nombre (edita inline) */}
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <Input
+                            value={editingCategoryName}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleRenameCategory(cat.id, editingCategoryName)
+                                setEditingCategoryId(null)
+                                setEditingCategoryName('')
+                              } else if (e.key === 'Escape') {
+                                setEditingCategoryId(null)
+                                setEditingCategoryName('')
+                              }
+                            }}
+                            autoFocus
+                          />
+                        ) : (
+                          <div>
+                            <div className="font-medium text-sm text-gray-900 truncate">{cat.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {usageCount} ingrediente{usageCount !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {isEditing ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                handleRenameCategory(cat.id, editingCategoryName)
+                                setEditingCategoryId(null)
+                                setEditingCategoryName('')
+                              }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-600 hover:bg-emerald-50"
+                              title="Guardar"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => { setEditingCategoryId(null); setEditingCategoryName('') }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                              title="Cancelar"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name) }}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100"
+                              title="Renombrar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(cat.id)}
+                              disabled={usageCount > 0}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={usageCount > 0 ? `No se puede eliminar (${usageCount} en uso)` : 'Eliminar'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowManageCategoriesModal(false)
+                setEditingCategoryId(null)
+                setEditingCategoryName('')
+                setNewCategoryName('')
+              }}
+            >
+              Cerrar
             </Button>
           </div>
         </div>

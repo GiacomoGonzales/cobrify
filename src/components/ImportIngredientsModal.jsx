@@ -101,9 +101,13 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
         return
       }
 
+      // Categoría (opcional — string con el nombre; luego se resuelve a ID o se crea)
+      const categoryRaw = row['Categoría'] || row.Categoria || row.categoria || row.category || row.Category || ''
+
       // Mapear campos
       const ingredient = {
         name: String(name).trim(),
+        categoryName: String(categoryRaw).trim(),
         purchaseUnit: unitLower === 'l' ? 'L' : unitLower,
         currentStock: parseFloat(row['Stock Inicial'] || row.stock || row.Stock || 0),
         minimumStock: parseFloat(row['Stock Mínimo'] || row['Stock Minimo'] || row.stockMinimo || row.minStock || 0),
