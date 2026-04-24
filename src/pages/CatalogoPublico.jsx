@@ -29,7 +29,8 @@ import {
   Hash,
   CheckCircle2,
   AlertCircle,
-  Info
+  Info,
+  Mail
 } from 'lucide-react'
 
 // Estilos de animacion para fade-in escalonado
@@ -1127,15 +1128,19 @@ function CartDrawer({
 }) {
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
-  // Estados para modo restaurante
-  const defaultOrderType = initialTableNumber ? 'dine_in'
-    : (business?.catalogAllowTakeaway !== false ? 'takeaway' : business?.catalogAllowDelivery !== false ? 'delivery' : 'takeaway')
+  // Estados para modo restaurante / tienda virtual retail
+  // Retail: siempre 'delivery' (siempre pide dirección, no hay toggle)
+  const defaultOrderType = isRestaurantMenu
+    ? (initialTableNumber ? 'dine_in'
+      : (business?.catalogAllowTakeaway !== false ? 'takeaway' : business?.catalogAllowDelivery !== false ? 'delivery' : 'takeaway'))
+    : 'delivery'
   const [orderType, setOrderType] = useState(defaultOrderType)
   const [tableNumber, setTableNumber] = useState(initialTableNumber)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
   const [customerCoords, setCustomerCoords] = useState(null)
+  const [customerEmail, setCustomerEmail] = useState('')
   const [gettingLocation, setGettingLocation] = useState(false)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -1172,6 +1177,7 @@ function CartDrawer({
         setCustomerPhone('')
         setCustomerAddress('')
         setCustomerCoords(null)
+        setCustomerEmail('')
         setNotes('')
       }, 300)
     }
@@ -1294,6 +1300,7 @@ function CartDrawer({
         ...(customerPhone && { customerPhone: customerPhone.trim() }),
         ...(customerAddress && { customerAddress: customerAddress.trim() }),
         ...(customerCoords && { customerCoords }),
+        ...(customerEmail && { customerEmail: customerEmail.trim() }),
 
         // Items
         items,
@@ -1643,18 +1650,18 @@ function CartDrawer({
                 </div>
               )}
 
-              {/* Opciones de restaurante */}
-              {isRestaurantMenu && (
+              {/* Opciones de pedido (restaurante o tienda virtual retail) */}
+              {(isRestaurantMenu || business?.catalogOnlineOrders !== false) && (
                 <div className="space-y-4 pt-2">
-                  {/* Si viene de QR con mesa, mostrar indicador fijo */}
-                  {initialTableNumber ? (
+                  {/* Si viene de QR con mesa, mostrar indicador fijo (solo restaurante) */}
+                  {isRestaurantMenu && initialTableNumber ? (
                     <div className="flex items-center gap-2 p-3 rounded-xl" style={{ backgroundColor: `${business?.catalogColor || '#10B981'}15`, border: `1px solid ${business?.catalogColor || '#10B981'}40` }}>
                       <Hash className="w-5 h-5" style={{ color: business?.catalogColor || '#10B981' }} />
                       <span className="text-sm font-medium" style={{ color: business?.catalogColor || '#10B981' }}>Mesa {initialTableNumber} — Pedido para tu mesa</span>
                     </div>
-                  ) : (
+                  ) : isRestaurantMenu ? (
                     <>
-                      {/* Tipo de orden (solo mostrar si hay más de una opción) */}
+                      {/* Tipo de orden (solo restaurante, solo mostrar si hay más de una opción) */}
                       {(business?.catalogAllowTakeaway !== false && business?.catalogAllowDelivery !== false) && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1709,7 +1716,7 @@ function CartDrawer({
                         </div>
                       )}
                     </>
-                  )}
+                  ) : null}
 
                   {/* Nombre (para takeaway y delivery) */}
                   {(orderType === 'takeaway' || orderType === 'delivery') && (
@@ -1728,7 +1735,7 @@ function CartDrawer({
                     </div>
                   )}
 
-                  {/* Teléfono (para delivery) */}
+                  {/* Teléfono (para delivery / retail) */}
                   {orderType === 'delivery' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1739,18 +1746,35 @@ function CartDrawer({
                         type="tel"
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
-                        placeholder="Para coordinar entrega"
+                        placeholder={isRestaurantMenu ? 'Para coordinar entrega' : 'Para contactarte'}
                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
                       />
                     </div>
                   )}
 
-                  {/* Dirección (para delivery) */}
+                  {/* Email opcional (solo retail / tienda virtual) */}
+                  {!isRestaurantMenu && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Mail className="w-4 h-4 inline mr-1" />
+                        Email <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                        placeholder="tu@email.com"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Dirección (para delivery / retail) */}
                   {orderType === 'delivery' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <MapPin className="w-4 h-4 inline mr-1" />
-                        Dirección de entrega
+                        {isRestaurantMenu ? 'Dirección de entrega' : 'Dirección'}
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -1850,7 +1874,7 @@ function CartDrawer({
 
               {/* Botón de checkout - fijo abajo */}
               <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
-              {isRestaurantMenu ? (
+              {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
                 <button
                   onClick={handleRestaurantOrder}
                   disabled={submitting}
@@ -1864,7 +1888,7 @@ function CartDrawer({
                     </>
                   ) : (
                     <>
-                      <UtensilsCrossed className="w-5 h-5" />
+                      {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
                       {activeTableOrder && orderType === 'dine_in' ? 'Agregar a la orden' : 'Enviar pedido'}
                     </>
                   )}
@@ -1883,7 +1907,7 @@ function CartDrawer({
               <p className="text-center text-sm text-gray-500">
                 {isRestaurantMenu
                   ? 'Tu pedido llegará directamente a cocina'
-                  : 'Te contactaremos para confirmar tu pedido'}
+                  : 'Tu pedido llegará a la tienda. Te contactaremos para confirmar.'}
               </p>
               </div>
             </div>

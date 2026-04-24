@@ -71,6 +71,7 @@ import Waiters from './pages/Waiters'
 import Sellers from './pages/Sellers'
 import Attendance from './pages/Attendance'
 import Orders from './pages/Orders'
+import OnlineOrders from './pages/OnlineOrders'
 import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
@@ -414,6 +415,9 @@ function App() {
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />
+
+              {/* Pedidos online (modo retail — tienda virtual) */}
+              <Route path="pedidos-online" element={<OnlineOrders />} />
 
               {/* Rutas de modo farmacia */}
               <Route path="laboratorios" element={<Laboratories />} />

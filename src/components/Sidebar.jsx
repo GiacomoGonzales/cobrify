@@ -120,6 +120,13 @@ function Sidebar() {
       // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
+      path: '/pedidos-online',
+      icon: ShoppingBag,
+      label: 'Pedidos Online',
+      pageId: 'online-orders',
+      menuId: 'online-orders',
+    },
+    {
       path: '/caja',
       icon: Wallet,
       label: 'Control de Caja',
@@ -1566,7 +1573,7 @@ function Sidebar() {
           </div>
         )}
         {filteredMenuItems.map(item => {
-          const hasOrderAlerts = item.pageId === 'orders' && orderAlertCount > 0
+          const hasOrderAlerts = (item.pageId === 'orders' || item.pageId === 'online-orders') && orderAlertCount > 0
           return (
           <NavLink
             key={item.path}

@@ -43,6 +43,8 @@ export const COMMON_PAGES = [
 
 // ============ PÁGINAS MODO RETAIL ============
 export const RETAIL_PAGES = [
+  // Operaciones
+  { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
   // Documentos
   { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
   { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },

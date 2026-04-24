@@ -44,6 +44,7 @@ const routeToPageId = {
   '/app/reclamos': 'complaints',
   '/app/mesas': 'tables',
   '/app/ordenes': 'orders',
+  '/app/pedidos-online': 'online-orders',
   '/app/cocina': 'kitchen',
   '/app/mozos': 'waiters',
   '/app/envios': 'envios',
@@ -89,13 +90,17 @@ export default function MainLayout() {
   const [alertCompanySettings, setAlertCompanySettings] = useState(null)
   const alertKitchenTicketRef = useRef()
 
+  // Modos que reciben pedidos del catálogo digital en tiempo real
+  const listenOrdersModes = ['restaurant', 'retail']
+  const isOnlineOrdersMode = listenOrdersModes.includes(businessMode)
+
   // Cargar company settings para el KitchenTicket (web print)
   useEffect(() => {
-    if (!user?.uid || businessMode !== 'restaurant') return
+    if (!user?.uid || !isOnlineOrdersMode) return
     getCompanySettings(getBusinessId()).then(result => {
       if (result.success) setAlertCompanySettings(result.data)
     })
-  }, [user?.uid, businessMode, getBusinessId])
+  }, [user?.uid, isOnlineOrdersMode, getBusinessId])
 
   // react-to-print para impresión web
   const handleAlertWebPrint = useReactToPrint({
@@ -159,14 +164,15 @@ export default function MainLayout() {
     activeOscillatorsRef.current = []
   }, [])
 
-  // Listener global de órdenes - solo para restaurantes
+  // Listener global de órdenes - restaurantes y retail (tienda virtual)
   useEffect(() => {
-    if (!user?.uid || businessMode !== 'restaurant') return
+    if (!user?.uid || !isOnlineOrdersMode) return
 
     const businessId = getBusinessId()
     if (!businessId) return
 
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    // Retail usa 'pending' como estado inicial (aún no contactado)
     const q = query(ordersRef, where('status', 'in', ['pending', 'preparing', 'ready', 'dispatched']))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -206,8 +212,8 @@ export default function MainLayout() {
             timestamp: Date.now(),
           })
 
-          // Auto-crear registro de envío para órdenes delivery
-          if (order.orderType === 'delivery') {
+          // Auto-crear registro de envío para órdenes delivery (solo restaurante)
+          if (order.orderType === 'delivery' && businessMode === 'restaurant') {
             createDeliveryRecord(businessId, {
               motoristaId: '',
               motoristaName: '',
@@ -259,7 +265,7 @@ export default function MainLayout() {
     })
 
     return () => unsubscribe()
-  }, [user?.uid, businessMode, getBusinessId, playNotificationSound])
+  }, [user?.uid, businessMode, isOnlineOrdersMode, getBusinessId, playNotificationSound])
 
   const dismissGlobalAlert = (alertId) => {
     const newAlerts = globalOrderAlerts.filter(a => a.id !== alertId)
