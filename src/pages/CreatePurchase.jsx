@@ -121,7 +121,7 @@ export default function CreatePurchase() {
   const [creditType, setCreditType] = useState('unico')
   const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '', trackSerials: false, serialNumbers: [] },
+    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', sanitaryRegistry: '', originalSanitaryRegistry: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '', trackSerials: false, serialNumbers: [] },
   ])
 
   // Warehouses y Branches
@@ -605,6 +605,12 @@ export default function CreatePurchase() {
       newItems[index].salePrice2 = item.price2 || ''
       newItems[index].salePrice3 = item.price3 || ''
       newItems[index].salePrice4 = item.price4 || ''
+      // Farmacia: hidratar registro sanitario para que el usuario lo verifique
+      // y lo pueda actualizar si cambió. Guardamos el original para detectar cambios al guardar.
+      if (businessMode === 'pharmacy') {
+        newItems[index].sanitaryRegistry = item.sanitaryRegistry || ''
+        newItems[index].originalSanitaryRegistry = item.sanitaryRegistry || ''
+      }
     }
 
     setPurchaseItems(newItems)
@@ -1300,6 +1306,20 @@ export default function CreatePurchase() {
                 businessName: selectedSupplier.businessName || ''
               }
             })
+          }
+
+          // Farmacia: si el usuario modificó el registro sanitario durante la compra,
+          // propagar el nuevo valor al producto master. Tomamos la última modificación
+          // (si hay varias líneas del mismo producto, generalmente comparten el registro).
+          if (businessMode === 'pharmacy') {
+            const modifiedItems = grouped.items.filter(it =>
+              it.sanitaryRegistry !== undefined &&
+              it.originalSanitaryRegistry !== undefined &&
+              (it.sanitaryRegistry || '') !== (it.originalSanitaryRegistry || '')
+            )
+            if (modifiedItems.length > 0) {
+              extraUpdates.sanitaryRegistry = modifiedItems[modifiedItems.length - 1].sanitaryRegistry || null
+            }
           }
 
           // Sistema de múltiples lotes para farmacia (procesar cada item original)
@@ -2222,6 +2242,26 @@ export default function CreatePurchase() {
                       </td>
                     </tr>
                   )}
+                  {/* Fila de Registro Sanitario — solo farmacia, con producto seleccionado */}
+                  {businessMode === 'pharmacy' && item.productId && (
+                    <tr className="bg-purple-50/40 border-b border-gray-200">
+                      <td colSpan={99} className="px-4 py-1.5">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span className="text-xs font-medium text-purple-700 whitespace-nowrap">Registro Sanitario:</span>
+                          <input
+                            type="text"
+                            placeholder="Ej: RS-12345"
+                            value={item.sanitaryRegistry || ''}
+                            onChange={e => updateItem(index, 'sanitaryRegistry', e.target.value)}
+                            className="flex-1 min-w-[180px] max-w-sm px-2 py-1 text-sm border border-purple-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                          {item.sanitaryRegistry !== item.originalSanitaryRegistry && (
+                            <span className="text-xs text-amber-600 font-medium">Modificado — se actualizará el producto al guardar</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {/* Fila de números de serie */}
                   {item.trackSerials && item.serialNumbers?.length > 0 && (
                     <tr className="bg-amber-50/40 border-b border-gray-200">
@@ -2392,6 +2432,25 @@ export default function CreatePurchase() {
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Registro Sanitario - Solo farmacia (pre-cargado del producto, editable para corregir cambios) */}
+                {businessMode === 'pharmacy' && item.productId && (
+                  <div>
+                    <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>Registro Sanitario</span>
+                      {item.sanitaryRegistry !== item.originalSanitaryRegistry && (
+                        <span className="text-amber-600 font-medium">Modificado — se actualizará el producto</span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: RS-12345"
+                      value={item.sanitaryRegistry || ''}
+                      onChange={e => updateItem(index, 'sanitaryRegistry', e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
                   </div>
                 )}
 
