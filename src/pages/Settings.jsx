@@ -3024,6 +3024,7 @@ export default function Settings() {
                   {businessMode === 'retail' && (
                     <>
                       {[
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
                         { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
                         { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
