@@ -714,9 +714,15 @@ export default function CreateQuotation() {
   // Buscar datos de DNI o RUC automáticamente
   const handleLookupDocument = async () => {
     const docNumber = manualCustomer.documentNumber
+    const docType = manualCustomer.documentType
 
     if (!docNumber) {
       toast.error('Ingrese un número de documento para buscar')
+      return
+    }
+
+    if (docType === ID_TYPES.CE || docType === ID_TYPES.PASSPORT) {
+      toast.info('La búsqueda automática solo está disponible para DNI y RUC. Completa los datos manualmente.')
       return
     }
 
@@ -725,10 +731,20 @@ export default function CreateQuotation() {
     try {
       let result
 
-      // Determinar si es DNI o RUC según la longitud
-      if (docNumber.length === 8) {
+      const isDNI = docType === ID_TYPES.DNI || (!docType && docNumber.length === 8)
+      const isRUC = docType === ID_TYPES.RUC || (!docType && docNumber.length === 11)
+
+      if (isDNI) {
+        if (docNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          return
+        }
         result = await consultarDNI(docNumber)
-      } else if (docNumber.length === 11) {
+      } else if (isRUC) {
+        if (docNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          return
+        }
         result = await consultarRUC(docNumber)
       } else {
         toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')

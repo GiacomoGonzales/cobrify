@@ -201,13 +201,19 @@ export default function Customers() {
       return
     }
 
+    // SUNAT solo expone búsqueda para DNI y RUC
+    if (docType === ID_TYPES.CE || docType === ID_TYPES.PASSPORT) {
+      toast.info('La búsqueda automática solo está disponible para DNI y RUC. Completa los datos manualmente.')
+      return
+    }
+
     setIsLookingUp(true)
 
     try {
       let result
 
       // Determinar si es DNI o RUC según el tipo seleccionado o la longitud
-      if (docType === ID_TYPES.DNI || docNumber.length === 8) {
+      if (docType === ID_TYPES.DNI || (!docType && docNumber.length === 8)) {
         if (docNumber.length !== 8) {
           toast.error('El DNI debe tener 8 dígitos')
           setIsLookingUp(false)
@@ -220,7 +226,7 @@ export default function Customers() {
           setValue('documentType', ID_TYPES.DNI)
           toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
         }
-      } else if (docType === ID_TYPES.RUC || docNumber.length === 11) {
+      } else if (docType === ID_TYPES.RUC || (!docType && docNumber.length === 11)) {
         if (docNumber.length !== 11) {
           toast.error('El RUC debe tener 11 dígitos')
           setIsLookingUp(false)

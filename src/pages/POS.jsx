@@ -2179,9 +2179,21 @@ export default function POS() {
         )
       )
     } else {
+      // Detectar bonificación automática: productos del catálogo con precio 0.
+      // Se comportan igual que la bonificación ad-hoc (inafecto + etiqueta en el nombre).
+      const effectivePrice = selectedPrice ?? product.price ?? 0
+      const isFreeProduct = Number(effectivePrice) === 0
+      const alreadyLabeled = (product.name || '').includes('(BONIFICACIÓN)')
+
       const cartItem = {
         ...product,
         quantity: 1,
+        ...(isFreeProduct && {
+          isBonificacion: true,
+          taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
+          name: alreadyLabeled ? product.name : `${product.name} (BONIFICACIÓN)`,
+          price: 0,
+        }),
         // Sin lote: marcar isNoLot y LIMPIAR batchNumber del producto
         ...(isNoLotSale && {
           cartId: cartItemId,
@@ -2962,9 +2974,16 @@ export default function POS() {
   // Buscar datos de DNI o RUC automáticamente
   const handleLookupDocument = async () => {
     const docNumber = customerData.documentNumber
+    const docType = customerData.documentType
 
     if (!docNumber) {
       toast.error('Ingrese un número de documento para buscar')
+      return
+    }
+
+    // SUNAT solo expone consulta para DNI y RUC. CE y Pasaporte se llenan manualmente.
+    if (docType === ID_TYPES.CE || docType === ID_TYPES.PASSPORT) {
+      toast.info('La búsqueda automática solo está disponible para DNI y RUC. Completa los datos manualmente.')
       return
     }
 
@@ -2976,10 +2995,21 @@ export default function POS() {
 
       let result
 
-      // Determinar si es DNI o RUC según la longitud
-      if (docNumber.length === 8) {
+      // Determinar si es DNI o RUC según tipo explícito, con fallback por longitud
+      const isDNI = docType === ID_TYPES.DNI || (!docType && docNumber.length === 8)
+      const isRUC = docType === ID_TYPES.RUC || (!docType && docNumber.length === 11)
+
+      if (isDNI) {
+        if (docNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          return
+        }
         result = await consultarDNI(docNumber)
-      } else if (docNumber.length === 11) {
+      } else if (isRUC) {
+        if (docNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          return
+        }
         result = await consultarRUC(docNumber)
       } else {
         toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')

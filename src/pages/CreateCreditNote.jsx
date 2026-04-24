@@ -79,14 +79,32 @@ export default function CreateCreditNote() {
 
   const handleLookupDocument = async () => {
     const docNumber = externalData.customerDocNumber.trim()
+    const docType = externalData.customerDocType
     if (!docNumber) return
+
+    // Códigos SUNAT: '1'=DNI, '6'=RUC, '4'=CE, '7'=Pasaporte
+    if (docType === '4' || docType === '7') {
+      setMessage({ type: 'info', text: 'La búsqueda automática solo está disponible para DNI y RUC. Completa los datos manualmente.' })
+      return
+    }
 
     setIsLookingUpDoc(true)
     try {
       let result
-      if (docNumber.length === 8) {
+      const isDNI = docType === '1' || (!docType && docNumber.length === 8)
+      const isRUC = docType === '6' || (!docType && docNumber.length === 11)
+
+      if (isDNI) {
+        if (docNumber.length !== 8) {
+          setMessage({ type: 'error', text: 'El DNI debe tener 8 dígitos' })
+          return
+        }
         result = await consultarDNI(docNumber)
-      } else if (docNumber.length === 11) {
+      } else if (isRUC) {
+        if (docNumber.length !== 11) {
+          setMessage({ type: 'error', text: 'El RUC debe tener 11 dígitos' })
+          return
+        }
         result = await consultarRUC(docNumber)
       } else {
         setMessage({ type: 'error', text: 'El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)' })

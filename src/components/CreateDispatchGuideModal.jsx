@@ -1003,12 +1003,29 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     const docNumber = recipientDocNumber.trim()
     if (!docNumber) return
 
+    // Códigos SUNAT: '1'=DNI, '6'=RUC, '4'=CE, '7'=Pasaporte
+    if (recipientDocType === '4' || recipientDocType === '7') {
+      toast.info('La búsqueda automática solo está disponible para DNI y RUC. Completa los datos manualmente.')
+      return
+    }
+
     setIsSearchingRecipient(true)
     try {
       let result
-      if (docNumber.length === 8) {
+      const isDNI = recipientDocType === '1' || (!recipientDocType && docNumber.length === 8)
+      const isRUC = recipientDocType === '6' || (!recipientDocType && docNumber.length === 11)
+
+      if (isDNI) {
+        if (docNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          return
+        }
         result = await consultarDNI(docNumber)
-      } else if (docNumber.length === 11) {
+      } else if (isRUC) {
+        if (docNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          return
+        }
         result = await consultarRUC(docNumber)
       } else {
         toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')
