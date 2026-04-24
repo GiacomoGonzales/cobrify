@@ -564,18 +564,19 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  // Medir el ancho real del label + 6pt de separación para que la fecha no quede pegada
+  // Separación generosa (14pt) entre label y valor para que no queden pegadas
+  const LABEL_VALUE_GAP = 14
   const emisionLabel = 'Fecha de emisión:'
   doc.text(emisionLabel, MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.issueDate || guide.createdAt || guide.transferDate), MARGIN_LEFT + doc.getTextWidth(emisionLabel) + 6, currentY)
+  doc.text(formatDate(guide.issueDate || guide.createdAt || guide.transferDate), MARGIN_LEFT + doc.getTextWidth(emisionLabel) + LABEL_VALUE_GAP, currentY)
 
   const colRightX = MARGIN_LEFT + CONTENT_WIDTH * 0.45
   doc.setFont('helvetica', 'bold')
   const trasladoLabel = 'Fecha de inicio de traslado:'
   doc.text(trasladoLabel, colRightX, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.transferDate), colRightX + doc.getTextWidth(trasladoLabel) + 6, currentY)
+  doc.text(formatDate(guide.transferDate), colRightX + doc.getTextWidth(trasladoLabel) + LABEL_VALUE_GAP, currentY)
   currentY += spacious ? 18 : 14
 
   // Fila: Destinatario | Punto de partida
