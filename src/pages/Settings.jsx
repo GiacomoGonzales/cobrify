@@ -8,6 +8,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
+import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
@@ -5399,12 +5400,18 @@ export default function Settings() {
                                 Descarga este código QR para compartirlo en tu negocio, tarjetas de presentación, o redes sociales.
                               </p>
                               <button
-                                onClick={() => {
-                                  const link = document.createElement('a')
-                                  link.download = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
-                                  link.href = catalogQrDataUrl
-                                  link.click()
-                                  toast.success('QR descargado exitosamente')
+                                onClick={async () => {
+                                  try {
+                                    const filename = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
+                                    await downloadDataUrl(catalogQrDataUrl, filename, {
+                                      title: filename,
+                                      dialogTitle: businessMode === 'restaurant' ? 'Guardar QR de la carta' : 'Guardar QR del catálogo'
+                                    })
+                                    toast.success('QR descargado exitosamente')
+                                  } catch (err) {
+                                    console.error('Error descargando QR:', err)
+                                    toast.error('No se pudo descargar el QR')
+                                  }
                                 }}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
                               >
@@ -5447,16 +5454,22 @@ export default function Settings() {
                                   <span className="text-sm text-gray-600">{tableQrCodes.length} códigos generados</span>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      tableQrCodes.forEach((qr, index) => {
-                                        setTimeout(() => {
-                                          const link = document.createElement('a')
-                                          link.download = `mesa-${qr.table}-qr.png`
-                                          link.href = qr.dataUrl
-                                          link.click()
-                                        }, index * 200)
-                                      })
-                                      toast.success('Descargando todos los QRs...')
+                                    onClick={async () => {
+                                      try {
+                                        const files = tableQrCodes.map(qr => ({
+                                          dataUrl: qr.dataUrl,
+                                          filename: `mesa-${qr.table}-qr.png`
+                                        }))
+                                        const result = await saveFilesToDevice(files)
+                                        if (result.nativeFolder) {
+                                          toast.success(`${result.count} QRs guardados en ${result.nativeFolder}`)
+                                        } else {
+                                          toast.success('Descargando todos los QRs...')
+                                        }
+                                      } catch (err) {
+                                        console.error('Error descargando QRs de mesas:', err)
+                                        toast.error('No se pudieron descargar los QRs')
+                                      }
                                     }}
                                     className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
                                   >
@@ -5474,11 +5487,17 @@ export default function Settings() {
                                       </span>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          const link = document.createElement('a')
-                                          link.download = `mesa-${qr.table}-qr.png`
-                                          link.href = qr.dataUrl
-                                          link.click()
+                                        onClick={async () => {
+                                          try {
+                                            const filename = `mesa-${qr.table}-qr.png`
+                                            await downloadDataUrl(qr.dataUrl, filename, {
+                                              title: filename,
+                                              dialogTitle: `Guardar QR de la mesa ${qr.table}`
+                                            })
+                                          } catch (err) {
+                                            console.error('Error descargando QR de mesa:', err)
+                                            toast.error('No se pudo descargar el QR')
+                                          }
                                         }}
                                         className="mt-1 text-xs text-orange-600 hover:text-orange-700"
                                       >
@@ -6352,12 +6371,18 @@ export default function Settings() {
                             Es obligatorio según la normativa peruana.
                           </p>
                           <button
-                            onClick={() => {
-                              const link = document.createElement('a')
-                              link.download = `libro-reclamaciones-${complaintsBookSlug}-qr.png`
-                              link.href = complaintsBookQrDataUrl
-                              link.click()
-                              toast.success('QR descargado exitosamente')
+                            onClick={async () => {
+                              try {
+                                const filename = `libro-reclamaciones-${complaintsBookSlug}-qr.png`
+                                await downloadDataUrl(complaintsBookQrDataUrl, filename, {
+                                  title: filename,
+                                  dialogTitle: 'Guardar QR del libro de reclamaciones'
+                                })
+                                toast.success('QR descargado exitosamente')
+                              } catch (err) {
+                                console.error('Error descargando QR del libro de reclamaciones:', err)
+                                toast.error('No se pudo descargar el QR')
+                              }
                             }}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
                           >
