@@ -488,7 +488,8 @@ export default function CashFlow() {
     const purchasePayments = []
     purchases.filter(p => p.paymentType === 'credito' && filterByBranch(p, 'purchase')).forEach(purchase => {
       // Revisar el array de pagos parciales
-      (purchase.payments || []).forEach(payment => {
+      const paymentsArr = Array.isArray(purchase.payments) ? purchase.payments : []
+      paymentsArr.forEach(payment => {
         const paymentDate = toDate(payment.date)
         if (paymentDate && isInDateRange(paymentDate, dateRange.startDate, dateRange.endDate)) {
           purchasePayments.push({
@@ -502,7 +503,8 @@ export default function CashFlow() {
 
       // Cuotas pagadas del cronograma (installments). Evitamos duplicar si una misma cuota
       // ya fue registrada como abono libre.
-      (purchase.installments || []).forEach((inst, idx) => {
+      const installmentsArr = Array.isArray(purchase.installments) ? purchase.installments : []
+      installmentsArr.forEach((inst, idx) => {
         if (inst.status !== 'paid') return
         const paidAt = toDate(inst.paidAt)
         if (!paidAt || !isInDateRange(paidAt, dateRange.startDate, dateRange.endDate)) return
