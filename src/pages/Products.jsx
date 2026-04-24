@@ -4154,15 +4154,20 @@ export default function Products() {
 
               {/* Precio principal - ocultar cuando tiene variantes (cada variante tiene su precio) */}
               {!hasVariants && (
-                <Input
-                  label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
-                  type="number"
-                  step="any"
-                  required
-                  placeholder="0.00"
-                  error={errors.price?.message}
-                  {...register('price')}
-                />
+                <div>
+                  <Input
+                    label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
+                    type="number"
+                    step="any"
+                    required
+                    placeholder="0.00"
+                    error={errors.price?.message}
+                    {...register('price')}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.
+                  </p>
+                </div>
               )}
 
               {/* Precio antes (tachado) - solo si está visible en catálogo */}

@@ -131,15 +131,17 @@ export const productSchema = z.object({
   sku: z.string().optional(), // Código interno/SKU (opcional)
   name: z.string().min(1, 'Nombre es requerido'),
   description: z.string().optional(),
+  // Precio: permitir 0 para marcar el producto como bonificación/cortesía.
+  // Con 0 se agrega al carrito sin costo y se imprime con la etiqueta BONIFICACIÓN.
   price: z
     .number({ required_error: 'Precio es requerido' })
-    .positive('El precio debe ser mayor a 0')
+    .nonnegative('El precio no puede ser negativo')
     .or(
       z
         .string()
         .min(1, 'Precio es requerido')
         .transform(val => parseFloat(val))
-        .pipe(z.number().positive('El precio debe ser mayor a 0'))
+        .pipe(z.number().nonnegative('El precio no puede ser negativo'))
     )
     .optional(), // Optional when hasVariants is true
   // Precios adicionales (opcionales, para sistema de múltiples precios)
