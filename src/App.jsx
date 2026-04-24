@@ -153,6 +153,21 @@ function App() {
     configureStatusBar()
   }, [])
 
+  // Evita que la rueda del mouse modifique el valor de inputs numéricos enfocados
+  // (bug reportado: en POS, al scrollear sobre "Descuento=5" se bajaba a 4.99).
+  // Quita el foco del input en cuanto detecta el scroll; el scroll de la página
+  // continúa normal porque el evento no se cancela.
+  useEffect(() => {
+    const handleWheel = (e) => {
+      const el = document.activeElement
+      if (el && el.tagName === 'INPUT' && el.type === 'number' && el === e.target) {
+        el.blur()
+      }
+    }
+    document.addEventListener('wheel', handleWheel, { passive: true })
+    return () => document.removeEventListener('wheel', handleWheel)
+  }, [])
+
   return (
     <Router
       future={{
