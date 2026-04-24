@@ -214,10 +214,10 @@ export default function ProductImagesManager({ images, onChange, maxImages = 5, 
       {/* Estado inicial: sin imágenes */}
       {images.length === 0 && !disabled && (
         <div className={`flex gap-3 ${Capacitor.isNativePlatform() ? 'flex-col' : ''}`}>
-          <label className="cursor-pointer flex-1 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-            <div className="text-center flex items-center gap-2">
-              <Upload className="w-5 h-5 text-gray-400" />
-              <span className="text-sm text-gray-500">Subir imágenes</span>
+          <label className="cursor-pointer flex-1 min-h-[90px] py-5 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center bg-gray-50 transition-colors">
+            <div className="text-center flex flex-col items-center gap-1.5">
+              <Upload className="w-7 h-7 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">Subir imágenes</span>
             </div>
             <input
               ref={fileInputRef}
@@ -232,11 +232,11 @@ export default function ProductImagesManager({ images, onChange, maxImages = 5, 
             <button
               type="button"
               onClick={handleTakePhoto}
-              className="flex-1 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
+              className="flex-1 min-h-[90px] py-5 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center bg-gray-50 transition-colors"
             >
-              <div className="text-center flex items-center gap-2">
-                <Camera className="w-5 h-5 text-gray-400" />
-                <span className="text-sm text-gray-500">Tomar foto</span>
+              <div className="text-center flex flex-col items-center gap-1.5">
+                <Camera className="w-7 h-7 text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Tomar foto</span>
               </div>
             </button>
           )}
