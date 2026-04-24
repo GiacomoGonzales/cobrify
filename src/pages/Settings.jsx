@@ -286,6 +286,7 @@ export default function Settings() {
   const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
   const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
   const [catalogGroupByCategory, setCatalogGroupByCategory] = useState(false)
+  const [catalogOnlyCarousels, setCatalogOnlyCarousels] = useState(false)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -946,6 +947,7 @@ export default function Settings() {
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
         setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
         setCatalogGroupByCategory(businessData.catalogGroupByCategory || false)
+        setCatalogOnlyCarousels(businessData.catalogOnlyCarousels || false)
         if (businessData.businessHours) {
           setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
         }
@@ -6125,6 +6127,24 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
+
+                        {/* Sub-opción: visible solo si "Agrupar por categoría" está activo */}
+                        {catalogGroupByCategory && (
+                          <label className="flex items-center justify-between cursor-pointer p-3 ml-6 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-gray-50">
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900 block">Mostrar solo carruseles</span>
+                              <span className="text-xs text-gray-500">
+                                Oculta el botón "Todos" y la lista completa de productos al final. El cliente navega únicamente entrando a cada categoría.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={catalogOnlyCarousels}
+                              onChange={(e) => setCatalogOnlyCarousels(e.target.checked)}
+                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                          </label>
+                        )}
                       </div>
 
                       {/* Tipos de pedido en menú digital (solo restaurante) */}
@@ -6220,6 +6240,7 @@ export default function Settings() {
                         catalogAllowTakeaway,
                         catalogAllowDelivery,
                         catalogGroupByCategory,
+                        catalogOnlyCarousels: catalogGroupByCategory ? catalogOnlyCarousels : false,
                         businessHours,
                         updatedAt: serverTimestamp(),
                       }, { merge: true })

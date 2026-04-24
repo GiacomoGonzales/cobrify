@@ -1525,17 +1525,33 @@ function CartDrawer({
               <a
                 href={(() => {
                   const waPhone = (business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')
+                  // Respetar "Precio a consultar":
+                  // - showPrices=false globalmente → toda la lista sin precios
+                  // - item.catalogHidePrice=true → esa línea dice "(A consultar)"
+                  // - si hay al menos un item oculto o el global está off → el total también es "A consultar"
                   const orderItems = (orderConfirmItems || []).map(item => {
                     let line = `• ${item.quantity}x ${item.name}`
                     if (item.modifiers?.length > 0) {
                       line += ` (${item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(', ')})`
                     }
+                    if (showPrices && !item.catalogHidePrice) {
+                      const unitPrice = item.unitPrice || item.price || 0
+                      line += ` - S/ ${(unitPrice * item.quantity).toFixed(2)}`
+                    } else {
+                      line += ' - (A consultar)'
+                    }
                     return line
                   }).join('\n')
+                  const hasHidden = (orderConfirmItems || []).some(i => i.catalogHidePrice)
+                  const showTotal = showPrices && !hasHidden
                   const total = (orderConfirmItems || []).reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
                   let msg = `🛒 *¡Hola! He hecho un pedido ${orderType === 'delivery' ? 'DELIVERY' : 'PARA RECOGER'}*\n\n`
                   msg += `📋 *Pedido ${orderNumber}*\n${orderItems}\n\n`
-                  msg += `💰 *Total: S/ ${total.toFixed(2)}*\n\n`
+                  if (showTotal) {
+                    msg += `💰 *Total: S/ ${total.toFixed(2)}*\n\n`
+                  } else {
+                    msg += `💰 *Total: A consultar*\n\n`
+                  }
                   if (customerName) msg += `👤 *Nombre:* ${customerName}\n`
                   if (customerPhone) msg += `📱 *Teléfono:* ${customerPhone}\n`
                   if (customerAddress) msg += `📍 *Dirección:* ${customerAddress}\n`
@@ -2309,6 +2325,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const showPrices = business?.catalogShowPrices !== false
   const ignoreStock = business?.catalogIgnoreStock === true
   const groupByCategory = business?.catalogGroupByCategory === true
+  // Solo aplica si también está activo groupByCategory.
+  // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
+  const onlyCarousels = groupByCategory && business?.catalogOnlyCarousels === true
   const isDark = business?.catalogTheme === 'dark'
   const isCafe = business?.catalogTheme === 'cafe'
 
@@ -2470,21 +2489,26 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           .join('\n')
         itemText += `\n${modsText}`
       }
-      if (showPrices) {
+      // Respetar flag por-producto "catalogHidePrice" además del global showPrices
+      if (showPrices && !item.catalogHidePrice) {
         itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+      } else {
+        itemText += ' - (A consultar)'
       }
       return itemText
     }).join('\n')
 
+    const hasHidden = cart.some(i => i.catalogHidePrice)
+    const showTotal = showPrices && !hasHidden
     let message
-    if (showPrices) {
+    if (showTotal) {
       const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
       message = encodeURIComponent(
         `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
       )
     } else {
       message = encodeURIComponent(
-        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\nGracias!`
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: A consultar*\n\nGracias!`
       )
     }
 
@@ -2750,17 +2774,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="max-w-7xl mx-auto px-4">
             {/* Categorías raíz - móvil: 1 fila scroll edge-to-edge, desktop: wrap centrado */}
             <div className="flex md:flex-wrap md:justify-center overflow-x-auto md:overflow-x-visible gap-2 py-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
-              <button
-                onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                  !selectedCategory
-                    ? 'text-white'
-                    : thCatInactive
-                }`}
-                style={!selectedCategory ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
-              >
-                Todos
-              </button>
+              {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
+                  para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
+              {(!onlyCarousels || selectedCategory || searchQuery) && (
+                <button
+                  onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+                    !selectedCategory
+                      ? 'text-white'
+                      : thCatInactive
+                  }`}
+                  style={!selectedCategory ? { backgroundColor: business?.catalogColor || '#10B981' } : {}}
+                >
+                  Todos
+                </button>
+              )}
               {rootCategories.map(category => (
                 <button
                   key={category.id}
@@ -3009,30 +3037,34 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               )
             })}
-            {/* Separador antes de mostrar todos */}
-            <div className="flex items-center gap-4 pt-2">
-              <div className={`flex-1 border-t ${thBorderColor}`} />
-              <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
-                >
-                  <Grid3X3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
+            {/* Separador antes de mostrar todos — oculto en modo onlyCarousels */}
+            {!onlyCarousels && (
+              <div className="flex items-center gap-4 pt-2">
+                <div className={`flex-1 border-t ${thBorderColor}`} />
+                <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1.5 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1.5 rounded-lg ${viewMode === 'list' ? thViewActive : thViewHover}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className={`flex-1 border-t ${thBorderColor}`} />
               </div>
-              <div className={`flex-1 border-t ${thBorderColor}`} />
-            </div>
+            )}
           </div>
         )}
 
-        {filteredProducts.length === 0 ? (
+        {/* Lista plana de productos — oculta en modo onlyCarousels cuando es vista principal.
+            Al entrar a una categoría o buscar, sigue mostrándose normal. */}
+        {onlyCarousels && groupByCategory && !selectedCategory && !searchQuery ? null : filteredProducts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className={`text-lg font-medium mb-2 ${thText}`}>No se encontraron productos</h3>
