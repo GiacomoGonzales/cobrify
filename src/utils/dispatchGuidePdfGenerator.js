@@ -975,26 +975,31 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Auto-ajuste de espaciado: si con "spacious" se requieren más páginas que con compacto,
   // desactivar spacious para ahorrar hoja.
   if (spacious && items.length > 0) {
-    // Espacio requerido debajo del último item: transporte + observaciones + footer QR.
-    // En modo compacto el contenido de abajo ocupa menos (~120pt vs ~150pt en spacious).
-    const getReservedBelow = () => (spacious ? 150 : 120)
-    const maxY = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT
+    // Estimamos páginas considerando que TODOS los items usan el mismo maxY que el
+    // render real (ya no reservamos espacio extra en el último item antes de dibujar).
+    // Post-items (transporte + observaciones + QR) necesitan ~270pt. Si no caben
+    // tras el último item, disparan su propio page break — por eso lo contabilizamos
+    // como un "pseudo-item final" después del loop.
+    const postItemsHeight = spacious ? 270 : 220
+    const maxYItems = PAGE_HEIGHT - MARGIN_BOTTOM
     const continuationHeaderOffset = 35 // header "(Continuación - Página N)" + separador
 
     const estimatePages = () => {
       let pages = 1
       let y = currentY + tableHeaderHeight
       const nextPageTop = MARGIN_TOP + continuationHeaderOffset + tableHeaderHeight
-      const reservedBelow = getReservedBelow()
       for (let i = 0; i < items.length; i++) {
         const h = calculateItemHeight(items[i]).height
-        const isLast = i === items.length - 1
-        const needed = h + 20 + (isLast ? reservedBelow : 0)
-        if (y + needed > maxY) {
+        const needed = h + 20
+        if (y + needed > maxYItems) {
           pages++
           y = nextPageTop
         }
         y += h
+      }
+      // Post-items: si no caben después del último item, agregan una página más
+      if (y + postItemsHeight > maxYItems) {
+        pages++
       }
       return pages
     }
@@ -1031,12 +1036,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   items.forEach((item, index) => {
     const { height: rowHeight, descLines, batchLine, serialLines } = calculateItemHeight(item)
 
-    // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
-    const isLastItem = index === items.length - 1
-    // En compacto el bloque transporte+observaciones ocupa menos → reserva menor
-    const reserveSpace = isLastItem ? (spacious ? 150 : 120) : 0 // FOOTER_HEIGHT ya se maneja en checkPageBreak
-
-    if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
+    // No reservamos espacio preventivo para el último item: las secciones siguientes
+    // (transporte, observaciones, QR) hacen su propio checkPageBreak y saltarán a
+    // nueva página si no caben. Reservar antes provocaba que el último item se
+    // empujara a página 2 dejando la página 1 semi-vacía (bug con espaciado amplio).
+    if (checkPageBreak(rowHeight + 20, false)) {
       // Nueva página - redibujar encabezado de tabla
       drawTableHeader()
     }
