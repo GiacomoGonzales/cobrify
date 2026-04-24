@@ -172,8 +172,13 @@ export default function MainLayout() {
     if (!businessId) return
 
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
-    // Retail usa 'pending' como estado inicial (aún no contactado)
-    const q = query(ordersRef, where('status', 'in', ['pending', 'preparing', 'ready', 'dispatched']))
+    // Retail: solo alerta cuando llega un pedido nuevo (pending)
+    //         avanzar a accepted/ready/completed no debe disparar el sonido otra vez.
+    // Restaurante: se mantiene el comportamiento original (items agregados a pedidos en curso).
+    const watchedStatuses = businessMode === 'retail'
+      ? ['pending']
+      : ['pending', 'preparing', 'ready', 'dispatched']
+    const q = query(ordersRef, where('status', 'in', watchedStatuses))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = []
@@ -576,13 +581,13 @@ export default function MainLayout() {
           {/* Navbar - Siempre fijo */}
           <Navbar />
 
-          {/* Banner global de alertas de órdenes del menú digital */}
+          {/* Banner global de alertas de pedidos desde el catálogo / menú digital */}
           {globalOrderAlerts.length > 0 && (
             <div className="bg-orange-50 border-b-2 border-orange-400 px-3 py-2 flex-shrink-0 space-y-2 max-h-[40vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-orange-700">
                   <Volume2 className="w-5 h-5 animate-bounce" />
-                  <span className="font-bold text-sm">{globalOrderAlerts.length} pedido{globalOrderAlerts.length > 1 ? 's' : ''} del menú digital</span>
+                  <span className="font-bold text-sm">{globalOrderAlerts.length} pedido{globalOrderAlerts.length > 1 ? 's' : ''} del {businessMode === 'restaurant' ? 'menú digital' : 'catálogo digital'}</span>
                 </div>
                 <button
                   onClick={dismissAllGlobalAlerts}
@@ -607,40 +612,45 @@ export default function MainLayout() {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900">
                       {alert.type === 'new_order'
-                        ? `Nueva orden ${alert.orderNumber}`
-                        : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} en orden ${alert.orderNumber}`
+                        ? `Nuevo pedido #${alert.orderNumber}`
+                        : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} en pedido #${alert.orderNumber}`
                       }
-                      {alert.tableNumber ? ` - Mesa ${alert.tableNumber}` : ''}
-                      {alert.orderType === 'delivery' ? ' - Delivery' : ''}
-                      {alert.orderType === 'takeaway' ? ' - Para llevar' : ''}
+                      {alert.tableNumber ? ` · Mesa ${alert.tableNumber}` : ''}
+                      {businessMode === 'restaurant' && alert.orderType === 'delivery' ? ' · Delivery' : ''}
+                      {businessMode === 'restaurant' && alert.orderType === 'takeaway' ? ' · Para llevar' : ''}
                     </p>
                     {alert.customerName && (
                       <p className="text-xs text-gray-600">{alert.customerName}</p>
                     )}
-                    {alert.orderType === 'delivery' && alert.customerAddress && (
+                    {alert.customerAddress && (
                       <p className="text-xs text-gray-600">📍 {alert.customerAddress}</p>
                     )}
                     <p className="text-xs text-gray-500 mt-0.5">
                       {alert.items.join(' | ')}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-1.5">
-                      <button
-                        onClick={() => handlePrintFromAlert(alert)}
-                        className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        Imprimir
-                      </button>
-                      {alert.orderType === 'delivery' && alert.customerPhone && (
-                        <a
-                          href={`https://wa.me/${alert.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${alert.customerName || ''}, su pedido #${alert.orderNumber} está siendo preparado.`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-lg hover:bg-green-600 transition-colors"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          WhatsApp
-                        </a>
+                      {/* Restaurante: imprimir comanda + WhatsApp. Retail: solo "Recibido". */}
+                      {businessMode === 'restaurant' && (
+                        <>
+                          <button
+                            onClick={() => handlePrintFromAlert(alert)}
+                            className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            Imprimir
+                          </button>
+                          {alert.orderType === 'delivery' && alert.customerPhone && (
+                            <a
+                              href={`https://wa.me/${alert.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${alert.customerName || ''}, su pedido #${alert.orderNumber} está siendo preparado.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-lg hover:bg-green-600 transition-colors"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              WhatsApp
+                            </a>
+                          )}
+                        </>
                       )}
                       <button
                         onClick={() => dismissGlobalAlert(alert.id)}

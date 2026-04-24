@@ -1164,6 +1164,25 @@ function CartDrawer({
     }
   }, [isOpen, orderSuccess])
 
+  // Precargar info del cliente guardada en este dispositivo (por negocio)
+  // — evita que tenga que escribir nombre/tel/dirección en cada pedido.
+  useEffect(() => {
+    if (!isOpen || !business?.id) return
+    try {
+      const saved = localStorage.getItem(`catalog_customer_${business.id}`)
+      if (!saved) return
+      const data = JSON.parse(saved)
+      if (!customerName && data.customerName) setCustomerName(data.customerName)
+      if (!customerPhone && data.customerPhone) setCustomerPhone(data.customerPhone)
+      if (!customerEmail && data.customerEmail) setCustomerEmail(data.customerEmail)
+      if (!customerAddress && data.customerAddress) setCustomerAddress(data.customerAddress)
+      if (!customerCoords && data.customerCoords) setCustomerCoords(data.customerCoords)
+    } catch (e) {
+      console.warn('No se pudo cargar info guardada del cliente:', e)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, business?.id])
+
   // Resetear formulario cuando se cierra
   useEffect(() => {
     if (!isOpen && orderSuccess) {
@@ -1430,6 +1449,22 @@ function CartDrawer({
           console.warn('No se pudo ocupar la mesa automáticamente:', tableError)
           // No fallar el pedido si no se pudo ocupar la mesa
         }
+      }
+
+      // Guardar info del cliente localmente para pre-rellenar en próximos pedidos
+      try {
+        if (business?.id && (customerName || customerPhone || customerEmail || customerAddress)) {
+          localStorage.setItem(`catalog_customer_${business.id}`, JSON.stringify({
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            customerEmail: customerEmail.trim(),
+            customerAddress: customerAddress.trim(),
+            customerCoords: customerCoords || null,
+            savedAt: Date.now(),
+          }))
+        }
+      } catch (e) {
+        console.warn('No se pudo guardar info del cliente:', e)
       }
 
       setOrderNumber(orderNum)

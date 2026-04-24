@@ -77,7 +77,7 @@ import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
-import { markOrderAsPaid, updateOrder } from '@/services/orderService'
+import { markOrderAsPaid, updateOrder, updateOrderStatus } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { completeAppointment } from '@/services/appointmentService'
@@ -356,6 +356,7 @@ export default function POS() {
   // Estado para orden de restaurante (para marcar como pagada al completar)
   const [pendingOrderId, setPendingOrderId] = useState(null)
   const [markOrderPaidOnComplete, setMarkOrderPaidOnComplete] = useState(false)
+  const [markOnlineOrderCompleteOnSale, setMarkOnlineOrderCompleteOnSale] = useState(false)
 
   // Estado para cotización (para marcar como convertida al completar)
   const [pendingQuotationId, setPendingQuotationId] = useState(null)
@@ -801,6 +802,7 @@ export default function POS() {
   const notaVentaLoadedRef = useRef(false)
   const dispatchGuideLoadedRef = useRef(false)
   const folioLoadedRef = useRef(false)
+  const onlineOrderLoadedRef = useRef(false)
   // IDs de cargos del folio pendientes de marcar como facturados (persiste aunque el cart cambie)
   const pendingFolioChargeIdsRef = useRef([])
   // Evita que loadBusinessData sobrescriba el documentType después de que el usuario lo cambió manualmente
@@ -1015,6 +1017,67 @@ export default function POS() {
       toast.success(`Cotización ${quotationInfo.quotationNumber} cargada - ${quotationInfo.items?.length || 0} items. Revisa y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    // Detectar si viene de un pedido online (tienda virtual retail) y cargar items + cliente
+    if (location.state?.fromOnlineOrder && !onlineOrderLoadedRef.current) {
+      const info = location.state
+      onlineOrderLoadedRef.current = true
+
+      // Guardar orderId para marcarlo como completado al finalizar la venta
+      if (info.orderId) {
+        setPendingOrderId(info.orderId)
+        setMarkOnlineOrderCompleteOnSale(true)
+      }
+
+      // Cargar items al carrito
+      if (Array.isArray(info.items) && info.items.length > 0) {
+        const cartItems = info.items.map(item => ({
+          id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
+          productId: item.productId || '',
+          name: item.name || '',
+          price: item.price || 0,
+          quantity: item.quantity || 1,
+          unit: item.unit || 'NIU',
+          code: item.code || '',
+          ...(item.isVariant && {
+            isVariant: true,
+            variantSku: item.variantSku,
+            variantAttributes: item.variantAttributes,
+          }),
+        }))
+        setCart(cartItems)
+      }
+
+      // Cargar datos del cliente (siempre inline — son datos del catálogo público)
+      if (info.customer) {
+        const c = info.customer
+        setCustomerData(prev => ({
+          ...prev,
+          name: c.name || '',
+          email: c.email || '',
+          phone: c.phone || '',
+          address: c.address || '',
+        }))
+        setSelectedCustomer({
+          id: null,
+          name: c.name || '',
+          businessName: '',
+          documentType: 'dni',
+          documentNumber: '',
+          email: c.email || '',
+          phone: c.phone || '',
+          address: c.address || '',
+        })
+      }
+
+      if (info.notes) {
+        setGeneralNotes(info.notes)
+      }
+
+      toast.success(`Pedido online #${info.orderNumber || ''} cargado · ${info.items?.length || 0} items`)
+
       navigate(location.pathname, { replace: true, state: null })
     }
 
@@ -4079,6 +4142,7 @@ export default function POS() {
         const _tableData = tableData
         const _pendingOrderId = pendingOrderId
         const _markOrderPaidOnComplete = markOrderPaidOnComplete
+        const _markOnlineOrderCompleteOnSale = markOnlineOrderCompleteOnSale
         const _pendingQuotationId = pendingQuotationId
         const _pendingNotaVentaIds = pendingNotaVentaIds
         const _pendingAppointmentData = pendingAppointmentData
@@ -4086,6 +4150,8 @@ export default function POS() {
         if (_pendingOrderId) {
           setPendingOrderId(null)
           setMarkOrderPaidOnComplete(false)
+          setMarkOnlineOrderCompleteOnSale(false)
+          onlineOrderLoadedRef.current = false
         }
         if (_pendingQuotationId) setPendingQuotationId(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
@@ -4465,12 +4531,21 @@ export default function POS() {
               }
             }
 
-            // 6.1. Marcar orden como pagada
+            // 6.1. Marcar orden como pagada (flujo restaurante: mesa/delivery)
             if (_pendingOrderId && _markOrderPaidOnComplete) {
               try {
                 await markOrderAsPaid(businessId, _pendingOrderId)
               } catch (error) {
                 console.error('Error al marcar orden como pagada:', error)
+              }
+            }
+
+            // 6.1.b. Marcar pedido online retail como completado al facturarse
+            if (_pendingOrderId && _markOnlineOrderCompleteOnSale) {
+              try {
+                await updateOrderStatus(businessId, _pendingOrderId, 'completed', 'Facturado desde POS')
+              } catch (error) {
+                console.error('Error al completar pedido online:', error)
               }
             }
 
