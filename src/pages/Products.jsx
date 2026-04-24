@@ -1383,8 +1383,8 @@ export default function Products() {
 
         const createResult = await createWarehouse(getBusinessId(), newWarehouse)
 
-        if (createResult.success) {
-          targetWarehouse = createResult.data
+        if (createResult.success && createResult.id) {
+          targetWarehouse = { id: createResult.id, ...newWarehouse, isDefault: true }
           toast.info(`Almacén "Almacén Principal" creado automáticamente`)
           console.log('✅ Almacén creado:', targetWarehouse)
         } else {
