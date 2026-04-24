@@ -296,6 +296,80 @@ export default function Purchases() {
         // Obtener warehouseId de la compra
         const warehouseId = deletingPurchase.warehouseId || ''
 
+        // Pre-calcular la limpieza a nivel de producto (lotes + series + vencimiento)
+        // Se aplica por productId aunque tenga múltiples líneas — el filtro por
+        // purchaseId es idempotente así que pasarlo múltiples veces no rompe nada.
+        const productCleanups = new Map() // productId -> { batches, serials, expirationDate, batchNumber, trackExpiration }
+        for (const item of deletingPurchase.items) {
+          if (item.itemType === 'ingredient' || !item.productId) continue
+          if (productCleanups.has(item.productId)) continue
+          const productData = products.find(p => p.id === item.productId)
+          if (!productData) continue
+
+          const allBatches = productData.batches || []
+          const allSerials = productData.serials || []
+
+          // Lotes: remover los que vinieron de esta compra.
+          // Si un lote ya fue parcialmente consumido por ventas, lo removemos igual
+          // (la compra no existe → el lote conceptualmente tampoco).
+          const remainingBatches = allBatches.filter(b => b.purchaseId !== deletingPurchase.id)
+
+          // Series: remover las disponibles de esta compra.
+          // Si alguna ya fue vendida ('sold'), la dejamos con un warning.
+          const remainingSerials = allSerials.filter(s => {
+            if (s.purchaseId !== deletingPurchase.id) return true
+            if (s.status === 'sold') {
+              console.warn(`⚠ Serie ${s.serialNumber} de esta compra ya fue vendida; se mantiene en el producto`)
+              return true
+            }
+            return false
+          })
+
+          const cleanup = { batches: remainingBatches, serials: remainingSerials }
+
+          // Recalcular el vencimiento/lote más próximo del producto
+          const batchesWithExpiry = remainingBatches.filter(b => (b.quantity || 0) > 0 && (b.expirationDate || b.expiryDate))
+          if (batchesWithExpiry.length > 0) {
+            batchesWithExpiry.sort((a, b) => {
+              const da = a.expirationDate?.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+              const db = b.expirationDate?.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+              return da - db
+            })
+            cleanup.expirationDate = batchesWithExpiry[0].expirationDate || batchesWithExpiry[0].expiryDate
+            cleanup.batchNumber = batchesWithExpiry[0].batchNumber
+          } else {
+            cleanup.expirationDate = null
+            cleanup.batchNumber = null
+            if (remainingBatches.length === 0) {
+              cleanup.trackExpiration = false
+            }
+          }
+
+          // Recalcular costo promedio ponderado usando los lotes que quedan
+          // (si el producto trackea lotes). Para productos sin lotes, el cost se
+          // mantiene como está — revertirlo con precisión requeriría todo el
+          // histórico de compras. Best-effort.
+          const batchesWithCost = remainingBatches.filter(b => (b.quantity || 0) > 0 && (b.costPrice || 0) > 0)
+          if (batchesWithCost.length > 0) {
+            const totalQty = batchesWithCost.reduce((sum, b) => sum + (b.quantity || 0), 0)
+            const totalCost = batchesWithCost.reduce((sum, b) => sum + ((b.quantity || 0) * (b.costPrice || 0)), 0)
+            if (totalQty > 0) {
+              cleanup.cost = Math.round((totalCost / totalQty) * 100) / 100
+            }
+          }
+
+          // lastSupplier: si apuntaba al proveedor de esta compra, resetear.
+          // La próxima compra lo actualizará al proveedor real. Evitamos dejar
+          // apuntando a un proveedor cuya compra ya no existe.
+          const purchaseSupplierId = deletingPurchase.supplier?.id || deletingPurchase.supplierId
+          const productLastSupplierId = productData.lastSupplier?.id
+          if (purchaseSupplierId && productLastSupplierId && purchaseSupplierId === productLastSupplierId) {
+            cleanup.lastSupplier = null
+          }
+
+          productCleanups.set(item.productId, cleanup)
+        }
+
         for (const item of deletingPurchase.items) {
           // Solo procesar productos (no ingredientes)
           if (item.itemType === 'ingredient') continue
@@ -318,14 +392,15 @@ export default function Purchases() {
             const quantityToDeduct = parseFloat(item.quantity) || 0
             if (quantityToDeduct <= 0) continue
 
-            // Descontar stock usando transacción atómica
+            // Descontar stock usando transacción atómica + aplicar limpieza de lotes/series
             const variantSku = item.variantSku || null
+            const extraUpdates = productCleanups.get(item.productId) || {}
             await updateProductStockTransaction(
               businessId,
               item.productId,
               warehouseId,
               -quantityToDeduct,
-              {},
+              extraUpdates,
               variantSku
             )
 
