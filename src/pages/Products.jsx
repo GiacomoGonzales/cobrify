@@ -2284,6 +2284,47 @@ export default function Products() {
     }
   }
 
+  const handleBulkSetShowInCatalog = async (show) => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const result = await updateProduct(businessId, productId, { showInCatalog: show })
+          if (result.success) successCount++
+          else errorCount++
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      const action = show ? 'visible' : 'oculto'
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) ahora ${successCount !== 1 ? 'están' : 'está'} ${action}${successCount !== 1 ? 's' : ''} en el catálogo`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de catálogo:', error)
+      toast.error('Error al cambiar la visibilidad en catálogo')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   // Variant management functions
   const handleAddAttribute = () => {
     if (!newAttributeName.trim()) {
@@ -2908,6 +2949,15 @@ export default function Products() {
                 >
                   <Package className="w-4 h-4 mr-2" />
                   Activar/Desactivar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('showInCatalog')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Mostrar en catálogo
                 </Button>
                 <Button
                   variant="outline"
@@ -6110,6 +6160,8 @@ export default function Products() {
             ? 'Eliminar productos seleccionados'
             : bulkAction === 'changeCategory'
             ? 'Cambiar categoría'
+            : bulkAction === 'showInCatalog'
+            ? 'Mostrar en catálogo'
             : 'Activar/Desactivar productos'
         }
         size="md"
@@ -6232,6 +6284,57 @@ export default function Products() {
                     <>
                       <Package className="w-4 h-4 mr-2" />
                       Cambiar Estado
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'showInCatalog' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  ¿Qué quieres hacer con los {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}?
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Elige si mostrarlos u ocultarlos en el catálogo público.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkSetShowInCatalog(false)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-4 h-4 mr-2" />
+                      Ocultar del catálogo
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleBulkSetShowInCatalog(true)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Mostrar en catálogo
                     </>
                   )}
                 </Button>
