@@ -9,6 +9,7 @@ import { getCompanySettings } from '@/services/firestoreService'
 import { generateOrderPDF } from '@/utils/orderPdfGenerator'
 import OrderTicketPrint from '@/components/OrderTicketPrint'
 import { useReactToPrint } from 'react-to-print'
+import { useNewOrderAlert } from '@/hooks/useNewOrderAlert'
 import {
   ShoppingBag, MessageCircle, CheckCircle, XCircle, Clock, MapPin, Phone,
   User, ChevronDown, ChevronUp, Package, Search, Loader2,
@@ -316,6 +317,11 @@ export default function OnlineOrders() {
     if (!validStatuses.includes(status)) status = 'pending'
     return { ...o, status }
   }), [orders])
+
+  // Alerta sonora + vibración + flash del título cuando llegan pedidos nuevos.
+  // Se dispara solo cuando la lista YA cargó (loading=false) para no sonar en
+  // la carga inicial. El hook hace su propio diff por IDs.
+  useNewOrderAlert(normalizedOrders, { enabled: !loading })
 
   // Pedidos del modo actual (activos vs historial)
   const ordersByMode = useMemo(() => {

@@ -17,6 +17,7 @@ import { db } from '../lib/firebase';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { FCM } from '@capacitor-community/fcm';
 import { Capacitor } from '@capacitor/core';
+import { playOrderAlertBeep, vibrateOrderAlert } from '../utils/orderAlertSound';
 
 // Tipos de notificaciones
 export const NOTIFICATION_TYPES = {
@@ -134,8 +135,20 @@ export const initializePushNotifications = async (userId) => {
     // 4. Registrar listeners solo una vez
     if (!listenersRegistered) {
       // Escuchar notificaciones recibidas (app en foreground)
+      // En foreground iOS/Android no muestran banner ni reproducen sonido por
+      // defecto, así que disparamos un beep nosotros para pedidos nuevos —
+      // si el usuario está viendo otra pantalla, igual se entera.
       PushNotifications.addListener('pushNotificationReceived', (notification) => {
         console.log('Push notification received:', notification);
+        const type = notification?.data?.type;
+        if (type === 'new_order' || type === 'items_added') {
+          try {
+            playOrderAlertBeep('strong');
+            vibrateOrderAlert([300, 100, 300, 100, 300]);
+          } catch (err) {
+            console.warn('No se pudo reproducir alerta de pedido:', err);
+          }
+        }
       });
 
       // Escuchar cuando el usuario toca una notificación
