@@ -1074,53 +1074,55 @@ export default function CreatePurchase() {
         const newWarehouseId = selectedWarehouse?.id || ''
         warehouseChangedInEdit = originalWarehouseId !== newWarehouseId
 
-        // Agrupar cantidades originales por producto
-        const originalQuantities = {}
-        originalProductItems.forEach(item => {
-          const productId = item.productId
-          if (!originalQuantities[productId]) {
-            originalQuantities[productId] = 0
-          }
-          originalQuantities[productId] += parseFloat(item.quantity) || 0
-        })
-
-        // Agrupar cantidades nuevas por producto
-        const newQuantities = {}
-        productItems.forEach(item => {
-          const productId = item.productId
-          if (!newQuantities[productId]) {
-            newQuantities[productId] = 0
-          }
-          newQuantities[productId] += parseFloat(item.quantity) || 0
-        })
-
-        // Calcular diferencias (productos que estaban en original)
-        for (const productId in originalQuantities) {
-          const originalQty = originalQuantities[productId]
-          const newQty = newQuantities[productId] || 0
-          stockDifferences[productId] = newQty - originalQty
+        // Helper para agrupar por producto + variante (preserva trazabilidad de variantes)
+        const makeKey = (productId, variantSku) => `${productId}|${variantSku || ''}`
+        const parseKey = key => {
+          const [productId, variantSku] = key.split('|')
+          return { productId, variantSku: variantSku || null }
         }
 
-        // Agregar productos nuevos que no estaban en la compra original
-        for (const productId in newQuantities) {
-          if (!(productId in stockDifferences)) {
-            stockDifferences[productId] = newQuantities[productId]
+        // Agrupar cantidades originales por producto + variante
+        const originalQuantities = {}
+        originalProductItems.forEach(item => {
+          const key = makeKey(item.productId, item.variantSku)
+          originalQuantities[key] = (originalQuantities[key] || 0) + (parseFloat(item.quantity) || 0)
+        })
+
+        // Agrupar cantidades nuevas por producto + variante
+        const newQuantities = {}
+        productItems.forEach(item => {
+          const key = makeKey(item.productId, item.variantSku)
+          newQuantities[key] = (newQuantities[key] || 0) + (parseFloat(item.quantity) || 0)
+        })
+
+        // Calcular diferencias (productos+variante que estaban en original)
+        for (const key in originalQuantities) {
+          const originalQty = originalQuantities[key]
+          const newQty = newQuantities[key] || 0
+          stockDifferences[key] = newQty - originalQty
+        }
+
+        // Agregar productos+variante nuevos que no estaban en la compra original
+        for (const key in newQuantities) {
+          if (!(key in stockDifferences)) {
+            stockDifferences[key] = newQuantities[key]
           }
         }
 
         // Aplicar ajustes de stock solo donde hay diferencia o cambio de almacén
-        for (const productId in stockDifferences) {
-          const difference = stockDifferences[productId]
+        for (const key in stockDifferences) {
+          const { productId, variantSku } = parseKey(key)
+          const difference = stockDifferences[key]
           const product = products.find(p => p.id === productId)
 
           if (!product || product.trackStock === false) continue
 
           // Si cambió el almacén, necesitamos mover el stock
-          if (warehouseChangedInEdit && originalQuantities[productId]) {
-            const originalQty = originalQuantities[productId]
+          if (warehouseChangedInEdit && originalQuantities[key]) {
+            const originalQty = originalQuantities[key]
 
             // Restar del almacén original (transacción atómica)
-            await updateProductStockTransaction(businessId, productId, originalWarehouseId, -originalQty)
+            await updateProductStockTransaction(businessId, productId, originalWarehouseId, -originalQty, {}, variantSku)
 
             // Registrar movimiento de salida del almacén original
             await createStockMovement(businessId, {
@@ -1132,12 +1134,13 @@ export default function CreatePurchase() {
               referenceType: 'purchase_edit',
               referenceId: purchaseId,
               userId: user?.uid,
+              ...(variantSku && { variantSku }),
               notes: `Transferido a otro almacén por edición de compra`
             }).catch(err => console.error('Error movimiento salida:', err))
 
             // La entrada al nuevo almacén se manejará en la sección de actualización de stock
             // con la cantidad nueva completa
-            stockDifferences[productId] = newQuantities[productId] || 0
+            stockDifferences[key] = newQuantities[key] || 0
           } else if (difference !== 0) {
             // Solo ajustar si hay diferencia (no cambió almacén)
             // Actualizar stock usando transacción atómica
@@ -1145,7 +1148,9 @@ export default function CreatePurchase() {
               businessId,
               productId,
               originalWarehouseId,
-              difference // Positivo = aumentar, Negativo = reducir
+              difference, // Positivo = aumentar, Negativo = reducir
+              {},
+              variantSku
             )
 
             // Registrar movimiento de ajuste
@@ -1158,6 +1163,7 @@ export default function CreatePurchase() {
               referenceType: 'purchase_edit',
               referenceId: purchaseId,
               userId: user?.uid,
+              ...(variantSku && { variantSku }),
               notes: `Ajuste de ${difference > 0 ? '+' : ''}${difference} unidades por edición`
             }).catch(err => console.error('Error movimiento ajuste:', err))
           }

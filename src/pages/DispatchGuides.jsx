@@ -489,7 +489,8 @@ export default function DispatchGuides() {
                 item.productId,
                 voidingGuide.warehouseId,
                 parseFloat(item.quantity), // Positivo: restaurar
-                extraUpdates
+                extraUpdates,
+                item.variantSku || null
               )
               await createStockMovement(businessId, {
                 productId: item.productId,
@@ -502,6 +503,7 @@ export default function DispatchGuides() {
                 referenceId: voidingGuide.id,
                 referenceNumber: voidingGuide.number,
                 userId: user?.uid || '',
+                ...(item.variantSku && { variantSku: item.variantSku }),
                 notes: `Stock restaurado por anulación: ${voidingGuide.number}`
               })
             }
@@ -1209,7 +1211,8 @@ export default function DispatchGuides() {
                               item.productId,
                               guide.warehouseId,
                               -parseFloat(item.quantity),
-                              extraUpdates
+                              extraUpdates,
+                              item.variantSku || null
                             )
                             await createStockMovement(businessId, {
                               productId: item.productId,
@@ -1223,6 +1226,7 @@ export default function DispatchGuides() {
                               referenceNumber: guide.number,
                               userId: user?.uid || '',
                               ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                              ...(item.variantSku && { variantSku: item.variantSku }),
                               notes: `Despacho: ${guide.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
                             })
                           }
@@ -1273,7 +1277,8 @@ export default function DispatchGuides() {
                               item.productId,
                               guide.warehouseId,
                               parseFloat(item.quantity), // Positivo para sumar
-                              extraUpdates
+                              extraUpdates,
+                              item.variantSku || null
                             )
                             // Registrar movimiento de entrada
                             await createStockMovement(businessId, {
@@ -1288,6 +1293,7 @@ export default function DispatchGuides() {
                               referenceNumber: guide.number,
                               userId: user?.uid || '',
                               ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                              ...(item.variantSku && { variantSku: item.variantSku }),
                               notes: `Stock restaurado: ${guide.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
                             })
                           }

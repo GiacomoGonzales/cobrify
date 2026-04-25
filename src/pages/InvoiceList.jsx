@@ -683,6 +683,7 @@ Gracias por tu preferencia.`
                   referenceNumber: voidingInvoice.number,
                   userId: user.uid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  ...(variantSku && { variantSku }),
                   notes: `Stock devuelto por anulación de ${voidingInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
                 })
 
@@ -922,6 +923,7 @@ Gracias por tu preferencia.`
                   referenceNumber: voidingSunatInvoice.number,
                   userId: user.uid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  ...(variantSku && { variantSku }),
                   notes: `Stock devuelto por anulación SUNAT de ${voidingSunatInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
                 })
 
@@ -1295,7 +1297,8 @@ Gracias por tu preferencia.`
 
         // Descontar stock del producto (transacción atómica)
         const { updateProductStockTransaction: updateStockTx } = await import('@/services/firestoreService')
-        await updateStockTx(bId, productId, warehouseId, -quantityForMovement)
+        const itemVariantSku = item.variantSku || null
+        await updateStockTx(bId, productId, warehouseId, -quantityForMovement, {}, itemVariantSku)
 
         // Crear movimiento
         await createStockMovement(bId, {
@@ -1309,6 +1312,7 @@ Gracias por tu preferencia.`
           referenceId: invoice.id,
           referenceNumber: invoice.number || '',
           userId: user?.uid,
+          ...(itemVariantSku && { variantSku: itemVariantSku }),
           notes: item.presentationName
             ? `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} - ${item.quantity} ${item.presentationName} (sincronizado)`
             : `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} (sincronizado)`,

@@ -643,8 +643,38 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
         variant.stock = variantWS.reduce((sum, ws) => sum + (ws.stock || 0), 0)
         variants[variantIndex] = variant
 
+        // Sincronizar stock a nivel producto: suma de todas las variantes
+        // Esto evita desincronización entre product.stock y suma(variants[].stock)
+        const aggregatedByWarehouse = {}
+        variants.forEach(v => {
+          const vws = v.warehouseStocks || []
+          vws.forEach(ws => {
+            if (!ws.warehouseId) return
+            aggregatedByWarehouse[ws.warehouseId] = (aggregatedByWarehouse[ws.warehouseId] || 0) + (ws.stock || 0)
+          })
+        })
+        // Preservar metadata existente (minStock, etc.) y agregar/actualizar almacenes con stock real
+        const existingProductWS = product.warehouseStocks || []
+        const productWarehouseStocks = []
+        const seenWarehouseIds = new Set()
+        existingProductWS.forEach(ws => {
+          if (!ws.warehouseId) return
+          seenWarehouseIds.add(ws.warehouseId)
+          productWarehouseStocks.push({
+            ...ws,
+            stock: aggregatedByWarehouse[ws.warehouseId] || 0,
+          })
+        })
+        Object.entries(aggregatedByWarehouse).forEach(([whId, stock]) => {
+          if (seenWarehouseIds.has(whId)) return
+          productWarehouseStocks.push({ warehouseId: whId, stock, minStock: 0 })
+        })
+        const productTotalStock = variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+
         transaction.update(docRef, {
           variants,
+          stock: productTotalStock,
+          warehouseStocks: productWarehouseStocks,
           ...finalExtraUpdates,
           updatedAt: serverTimestamp(),
         })

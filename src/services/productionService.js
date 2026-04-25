@@ -79,7 +79,11 @@ export const executeRecipeProduction = async (businessId, params) => {
 
       if (variantIndex != null && freshProduct.variants?.length > 0) {
         const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
-        updateData = { variants: updatedProduct.variants }
+        updateData = {
+          variants: updatedProduct.variants,
+          stock: updatedProduct.stock,
+          warehouseStocks: updatedProduct.warehouseStocks,
+        }
       } else {
         const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
         updateData = {
@@ -103,6 +107,7 @@ export const executeRecipeProduction = async (businessId, params) => {
       reason: `Producción con receta: ${productName} (x${quantity})`,
       referenceType: 'production',
       userId,
+      ...(variantSku && { variantSku }),
       notes: notes || `Producción automática de ${quantity} unidades`
     })
 
@@ -155,7 +160,11 @@ export const executeManualProduction = async (businessId, params) => {
 
       if (variantIndex != null && freshProduct.variants?.length > 0) {
         const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
-        updateData = { variants: updatedProduct.variants }
+        updateData = {
+          variants: updatedProduct.variants,
+          stock: updatedProduct.stock,
+          warehouseStocks: updatedProduct.warehouseStocks,
+        }
       } else {
         const updatedProduct = updateWarehouseStock(freshProduct, warehouseId, quantity)
         updateData = {
@@ -179,6 +188,7 @@ export const executeManualProduction = async (businessId, params) => {
       reason: `Producción manual: ${productName} (x${quantity})`,
       referenceType: 'production_manual',
       userId,
+      ...(variantSku && { variantSku }),
       notes: notes || `Producción manual de ${quantity} unidades`
     })
 
@@ -278,7 +288,7 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
       return { success: false, error: 'Producción no encontrada' }
     }
     const production = productionDoc.data()
-    const { productId, quantity, warehouseId, mode, ingredientsDeducted } = production
+    const { productId, quantity, warehouseId, mode, ingredientsDeducted, variantIndex, variantSku } = production
 
     const batch = writeBatch(db)
 
@@ -289,25 +299,41 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
     if (productDoc.exists()) {
       const productData = productDoc.data()
       if (productData.stock !== null && productData.trackStock !== false) {
-        const warehouseStocks = [...(productData.warehouseStocks || [])]
-        const wsIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+        // Si la producción fue de una variante específica, revertir a nivel de variante
+        if (variantIndex != null && productData.variants?.length > variantIndex) {
+          const updatedProduct = updateVariantWarehouseStock(
+            { id: productId, ...productData },
+            variantIndex,
+            warehouseId,
+            -quantity
+          )
+          batch.update(productRef, {
+            variants: updatedProduct.variants,
+            stock: updatedProduct.stock,
+            warehouseStocks: updatedProduct.warehouseStocks,
+            updatedAt: Timestamp.now(),
+          })
+        } else {
+          const warehouseStocks = [...(productData.warehouseStocks || [])]
+          const wsIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
 
-        if (wsIndex >= 0) {
-          warehouseStocks[wsIndex] = {
-            ...warehouseStocks[wsIndex],
-            stock: Math.max(0, (warehouseStocks[wsIndex].stock || 0) - quantity)
+          if (wsIndex >= 0) {
+            warehouseStocks[wsIndex] = {
+              ...warehouseStocks[wsIndex],
+              stock: Math.max(0, (warehouseStocks[wsIndex].stock || 0) - quantity)
+            }
           }
+
+          const newStock = warehouseStocks.length > 0
+            ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+            : Math.max(0, (productData.stock || 0) - quantity)
+
+          batch.update(productRef, {
+            stock: newStock,
+            warehouseStocks,
+            updatedAt: Timestamp.now()
+          })
         }
-
-        const newStock = warehouseStocks.length > 0
-          ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-          : Math.max(0, (productData.stock || 0) - quantity)
-
-        batch.update(productRef, {
-          stock: newStock,
-          warehouseStocks,
-          updatedAt: Timestamp.now()
-        })
 
         // Movimiento de reversión del producto
         const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
@@ -317,6 +343,7 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
           type: 'production_reversal',
           quantity: -quantity,
           warehouseId: warehouseId || null,
+          ...(variantSku && { variantSku }),
           reason: `Reversión de producción: ${production.productName}`,
           createdAt: Timestamp.now()
         })

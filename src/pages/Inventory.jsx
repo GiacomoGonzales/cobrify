@@ -1011,6 +1011,16 @@ export default function Inventory() {
         } else {
           toast.info(`El stock ya estaba correcto (${result.stockFromMovements})`)
         }
+
+        // Advertir si hay movimientos sin variantSku en producto con variantes
+        if (result.hasVariants && result.orphanMovements?.length > 0) {
+          const count = result.orphanMovements.length
+          toast.warning(
+            `Hay ${count} movimiento${count > 1 ? 's' : ''} antiguo${count > 1 ? 's' : ''} sin variante asignada. Las variantes se recalcularon ignorándolos. Si tu stock no cuadra, haz un recuento manual de cada variante.`,
+            8000
+          )
+          console.warn('Movimientos huérfanos (sin variantSku):', result.orphanMovements)
+        }
       } else {
         console.error('Error en recalculo:', result.error)
         toast.error('Error al recalcular: ' + (result.error || 'Error desconocido'))

@@ -611,12 +611,14 @@ export default function CreateCreditNote() {
                   }
                 }
 
+                const itemVariantSku = item.variantSku || null
                 await updateProductStockTransaction(
                   user.uid,
                   item.productId,
                   warehouseId,
                   quantityToRestore,
-                  batchExtraUpdates
+                  batchExtraUpdates,
+                  itemVariantSku
                 )
 
                 await createStockMovement(user.uid, {
@@ -630,6 +632,7 @@ export default function CreateCreditNote() {
                   referenceNumber: creditNoteNumber,
                   userId: user.uid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                  ...(itemVariantSku && { variantSku: itemVariantSku }),
                   notes: `Stock devuelto por NC ${creditNoteNumber} - ${formData.discrepancyReason}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
                 })
 

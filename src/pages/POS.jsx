@@ -4456,6 +4456,7 @@ export default function POS() {
                   userId: bgUserUid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
                   ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                  ...(item.variantSku && { variantSku: item.variantSku }),
                   notes: noteParts.join(' - ')
                 }
                 // Reintentar hasta 3 veces si falla para evitar movimientos perdidos

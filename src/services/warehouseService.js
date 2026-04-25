@@ -584,7 +584,35 @@ export const updateVariantWarehouseStock = (product, variantIndex, warehouseId, 
     }
   })
 
-  return { ...product, variants }
+  // Sincronizar product.stock y product.warehouseStocks como suma de variantes
+  const aggregatedByWarehouse = {}
+  variants.forEach(v => {
+    const vws = v.warehouseStocks || []
+    vws.forEach(ws => {
+      if (!ws.warehouseId) return
+      aggregatedByWarehouse[ws.warehouseId] = (aggregatedByWarehouse[ws.warehouseId] || 0) + (ws.stock || 0)
+    })
+  })
+  const productWarehouseStocks = []
+  const seenWh = new Set()
+  const existingProductWS = product.warehouseStocks || []
+  existingProductWS.forEach(ws => {
+    if (!ws.warehouseId) return
+    seenWh.add(ws.warehouseId)
+    productWarehouseStocks.push({ ...ws, stock: aggregatedByWarehouse[ws.warehouseId] || 0 })
+  })
+  Object.entries(aggregatedByWarehouse).forEach(([whId, stock]) => {
+    if (seenWh.has(whId)) return
+    productWarehouseStocks.push({ warehouseId: whId, stock, minStock: 0 })
+  })
+  const totalStock = variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+
+  return {
+    ...product,
+    variants,
+    stock: totalStock,
+    warehouseStocks: productWarehouseStocks,
+  }
 }
 
 /**
@@ -959,8 +987,6 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
     const defaultWarehouse = warehouses.find(w => w.isDefault) || warehouses[0]
     const defaultWarehouseId = defaultWarehouse?.id || null
 
-    console.log('Almacén principal:', defaultWarehouseId, defaultWarehouse?.name)
-
     // 2. Obtener todos los movimientos del producto/ingrediente
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
     const q = query(movementsRef, where('productId', '==', productId))
@@ -978,30 +1004,7 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
       })
     }
 
-    // 3. Sumar cantidades por almacén
-    const stockByWarehouse = {}
-    let totalFromMovements = 0
-
-    allDocs.forEach(docSnap => {
-      const mov = docSnap.data()
-      const qty = mov.quantity || 0
-      // Si no tiene warehouseId o es 'default', usar el almacén principal
-      let whId = mov.warehouseId
-      if (!whId || whId === 'default') {
-        whId = defaultWarehouseId || 'default'
-      }
-
-      if (!stockByWarehouse[whId]) {
-        stockByWarehouse[whId] = 0
-      }
-      stockByWarehouse[whId] += qty
-      totalFromMovements += qty
-    })
-
-    console.log('Stock por almacén:', stockByWarehouse)
-    console.log('Total desde movimientos:', totalFromMovements)
-
-    // 4. Leer producto/ingrediente actual
+    // 3. Leer producto/ingrediente actual (necesario para detectar variantes)
     const collectionName = isIngredient ? 'ingredients' : 'products'
     const productRef = doc(db, 'businesses', businessId, collectionName, productId)
     const productDoc = await getDoc(productRef)
@@ -1014,22 +1017,149 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
     const previousWarehouseStocks = product.warehouseStocks || []
     const previousWarehouseTotal = previousWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
-    console.log('Stock anterior (general):', previousStock)
-    console.log('Stock anterior (warehouseStocks):', previousWarehouseTotal)
-    console.log('Stock corregido:', totalFromMovements)
+    const hasVariants = !isIngredient && product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
 
-    // 5. Construir nuevo warehouseStocks
+    // ============================================================
+    // RAMA A: Producto con variantes — recalcular por variante
+    // ============================================================
+    if (hasVariants) {
+      // Agrupar movimientos por variantSku y warehouseId
+      const byVariant = new Map() // variantSku -> { warehouseId -> qty }
+      const orphanMovements = []
+
+      allDocs.forEach(docSnap => {
+        const mov = { id: docSnap.id, ...docSnap.data() }
+        const qty = mov.quantity || 0
+        let whId = mov.warehouseId
+        if (!whId || whId === 'default') whId = defaultWarehouseId || 'default'
+
+        if (mov.variantSku) {
+          if (!byVariant.has(mov.variantSku)) byVariant.set(mov.variantSku, {})
+          const m = byVariant.get(mov.variantSku)
+          m[whId] = (m[whId] || 0) + qty
+        } else {
+          // Movimiento huérfano: no tiene variantSku pero el producto tiene variantes
+          orphanMovements.push({
+            id: mov.id,
+            type: mov.type,
+            quantity: qty,
+            warehouseId: whId,
+            productName: mov.productName,
+            notes: mov.notes,
+            referenceNumber: mov.referenceNumber,
+            createdAt: mov.createdAt,
+          })
+        }
+      })
+
+      // Reconstruir variants[] con stock derivado de movimientos
+      const variantSkusInProduct = new Set((product.variants || []).map(v => v.sku))
+      const newVariants = (product.variants || []).map(v => {
+        const variantMov = byVariant.get(v.sku) || {}
+        const newWS = []
+        const seenWh = new Set()
+
+        // Preservar warehouses existentes (con su minStock) recalculando stock
+        ;(v.warehouseStocks || []).forEach(ws => {
+          if (!ws.warehouseId) return
+          seenWh.add(ws.warehouseId)
+          newWS.push({ ...ws, stock: Math.max(0, variantMov[ws.warehouseId] || 0) })
+        })
+        // Agregar warehouses que tienen movimientos pero no estaban en warehouseStocks
+        Object.entries(variantMov).forEach(([whId, stock]) => {
+          if (seenWh.has(whId)) return
+          if (whId === 'default' || stock === 0) return
+          newWS.push({ warehouseId: whId, stock: Math.max(0, stock), minStock: 0 })
+        })
+
+        const totalStock = newWS.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        return { ...v, warehouseStocks: newWS, stock: totalStock }
+      })
+
+      // Detectar movimientos con variantSku que ya no existe en el producto (variante eliminada)
+      const removedVariantMovements = []
+      byVariant.forEach((_warehouseQty, sku) => {
+        if (!variantSkusInProduct.has(sku)) {
+          removedVariantMovements.push(sku)
+        }
+      })
+
+      // Calcular product.warehouseStocks como agregado de todas las variantes
+      const productWHAgg = {}
+      newVariants.forEach(v => {
+        const vws = v.warehouseStocks || []
+        vws.forEach(ws => {
+          if (!ws.warehouseId) return
+          productWHAgg[ws.warehouseId] = (productWHAgg[ws.warehouseId] || 0) + (ws.stock || 0)
+        })
+      })
+
+      const newProductWS = []
+      const seenProductWh = new Set()
+      previousWarehouseStocks.forEach(ws => {
+        if (!ws.warehouseId) return
+        seenProductWh.add(ws.warehouseId)
+        newProductWS.push({ ...ws, stock: productWHAgg[ws.warehouseId] || 0 })
+      })
+      Object.entries(productWHAgg).forEach(([whId, stock]) => {
+        if (seenProductWh.has(whId)) return
+        newProductWS.push({ warehouseId: whId, stock, minStock: 0 })
+      })
+
+      const productTotalStock = newVariants.reduce((sum, v) => sum + (v.stock || 0), 0)
+
+      await updateDoc(productRef, {
+        variants: newVariants,
+        stock: productTotalStock,
+        warehouseStocks: newProductWS,
+        updatedAt: serverTimestamp(),
+      })
+
+      const corrected = previousStock !== productTotalStock || previousWarehouseTotal !== productTotalStock
+
+      return {
+        success: true,
+        corrected,
+        stockFromMovements: productTotalStock,
+        previousStock: previousWarehouseTotal || previousStock,
+        byWarehouse: productWHAgg,
+        hasVariants: true,
+        variantsCount: newVariants.length,
+        ...(orphanMovements.length > 0 && { orphanMovements }),
+        ...(removedVariantMovements.length > 0 && { removedVariantSkus: removedVariantMovements }),
+      }
+    }
+
+    // ============================================================
+    // RAMA B: Producto sin variantes (o ingrediente) — comportamiento original
+    // ============================================================
+    const stockByWarehouse = {}
+    let totalFromMovements = 0
+
+    allDocs.forEach(docSnap => {
+      const mov = docSnap.data()
+      const qty = mov.quantity || 0
+      let whId = mov.warehouseId
+      if (!whId || whId === 'default') {
+        whId = defaultWarehouseId || 'default'
+      }
+
+      if (!stockByWarehouse[whId]) {
+        stockByWarehouse[whId] = 0
+      }
+      stockByWarehouse[whId] += qty
+      totalFromMovements += qty
+    })
+
     const newWarehouseStocks = []
     const processedWarehouseIds = new Set()
 
-    // Primero, actualizar los almacenes que ya existen en el producto
     previousWarehouseStocks.forEach(ws => {
       const calculatedStock = stockByWarehouse[ws.warehouseId] || 0
       newWarehouseStocks.push({ ...ws, stock: calculatedStock })
       processedWarehouseIds.add(ws.warehouseId)
     })
 
-    // Agregar almacenes que tienen movimientos pero no están en warehouseStocks
     Object.keys(stockByWarehouse).forEach(whId => {
       if (whId === 'default' || processedWarehouseIds.has(whId)) return
       newWarehouseStocks.push({
@@ -1039,7 +1169,6 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
       })
     })
 
-    // Si no hay warehouseStocks pero hay un almacén principal, crear uno
     if (newWarehouseStocks.length === 0 && defaultWarehouseId && totalFromMovements !== 0) {
       newWarehouseStocks.push({
         warehouseId: defaultWarehouseId,
@@ -1048,17 +1177,12 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
       })
     }
 
-    console.log('Nuevo warehouseStocks:', newWarehouseStocks)
-
-    // 6. Actualizar producto/ingrediente
     const stockField = isIngredient ? 'currentStock' : 'stock'
     await updateDoc(productRef, {
       [stockField]: totalFromMovements,
       warehouseStocks: newWarehouseStocks,
       updatedAt: serverTimestamp(),
     })
-
-    console.log(`${isIngredient ? 'Ingrediente' : 'Producto'} actualizado con stock:`, totalFromMovements)
 
     return {
       success: true,

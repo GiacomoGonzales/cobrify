@@ -683,7 +683,34 @@ export default function InventoryCountModal({
             updatedVariants[vIdx] = variant
           }
 
-          const result = await updateProduct(businessId, productId, { variants: updatedVariants })
+          // Sincronizar product.stock y product.warehouseStocks con la suma de variantes
+          const aggregatedByWarehouse = {}
+          updatedVariants.forEach(v => {
+            const vws = v.warehouseStocks || []
+            vws.forEach(ws => {
+              if (!ws.warehouseId) return
+              aggregatedByWarehouse[ws.warehouseId] = (aggregatedByWarehouse[ws.warehouseId] || 0) + (ws.stock || 0)
+            })
+          })
+          const existingProductWS = firstItem.productWarehouseStocks || firstItem.warehouseStocks || []
+          const newProductWarehouseStocks = []
+          const seenWh = new Set()
+          existingProductWS.forEach(ws => {
+            if (!ws.warehouseId) return
+            seenWh.add(ws.warehouseId)
+            newProductWarehouseStocks.push({ ...ws, stock: aggregatedByWarehouse[ws.warehouseId] || 0 })
+          })
+          Object.entries(aggregatedByWarehouse).forEach(([whId, stock]) => {
+            if (seenWh.has(whId)) return
+            newProductWarehouseStocks.push({ warehouseId: whId, stock, minStock: 0 })
+          })
+          const newProductTotalStock = updatedVariants.reduce((sum, v) => sum + (v.stock || 0), 0)
+
+          const result = await updateProduct(businessId, productId, {
+            variants: updatedVariants,
+            stock: newProductTotalStock,
+            warehouseStocks: newProductWarehouseStocks,
+          })
 
           if (result.success) {
             for (const vItem of vItems) {

@@ -1244,7 +1244,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 item.productId,
                 selectedWarehouseId,
                 -parseFloat(item.quantity),
-                extraUpdates
+                extraUpdates,
+                item.variantSku || null
               )
               await createStockMovement(businessId, {
                 productId: item.productId,
@@ -1258,6 +1259,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 referenceNumber: result.number,
                 userId: user?.uid || '',
                 ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                ...(item.variantSku && { variantSku: item.variantSku }),
                 notes: `Despacho: ${result.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
               })
             }
