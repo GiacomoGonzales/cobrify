@@ -53,13 +53,22 @@ export const onNewOrder = onDocumentWritten(
       const source = order.source || ''
       const orderType = order.orderType || ''
       const mesa = order.tableNumber ? ` Mesa ${order.tableNumber}` : ''
+      const isRestaurant = business.businessMode === 'restaurant'
+
+      // Path al que redirigir cuando el usuario toca la notificación
+      // - Restaurant → pantalla de órdenes
+      // - Resto (retail, pharmacy, hotel, etc) → pedidos online
+      const redirectPath = isRestaurant ? '/app/ordenes' : '/app/pedidos-online'
 
       let title = ''
       let body = ''
 
       if (isNewOrder) {
         if (source === 'menu_digital') {
-          title = '📱 Nuevo Pedido - Menú Digital'
+          // Texto según el modo del negocio
+          title = isRestaurant
+            ? '📱 Nuevo Pedido - Menú Digital'
+            : '🛒 Nuevo Pedido - Catálogo'
           if (orderType === 'delivery') {
             body = `Pedido ${orderNumber} delivery - ${afterItems} item${afterItems > 1 ? 's' : ''} - S/ ${(order.total || 0).toFixed(2)}`
           } else if (orderType === 'takeaway') {
@@ -84,6 +93,7 @@ export const onNewOrder = onDocumentWritten(
         businessId,
         orderNumber,
         source,
+        redirectPath,
       }
 
       // Enviar al owner (mismo flujo que onNewSale → entrega probada en bloqueado)

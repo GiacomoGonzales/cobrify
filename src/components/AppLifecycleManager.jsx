@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
 import { disableNetwork, enableNetwork } from 'firebase/firestore'
@@ -22,6 +23,19 @@ const HARD_RELOAD_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutos
 export default function AppLifecycleManager() {
   const backgroundedAtRef = useRef(null)
   const reconnectingRef = useRef(false)
+  const navigate = useNavigate()
+
+  // Tap en push notification → navegar al path indicado en la data del push.
+  // notificationService.js dispara este evento global desde el listener de
+  // pushNotificationActionPerformed (que vive fuera de React Router).
+  useEffect(() => {
+    const handleTap = (e) => {
+      const path = e?.detail?.redirectPath
+      if (path) navigate(path)
+    }
+    window.addEventListener('cobrify:notification-tap', handleTap)
+    return () => window.removeEventListener('cobrify:notification-tap', handleTap)
+  }, [navigate])
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return

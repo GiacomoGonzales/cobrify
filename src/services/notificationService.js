@@ -151,9 +151,15 @@ export const initializePushNotifications = async (userId) => {
         }
       });
 
-      // Escuchar cuando el usuario toca una notificación
+      // Escuchar cuando el usuario toca una notificación.
+      // Despachamos un evento global con el redirectPath y lo escucha App.jsx
+      // (que sí tiene contexto de Router) para hacer el navigate.
       PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push notification action performed:', notification);
+        const data = notification?.notification?.data || {};
+        if (data.redirectPath) {
+          window.dispatchEvent(new CustomEvent('cobrify:notification-tap', { detail: data }));
+        }
       });
 
       listenersRegistered = true;
