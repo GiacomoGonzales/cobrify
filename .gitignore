@@ -61,7 +61,7 @@ android/app/*.jks
 *.jks
 
 # Claude Code local settings
-.claude/settings.local.json
+.claude/
 
 # Temporary files
 logs_temp.txt
