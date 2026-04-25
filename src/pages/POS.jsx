@@ -5206,16 +5206,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
-                  {/* Badge de cantidad en carrito */}
+                  {/* Badge de cantidad en carrito.
+                      Posicionado dentro de la card (top-1 left-1) en vez de
+                      sobresalir (-top-2 -left-2) porque WebKit (iOS) recorta
+                      los elementos absolute con offsets negativos dentro de
+                      columnas CSS multi-column. */}
                   {quantityInCart > 0 && (
-                    <div className="absolute -top-2 -left-2 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg z-10">
+                    <div className="absolute top-1 left-1 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg z-10">
                       {quantityInCart}
                     </div>
                   )}
 
                   {/* Badge de vencimiento */}
                   {expirationStatus && expirationStatus.status !== 'ok' && (
-                    <div className={`absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    <div className={`absolute top-1 right-1 px-2 py-0.5 rounded-full text-xs font-medium z-10 ${
                       isExpired
                         ? 'bg-red-600 text-white'
                         : expirationStatus.status === 'critical' || expirationStatus.status === 'today'
