@@ -59,6 +59,69 @@ export default function OrderItemsModal({
     return categoryMap[categoryId] || categoryId
   }
 
+  // Devuelve los nombres únicos de categorías en el orden en que aparecen en
+  // "Productos y Servicios" (DFS por árbol parent-child, ordenado por `order`
+  // dentro de cada nivel). Solo incluye nombres que tengan al menos un producto.
+  // Dedupe por nombre para que parent + subcategoría con mismo nombre se agrupen.
+  const buildOrderedCategoryNames = (categoriesData, productList) => {
+    // Set de nombres que aparecen en al menos un producto
+    const namesInProducts = new Set()
+    productList.forEach((p) => {
+      if (!p.category) return
+      const cat = (categoriesData || []).find((c) => c.id === p.category)
+      const name = cat?.name || p.category
+      namesInProducts.add(name)
+    })
+
+    if (!Array.isArray(categoriesData) || categoriesData.length === 0) {
+      // Sin tabla de categorías: dedupe simple por nombre, en orden de aparición de productos
+      const fallback = []
+      const seen = new Set()
+      productList.forEach((p) => {
+        if (!p.category) return
+        const name = p.category
+        if (!seen.has(name)) {
+          seen.add(name)
+          fallback.push(name)
+        }
+      })
+      return fallback
+    }
+
+    const result = []
+    const seen = new Set()
+    const sortByOrder = (a, b) => (a.order ?? 999) - (b.order ?? 999)
+
+    const visit = (cat) => {
+      if (namesInProducts.has(cat.name) && !seen.has(cat.name)) {
+        result.push(cat.name)
+        seen.add(cat.name)
+      }
+      // Visitar subcategorías
+      const children = categoriesData
+        .filter((c) => c.parentId === cat.id)
+        .sort(sortByOrder)
+      children.forEach(visit)
+    }
+
+    const roots = categoriesData
+      .filter((c) => !c.parentId)
+      .sort(sortByOrder)
+    roots.forEach(visit)
+
+    // Categorías "huérfanas" (su parentId apunta a algo que no existe): agrégalas al final
+    categoriesData.forEach((cat) => {
+      if (cat.parentId && !categoriesData.some((c) => c.id === cat.parentId)) {
+        if (namesInProducts.has(cat.name) && !seen.has(cat.name)) {
+          result.push(cat.name)
+          seen.add(cat.name)
+        }
+      }
+    })
+
+    return result
+  }
+
   // Filtrar productos por búsqueda y categoría
   useEffect(() => {
     let filtered = products
@@ -110,12 +173,9 @@ export default function OrderItemsModal({
         setProducts(allProducts)
         setFilteredProducts(allProducts)
 
-        // Extraer categorías únicas con nombres reales usando el mapa de categorías
-        const categoryNames = allProducts
-          .map(p => p.category ? (catMap[p.category] || p.category) : null)
-          .filter(Boolean)
-        const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
-        setCategories(uniqueCategoryNames)
+        // Categorías ordenadas según la jerarquía de "Productos y Servicios"
+        const orderedNames = buildOrderedCategoryNames(categoriesData, allProducts)
+        setCategories(['Todos', ...orderedNames])
       } else if (demoContext) {
         // Si está en el layout de demo pero no hay productos, mostrar productos de ejemplo
         const demoProducts = demoContext.demoData?.products || []
@@ -123,12 +183,8 @@ export default function OrderItemsModal({
           setProducts(demoProducts)
           setFilteredProducts(demoProducts)
 
-          // Extraer categorías únicas con nombres reales usando el mapa de categorías
-          const categoryNames = demoProducts
-            .map(p => p.category ? (catMap[p.category] || p.category) : null)
-            .filter(Boolean)
-          const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
-          setCategories(uniqueCategoryNames)
+          const orderedNames = buildOrderedCategoryNames(categoriesData, demoProducts)
+          setCategories(['Todos', ...orderedNames])
         } else {
           // Fallback: productos hardcodeados para demo
           const fallbackProducts = [
@@ -154,12 +210,8 @@ export default function OrderItemsModal({
           setProducts(allProducts)
           setFilteredProducts(allProducts)
 
-          // Extraer categorías únicas con nombres reales usando el mapa de categorías
-          const categoryNames = allProducts
-            .map(p => p.category ? (catMap[p.category] || p.category) : null)
-            .filter(Boolean)
-          const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
-          setCategories(uniqueCategoryNames)
+          const orderedNames = buildOrderedCategoryNames(categoriesData, allProducts)
+          setCategories(['Todos', ...orderedNames])
         } else {
           console.error('Error al cargar productos:', result.error)
           toast.error('Error al cargar productos: ' + result.error)
