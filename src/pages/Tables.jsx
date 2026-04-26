@@ -34,6 +34,8 @@ import {
   transferTable,
   moveOrderToTable,
   splitTableItems,
+  mergeTables,
+  unmergeTable,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder, updateItemStatus } from '@/services/orderService'
@@ -645,6 +647,67 @@ export default function Tables() {
   const handleSplitTable = () => {
     setIsActionModalOpen(false)
     setIsSplitTableModalOpen(true)
+  }
+
+  const handleMergeTables = async (primaryTableId, sourceTableIds, waiterData = null) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setIsActionModalOpen(false)
+      return
+    }
+
+    try {
+      const options = waiterData ? { waiterData } : {}
+      const result = await mergeTables(getBusinessId(), primaryTableId, sourceTableIds, options)
+      if (result.success) {
+        const total = result.data?.totalTables || (sourceTableIds.length + 1)
+        toast.success(`Grupo creado con ${total} mesas`)
+        loadTables()
+        setIsActionModalOpen(false)
+        setSelectedTable(null)
+        setSelectedOrder(null)
+      } else {
+        toast.error('Error al fusionar mesas: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al fusionar mesas:', error)
+      toast.error('Error al fusionar mesas')
+    }
+  }
+
+  const handleOpenPrimary = async (groupId) => {
+    // groupId es el id de la mesa principal del grupo
+    const primary = tables.find(t => t.id === groupId)
+    if (!primary) {
+      toast.error('No se encontró la mesa principal del grupo')
+      return
+    }
+    // Reutilizamos handleTableClick para que cargue la orden y actualice el modal
+    await handleTableClick(primary)
+  }
+
+  const handleUnmergeTable = async (tableId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setIsActionModalOpen(false)
+      return
+    }
+
+    try {
+      const result = await unmergeTable(getBusinessId(), tableId)
+      if (result.success) {
+        toast.success(result.data?.dissolved ? 'Grupo disuelto' : 'Mesa separada del grupo')
+        loadTables()
+        setIsActionModalOpen(false)
+        setSelectedTable(null)
+        setSelectedOrder(null)
+      } else {
+        toast.error('Error al separar mesa: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al separar mesa:', error)
+      toast.error('Error al separar mesa')
+    }
   }
 
   const handleConfirmSplitTable = async (sourceTableId, destTableId, splitItems, destTable) => {
@@ -1387,54 +1450,90 @@ export default function Tables() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {zoneTables.map((table) => (
+                    {zoneTables.map((table) => {
+                      const isGrouped = !!table.groupId
+                      const isPrimary = isGrouped && table.isGroupPrimary
+                      const isLinked = isGrouped && !table.isGroupPrimary
+                      const groupNumbers = table.groupTableNumbers || []
+                      const primaryNumber = groupNumbers[0]
+                      const groupLabel = groupNumbers.length > 0
+                        ? `${groupNumbers.join('+')}`
+                        : ''
+                      return (
                       <div key={table.id} className="relative group">
                         <div
                           onClick={() => handleTableClick(table)}
                           className={`p-4 border-2 rounded-lg cursor-pointer transition-all min-h-[180px] flex flex-col ${
-                            table.status === 'occupied' && table.allItemsServed
+                            isPrimary
+                              ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-300 hover:ring-indigo-400'
+                              : isLinked
+                              ? 'bg-gray-100 border-gray-300 border-dashed hover:border-gray-400 opacity-80'
+                              : table.status === 'occupied' && table.allItemsServed
                               ? 'bg-blue-100 border-blue-400 hover:border-blue-500'
                               : getStatusColor(table.status)
                           }`}
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
-                              <span className="text-2xl font-bold text-gray-900">
+                              <span className={`text-2xl font-bold ${isLinked ? 'text-gray-500' : 'text-gray-900'}`}>
                                 {table.number}
                               </span>
-                              {getStatusIcon(table.status)}
+                              {!isLinked && getStatusIcon(table.status)}
                             </div>
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                            <div className={`flex items-center gap-1 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
                               <Users className="w-4 h-4" />
                               <span>{table.capacity}</span>
                             </div>
                           </div>
 
-                          <Badge
-                            variant={
-                              table.status === 'available'
-                                ? 'success'
-                                : table.status === 'occupied' && table.allItemsServed
-                                ? 'info'
-                                : table.status === 'occupied'
-                                ? 'danger'
-                                : 'warning'
-                            }
-                            className="mb-2 w-full justify-center"
-                          >
-                            {table.status === 'occupied' && table.allItemsServed
-                              ? '✓ Todo servido'
-                              : getStatusText(table.status)}
-                          </Badge>
+                          {/* Indicador de grupo (fusión) */}
+                          {isPrimary && (
+                            <div className="mb-2 px-2 py-1 rounded-md text-center text-xs font-semibold bg-indigo-600 text-white">
+                              ★ Principal · Grupo {groupLabel}
+                            </div>
+                          )}
+                          {isLinked && (
+                            <div className="mb-2 px-2 py-1 rounded-md text-center text-xs font-semibold bg-gray-200 text-gray-600 border border-gray-300">
+                              ↳ Vinculada a Mesa {primaryNumber}
+                            </div>
+                          )}
 
-                          {/* Mostrar nombre del mozo de forma prominente cuando la mesa está ocupada */}
-                          {table.status === 'occupied' && table.waiter && (
+                          {!isLinked && (
+                            <Badge
+                              variant={
+                                table.status === 'available'
+                                  ? 'success'
+                                  : table.status === 'occupied' && table.allItemsServed
+                                  ? 'info'
+                                  : table.status === 'occupied'
+                                  ? 'danger'
+                                  : 'warning'
+                              }
+                              className="mb-2 w-full justify-center"
+                            >
+                              {table.status === 'occupied' && table.allItemsServed
+                                ? '✓ Todo servido'
+                                : getStatusText(table.status)}
+                            </Badge>
+                          )}
+
+                          {/* Mozo: visible en ocupadas y en la principal del grupo. En vinculadas se omite (la cuenta es de la principal) */}
+                          {table.status === 'occupied' && table.waiter && !isLinked && (
                             <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-center mb-2">
                               <span className="text-xs font-semibold">👤 {table.waiter}</span>
                             </div>
                           )}
 
-                          {table.status === 'occupied' && (
+                          {/* Vinculadas: solo info simple, sin consumo */}
+                          {isLinked && (
+                            <div className="text-xs text-gray-500 text-center mt-2 pt-2 border-t border-gray-300">
+                              <p>Sin cuenta propia</p>
+                              <p className="mt-1 italic">Toca para ver Mesa {primaryNumber}</p>
+                            </div>
+                          )}
+
+                          {/* Ocupadas no vinculadas: mostrar inicio y consumo */}
+                          {table.status === 'occupied' && !isLinked && (
                             <div className="space-y-1 text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
                               {table.startTime && (
                                 <div className="flex justify-between">
@@ -1443,7 +1542,7 @@ export default function Tables() {
                                 </div>
                               )}
                               <div className="flex justify-between items-center">
-                                <span>Consumo:</span>
+                                <span>{isPrimary ? 'Cuenta del grupo:' : 'Consumo:'}</span>
                                 <span className="font-bold text-gray-900">
                                   S/ {(table.amount || 0).toFixed(2)}
                                 </span>
@@ -1504,7 +1603,7 @@ export default function Tables() {
                           </div>
                         )}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </CardContent>
               </Card>
@@ -1597,7 +1696,9 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         waiters={waiters}
+        defaultWaiterId={userPermissions?.defaultWaiterId || null}
         availableTables={tables.filter(t => t.status === 'available')}
+        occupiedTables={tables.filter(t => t.status === 'occupied')}
         onOccupy={handleOccupyTable}
         onRelease={handleReleaseTable}
         onReserve={handleReserveTable}
@@ -1608,6 +1709,9 @@ export default function Tables() {
         onTransferTable={handleTransferTable}
         onMoveTable={handleMoveTable}
         onSplitTable={handleSplitTable}
+        onMergeTables={handleMergeTables}
+        onUnmergeTable={handleUnmergeTable}
+        onOpenPrimary={handleOpenPrimary}
         onPrintPreBill={handlePrintPreBill}
         onPrintKitchenTicket={handlePrintKitchenTicket}
         onToggleItemServed={handleToggleItemServed}

@@ -25,6 +25,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
+import { getTablesStats } from '@/services/tableService'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
+  const [openTablesAmount, setOpenTablesAmount] = useState(0) // Suma de mesas ocupadas (modo restaurante)
 
   const toggleShowAmounts = () => {
     const newValue = !showAmounts
@@ -106,6 +108,15 @@ export default function Dashboard() {
       setInvoices(demoData.invoices || [])
       setCustomers(demoData.customers || [])
       setProducts(demoData.products || [])
+      // Calcular monto de mesas abiertas en modo demo restaurante
+      if (businessMode === 'restaurant' && Array.isArray(demoData.tables)) {
+        const openAmount = demoData.tables
+          .filter(t => t.status === 'occupied')
+          .reduce((sum, t) => sum + (t.amount || 0), 0)
+        setOpenTablesAmount(openAmount)
+      } else {
+        setOpenTablesAmount(0)
+      }
       setIsLoading(false)
       return
     }
@@ -153,6 +164,18 @@ export default function Dashboard() {
       }
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      // Cargar monto de mesas abiertas (solo en modo restaurante)
+      if (businessMode === 'restaurant') {
+        const tablesStatsResult = await getTablesStats(businessId)
+        if (tablesStatsResult.success) {
+          setOpenTablesAmount(tablesStatsResult.data.totalAmount || 0)
+        } else {
+          setOpenTablesAmount(0)
+        }
+      } else {
+        setOpenTablesAmount(0)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -305,6 +328,8 @@ export default function Dashboard() {
 
   // Estadísticas
   const hiddenAmount = 'S/ ****'
+  const isRestaurantMode = businessMode === 'restaurant'
+  const projectedDayTotal = todaysSales + openTablesAmount
   const stats = [
     {
       title: 'Ventas del Día',
@@ -314,6 +339,12 @@ export default function Dashboard() {
       change: todaysSales > yesterdaySales ? `+${todayChange}%` : `${todayChange}%`,
       changeType: todaysSales >= yesterdaySales ? 'positive' : 'negative',
       isSalesAmount: true,
+      // En modo restaurante, mostrar desglose Cerrado / Abierto / Total proyectado
+      restaurantBreakdown: isRestaurantMode ? {
+        closed: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
+        open: showAmounts ? formatCurrency(openTablesAmount) : hiddenAmount,
+        projected: showAmounts ? formatCurrency(projectedDayTotal) : hiddenAmount,
+      } : null,
     },
     {
       title: 'Ventas del Mes',
@@ -447,19 +478,36 @@ export default function Dashboard() {
                     <p className="text-xs text-primary-600 mt-0.5">{stat.subtitle}</p>
                   )}
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                  <p
-                    className={`text-xs sm:text-sm mt-2 ${
-                      stat.changeType === 'positive'
-                        ? 'text-green-600'
-                        : stat.changeType === 'warning'
-                        ? 'text-yellow-600'
-                        : stat.changeType === 'negative'
-                        ? 'text-gray-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {stat.change}
-                  </p>
+                  {stat.restaurantBreakdown ? (
+                    <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Cerrado</span>
+                        <span className="font-medium text-gray-700">{stat.restaurantBreakdown.closed}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Abierto (mesas)</span>
+                        <span className="font-medium text-amber-600">{stat.restaurantBreakdown.open}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                        <span className="text-gray-600 font-medium">Total proyectado</span>
+                        <span className="font-bold text-primary-600">{stat.restaurantBreakdown.projected}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p
+                      className={`text-xs sm:text-sm mt-2 ${
+                        stat.changeType === 'positive'
+                          ? 'text-green-600'
+                          : stat.changeType === 'warning'
+                          ? 'text-yellow-600'
+                          : stat.changeType === 'negative'
+                          ? 'text-gray-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {stat.change}
+                    </p>
+                  )}
                 </div>
                 <div
                   className={`p-2 sm:p-3 rounded-lg ${

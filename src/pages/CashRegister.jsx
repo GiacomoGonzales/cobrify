@@ -48,6 +48,10 @@ export default function CashRegister() {
   const [selectedCashUser, setSelectedCashUser] = useState(null) // null = mi caja, 'all' = todos, o uid del sub-usuario
   const [openSessions, setOpenSessions] = useState([]) // sesiones abiertas en la sucursal
 
+  // Filtro por usuario que realizó cada venta (aplica a tabla de comprobantes)
+  const [invoiceUserFilter, setInvoiceUserFilter] = useState('all') // 'all' o uid del usuario
+  const [historyInvoiceUserFilter, setHistoryInvoiceUserFilter] = useState('all')
+
   // Tab state: 'current' o 'history'
   const [activeTab, setActiveTab] = useState('current')
   const [historyData, setHistoryData] = useState([])
@@ -77,6 +81,17 @@ export default function CashRegister() {
   const getDateFromTimestamp = (timestamp) => {
     if (!timestamp) return null
     return timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  }
+
+  // Devuelve lista única de usuarios que realizaron ventas en el conjunto de comprobantes
+  const getInvoiceUserOptions = (invoices) => {
+    const map = new Map()
+    invoices.forEach(inv => {
+      const uid = inv.createdBy || 'unknown'
+      const name = inv.createdByName || inv.createdByEmail || 'Sin identificar'
+      if (!map.has(uid)) map.set(uid, name)
+    })
+    return Array.from(map.entries()).map(([uid, name]) => ({ uid, name }))
   }
 
   // Modal states
@@ -566,6 +581,7 @@ export default function CashRegister() {
     setHistoryInvoices([])
     setHistoryClosedWithoutReceipt([])
     setHistoryOrderModifications([])
+    setHistoryInvoiceUserFilter('all')
 
     // Cargar movimientos, facturas y cierres sin comprobante de esa sesión
     if (!isDemoMode) {
@@ -1859,84 +1875,120 @@ export default function CashRegister() {
           {/* Lista de Comprobantes de la Sesión */}
           <Card className="mt-6">
             <CardContent>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Comprobantes de esta sesión ({todayInvoices.length})
-              </h3>
-              {todayInvoices.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p className="text-sm">No hay comprobantes en esta sesión</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-                        <th className="pb-2 pr-3">Número</th>
-                        <th className="pb-2 pr-3">Tipo</th>
-                        <th className="pb-2 pr-3">Cliente</th>
-                        <th className="pb-2 pr-3">Método</th>
-                        <th className="pb-2 pr-3 text-right">Total</th>
-                        <th className="pb-2 pr-3">Estado</th>
-                        <th className="pb-2 text-right">Hora</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {todayInvoices
-                        .sort((a, b) => {
-                          const dA = a.createdAt?.toDate?.() || new Date(0)
-                          const dB = b.createdAt?.toDate?.() || new Date(0)
-                          return dB - dA
-                        })
-                        .map(inv => {
-                          const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
-                          const payMethod = inv.payments?.length > 0
-                            ? inv.payments.map(p => p.method).join(', ')
-                            : inv.paymentMethod || '-'
-                          const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
-                          const isNC = inv.documentType === 'nota_credito'
-                          const isND = inv.documentType === 'nota_debito'
-                          const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
-                          const isPending = inv.paymentStatus === 'pending'
-                          const isPartial = inv.paymentStatus === 'partial'
-                          const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
-                          const timeStr = createdAt ? createdAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
+              {(() => {
+                const userOptions = getInvoiceUserOptions(todayInvoices)
+                const filteredInvoices = invoiceUserFilter === 'all'
+                  ? todayInvoices
+                  : todayInvoices.filter(inv => (inv.createdBy || 'unknown') === invoiceUserFilter)
+                const showUserFilter = isOwner && userOptions.length > 1
 
-                          let statusBadge
-                          if (isVoided) {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
-                          } else if (isNC) {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
-                          } else if (isConverted) {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
-                          } else if (isPending) {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
-                          } else if (isPartial) {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
-                          } else {
-                            statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
-                          }
-
-                          const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
-
-                          return (
-                            <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${rowClass}`}>
-                              <td className="py-2 pr-3 font-medium text-primary-600">{inv.number || '-'}</td>
-                              <td className="py-2 pr-3">{docTypeLabels[inv.documentType] || inv.documentType}</td>
-                              <td className="py-2 pr-3 truncate max-w-[150px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
-                              <td className="py-2 pr-3 text-gray-600">{payMethod}</td>
-                              <td className={`py-2 pr-3 text-right font-medium ${isNC ? 'text-red-600' : ''}`}>
-                                {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
-                              </td>
-                              <td className="py-2 pr-3">{statusBadge}</td>
-                              <td className="py-2 text-right text-gray-500">{timeStr}</td>
+                return (
+                  <>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Comprobantes de esta sesión ({filteredInvoices.length}{invoiceUserFilter !== 'all' ? ` de ${todayInvoices.length}` : ''})
+                      </h3>
+                      {showUserFilter && (
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <select
+                            value={invoiceUserFilter}
+                            onChange={e => setInvoiceUserFilter(e.target.value)}
+                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="all">Todos los usuarios</option>
+                            {userOptions.map(u => (
+                              <option key={u.uid} value={u.uid}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {filteredInvoices.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="text-sm">
+                          {todayInvoices.length === 0
+                            ? 'No hay comprobantes en esta sesión'
+                            : 'Ningún comprobante coincide con el filtro'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+                              <th className="pb-2 pr-3">Número</th>
+                              <th className="pb-2 pr-3">Tipo</th>
+                              <th className="pb-2 pr-3">Cliente</th>
+                              <th className="pb-2 pr-3">Usuario</th>
+                              <th className="pb-2 pr-3">Método</th>
+                              <th className="pb-2 pr-3 text-right">Total</th>
+                              <th className="pb-2 pr-3">Estado</th>
+                              <th className="pb-2 text-right">Hora</th>
                             </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          </thead>
+                          <tbody>
+                            {filteredInvoices
+                              .sort((a, b) => {
+                                const dA = a.createdAt?.toDate?.() || new Date(0)
+                                const dB = b.createdAt?.toDate?.() || new Date(0)
+                                return dB - dA
+                              })
+                              .map(inv => {
+                                const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+                                const payMethod = inv.payments?.length > 0
+                                  ? inv.payments.map(p => p.method).join(', ')
+                                  : inv.paymentMethod || '-'
+                                const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
+                                const isNC = inv.documentType === 'nota_credito'
+                                const isND = inv.documentType === 'nota_debito'
+                                const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
+                                const isPending = inv.paymentStatus === 'pending'
+                                const isPartial = inv.paymentStatus === 'partial'
+                                const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+                                const timeStr = createdAt ? createdAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '-'
+                                const userLabel = inv.createdByName || inv.createdByEmail || 'Sin identificar'
+
+                                let statusBadge
+                                if (isVoided) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
+                                } else if (isNC) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                                } else if (isConverted) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
+                                } else if (isPending) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
+                                } else if (isPartial) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
+                                } else {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
+                                }
+
+                                const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+
+                                return (
+                                  <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${rowClass}`}>
+                                    <td className="py-2 pr-3 font-medium text-primary-600">{inv.number || '-'}</td>
+                                    <td className="py-2 pr-3">{docTypeLabels[inv.documentType] || inv.documentType}</td>
+                                    <td className="py-2 pr-3 truncate max-w-[150px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
+                                    <td className="py-2 pr-3 truncate max-w-[140px] text-gray-700" title={userLabel}>{userLabel}</td>
+                                    <td className="py-2 pr-3 text-gray-600">{payMethod}</td>
+                                    <td className={`py-2 pr-3 text-right font-medium ${isNC ? 'text-red-600' : ''}`}>
+                                      {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
+                                    </td>
+                                    <td className="py-2 pr-3">{statusBadge}</td>
+                                    <td className="py-2 text-right text-gray-500">{timeStr}</td>
+                                  </tr>
+                                )
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </>
@@ -2514,78 +2566,106 @@ export default function CashRegister() {
             )}
 
             {/* Comprobantes de la Sesión */}
-            {historyInvoices.length > 0 && (
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Comprobantes de la Sesión ({historyInvoices.length})
-                </h4>
-                <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-                        <th className="pb-2 pr-2">Número</th>
-                        <th className="pb-2 pr-2">Tipo</th>
-                        <th className="pb-2 pr-2">Cliente</th>
-                        <th className="pb-2 pr-2">Método</th>
-                        <th className="pb-2 pr-2 text-right">Total</th>
-                        <th className="pb-2">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historyInvoices
-                        .sort((a, b) => {
-                          const dA = a.createdAt?.toDate?.() || new Date(0)
-                          const dB = b.createdAt?.toDate?.() || new Date(0)
-                          return dB - dA
-                        })
-                        .map(inv => {
-                          const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'N. Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
-                          const payMethod = inv.payments?.length > 0
-                            ? inv.payments.map(p => p.method).join(', ')
-                            : inv.paymentMethod || '-'
-                          const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
-                          const isNC = inv.documentType === 'nota_credito'
-                          const isND = inv.documentType === 'nota_debito'
-                          const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
-                          const isPending = inv.paymentStatus === 'pending'
-                          const isPartial = inv.paymentStatus === 'partial'
+            {historyInvoices.length > 0 && (() => {
+              const userOptions = getInvoiceUserOptions(historyInvoices)
+              const filteredHistoryInvoices = historyInvoiceUserFilter === 'all'
+                ? historyInvoices
+                : historyInvoices.filter(inv => (inv.createdBy || 'unknown') === historyInvoiceUserFilter)
+              const showUserFilter = isOwner && userOptions.length > 1
 
-                          let statusBadge
-                          if (isVoided) {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
-                          } else if (isNC) {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
-                          } else if (isConverted) {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
-                          } else if (isPending) {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
-                          } else if (isPartial) {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
-                          } else {
-                            statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
-                          }
+              return (
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Comprobantes de la Sesión ({filteredHistoryInvoices.length}{historyInvoiceUserFilter !== 'all' ? ` de ${historyInvoices.length}` : ''})
+                    </h4>
+                    {showUserFilter && (
+                      <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-gray-500" />
+                        <select
+                          value={historyInvoiceUserFilter}
+                          onChange={e => setHistoryInvoiceUserFilter(e.target.value)}
+                          className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="all">Todos los usuarios</option>
+                          {userOptions.map(u => (
+                            <option key={u.uid} value={u.uid}>{u.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+                          <th className="pb-2 pr-2">Número</th>
+                          <th className="pb-2 pr-2">Tipo</th>
+                          <th className="pb-2 pr-2">Cliente</th>
+                          <th className="pb-2 pr-2">Usuario</th>
+                          <th className="pb-2 pr-2">Método</th>
+                          <th className="pb-2 pr-2 text-right">Total</th>
+                          <th className="pb-2">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredHistoryInvoices
+                          .sort((a, b) => {
+                            const dA = a.createdAt?.toDate?.() || new Date(0)
+                            const dB = b.createdAt?.toDate?.() || new Date(0)
+                            return dB - dA
+                          })
+                          .map(inv => {
+                            const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'N. Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+                            const payMethod = inv.payments?.length > 0
+                              ? inv.payments.map(p => p.method).join(', ')
+                              : inv.paymentMethod || '-'
+                            const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
+                            const isNC = inv.documentType === 'nota_credito'
+                            const isND = inv.documentType === 'nota_debito'
+                            const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
+                            const isPending = inv.paymentStatus === 'pending'
+                            const isPartial = inv.paymentStatus === 'partial'
+                            const userLabel = inv.createdByName || inv.createdByEmail || 'Sin identificar'
 
-                          const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+                            let statusBadge
+                            if (isVoided) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
+                            } else if (isNC) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                            } else if (isConverted) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
+                            } else if (isPending) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Crédito</span>
+                            } else if (isPartial) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Parcial</span>
+                            } else {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
+                            }
 
-                          return (
-                            <tr key={inv.id} className={`border-b border-gray-100 ${rowClass}`}>
-                              <td className="py-1.5 pr-2 font-medium text-primary-600 text-xs">{inv.number || '-'}</td>
-                              <td className="py-1.5 pr-2 text-xs">{docTypeLabels[inv.documentType] || inv.documentType}</td>
-                              <td className="py-1.5 pr-2 text-xs truncate max-w-[100px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
-                              <td className="py-1.5 pr-2 text-xs text-gray-600">{payMethod}</td>
-                              <td className={`py-1.5 pr-2 text-right text-xs font-medium ${isNC ? 'text-red-600' : ''}`}>
-                                {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
-                              </td>
-                              <td className="py-1.5">{statusBadge}</td>
-                            </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
+                            const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+
+                            return (
+                              <tr key={inv.id} className={`border-b border-gray-100 ${rowClass}`}>
+                                <td className="py-1.5 pr-2 font-medium text-primary-600 text-xs">{inv.number || '-'}</td>
+                                <td className="py-1.5 pr-2 text-xs">{docTypeLabels[inv.documentType] || inv.documentType}</td>
+                                <td className="py-1.5 pr-2 text-xs truncate max-w-[100px]">{inv.customer?.name || inv.customer?.businessName || 'Cliente General'}</td>
+                                <td className="py-1.5 pr-2 text-xs text-gray-700 truncate max-w-[110px]" title={userLabel}>{userLabel}</td>
+                                <td className="py-1.5 pr-2 text-xs text-gray-600">{payMethod}</td>
+                                <td className={`py-1.5 pr-2 text-right text-xs font-medium ${isNC ? 'text-red-600' : ''}`}>
+                                  {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
+                                </td>
+                                <td className="py-1.5">{statusBadge}</td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Botones */}
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">

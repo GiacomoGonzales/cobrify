@@ -258,6 +258,8 @@ export const deleteOrder = async (businessId, orderId) => {
 
 /**
  * Marcar una orden como pagada
+ * También cambia el status a 'closed' para que la orden salga de la lista de órdenes activas
+ * (antes solo seteaba paid: true y la orden quedaba huérfana en "Órdenes Activas")
  */
 export const markOrderAsPaid = async (businessId, orderId) => {
   try {
@@ -265,6 +267,7 @@ export const markOrderAsPaid = async (businessId, orderId) => {
 
     await updateDoc(orderRef, {
       paid: true,
+      status: 'closed',
       paidAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -864,8 +867,11 @@ export const completeOrder = async (businessId, orderId) => {
 }
 
 /**
- * Obtener órdenes activas (pending, preparing, ready)
+ * Obtener órdenes activas (pending, preparing, ready) que NO estén pagadas
  * Filtrado en cliente para evitar necesidad de índice compuesto
+ * El check `paid !== true` es una red de seguridad para órdenes huérfanas:
+ * en la versión anterior markOrderAsPaid no cambiaba el status, dejando órdenes
+ * pagadas pero con status 'pending' visibles aquí indefinidamente.
  */
 export const getActiveOrders = async (businessId) => {
   try {
@@ -876,8 +882,8 @@ export const getActiveOrders = async (businessId) => {
     const orders = []
     snapshot.forEach((doc) => {
       const data = doc.data()
-      // Filtrar solo órdenes activas
-      if (['pending', 'preparing', 'ready'].includes(data.status)) {
+      // Solo órdenes con status activo y que NO estén ya pagadas
+      if (['pending', 'preparing', 'ready'].includes(data.status) && data.paid !== true) {
         orders.push({ id: doc.id, ...data })
       }
     })

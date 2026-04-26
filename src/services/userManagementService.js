@@ -279,6 +279,8 @@ export const createManagedUser = async (ownerId, userData) => {
       allowedPaymentMethods: userData.allowedPaymentMethods || [], // Métodos de pago permitidos en POS (vacío = todos)
       assignedSellerId: userData.assignedSellerId || null, // Vendedor asignado al sub-usuario en POS
       assignedSellerName: userData.assignedSellerName || null,
+      defaultWaiterId: userData.defaultWaiterId || null, // Mozo por defecto (modo restaurante) al ocupar mesa
+      defaultWaiterName: userData.defaultWaiterName || null,
       independentCashRegister: userData.independentCashRegister || false, // Si true, abre su propia caja; si false, comparte la caja del owner
       ownerId, // ID del usuario que lo creó (dueño del negocio)
       isActive: true,

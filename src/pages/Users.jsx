@@ -22,6 +22,7 @@ import {
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getSellers } from '@/services/sellerService'
+import { getActiveWaiters } from '@/services/waiterService'
 import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
@@ -50,9 +51,12 @@ export default function Users() {
   const [independentCashRegister, setIndependentCashRegister] = useState(false)
   const [hideStockInPOS, setHideStockInPOS] = useState(false)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
+  const [waiters, setWaiters] = useState([])
+  const [defaultWaiterId, setDefaultWaiterId] = useState('')
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
+  const isRestaurantMode = businessMode === 'restaurant'
 
   // Obtener páginas disponibles según el modo del negocio
   const availablePages = getAvailablePagesByMode(businessMode)
@@ -121,7 +125,10 @@ export default function Users() {
     if (isRealEstateMode) {
       loadAgents()
     }
-  }, [user, isRealEstateMode])
+    if (isRestaurantMode) {
+      loadWaiters()
+    }
+  }, [user, isRealEstateMode, isRestaurantMode])
 
   const loadUsers = async () => {
     if (!user?.uid) return
@@ -197,6 +204,20 @@ export default function Users() {
     }
   }
 
+  const loadWaiters = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getActiveWaiters(businessId)
+      if (result.success) {
+        setWaiters(result.data || [])
+      }
+    } catch (error) {
+      console.log('Error loading waiters:', error.message)
+      setWaiters([])
+    }
+  }
+
   const openCreateModal = () => {
     setIsEditMode(false)
     setSelectedUser(null)
@@ -207,6 +228,7 @@ export default function Users() {
     setAllowedDocumentTypes([])
     setAllowedPaymentMethods([])
     setAssignedSellerId('')
+    setDefaultWaiterId('')
     setIndependentCashRegister(false)
     setHideStockInPOS(false)
     setHideDiscountInPOS(false)
@@ -228,6 +250,7 @@ export default function Users() {
     setAllowedDocumentTypes(userToEdit.allowedDocumentTypes || [])
     setAllowedPaymentMethods(userToEdit.allowedPaymentMethods || [])
     setAssignedSellerId(userToEdit.assignedSellerId || '')
+    setDefaultWaiterId(userToEdit.defaultWaiterId || '')
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
     setHideDiscountInPOS(userToEdit.hideDiscountInPOS || false)
@@ -307,6 +330,7 @@ export default function Users() {
       if (isEditMode) {
         // Actualizar usuario existente
         const selectedSellerObj = posSellers.find(s => s.id === assignedSellerId)
+        const selectedWaiterObj = waiters.find(w => w.id === defaultWaiterId)
         const updateData = {
           displayName: data.displayName,
           allowedWarehouses: selectedWarehouses,
@@ -315,6 +339,8 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerObj?.name || null,
+          defaultWaiterId: defaultWaiterId || null,
+          defaultWaiterName: selectedWaiterObj?.name || null,
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
@@ -340,6 +366,7 @@ export default function Users() {
       } else {
         // Crear nuevo usuario
         const selectedSellerForCreate = posSellers.find(s => s.id === assignedSellerId)
+        const selectedWaiterForCreate = waiters.find(w => w.id === defaultWaiterId)
         const userData = {
           email: data.email,
           password: data.password,
@@ -351,6 +378,8 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerForCreate?.name || null,
+          defaultWaiterId: defaultWaiterId || null,
+          defaultWaiterName: selectedWaiterForCreate?.name || null,
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
@@ -970,6 +999,28 @@ export default function Users() {
                       </select>
                       <p className="text-xs text-purple-600">
                         Si se asigna, el vendedor queda fijo en el POS y no se puede cambiar
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Mozo por defecto (solo modo restaurante) */}
+                  {isRestaurantMode && waiters.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Mozo por Defecto:</p>
+                      <select
+                        value={defaultWaiterId}
+                        onChange={(e) => setDefaultWaiterId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                      >
+                        <option value="">Sin mozo por defecto</option>
+                        {waiters.map(waiter => (
+                          <option key={waiter.id} value={waiter.id}>
+                            {waiter.code ? `${waiter.code} - ` : ''}{waiter.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-purple-600">
+                        Aparecerá preseleccionado al ocupar una mesa. El usuario podrá cambiarlo si lo necesita.
                       </p>
                     </div>
                   )}
