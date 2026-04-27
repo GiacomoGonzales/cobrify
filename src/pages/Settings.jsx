@@ -162,6 +162,9 @@ export default function Settings() {
   // Estado para mostrar descripción de producto en cotizaciones PDF
   const [showProductDescriptionInQuotation, setShowProductDescriptionInQuotation] = useState(true)
 
+  // Estado para mostrar imágenes de producto en cotizaciones PDF
+  const [showImagesInQuotations, setShowImagesInQuotations] = useState(false)
+
   // Estado para espaciado amplio en PDF
   const [pdfSpacious, setPdfSpacious] = useState(false)
   const [pdfA5, setPdfA5] = useState(false)
@@ -831,6 +834,11 @@ export default function Settings() {
           setShowProductDescriptionInQuotation(businessData.showProductDescriptionInQuotation)
         }
 
+        // Cargar flag de imágenes en cotizaciones (default false)
+        if (businessData.showImagesInQuotations !== undefined) {
+          setShowImagesInQuotations(businessData.showImagesInQuotations)
+        }
+
         // Cargar flag de espaciado amplio en PDF
         if (businessData.pdfSpacious !== undefined) {
           setPdfSpacious(businessData.pdfSpacious)
@@ -1359,6 +1367,7 @@ export default function Settings() {
         showProductCodeInQuotation: showProductCodeInQuotation,
         showProductCodeInInvoices: showProductCodeInInvoices,
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+        showImagesInQuotations: showImagesInQuotations,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
@@ -4774,6 +4783,26 @@ export default function Settings() {
                   </div>
                 </label>
 
+                {/* Imágenes de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showImagesInQuotations}
+                    onChange={(e) => setShowImagesInQuotations(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Habilitar imágenes en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showImagesInQuotations
+                        ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
+                        : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
+                    </p>
+                  </div>
+                </label>
+
                 {/* Espaciado amplio en PDF */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                   <input
@@ -5193,6 +5222,7 @@ export default function Settings() {
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+                      showImagesInQuotations: showImagesInQuotations,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,

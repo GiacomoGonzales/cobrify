@@ -9,6 +9,10 @@ import { Share } from '@capacitor/share'
 const LOGO_CACHE_KEY = 'cobrify_logo_cache'
 const LOGO_CACHE_EXPIRY = 24 * 60 * 60 * 1000 // 24 horas
 
+// Caché en memoria para imágenes de productos durante una misma generación de PDF
+// (evita descargar la misma imagen varias veces si se repite el producto)
+const _productImageMemoryCache = new Map()
+
 const getLogoFromCache = (logoUrl) => {
   try {
     const cached = localStorage.getItem(LOGO_CACHE_KEY)
@@ -223,6 +227,100 @@ const loadImageAsBase64 = async (url) => {
     throw error
   }
 }
+
+/**
+ * Carga una imagen de producto desde Firebase Storage o URL pública y la convierte a base64.
+ * NO usa el caché del logo para no invalidarlo. Usa caché en memoria para repetidos en la misma sesión.
+ * Retorna null si falla (no lanza para no bloquear el PDF).
+ */
+const loadProductImageAsBase64 = async (url, timeout = 8000) => {
+  if (!url) return null
+  if (_productImageMemoryCache.has(url)) {
+    return _productImageMemoryCache.get(url)
+  }
+  try {
+    const isNative = Capacitor.isNativePlatform()
+
+    const fetchPromise = (async () => {
+      if (isNative) {
+        try {
+          const storagePath = getStoragePathFromUrl(url)
+          let downloadUrl = url
+          if (storagePath) {
+            const storageRef = ref(storage, storagePath)
+            downloadUrl = await getDownloadURL(storageRef)
+          }
+          const response = await CapacitorHttp.get({ url: downloadUrl, responseType: 'blob' })
+          if (response.status === 200 && response.data) {
+            const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
+            return `data:${mimeType};base64,${response.data}`
+          }
+        } catch (e) {
+          // fallthrough a la ruta SDK
+        }
+      }
+
+      const storagePath = getStoragePathFromUrl(url)
+      if (storagePath) {
+        const storageRef = ref(storage, storagePath)
+        const blob = await getBlob(storageRef)
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+      }
+
+      const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'default' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    })()
+
+    const result = await Promise.race([
+      fetchPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout)),
+    ])
+    _productImageMemoryCache.set(url, result)
+    return result
+  } catch (e) {
+    console.warn('No se pudo cargar imagen de producto:', url, e?.message || e)
+    _productImageMemoryCache.set(url, null) // cachear el fallo para no reintentar
+    return null
+  }
+}
+
+/**
+ * Detecta el formato de imagen a partir del data URL para pasarlo a jsPDF.addImage.
+ */
+const detectImageFormat = (dataUrl) => {
+  if (!dataUrl) return 'JPEG'
+  if (dataUrl.startsWith('data:image/png')) return 'PNG'
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
+  return 'JPEG'
+}
+
+/**
+ * Obtiene las dimensiones reales (naturalWidth/naturalHeight) de una imagen base64.
+ * Devuelve null si no se puede determinar (no bloquea — el caller usa el cuadrado completo).
+ */
+const getImageDimensions = (dataUrl) => new Promise((resolve) => {
+  if (!dataUrl) return resolve(null)
+  try {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 })
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  } catch {
+    resolve(null)
+  }
+})
 
 /**
  * Carga imagen con reintentos
@@ -755,22 +853,41 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const showProductCode = companySettings?.showProductCodeInQuotation === true
   // Flag para mostrar descripción del producto (configurable, por defecto SÍ se muestra por retrocompatibilidad)
   const showProductDescription = companySettings?.showProductDescriptionInQuotation !== false
+  // Flag para mostrar imágenes de productos en cotizaciones (default false)
+  const showImages = companySettings?.showImagesInQuotations === true
+  // Tamaño de la imagen en el PDF (4× más grande que la versión inicial)
+  const imageBoxSize = spacious ? 120 : 104
+  const imagePadding = 8 // espacio entre la imagen y el texto
 
-  const colWidths = {
-    cant: CONTENT_WIDTH * 0.07,
-    um: CONTENT_WIDTH * 0.07,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.26 : CONTENT_WIDTH * 0.44,
-    lab: isPharmacy ? CONTENT_WIDTH * 0.14 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.12 : 0,
-    pu: isPharmacy ? CONTENT_WIDTH * 0.15 : CONTENT_WIDTH * 0.20,
-    total: CONTENT_WIDTH * 0.19
-  }
+  // Cuando hay imágenes activas se agrega una columna IMAGEN dedicada antes de DESCRIPCIÓN.
+  const colWidths = isPharmacy
+    ? {
+        cant: CONTENT_WIDTH * 0.05,
+        um: CONTENT_WIDTH * 0.05,
+        img: showImages ? CONTENT_WIDTH * 0.22 : 0,
+        desc: CONTENT_WIDTH * (showImages ? 0.18 : 0.26),
+        lab: CONTENT_WIDTH * (showImages ? 0.10 : 0.14),
+        marca: CONTENT_WIDTH * (showImages ? 0.09 : 0.12),
+        pu: CONTENT_WIDTH * (showImages ? 0.13 : 0.15),
+        total: CONTENT_WIDTH * (showImages ? 0.18 : 0.19),
+      }
+    : {
+        cant: CONTENT_WIDTH * 0.06,
+        um: CONTENT_WIDTH * 0.06,
+        img: showImages ? CONTENT_WIDTH * 0.22 : 0,
+        desc: CONTENT_WIDTH * (showImages ? 0.35 : 0.44),
+        lab: 0,
+        marca: 0,
+        pu: CONTENT_WIDTH * (showImages ? 0.16 : 0.20),
+        total: CONTENT_WIDTH * (showImages ? 0.15 : 0.19),
+      }
 
   let colX = MARGIN_LEFT
   const cols = {
     cant: colX,
     um: colX += colWidths.cant,
-    desc: colX += colWidths.um,
+    img: colX += colWidths.um,
+    desc: colX += colWidths.img,
     lab: colX += colWidths.desc,
     marca: colX += colWidths.lab,
     pu: colX += colWidths.marca,
@@ -778,6 +895,36 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   }
 
   const items = quotation.items || []
+
+  // Pre-cargar imágenes de productos en paralelo (solo si la opción está habilitada).
+  // Para cada imagen guardamos { data, width, height } para poder respetar la proporción al dibujar.
+  const imagesByUrl = {}
+  if (showImages) {
+    const uniqueUrls = Array.from(new Set(
+      items
+        .map(it => it.imageUrl || it.image || '')
+        .filter(u => typeof u === 'string' && u.length > 0)
+    ))
+    if (uniqueUrls.length > 0) {
+      const results = await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const data = await loadProductImageAsBase64(url)
+          if (!data) return { url, data: null }
+          const dims = await getImageDimensions(data)
+          return { url, data, width: dims?.width || 0, height: dims?.height || 0 }
+        })
+      )
+      results.forEach(({ url, data, width, height }) => {
+        if (data) imagesByUrl[url] = { data, width, height }
+      })
+    }
+  }
+  // Helper para saber si un item efectivamente tiene imagen disponible
+  const itemHasImage = (item) => {
+    if (!showImages) return false
+    const url = item.imageUrl || item.image || ''
+    return !!url && !!imagesByUrl[url]
+  }
 
   // Calcular altura dinámica para cada item basado en la descripción
   const calculateItemHeight = (item) => {
@@ -792,17 +939,21 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const rawDescription = showProductDescription ? (item.description || '') : ''
     const productDescription = rawDescription.trim().toLowerCase() === itemName.trim().toLowerCase() ? '' : rawDescription
 
+    // La imagen ahora va en columna propia, así que el ancho del texto en desc es completo.
+    const hasImage = itemHasImage(item)
+    const descTextWidth = colWidths.desc - 15
+
     // Calcular líneas necesarias para el nombre (usar mismo tamaño que al renderizar: 8pt)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    const nameLines = doc.splitTextToSize(itemDesc, colWidths.desc - 15)
+    const nameLines = doc.splitTextToSize(itemDesc, descTextWidth)
 
     // Calcular líneas necesarias para la descripción (si existe)
     let descLines = []
     if (productDescription && productDescription.trim()) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
-      descLines = doc.splitTextToSize(productDescription, colWidths.desc - 15)
+      descLines = doc.splitTextToSize(productDescription, descTextWidth)
     }
 
     // Líneas de detalle farmacéutico (solo farmacia)
@@ -817,16 +968,20 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       if (parts.length > 0) {
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(7)
-        pharmaLines = doc.splitTextToSize(parts.join('  |  '), colWidths.desc - 15)
+        pharmaLines = doc.splitTextToSize(parts.join('  |  '), descTextWidth)
       }
     }
 
     const totalLines = nameLines.length + descLines.length + pharmaLines.length
     const minHeight = baseHeight
     const lineH = spacious ? 10 : 9
-    const calculatedHeight = Math.max(minHeight, (spacious ? 14 : 10) + (totalLines * lineH))
+    let calculatedHeight = Math.max(minHeight, (spacious ? 14 : 10) + (totalLines * lineH))
+    // Si el item tiene imagen, asegurar suficiente alto para mostrarla con padding
+    if (hasImage) {
+      calculatedHeight = Math.max(calculatedHeight, imageBoxSize + 8)
+    }
 
-    return { height: calculatedHeight, nameLines, descLines, pharmaLines }
+    return { height: calculatedHeight, nameLines, descLines, pharmaLines, hasImage }
   }
 
   // Calcular alturas de todos los items
@@ -842,6 +997,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const hTextY = y + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, hTextY, { align: 'center' })
     doc.text('U.M.', cols.um + colWidths.um / 2, hTextY, { align: 'center' })
+    if (showImages) {
+      doc.text('IMAGEN', cols.img + colWidths.img / 2, hTextY, { align: 'center' })
+    }
     doc.text('DESCRIPCIÓN', cols.desc + 5, hTextY)
     if (isPharmacy) {
       doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, hTextY, { align: 'center' })
@@ -864,7 +1022,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // Renderizar items con paginación automática
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
-    const { height: rowHeight, nameLines, descLines, pharmaLines } = itemHeights[i]
+    const { height: rowHeight, nameLines, descLines, pharmaLines, hasImage } = itemHeights[i]
 
     // Verificar si el item cabe en la página actual
     if (dataRowY + rowHeight > PAGE_BOTTOM) {
@@ -881,25 +1039,72 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
     const precioConIGV = item.unitPrice || item.price || 0
     const importeConIGV = item.quantity * precioConIGV
-    const textY = dataRowY + (spacious ? 13 : 10)
+    const descLineH = spacious ? 10 : 9
+
+    // Y vertical para valores de una sola línea (cant, um, pu, total, lab, marca):
+    // centrado dentro de la fila para que no queden pegados arriba cuando la fila es alta.
+    const singleLineY = dataRowY + rowHeight / 2 + 3
+
+    // Y vertical inicial del bloque de descripción (puede ser multilínea):
+    // centrado verticalmente en función de la altura total del bloque.
+    const totalDescLines = nameLines.length + descLines.length + pharmaLines.length
+    const descBlockHeight = totalDescLines * descLineH
+    const descBlockStartY = dataRowY + Math.max(spacious ? 13 : 10, (rowHeight - descBlockHeight) / 2 + descLineH - 2)
 
     doc.setTextColor(...BLACK)
     doc.setFontSize(7)
 
     const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
-    doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+    doc.text(quantityText, cols.cant + colWidths.cant / 2, singleLineY, { align: 'center' })
 
     const unitCode = item.unit || 'UNIDAD'
     const unitText = unitLabels[unitCode] || unitCode
-    doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
+    doc.text(unitText, cols.um + colWidths.um / 2, singleLineY, { align: 'center' })
+
+    // Imagen del producto en su columna propia, respetando proporción (sin estirar ni cortar)
+    if (hasImage) {
+      const url = item.imageUrl || item.image || ''
+      const imgInfo = imagesByUrl[url]
+      if (imgInfo?.data) {
+        // Calcular tamaño "fit" dentro del cuadrado disponible (imageBoxSize × imageBoxSize)
+        let drawW = imageBoxSize
+        let drawH = imageBoxSize
+        const w = imgInfo.width
+        const h = imgInfo.height
+        if (w > 0 && h > 0) {
+          const ratio = w / h
+          if (ratio >= 1) {
+            // Imagen horizontal o cuadrada: ajustar al ancho del cuadro
+            drawW = imageBoxSize
+            drawH = imageBoxSize / ratio
+          } else {
+            // Imagen vertical: ajustar al alto del cuadro
+            drawH = imageBoxSize
+            drawW = imageBoxSize * ratio
+          }
+        }
+        // Centrar dentro de la celda: tanto horizontal como verticalmente
+        const cellLeft = cols.img + (colWidths.img - imageBoxSize) / 2
+        const cellTop = dataRowY + Math.max(2, (rowHeight - imageBoxSize) / 2)
+        const imgX = cellLeft + (imageBoxSize - drawW) / 2
+        const imgY = cellTop + (imageBoxSize - drawH) / 2
+        try {
+          const fmt = detectImageFormat(imgInfo.data)
+          doc.addImage(imgInfo.data, fmt, imgX, imgY, drawW, drawH, undefined, 'FAST')
+        } catch (e) {
+          console.warn('No se pudo dibujar imagen del producto en PDF:', e?.message || e)
+        }
+      }
+    }
+
+    const descTextX = cols.desc + 4
 
     // Nombre del producto (puede ser múltiples líneas)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    const descLineH = spacious ? 10 : 9
-    let currentDescY = textY
+    let currentDescY = descBlockStartY
     nameLines.forEach((line) => {
-      doc.text(line, cols.desc + 4, currentDescY)
+      doc.text(line, descTextX, currentDescY)
       currentDescY += descLineH
     })
 
@@ -909,7 +1114,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setFontSize(8)
       doc.setTextColor(...MEDIUM_GRAY)
       descLines.forEach((line) => {
-        doc.text(line, cols.desc + 4, currentDescY)
+        doc.text(line, descTextX, currentDescY)
         currentDescY += descLineH
       })
       doc.setTextColor(...BLACK)
@@ -921,32 +1126,32 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setFontSize(7)
       doc.setTextColor(80, 80, 120)
       pharmaLines.forEach((line) => {
-        doc.text(line, cols.desc + 4, currentDescY)
+        doc.text(line, descTextX, currentDescY)
         currentDescY += descLineH
       })
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio y Marca (solo modo farmacia)
+    // Laboratorio y Marca (solo modo farmacia) - también centrados verticalmente
     if (isPharmacy) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
       const labText = item.laboratoryName || ''
       if (labText) {
         const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
-        doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
+        doc.text(labLines[0], cols.lab + colWidths.lab / 2, singleLineY, { align: 'center' })
       }
       const marcaText = item.marca || ''
       if (marcaText) {
         const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
-        doc.text(marcaLines[0], cols.marca + colWidths.marca / 2, textY, { align: 'center' })
+        doc.text(marcaLines[0], cols.marca + colWidths.marca / 2, singleLineY, { align: 'center' })
       }
     }
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu / 2, textY, { align: 'center' })
-    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total / 2, textY, { align: 'center' })
+    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu / 2, singleLineY, { align: 'center' })
+    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total / 2, singleLineY, { align: 'center' })
 
     dataRowY += rowHeight
   }

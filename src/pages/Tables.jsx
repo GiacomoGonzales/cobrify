@@ -749,6 +749,9 @@ export default function Tables() {
       posPath = '/demo/pos'
     }
 
+    // Cortesías no se incluyen en el comprobante (opción A1)
+    const billableSelected = (selectedItems || []).filter(it => !it.isCourtesy)
+
     navigate(posPath, {
       state: {
         fromTable: true,
@@ -757,7 +760,7 @@ export default function Tables() {
         tableNumber: selectedTable.number,
         orderId: selectedOrder.id,
         orderNumber: selectedOrder.orderNumber,
-        items: selectedItems,
+        items: billableSelected,
         remainingItems: remainingItems,
         waiterId: selectedTable.waiterId || selectedOrder.waiterId || null,
         waiterName: selectedTable.waiter || selectedOrder.waiterName || null,

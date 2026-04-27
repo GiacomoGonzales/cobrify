@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Edit, Plus, Minus, Trash2, Loader2 } from 'lucide-react'
+import { Edit, Plus, Minus, Trash2, Loader2, Gift } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import { removeOrderItem, updateOrderItemQuantity } from '@/services/orderService'
+import { removeOrderItem, updateOrderItemQuantity, toggleItemCourtesy } from '@/services/orderService'
 import OrderItemsModal from './OrderItemsModal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -95,6 +95,47 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al actualizar cantidad')
+    } finally {
+      setIsUpdating(false)
+      setUpdatingItemIndex(null)
+    }
+  }
+
+  const handleToggleCourtesy = async (itemIndex, item) => {
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
+    const isCurrentlyCourtesy = !!item.isCourtesy
+    let reason = item.courtesyReason || ''
+
+    if (!isCurrentlyCourtesy) {
+      // Marcar como cortesía: pedir motivo opcional
+      const input = window.prompt('Motivo de la cortesía (opcional):', '')
+      if (input === null) return // canceló
+      reason = input.trim()
+    } else {
+      // Desmarcar: confirmar
+      if (!window.confirm('¿Quitar la cortesía y restaurar el precio original?')) return
+    }
+
+    setUpdatingItemIndex(itemIndex)
+    setIsUpdating(true)
+    try {
+      const result = await toggleItemCourtesy(getBusinessId(), order.id, itemIndex, !isCurrentlyCourtesy, {
+        reason,
+        markedBy: { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' },
+      })
+      if (result.success) {
+        toast.success(isCurrentlyCourtesy ? 'Cortesía quitada' : 'Marcado como cortesía')
+        onSuccess()
+      } else {
+        toast.error('Error al cambiar cortesía: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al cambiar cortesía')
     } finally {
       setIsUpdating(false)
       setUpdatingItemIndex(null)
@@ -214,13 +255,23 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
             order.items.map((item, index) => {
               const modsLabel = formatModifiers(item)
               const isRowBusy = updatingItemIndex === index && isUpdating
+              const isCourtesy = !!item.isCourtesy
+              const displayPriceUnit = isCourtesy && item.originalPrice !== undefined ? item.originalPrice : item.price
+              const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
               return (
-                <div key={index} className="py-2 px-2 hover:bg-gray-50 transition-colors">
+                <div key={index} className={`py-2 px-2 transition-colors ${isCourtesy ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
                   <div className="flex items-center gap-2">
                     {/* Nombre + precio unitario */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{item.name}</div>
-                      <div className="text-xs text-gray-500">S/ {item.price.toFixed(2)} c/u</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-sm font-medium text-gray-900 truncate ${isCourtesy ? 'line-through text-gray-500' : ''}`}>{item.name}</span>
+                        {isCourtesy && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-600 text-white font-bold tracking-wide shrink-0">
+                            CORTESÍA
+                          </span>
+                        )}
+                      </div>
+                      <div className={`text-xs text-gray-500 ${isCourtesy ? 'line-through' : ''}`}>S/ {(displayPriceUnit || 0).toFixed(2)} c/u</div>
                     </div>
 
                     {/* Controles de cantidad */}
@@ -245,9 +296,30 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                     </div>
 
                     {/* Total */}
-                    <div className="w-20 text-right text-sm font-semibold text-gray-900 shrink-0">
-                      S/ {item.total.toFixed(2)}
+                    <div className="w-20 text-right text-sm font-semibold shrink-0">
+                      {isCourtesy ? (
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="text-gray-400 line-through text-xs">S/ {(displayTotal || 0).toFixed(2)}</span>
+                          <span className="text-green-700">S/ 0.00</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-900">S/ {item.total.toFixed(2)}</span>
+                      )}
                     </div>
+
+                    {/* Cortesía */}
+                    <button
+                      onClick={() => handleToggleCourtesy(index, item)}
+                      disabled={isUpdating}
+                      className={`w-7 h-7 flex items-center justify-center rounded shrink-0 disabled:opacity-40 ${
+                        isCourtesy
+                          ? 'bg-green-600 text-white hover:bg-green-700'
+                          : 'text-green-600 hover:bg-green-50 hover:text-green-700'
+                      }`}
+                      title={isCourtesy ? 'Quitar cortesía' : 'Marcar como cortesía'}
+                    >
+                      <Gift className="w-3.5 h-3.5" />
+                    </button>
 
                     {/* Eliminar */}
                     <button
@@ -261,7 +333,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                   </div>
 
                   {/* Modificadores y notas debajo, en línea fina */}
-                  {(modsLabel || item.notes) && (
+                  {(modsLabel || item.notes || (isCourtesy && item.courtesyReason)) && (
                     <div className="ml-0 mt-1 space-y-0.5">
                       {modsLabel && (
                         <div className="text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block max-w-full truncate" title={modsLabel}>
@@ -271,6 +343,11 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                       {item.notes && (
                         <div className="text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded inline-block max-w-full truncate" title={item.notes}>
                           Nota: {item.notes}
+                        </div>
+                      )}
+                      {isCourtesy && item.courtesyReason && (
+                        <div className="text-xs text-green-800 bg-green-100 px-2 py-0.5 rounded inline-block max-w-full truncate" title={item.courtesyReason}>
+                          Motivo: {item.courtesyReason}
                         </div>
                       )}
                     </div>

@@ -2,6 +2,7 @@ import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
+import { getPricedModifiers } from '@/utils/modifierHelpers';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -769,6 +770,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
         }
+
+        // Modificadores con precio (los gratis solo van a cocina)
+        const pricedMods80 = getPricedModifiers(item);
+        pricedMods80.forEach((modifier) => {
+          modifier.options.forEach((option) => {
+            const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
+            const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/ ${totalAdj.toFixed(2)})\n`;
+          });
+        });
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
         // Línea 1: Nombre del producto completo
@@ -817,6 +828,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
         }
+
+        // Modificadores con precio (los gratis solo van a cocina)
+        const pricedMods58 = getPricedModifiers(item);
+        pricedMods58.forEach((modifier) => {
+          modifier.options.forEach((option) => {
+            const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
+            const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/${totalAdj.toFixed(2)})\n`;
+          });
+        });
       }
     }
 
@@ -1598,25 +1619,30 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
 
     let itemsText = headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of order.items || []) {
+      const isCourtesy = !!item.isCourtesy;
+      const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total;
       const cant = String(item.quantity).padEnd(6);
       const desc = convertSpanishText(item.name).substring(0, descWidth).padEnd(descWidth);
-      const price = `S/${item.total.toFixed(2)}`.padStart(paperWidth === 80 ? 10 : 8);
-      itemsText += `${cant}${desc}${price}\n`;
-
-      // Mostrar modificadores si existen
-      if (item.modifiers && item.modifiers.length > 0) {
-        itemsText += '  ** MODIFICADORES **\n';
-        for (const modifier of item.modifiers) {
-          itemsText += `  * ${convertSpanishText(modifier.modifierName)}:\n`;
-          for (const option of modifier.options) {
-            itemsText += `    -> ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
-            if (option.priceAdjustment > 0) {
-              itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
-            }
-            itemsText += '\n';
-          }
+      const priceStr = isCourtesy
+        ? `[CORT.]`.padStart(paperWidth === 80 ? 10 : 8)
+        : `S/${item.total.toFixed(2)}`.padStart(paperWidth === 80 ? 10 : 8);
+      itemsText += `${cant}${desc}${priceStr}\n`;
+      if (isCourtesy) {
+        itemsText += `  *** CORTESIA *** (Valor: S/${(displayTotal || 0).toFixed(2)})\n`;
+        if (item.courtesyReason) {
+          itemsText += `  Motivo: ${convertSpanishText(item.courtesyReason)}\n`;
         }
       }
+
+      // Mostrar SOLO modificadores con precio (los gratis quedan en cocina)
+      const pricedMods = getPricedModifiers(item);
+      pricedMods.forEach((modifier) => {
+        modifier.options.forEach((option) => {
+          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
+          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+          itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/${totalAdj.toFixed(2)})\n`;
+        });
+      });
 
       if (item.notes) {
         itemsText += `  * ${convertSpanishText(item.notes)}\n`;
@@ -1752,10 +1778,23 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       customerPhone: invoice.customer?.phone || invoice.customerPhone || '',
 
       // Items (con todos los campos necesarios)
-      items: (invoice.items || []).map(item => ({
+      items: (invoice.items || []).map(item => {
+        // Anexar modificadores con precio a observations para que el plugin BLE
+        // los muestre (no tiene lógica propia de modifiers).
+        const pricedMods = getPricedModifiers(item)
+        const modLines = pricedMods.flatMap((m) =>
+          m.options.map((o) => {
+            const qty = o.quantity > 1 ? `${o.quantity}x ` : ''
+            const totalAdj = (o.priceAdjustment || 0) * (o.quantity || 1)
+            return `+ ${qty}${o.optionName} (+S/ ${totalAdj.toFixed(2)})`
+          })
+        )
+        const baseObs = item.observations || ''
+        const combinedObs = [baseObs, ...modLines].filter(Boolean).join('\n')
+        return {
         name: item.name || '',
         description: item.description || '', // Descripción del producto (del catálogo)
-        observations: item.observations || '', // Observaciones adicionales (IMEI, placa, serie, etc.)
+        observations: combinedObs, // Observaciones + modificadores con precio
         code: item.code || '',
         quantity: item.quantity || 1,
         unit: item.unit || '',
@@ -1764,7 +1803,8 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
         unitPrice: item.unitPrice || item.price || 0,
         total: item.total || item.subtotal || ((item.unitPrice || item.price || 0) * (item.quantity || 1)),
         subtotal: item.subtotal || item.total,
-      })),
+        }
+      }),
 
       // Totales
       subtotal: invoice.subtotal || 0,
@@ -2363,6 +2403,16 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       if (itemObservations) {
         builder.text(`  ${itemObservations}`).newLine();
       }
+
+      // Modificadores con precio (los gratis solo van a cocina)
+      const pricedModsTk = getPricedModifiers(item);
+      pricedModsTk.forEach((modifier) => {
+        modifier.options.forEach((option) => {
+          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
+          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+          builder.text(`  + ${qty}${option.optionName} (+S/ ${totalAdj.toFixed(2)})`).newLine();
+        });
+      });
     }
 
     builder.text(format.separator).newLine()
@@ -2881,13 +2931,22 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
 
     // Items
     for (const item of order.items || []) {
+      const isCourtesy = !!item.isCourtesy;
+      const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : (item.total || (item.price * item.quantity));
       const itemTotal = item.total || (item.price * item.quantity);
       const itemDiscount = item.itemDiscount || 0;
-      const itemTotalWithDiscount = itemTotal - itemDiscount;
       builder.text(`${item.quantity}x ${item.name}`)
-        .newLine()
-        .text(`   S/ ${itemTotal.toFixed(2)}`)
         .newLine();
+      if (isCourtesy) {
+        builder.text(`   *** CORTESIA *** (Valor: S/${displayTotal.toFixed(2)})`)
+          .newLine();
+        if (item.courtesyReason) {
+          builder.text(`   Motivo: ${item.courtesyReason}`).newLine();
+        }
+      } else {
+        builder.text(`   S/ ${itemTotal.toFixed(2)}`)
+          .newLine();
+      }
 
       // Mostrar descuento por ítem si existe
       if (itemDiscount > 0) {
@@ -2895,16 +2954,15 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
           .newLine();
       }
 
-      if (item.modifiers && item.modifiers.length > 0) {
-        for (const modifier of item.modifiers) {
-          for (const option of modifier.options) {
-            if (option.priceAdjustment > 0) {
-              builder.text(`   + ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}: S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)}`)
-                .newLine();
-            }
-          }
-        }
-      }
+      // Modificadores con precio (los gratis solo van a cocina)
+      const pricedModsPB = getPricedModifiers(item);
+      pricedModsPB.forEach((modifier) => {
+        modifier.options.forEach((option) => {
+          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
+          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+          builder.text(`   + ${qty}${option.optionName}: S/${totalAdj.toFixed(2)}`).newLine();
+        });
+      });
 
       if (item.notes) {
         builder.text(`   * ${item.notes}`).newLine();

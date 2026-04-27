@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { formatPricedModifierHtmlLines } from './modifierHelpers'
 
 /**
  * Helper: imprime HTML usando iframe oculto (nativo) o window.open (web)
@@ -302,6 +303,37 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           color: #666;
         }
 
+        .item-modifier {
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
+          margin-left: ${is58mm ? '25px' : '35px'};
+          margin-top: 0;
+          color: #333;
+        }
+
+        .courtesy-badge {
+          display: inline-block;
+          font-weight: bold;
+          background: #000;
+          color: #fff;
+          padding: 1px 6px;
+          margin-left: 4px;
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '7pt' : '8pt')};
+          border-radius: 2px;
+        }
+
+        .item-row .desc.is-courtesy,
+        .item-row .price.is-courtesy {
+          text-decoration: line-through;
+          color: #555;
+        }
+
+        .item-courtesy-reason {
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
+          font-style: italic;
+          margin-left: ${is58mm ? '25px' : '35px'};
+          color: #555;
+        }
+
         .totals {
           margin-top: ${is58mm ? '2mm' : '3mm'};
           border-top: 1px dashed #000;
@@ -473,14 +505,20 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         <div class="price">IMPORTE</div>
       </div>
 
-      ${itemsToShow.map(item => `
+      ${itemsToShow.map(item => {
+        const isCourtesy = !!item.isCourtesy
+        const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
+        const courtesyClass = isCourtesy ? ' is-courtesy' : ''
+        return `
         <div class="item-row">
           <div class="qty">${item.quantity}</div>
-          <div class="desc">${(item.name || '').toUpperCase()}</div>
-          <div class="price">S/ ${item.total.toFixed(2)}</div>
+          <div class="desc${courtesyClass}">${(item.name || '').toUpperCase()}${isCourtesy ? '<span class="courtesy-badge">CORTESÍA</span>' : ''}</div>
+          <div class="price${courtesyClass}">S/ ${(displayTotal || 0).toFixed(2)}</div>
         </div>
+        ${isCourtesy && item.courtesyReason ? `<div class="item-courtesy-reason">${item.courtesyReason}</div>` : ''}
+        ${formatPricedModifierHtmlLines(item)}
         ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
-      `).join('')}
+      `}).join('')}
 
       <div class="totals">
         ${!taxConfig.igvExempt ? `
@@ -591,14 +629,20 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
         <div class="price">IMPORTE</div>
       </div>
 
-      ${itemsToShow.map(item => `
+      ${itemsToShow.map(item => {
+        const isCourtesy = !!item.isCourtesy
+        const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
+        const courtesyClass = isCourtesy ? ' is-courtesy' : ''
+        return `
         <div class="item-row">
           <div class="qty">${item.quantity}</div>
-          <div class="desc">${(item.name || '').toUpperCase()}</div>
-          <div class="price">S/ ${item.total.toFixed(2)}</div>
+          <div class="desc${courtesyClass}">${(item.name || '').toUpperCase()}${isCourtesy ? '<span class="courtesy-badge">CORTESÍA</span>' : ''}</div>
+          <div class="price${courtesyClass}">S/ ${(displayTotal || 0).toFixed(2)}</div>
         </div>
+        ${isCourtesy && item.courtesyReason ? `<div class="item-courtesy-reason">${item.courtesyReason}</div>` : ''}
+        ${formatPricedModifierHtmlLines(item)}
         ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
-      `).join('')}
+      `}).join('')}
 
       <div class="totals">
         ${!taxConfig.igvExempt ? `

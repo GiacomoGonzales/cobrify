@@ -571,6 +571,7 @@ export default function CreateQuotation() {
     newItems[index].searchTerm = finalName
     newItems[index].presentationName = presentationInfo
     newItems[index].presentationFactor = selectedPresentation?.factor || 1
+    newItems[index].imageUrl = product.imageUrl || product.image || ''
     newItems[index].laboratoryName = product.laboratoryName || ''
     newItems[index].marca = product.marca || ''
     newItems[index].genericName = product.genericName || ''
@@ -912,26 +913,30 @@ export default function CreateQuotation() {
 
     try {
       // Preparar items de la cotización
-      const items = quotationItems.map(item => ({
-        productId: item.productId || '',
-        code: products.find(p => p.id === item.productId)?.code || '',
-        name: item.name,
-        description: item.description || '',
-        quantity: parseFloat(item.quantity),
-        unitPrice: parseFloat(item.unitPrice),
-        unit: item.unit,
-        subtotal: calculateItemTotal(item),
-        laboratoryName: item.laboratoryName || '',
-        marca: item.marca || '',
-        genericName: item.genericName || '',
-        concentration: item.concentration || '',
-        presentation: item.presentation || '',
-        batchNumber: item.batchNumber || '',
-        activeIngredient: item.activeIngredient || '',
-        therapeuticAction: item.therapeuticAction || '',
-        saleCondition: item.saleCondition || '',
-        sanitaryRegistry: item.sanitaryRegistry || '',
-      }))
+      const items = quotationItems.map(item => {
+        const productCatalog = products.find(p => p.id === item.productId)
+        return {
+          productId: item.productId || '',
+          code: productCatalog?.code || '',
+          name: item.name,
+          description: item.description || '',
+          quantity: parseFloat(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+          unit: item.unit,
+          subtotal: calculateItemTotal(item),
+          imageUrl: item.imageUrl || productCatalog?.imageUrl || productCatalog?.image || '',
+          laboratoryName: item.laboratoryName || '',
+          marca: item.marca || '',
+          genericName: item.genericName || '',
+          concentration: item.concentration || '',
+          presentation: item.presentation || '',
+          batchNumber: item.batchNumber || '',
+          activeIngredient: item.activeIngredient || '',
+          therapeuticAction: item.therapeuticAction || '',
+          saleCondition: item.saleCondition || '',
+          sanitaryRegistry: item.sanitaryRegistry || '',
+        }
+      })
 
       // Calcular fecha de expiración desde la fecha de emisión
       const expiryDate = new Date(issueDate + 'T00:00:00')

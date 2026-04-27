@@ -828,15 +828,20 @@ export default function POS() {
         }
       }
 
-      // Cargar items de la mesa al carrito
+      // Cargar items de la mesa al carrito (excluyendo cortesías: no van al comprobante)
       if (tableInfo.items && tableInfo.items.length > 0) {
-        const cartItems = tableInfo.items.map(item => ({
+        const billableSourceItems = tableInfo.items.filter(item => !item.isCourtesy)
+        const cartItems = billableSourceItems.map(item => ({
           ...item,
           id: item.productId || item.id,
           // Mantener todos los datos del item de la mesa
         }))
         setCart(cartItems)
-        toast.success(`Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`)
+        const courtesyCount = tableInfo.items.length - billableSourceItems.length
+        const toastMsg = courtesyCount > 0
+          ? `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items (${courtesyCount} cortesía${courtesyCount > 1 ? 's' : ''} omitida${courtesyCount > 1 ? 's' : ''} del comprobante)`
+          : `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`
+        toast.success(toastMsg)
       }
 
       // Limpiar el state de navegación para evitar recarga

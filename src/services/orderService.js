@@ -612,6 +612,110 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
 }
 
 /**
+ * Alternar el estado "cortesía" de un ítem de la orden.
+ *
+ * Cuando se marca como cortesía:
+ *   - Se preservan price/total originales en `originalPrice` y `originalTotal` (para mostrar en precuenta)
+ *   - price y total se ponen en 0 → el total de la orden y el monto de la mesa
+ *     dejan de incluirlo automáticamente
+ *   - Se guarda `isCourtesy: true`, `courtesyReason`, `courtesyMarkedAt`, `courtesyMarkedBy`
+ *
+ * Cuando se desmarca:
+ *   - Se restaura price/total desde originalPrice/originalTotal
+ *   - Se limpian las marcas de cortesía
+ *
+ * Al final recalcula totales y actualiza el monto de la mesa (si aplica).
+ *
+ * @param {string} businessId
+ * @param {string} orderId
+ * @param {number} itemIndex
+ * @param {boolean} markAsCourtesy - true para marcar, false para desmarcar
+ * @param {object} [options]
+ * @param {string} [options.reason] - motivo de la cortesía
+ * @param {{uid:string, name:string}} [options.markedBy] - usuario que marca
+ */
+export const toggleItemCourtesy = async (businessId, orderId, itemIndex, markAsCourtesy, options = {}) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+    const orderData = orderSnap.data()
+    const items = [...(orderData.items || [])]
+    if (itemIndex < 0 || itemIndex >= items.length) {
+      return { success: false, error: 'Item inválido' }
+    }
+
+    const item = { ...items[itemIndex] }
+    if (markAsCourtesy) {
+      if (item.isCourtesy) {
+        return { success: false, error: 'El item ya está marcado como cortesía' }
+      }
+      item.originalPrice = item.price
+      item.originalTotal = item.total
+      item.price = 0
+      item.total = 0
+      item.isCourtesy = true
+      if (options.reason) item.courtesyReason = options.reason
+      item.courtesyMarkedAt = new Date()
+      if (options.markedBy) {
+        item.courtesyMarkedBy = options.markedBy.uid || null
+        item.courtesyMarkedByName = options.markedBy.name || 'Usuario'
+      }
+    } else {
+      if (!item.isCourtesy) {
+        return { success: false, error: 'El item no está marcado como cortesía' }
+      }
+      // Restaurar precios originales
+      if (item.originalPrice !== undefined) item.price = item.originalPrice
+      if (item.originalTotal !== undefined) item.total = item.originalTotal
+      delete item.originalPrice
+      delete item.originalTotal
+      delete item.isCourtesy
+      delete item.courtesyReason
+      delete item.courtesyMarkedAt
+      delete item.courtesyMarkedBy
+      delete item.courtesyMarkedByName
+    }
+    items[itemIndex] = item
+
+    // Recalcular totales (los items con isCourtesy ya tienen total=0, así que se "auto-excluyen")
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
+      : { igvRate: 18, igvExempt: false }
+
+    const total = items.reduce((sum, it) => sum + (it.total || 0), 0)
+    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
+
+    await updateDoc(orderRef, {
+      items,
+      subtotal,
+      tax,
+      total,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Actualizar monto en la mesa si aplica
+    if (orderData.tableId) {
+      try {
+        const { updateTableAmount } = await import('./tableService')
+        await updateTableAmount(businessId, orderData.tableId, total)
+      } catch (err) {
+        console.warn('No se pudo actualizar monto de la mesa:', err)
+      }
+    }
+
+    return { success: true, data: { subtotal, tax, total } }
+  } catch (error) {
+    console.error('Error al cambiar estado de cortesía:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Actualizar el estado de una orden
  */
 export const updateOrderStatus = async (businessId, orderId, newStatus, note = '', extraData = {}) => {
@@ -904,6 +1008,7 @@ export default {
   addOrderItems,
   removeOrderItem,
   updateOrderItemQuantity,
+  toggleItemCourtesy,
   updateOrderStatus,
   getOrdersByStatus,
   getOrdersByTable,

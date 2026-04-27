@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
+import { formatPricedModifierLines } from '@/utils/modifierHelpers'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -855,6 +856,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {itemObservations && (
                   <div className="item-code">{itemObservations}</div>
                 )}
+                {formatPricedModifierLines(item).map((line, lineIdx) => (
+                  <div key={`mod-${lineIdx}`} className="item-code">{line}</div>
+                ))}
               </div>
             );
           })}
