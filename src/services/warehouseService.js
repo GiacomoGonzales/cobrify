@@ -1198,6 +1198,82 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
 }
 
 /**
+ * Recalcula el stock de TODOS los productos/ingredientes recibidos comparándolos con
+ * el historial de movimientos. Aplica la misma lógica que recalculateStockFromMovements
+ * pero en lote, con concurrencia controlada y callback de progreso.
+ *
+ * @param {string} businessId
+ * @param {Array<{id:string, name?:string, isIngredient?:boolean}>} items - lista de productos/ingredientes a verificar
+ * @param {object} [options]
+ * @param {number} [options.batchSize=8] - cuántos items procesar en paralelo
+ * @param {(state:{processed:number,total:number,corrected:number,errors:number,currentName?:string})=>void} [options.onProgress]
+ * @returns {Promise<{success:boolean, totalChecked:number, totalCorrected:number, errors:number, corrections:Array, errorDetails:Array}>}
+ */
+export const bulkRecalculateStock = async (businessId, items, options = {}) => {
+  const { batchSize = 8, onProgress } = options
+  if (!Array.isArray(items) || items.length === 0) {
+    return { success: true, totalChecked: 0, totalCorrected: 0, errors: 0, corrections: [], errorDetails: [] }
+  }
+
+  const corrections = []
+  const errorDetails = []
+  let processed = 0
+  let corrected = 0
+  let errors = 0
+
+  const reportProgress = (currentName) => {
+    if (onProgress) {
+      onProgress({ processed, total: items.length, corrected, errors, currentName })
+    }
+  }
+  reportProgress()
+
+  // Procesar en lotes para no saturar Firestore
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    const results = await Promise.all(
+      batch.map(async (item) => {
+        try {
+          const result = await recalculateStockFromMovements(businessId, item.id, !!item.isIngredient)
+          return { item, result }
+        } catch (err) {
+          return { item, result: { success: false, error: err?.message || String(err) } }
+        }
+      })
+    )
+    results.forEach(({ item, result }) => {
+      processed += 1
+      if (!result.success) {
+        errors += 1
+        errorDetails.push({ id: item.id, name: item.name || item.id, error: result.error })
+      } else if (result.corrected) {
+        corrected += 1
+        corrections.push({
+          id: item.id,
+          name: item.name || item.id,
+          previousStock: result.previousStock,
+          newStock: result.stockFromMovements,
+          isIngredient: !!item.isIngredient,
+          hasVariants: !!result.hasVariants,
+          variantsCount: result.variantsCount || 0,
+          byWarehouse: result.byWarehouse || null,
+        })
+      }
+    })
+    reportProgress(batch[batch.length - 1]?.name)
+  }
+
+  return {
+    success: true,
+    totalChecked: processed,
+    totalCorrected: corrected,
+    errors,
+    corrections,
+    errorDetails,
+  }
+}
+
+/**
  * Recalcular stock general basándose en la suma de warehouseStocks
  * Útil cuando warehouseStocks es el valor correcto y stock general está desactualizado
  *
@@ -1351,6 +1427,7 @@ export default {
   // Stock Sync
   syncAllProductsStock,
   recalculateStockFromMovements,
+  bulkRecalculateStock,
   recalculateStockFromWarehouses,
   getTotalAvailableStock,
   // Inventory Counts

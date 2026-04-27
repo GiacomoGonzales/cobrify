@@ -57,11 +57,12 @@ import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import InventoryExportModal from '@/components/InventoryExportModal'
 import MassTransferModal from '@/components/MassTransferModal'
+import BulkStockCorrectionModal from '@/components/BulkStockCorrectionModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
@@ -213,6 +214,7 @@ export default function Inventory() {
   // Estado para modal de recuento de inventario
   const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
   const [showMassTransferModal, setShowMassTransferModal] = useState(false)
+  const [showBulkCorrectionModal, setShowBulkCorrectionModal] = useState(false)
   const [showCountHistory, setShowCountHistory] = useState(false)
   const [countHistory, setCountHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -1833,6 +1835,16 @@ export default function Inventory() {
           >
             <ClipboardCheck className="w-4 h-4 mr-2" />
             Recuento
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBulkCorrectionModal(true)}
+            disabled={isDemoMode}
+            title={isDemoMode ? 'No disponible en modo demo' : 'Verificar y corregir stock de todos los productos'}
+          >
+            <Wrench className="w-4 h-4 mr-2" />
+            Verificar stock
           </Button>
           <Button
             variant="outline"
@@ -4531,6 +4543,26 @@ export default function Inventory() {
           loadProducts()
           loadIngredients()
           setShowMassTransferModal(false)
+        }}
+      />
+
+      {/* Modal de Verificación y Corrección masiva de stock */}
+      <BulkStockCorrectionModal
+        isOpen={showBulkCorrectionModal}
+        onClose={() => setShowBulkCorrectionModal(false)}
+        totalItems={products.length + ingredients.length}
+        onStart={async ({ onProgress }) => {
+          const businessId = getBusinessId()
+          const items = [
+            ...products.map(p => ({ id: p.id, name: p.name, isIngredient: false })),
+            ...ingredients.map(i => ({ id: i.id, name: i.name, isIngredient: true })),
+          ]
+          return await bulkRecalculateStock(businessId, items, { batchSize: 8, onProgress })
+        }}
+        onCompleted={() => {
+          // Refrescar inventario tras correcciones
+          loadProducts()
+          loadIngredients()
         }}
       />
 
