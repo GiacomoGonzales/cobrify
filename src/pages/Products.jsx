@@ -1603,8 +1603,21 @@ export default function Products() {
             }
             // Código de barras (campo `code`) — también se actualiza en reimports
             if (product.code) updates.code = product.code
-            // Mostrar en catálogo público — el parser siempre lo setea (default true)
-            if (product.showInCatalog !== undefined) updates.showInCatalog = product.showInCatalog
+            // Visibilidad en catálogo público (parser usa `catalogVisible`)
+            if (product.catalogVisible !== undefined) updates.catalogVisible = product.catalogVisible
+            // Backward-compat: algunos sitios viejos usaban showInCatalog
+            if (product.catalogVisible !== undefined) updates.showInCatalog = product.catalogVisible
+            // Precio comparación (catálogo)
+            if (product.catalogComparePrice !== undefined) updates.catalogComparePrice = product.catalogComparePrice
+            // Inventario avanzado
+            if (product.allowDecimalQuantity !== undefined) updates.allowDecimalQuantity = product.allowDecimalQuantity
+            if (product.trackExpiration !== undefined) updates.trackExpiration = product.trackExpiration
+            if (product.expirationDate) updates.expirationDate = product.expirationDate
+            if (product.trackSerials !== undefined) updates.trackSerials = product.trackSerials
+            // Imagen y peso
+            if (product.imageUrl) updates.imageUrl = product.imageUrl
+            if (product.imageUrls && product.imageUrls.length) updates.imageUrls = product.imageUrls
+            if (product.weight !== null && product.weight !== undefined) updates.weight = product.weight
 
             // VARIANTES: mergear (permite usar varias filas con mismo nombre para
             //            ir agregando variantes de un producto con muchas combinaciones).
@@ -1613,7 +1626,14 @@ export default function Products() {
               const existingVariants = existingProduct.variants || []
               const skuKey = (s) => String(s || '').toLowerCase().trim()
               const existingSkus = new Set(existingVariants.map(v => skuKey(v.sku)))
-              const newVariants = product.variants.filter(v => v.sku && !existingSkus.has(skuKey(v.sku)))
+              // Las variantes nuevas necesitan warehouseStocks o no aparecen en la vista por almacén
+              const newVariantsRaw = product.variants.filter(v => v.sku && !existingSkus.has(skuKey(v.sku)))
+              const newVariants = newVariantsRaw.map(v => ({
+                ...v,
+                warehouseStocks: targetWarehouse
+                  ? [{ warehouseId: targetWarehouse.id, stock: parseInt(v.stock) || 0, minStock: 0 }]
+                  : (v.warehouseStocks || [])
+              }))
               if (newVariants.length > 0) {
                 const mergedVariants = [...existingVariants, ...newVariants]
                 const mergedAttrs = Array.from(new Set([
@@ -1626,6 +1646,19 @@ export default function Products() {
                 // Si hay variantes, el stock total = suma de stocks de variantes
                 const totalVariantStock = mergedVariants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
                 updates.stock = totalVariantStock
+                // Asegurar que el producto tenga el warehouseStocks "padre" en el almacén destino
+                if (targetWarehouse) {
+                  const currentWS = existingProduct.warehouseStocks || []
+                  const idx = currentWS.findIndex(ws => ws.warehouseId === targetWarehouse.id)
+                  let newWS
+                  if (idx >= 0) {
+                    newWS = [...currentWS]
+                    newWS[idx] = { ...newWS[idx], stock: totalVariantStock }
+                  } else {
+                    newWS = [...currentWS, { warehouseId: targetWarehouse.id, stock: totalVariantStock, minStock: 0 }]
+                  }
+                  updates.warehouseStocks = newWS
+                }
               }
             }
 
@@ -1676,21 +1709,45 @@ export default function Products() {
 
               if (updateResult.success) {
                 updatedCount++
-                // Registrar movimiento de stock si cambió
-                if (updates.stock !== undefined && product.trackStock && targetWarehouse) {
-                  const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
-                  if (stockValue > 0) {
-                    await createStockMovement(getBusinessId(), {
-                      productId: existingProduct.id,
-                      warehouseId: targetWarehouse.id,
-                      type: 'entry',
-                      quantity: stockValue,
-                      reason: 'Stock inicial',
-                      referenceType: 'initial_stock',
-                      referenceId: existingProduct.id,
-                      userId: user?.uid,
-                      notes: 'Ingreso de stock por importación masiva'
-                    })
+                // Registrar movimiento de stock si cambió.
+                // Si el producto tiene variantes y vinieron nuevas variantes, creamos un
+                // movimiento por variante NUEVA (no por las que ya existían).
+                if (product.trackStock && targetWarehouse) {
+                  if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+                    const existingSkus = new Set((existingProduct.variants || []).map(v => String(v.sku || '').toLowerCase().trim()))
+                    // Las "nuevas" son las que no estaban antes del merge
+                    const variantsBeforeMerge = (updates.variants || []).filter(v => !existingSkus.has(String(v.sku || '').toLowerCase().trim()))
+                    for (const v of variantsBeforeMerge) {
+                      const qty = parseInt(v.stock) || 0
+                      if (qty <= 0) continue
+                      await createStockMovement(getBusinessId(), {
+                        productId: existingProduct.id,
+                        variantSku: v.sku,
+                        warehouseId: targetWarehouse.id,
+                        type: 'entry',
+                        quantity: qty,
+                        reason: 'Stock inicial',
+                        referenceType: 'initial_stock',
+                        referenceId: existingProduct.id,
+                        userId: user?.uid,
+                        notes: `Stock inicial variante ${v.sku} por importación masiva`
+                      })
+                    }
+                  } else if (updates.stock !== undefined) {
+                    const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
+                    if (stockValue > 0) {
+                      await createStockMovement(getBusinessId(), {
+                        productId: existingProduct.id,
+                        warehouseId: targetWarehouse.id,
+                        type: 'entry',
+                        quantity: stockValue,
+                        reason: 'Stock inicial',
+                        referenceType: 'initial_stock',
+                        referenceId: existingProduct.id,
+                        userId: user?.uid,
+                        notes: 'Ingreso de stock por importación masiva'
+                      })
+                    }
                   }
                 }
                 // Actualizar el producto en el mapa para siguientes iteraciones
@@ -1719,6 +1776,19 @@ export default function Products() {
                   minStock: 0
                 }]
                 product.stock = stockValue
+
+                // CRÍTICO: cada variante necesita su propio warehouseStocks o no aparece
+                // en la vista por almacén del inventario.
+                if (product.hasVariants && Array.isArray(product.variants)) {
+                  product.variants = product.variants.map(v => ({
+                    ...v,
+                    warehouseStocks: [{
+                      warehouseId: targetWarehouse.id,
+                      stock: parseInt(v.stock) || 0,
+                      minStock: 0
+                    }]
+                  }))
+                }
               } else {
                 product.warehouseStocks = []
                 product.stock = stockValue
@@ -1734,19 +1804,40 @@ export default function Products() {
 
             if (result.success) {
               successCount++
-              // Registrar movimiento de stock inicial
-              if (product.trackStock && product.stock > 0 && targetWarehouse) {
-                await createStockMovement(getBusinessId(), {
-                  productId: result.id,
-                  warehouseId: targetWarehouse.id,
-                  type: 'entry',
-                  quantity: product.stock,
-                  reason: 'Stock inicial',
-                  referenceType: 'initial_stock',
-                  referenceId: result.id,
-                  userId: user?.uid,
-                  notes: 'Ingreso de stock inicial por importación masiva'
-                })
+              // Registrar movimiento de stock inicial.
+              // Si el producto tiene variantes, creamos UN movimiento por variante con su variantSku
+              // (necesario para que recalculateStockFromMovements pueda asignar stock por variante).
+              if (product.trackStock && targetWarehouse) {
+                if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+                  for (const v of product.variants) {
+                    const qty = parseInt(v.stock) || 0
+                    if (qty <= 0) continue
+                    await createStockMovement(getBusinessId(), {
+                      productId: result.id,
+                      variantSku: v.sku,
+                      warehouseId: targetWarehouse.id,
+                      type: 'entry',
+                      quantity: qty,
+                      reason: 'Stock inicial',
+                      referenceType: 'initial_stock',
+                      referenceId: result.id,
+                      userId: user?.uid,
+                      notes: `Stock inicial variante ${v.sku} por importación masiva`
+                    })
+                  }
+                } else if (product.stock > 0) {
+                  await createStockMovement(getBusinessId(), {
+                    productId: result.id,
+                    warehouseId: targetWarehouse.id,
+                    type: 'entry',
+                    quantity: product.stock,
+                    reason: 'Stock inicial',
+                    referenceType: 'initial_stock',
+                    referenceId: result.id,
+                    userId: user?.uid,
+                    notes: 'Ingreso de stock inicial por importación masiva'
+                  })
+                }
               }
               // Agregar al mapa para detectar duplicados en el mismo archivo
               const createdProduct = { ...product, id: result.id }

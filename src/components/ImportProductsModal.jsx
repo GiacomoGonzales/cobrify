@@ -106,6 +106,36 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     reader.readAsArrayBuffer(file)
   }
 
+  // Helpers para parseo
+  const parseBool = (val, defaultVal = false) => {
+    if (val === undefined || val === null || val === '') return defaultVal
+    const s = String(val).toLowerCase().trim()
+    if (['si', 'sí', 'yes', 'y', '1', 'true', 'verdadero'].includes(s)) return true
+    if (['no', 'n', '0', 'false', 'falso'].includes(s)) return false
+    return defaultVal
+  }
+
+  const parseExcelDate = (val) => {
+    if (val === undefined || val === null || val === '') return null
+    if (val instanceof Date) return val
+    if (typeof val === 'number') {
+      // Excel almacena fechas como número de días desde 1900-01-01.
+      // 25569 = 1970-01-01. Conversión estándar XLSX.
+      return new Date(Math.round((val - 25569) * 86400 * 1000))
+    }
+    const s = String(val).trim()
+    // Acepta YYYY-MM-DD, DD/MM/YYYY, etc.
+    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+    if (isoMatch) return new Date(`${s}T00:00:00`)
+    const dmyMatch = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s)
+    if (dmyMatch) {
+      const [, d, m, y] = dmyMatch
+      return new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T00:00:00`)
+    }
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? null : d
+  }
+
   const validateAndMapProducts = (data) => {
     const validProducts = []
     const errors = []
@@ -113,14 +143,28 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     data.forEach((row, index) => {
       const rowNum = index + 2 // +2 porque Excel empieza en 1 y tiene header
 
-      // Validar campos requeridos (solo nombre y precio son obligatorios)
+      // Validar campos requeridos (solo nombre es obligatorio).
+      // El precio es obligatorio SOLO si la fila no tiene variantes (en filas de variantes
+      // el precio va por variante: variante_precio / variante1_precio).
       if (!row.nombre && !row.Nombre && !row.NOMBRE && !row.name && !row.Name && !row.NAME) {
         errors.push(`Fila ${rowNum}: Falta el nombre del producto`)
         return
       }
 
-      if (!row.precio && !row.Precio && !row.PRECIO && !row.price && !row.Price && !row.PRICE) {
-        errors.push(`Fila ${rowNum}: Falta el precio del producto`)
+      const hasRowPrice = !!(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE)
+      // Detectar si la fila lleva alguna variante con precio válido
+      let hasVariantPrice = false
+      const unnumberedPrice = parseFloat(row.variante_precio || row.Variante_Precio || row.VARIANTE_PRECIO || 0)
+      if (unnumberedPrice > 0) hasVariantPrice = true
+      if (!hasVariantPrice) {
+        for (let vi = 1; vi <= 50; vi++) {
+          const vp = parseFloat(row[`variante${vi}_precio`] || row[`Variante${vi}_Precio`] || row[`VARIANTE${vi}_PRECIO`] || 0)
+          if (vp > 0) { hasVariantPrice = true; break }
+        }
+      }
+
+      if (!hasRowPrice && !hasVariantPrice) {
+        errors.push(`Fila ${rowNum}: Falta el precio (a nivel de producto o de variante)`)
         return
       }
 
@@ -143,6 +187,51 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       // Código de barras (campo existente, ahora opcional)
       const code = String(row.codigo_barras || row.Codigo_Barras || row.CODIGO_BARRAS || row.codigoBarras || row.CodigoBarras || row.barcode || row.Barcode || row.BARCODE || row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim()
 
+      // Campos avanzados de inventario (parseados antes para poder usarlos en parsing de stock)
+      const allowDecimalQuantity = parseBool(
+        row.permitir_decimales || row.Permitir_Decimales || row.PERMITIR_DECIMALES ||
+        row.permitirDecimales || row.allow_decimal || row.allowDecimal || row.allowDecimalQuantity,
+        false
+      )
+      const trackExpiration = parseBool(
+        row.control_vencimiento || row.Control_Vencimiento || row.CONTROL_VENCIMIENTO ||
+        row.controlVencimiento || row.track_expiration || row.trackExpiration,
+        false
+      )
+      const trackSerials = parseBool(
+        row.control_series || row.Control_Series || row.CONTROL_SERIES ||
+        row.controlSeries || row.track_serials || row.trackSerials,
+        false
+      )
+      const expirationDate = trackExpiration ? parseExcelDate(
+        row.fecha_vencimiento || row.Fecha_Vencimiento || row.FECHA_VENCIMIENTO ||
+        row.fechaVencimiento || row.expiration_date || row.expirationDate
+      ) : null
+      const catalogVisible = parseBool(
+        row.mostrar_en_catalogo || row.Mostrar_En_Catalogo || row.MOSTRAR_EN_CATALOGO ||
+        row.mostrarEnCatalogo || row.catalogVisible || row.showInCatalog || row.show_in_catalog,
+        true // Por defecto sí mostrar
+      )
+      const catalogComparePriceRaw = row.precio_comparacion || row.Precio_Comparacion || row.PRECIO_COMPARACION ||
+        row.precioComparacion || row.compare_price || row.catalogComparePrice
+      const catalogComparePrice = catalogComparePriceRaw !== undefined && catalogComparePriceRaw !== '' && catalogComparePriceRaw !== null
+        ? parseFloat(catalogComparePriceRaw) || null
+        : null
+      const imageUrl = String(
+        row.imagen_url || row.Imagen_Url || row.IMAGEN_URL || row.imagenUrl ||
+        row.image_url || row.Image_Url || row.IMAGE_URL || row.imageUrl || ''
+      ).trim() || null
+      const weightRaw = row.peso || row.Peso || row.PESO || row.weight || row.Weight || row.WEIGHT
+      const weight = weightRaw !== undefined && weightRaw !== '' && weightRaw !== null
+        ? parseFloat(weightRaw) || null
+        : null
+
+      // Stock: si permite decimales, parseFloat; si no, parseInt
+      const stockRaw = row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO
+      const stockValue = stockRaw !== undefined && stockRaw !== '' && stockRaw !== null
+        ? (allowDecimalQuantity ? parseFloat(stockRaw) : parseInt(stockRaw))
+        : null
+
       const product = {
         sku: sku,
         code: code,
@@ -153,11 +242,23 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
-        stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
+        stock: stockValue,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
         subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
         trackStock: trackStock,
+        // Campos de inventario avanzado
+        allowDecimalQuantity,
+        trackExpiration,
+        expirationDate,
+        trackSerials,
+        // Catálogo público
+        catalogVisible,
+        catalogComparePrice: catalogVisible ? catalogComparePrice : null,
+        // Imagen y peso
+        imageUrl,
+        imageUrls: imageUrl ? [imageUrl] : [],
+        weight,
         // Variantes (3 formatos soportados):
         //   A) variante1_atributo .. variante50_atributo  (multi en una fila, hasta 50)
         //   B) variante_atributo / variante_valor / variante_sku / variante_precio / variante_stock
@@ -231,10 +332,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           }
 
           if (variants.length > 0) {
+            // Cuando el producto tiene variantes NO usamos SKU/código padre:
+            // cada variante tiene su propio SKU único. El SKU del padre solo se
+            // usaba como base para el autogen (eso ya se aplicó arriba).
             return {
               hasVariants: true,
               variantAttributes: [...attributeNames],
               variants,
+              sku: '',
+              code: '',
             }
           }
           return { hasVariants: false, variantAttributes: [], variants: [] }
@@ -250,13 +356,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         saleCondition: String(row.condicion_venta || row.Condicion_Venta || row.CONDICION_VENTA || row.condicionVenta || row.sale_condition || '').trim().toLowerCase() || null,
         sanitaryRegistry: String(row.registro_sanitario || row.Registro_Sanitario || row.REGISTRO_SANITARIO || row.registroSanitario || row.sanitary_registry || '').trim() || null,
         location: String(row.ubicacion || row.Ubicacion || row.UBICACION || row.location || '').trim() || null,
-        // Mostrar en catálogo público
-        showInCatalog: (() => {
-          const rawValue = String(row.mostrar_en_catalogo || row.Mostrar_En_Catalogo || row.MOSTRAR_EN_CATALOGO || row.mostrarEnCatalogo || row.showInCatalog || row.ShowInCatalog || row.SHOW_IN_CATALOG || '').trim().toUpperCase()
-          if (rawValue === 'SI' || rawValue === 'SÍ' || rawValue === 'YES' || rawValue === '1' || rawValue === 'TRUE') return true
-          if (rawValue === 'NO' || rawValue === '0' || rawValue === 'FALSE') return false
-          return true // Por defecto SÍ mostrar en catálogo
-        })(),
         // Afectación IGV: GRAVADO (10), EXONERADO (20), INAFECTO (30)
         taxAffectation: (() => {
           const rawValue = String(row.afectacion_igv || row.Afectacion_Igv || row.AFECTACION_IGV || row.afectacionIgv || row.tax_affectation || row.taxAffectation || '').trim().toUpperCase()
@@ -513,159 +612,41 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     } else {
       // Plantilla estándar para retail
       template = [
+        // ===================================================================
+        // PLANTILLA RETAIL: cada ejemplo demuestra un caso de uso REAL.
+        // El orden de columnas viene dado por las claves del primer objeto.
+        // Las columnas vacías en filas posteriores muestran qué se omite.
+        // ===================================================================
+
+        // 1. PRODUCTO RETAIL CLÁSICO — barcode, costo/precio, multi-tier
+        //    de precio (mayorista/distribuidor), stock, categoría.
         {
-          sku: 'SKU-001',
-          codigo_barras: '7501234567890',
-          nombre: 'Producto con Stock',
-          descripcion: 'Descripción del producto',
-          marca: 'Marca Ejemplo',
-          ubicacion: 'P1-3A-4R',
-          costo: 8.50,
-          precio: 10.50,
-          precio2: 9.50,
-          precio3: 8.80,
-          precio4: 8.00,
-          stock: 100,
-          trackStock: 'SI',
-          mostrar_en_catalogo: 'SI',
-          unidad: 'UNIDAD',
-          categoria: 'Categoría Ejemplo',
-          subcategoria: 'Subcategoría Ejemplo',
-          afectacion_igv: 'GRAVADO',
-          presentacion1_nombre: 'Pack x3',
-          presentacion1_cantidad: 3,
-          presentacion1_precio: 28.00,
-          presentacion2_nombre: 'Caja x6',
-          presentacion2_cantidad: 6,
-          presentacion2_precio: 52.00,
-          presentacion3_nombre: '',
-          presentacion3_cantidad: '',
-          presentacion3_precio: '',
-          variante1_atributo: '',
-          variante1_valor: '',
-          variante1_sku: '',
-          variante1_precio: '',
-          variante1_stock: '',
-          variante2_atributo: '',
-          variante2_valor: '',
-          variante2_sku: '',
-          variante2_precio: '',
-          variante2_stock: '',
-          variante3_atributo: '',
-          variante3_valor: '',
-          variante3_sku: '',
-          variante3_precio: '',
-          variante3_stock: '',
-        },
-        {
-          sku: 'SKU-002',
-          codigo_barras: '',
-          nombre: 'Servicio (Sin Stock)',
-          descripcion: 'No controla inventario',
-          marca: '',
-          ubicacion: '',
-          costo: 20.00,
-          precio: 25.00,
-          precio2: '',
-          precio3: '',
-          precio4: '',
-          stock: '',
-          trackStock: 'NO',
-          mostrar_en_catalogo: 'NO',
-          unidad: 'SERVICIO',
-          categoria: 'Servicios',
-          subcategoria: '',
-          afectacion_igv: 'EXONERADO',
-          presentacion1_nombre: '',
-          presentacion1_cantidad: '',
-          presentacion1_precio: '',
-          presentacion2_nombre: '',
-          presentacion2_cantidad: '',
-          presentacion2_precio: '',
-          presentacion3_nombre: '',
-          presentacion3_cantidad: '',
-          presentacion3_precio: '',
-          variante1_atributo: '',
-          variante1_valor: '',
-          variante1_sku: '',
-          variante1_precio: '',
-          variante1_stock: '',
-          variante2_atributo: '',
-          variante2_valor: '',
-          variante2_sku: '',
-          variante2_precio: '',
-          variante2_stock: '',
-          variante3_atributo: '',
-          variante3_valor: '',
-          variante3_sku: '',
-          variante3_precio: '',
-          variante3_stock: '',
-        },
-        {
-          sku: '',
-          codigo_barras: '7509876543210',
-          nombre: 'Producto Solo con Barras',
-          descripcion: 'Sin código interno',
-          marca: 'Otra Marca',
-          ubicacion: 'P2-1B-2R',
-          costo: 12.00,
-          precio: 15.00,
-          precio2: 13.50,
-          precio3: 12.00,
-          precio4: 11.00,
-          stock: 50,
-          trackStock: 'SI',
-          mostrar_en_catalogo: 'SI',
-          unidad: 'UNIDAD',
-          categoria: '',
-          subcategoria: '',
-          afectacion_igv: 'INAFECTO',
-          presentacion1_nombre: 'Display x12',
-          presentacion1_cantidad: 12,
-          presentacion1_precio: 150.00,
-          presentacion2_nombre: '',
-          presentacion2_cantidad: '',
-          presentacion2_precio: '',
-          presentacion3_nombre: '',
-          presentacion3_cantidad: '',
-          presentacion3_precio: '',
-          variante1_atributo: '',
-          variante1_valor: '',
-          variante1_sku: '',
-          variante1_precio: '',
-          variante1_stock: '',
-          variante2_atributo: '',
-          variante2_valor: '',
-          variante2_sku: '',
-          variante2_precio: '',
-          variante2_stock: '',
-          variante3_atributo: '',
-          variante3_valor: '',
-          variante3_sku: '',
-          variante3_precio: '',
-          variante3_stock: '',
-        },
-        // Ejemplo 1 — Producto con UN eje (talla S/M/L) en formato compacto:
-        // todas las variantes en una sola fila usando variante1, variante2, variante3.
-        {
-          sku: '',
-          codigo_barras: '',
-          nombre: 'Polo Básico (1 eje)',
-          descripcion: 'Producto con tallas',
-          marca: 'Mi Marca',
-          ubicacion: '',
-          costo: 20.00,
-          precio: '',
-          precio2: '',
-          precio3: '',
-          precio4: '',
-          stock: '',
-          trackStock: 'SI',
-          mostrar_en_catalogo: 'SI',
-          unidad: 'UNIDAD',
+          sku: 'POLERON-CLASSIC',
+          codigo_barras: '7501234567001',
+          nombre: 'Polerón Classic con Capucha',
+          descripcion: 'Polerón unisex de algodón felpado, talla única',
+          marca: 'StreetWear',
           categoria: 'Ropa',
-          subcategoria: '',
+          subcategoria: 'Poleras',
+          unidad: 'UNIDAD',
+          costo: 35.00,
+          precio: 65.00,
+          precio2: 60.00,           // precio mayorista
+          precio3: 55.00,           // precio distribuidor
+          precio4: '',
+          stock: 25,
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
+          mostrar_en_catalogo: 'SI',
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: 0.45,
+          ubicacion: 'A-2-3',
           afectacion_igv: 'GRAVADO',
+          tasa_igv: 18,
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
@@ -675,80 +656,291 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
-          variante1_atributo: 'talla',
-          variante1_valor: 'S',
-          variante1_sku: 'POLO-S',
-          variante1_precio: 35.00,
-          variante1_stock: 10,
-          variante2_atributo: 'talla',
-          variante2_valor: 'M',
-          variante2_sku: 'POLO-M',
-          variante2_precio: 35.00,
-          variante2_stock: 15,
-          variante3_atributo: 'talla',
-          variante3_valor: 'L',
-          variante3_sku: 'POLO-L',
-          variante3_precio: 40.00,
-          variante3_stock: 20,
+          variante1_atributo: '',
+          variante1_valor: '',
+          variante1_sku: '',
+          variante1_precio: '',
+          variante1_stock: '',
           variante_atributo: '',
           variante_valor: '',
           variante_sku: '',
           variante_precio: '',
           variante_stock: '',
         },
-        // Ejemplo 2 — Producto con DOS ejes (talla × color) usando MÚLTIPLES FILAS
-        // con el mismo nombre. Cada fila aporta una variante. Los atributos y valores
-        // se separan por coma. El SKU puedes dejarlo en blanco y el sistema lo genera
-        // automáticamente como POLO-S-ROJO, POLO-M-AZUL, etc.
-        ...['S,rojo', 'M,rojo', 'L,rojo', 'S,azul', 'M,azul', 'L,azul'].map((combo, idx) => ({
-          sku: idx === 0 ? 'POLO2EJES' : '',  // Solo la primera fila lleva el SKU "padre"
+
+        // 2. SERVICIO SIN STOCK — trackStock=NO, no aparece en inventario.
+        //    Útil para "Consultoría", "Instalación", "Asesoría legal", etc.
+        {
+          sku: 'SERV-CONSULTORIA-1H',
           codigo_barras: '',
-          nombre: 'Polo Premium (2 ejes)',
-          descripcion: idx === 0 ? 'Producto con talla y color' : '',
-          marca: idx === 0 ? 'Mi Marca' : '',
-          ubicacion: '',
-          costo: idx === 0 ? 25.00 : '',
-          precio: '',
+          nombre: 'Consultoría 1 hora',
+          descripcion: 'Sesión de asesoría individual (no requiere inventario)',
+          marca: '',
+          categoria: 'Servicios',
+          subcategoria: '',
+          unidad: 'HORA',
+          costo: '',
+          precio: 150.00,
           precio2: '',
           precio3: '',
           precio4: '',
           stock: '',
+          trackStock: 'NO',          // NO controla inventario
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
+          mostrar_en_catalogo: 'NO',  // servicio interno, no en catálogo
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: '',
+          ubicacion: '',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+
+        // 3. VENTA POR PESO/VOLUMEN — permitir_decimales=SI permite vender 2.5 litros, 0.75 kg.
+        //    Stock puede ir con decimales. Unidad típica: LITRO, KG, METRO.
+        {
+          sku: 'ACEITE-OLIVA-1L',
+          codigo_barras: '7501234567003',
+          nombre: 'Aceite de Oliva Extra Virgen (a granel)',
+          descripcion: 'Venta por litros desde bidón industrial',
+          marca: 'Italia',
+          categoria: 'Comestibles',
+          subcategoria: 'Aceites',
+          unidad: 'LITRO',
+          costo: 28.00,
+          precio: 45.00,
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: 50.5,                // 50 litros y medio
           trackStock: 'SI',
+          permitir_decimales: 'SI',   // CLAVE: permite cantidades fraccionarias
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
           mostrar_en_catalogo: 'SI',
-          unidad: 'UNIDAD',
-          categoria: idx === 0 ? 'Ropa' : '',
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: '',
+          ubicacion: 'B-1-2',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+
+        // 4. PERECEDERO CON FECHA DE VENCIMIENTO — control_vencimiento=SI obliga a registrar fecha.
+        //    Útil para alimentos, cosméticos, medicamentos. La fecha va en formato YYYY-MM-DD.
+        {
+          sku: 'YOGURT-NAT-1L',
+          codigo_barras: '7501234567004',
+          nombre: 'Yogurt Natural Bidón 1L',
+          descripcion: 'Yogurt griego sin azúcar, conservar refrigerado',
+          marca: 'Lácteos del Valle',
+          categoria: 'Lácteos',
           subcategoria: '',
-          afectacion_igv: idx === 0 ? 'GRAVADO' : '',
-          presentacion1_nombre: '',
-          presentacion1_cantidad: '',
-          presentacion1_precio: '',
-          presentacion2_nombre: '',
-          presentacion2_cantidad: '',
-          presentacion2_precio: '',
+          unidad: 'UNIDAD',
+          costo: 8.00,
+          precio: 14.00,
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: 30,
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'SI',          // CLAVE: activa control de vencimiento
+          fecha_vencimiento: '2026-08-30',    // formato YYYY-MM-DD
+          control_series: 'NO',
+          mostrar_en_catalogo: 'SI',
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: 1.05,
+          ubicacion: 'Refri-1',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+
+        // 5. PRODUCTO CON CONTROL DE SERIE — control_series=SI te permitirá
+        //    registrar números de serie individuales al ingresar/vender (electrónica, equipos).
+        {
+          sku: 'LAPTOP-PRO-15',
+          codigo_barras: '7501234567005',
+          nombre: 'Laptop Pro 15"',
+          descripcion: 'Laptop profesional, 16GB RAM, SSD 512GB',
+          marca: 'TechBrand',
+          categoria: 'Electrónica',
+          subcategoria: 'Laptops',
+          unidad: 'UNIDAD',
+          costo: 2400.00,
+          precio: 3200.00,
+          precio2: 3000.00,
+          precio3: '',
+          precio4: '',
+          stock: 5,
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'SI',         // CLAVE: pedirá serial al ingresar/vender
+          mostrar_en_catalogo: 'SI',
+          precio_comparacion: 3500.00,  // se ve "antes 3500" tachado en catálogo
+          imagen_url: '',
+          peso: 1.85,
+          ubicacion: 'Vitrina-1',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+
+        // 6. PRODUCTO CON IMAGEN Y PRESENTACIONES (caja, six-pack, individual).
+        //    presentacionX_* permite vender el mismo producto en múltiples formatos
+        //    a precios distintos (cada presentación descuenta su factor del stock).
+        {
+          sku: 'GASEOSA-COLA-500',
+          codigo_barras: '7501234567006',
+          nombre: 'Gaseosa Cola 500ml',
+          descripcion: 'Botella plástica, sabor cola',
+          marca: 'RefrescoSA',
+          categoria: 'Bebidas',
+          subcategoria: 'Gaseosas',
+          unidad: 'UNIDAD',
+          costo: 1.50,
+          precio: 3.00,                       // precio por unidad
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: 240,                          // 240 botellas individuales
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
+          mostrar_en_catalogo: 'SI',
+          precio_comparacion: '',
+          imagen_url: 'https://ejemplo.com/imagenes/gaseosa-cola-500.jpg',  // opcional
+          peso: 0.55,
+          ubicacion: 'B-3-1',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          // 3 presentaciones: unitaria (precio principal), six-pack y caja
+          presentacion1_nombre: 'Six Pack',
+          presentacion1_cantidad: 6,
+          presentacion1_precio: 16.00,
+          presentacion2_nombre: 'Caja x24',
+          presentacion2_cantidad: 24,
+          presentacion2_precio: 60.00,
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
-          variante1_atributo: '',
-          variante1_valor: '',
-          variante1_sku: '',
-          variante1_precio: '',
-          variante1_stock: '',
-          variante2_atributo: '',
-          variante2_valor: '',
-          variante2_sku: '',
-          variante2_precio: '',
-          variante2_stock: '',
-          variante3_atributo: '',
-          variante3_valor: '',
-          variante3_sku: '',
-          variante3_precio: '',
-          variante3_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+
+        // 7. PRODUCTO CON UN SOLO EJE DE VARIANTES (sólo tallas) — formato compacto:
+        //    todas las variantes en UNA sola fila usando variante1_*, variante2_*, etc.
+        //    NO se llena sku/codigo_barras/precio del padre (cada variante tiene su SKU).
+        {
+          sku: '',
+          codigo_barras: '',
+          nombre: 'Polo Básico Algodón',
+          descripcion: 'Polo unisex de algodón pima — 3 tallas',
+          marca: 'Local',
+          categoria: 'Ropa',
+          subcategoria: 'Polos',
+          unidad: 'UNIDAD',
+          costo: 18.00,
+          precio: '',                  // sin precio padre — el precio va por variante
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: '',                   // sin stock padre — va por variante
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
+          mostrar_en_catalogo: 'SI',
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: '',
+          ubicacion: '',
+          afectacion_igv: 'GRAVADO',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          // 3 variantes en columnas numeradas
+          variante1_atributo: 'talla',
+          variante1_valor: 'S',
+          variante1_sku: 'POLO-BAS-S',
+          variante1_precio: 32.00,
+          variante1_stock: 12,
+          variante_atributo: '', variante_valor: '', variante_sku: '', variante_precio: '', variante_stock: '',
+        },
+        // (continúan las otras tallas del Polo Básico, en columnas variante2 y variante3
+        // — se podría haber puesto todo en la fila anterior pero las muestro abajo en el
+        // formato multi-fila para enseñar AMBAS opciones)
+
+        // 8-13. PRODUCTO CON DOS EJES DE VARIANTES (talla × color) — formato MULTI-FILA:
+        //       Una fila por cada combinación de variantes, todas con el MISMO nombre.
+        //       En cada fila, variante_atributo y variante_valor llevan los dos atributos
+        //       separados por coma. SKU se autogenera si lo dejas vacío.
+        ...['S,negro', 'M,negro', 'L,negro', 'S,blanco', 'M,blanco', 'L,blanco'].map((combo, idx) => ({
+          sku: '',                    // sin SKU padre cuando hay variantes
+          codigo_barras: '',
+          nombre: 'Polo Deportivo Dry-Fit',
+          descripcion: idx === 0 ? 'Polo deportivo dry-fit, S a L en negro o blanco' : '',
+          marca: idx === 0 ? 'SportPro' : '',
+          categoria: idx === 0 ? 'Ropa' : '',
+          subcategoria: idx === 0 ? 'Polos Deportivos' : '',
+          unidad: 'UNIDAD',
+          costo: idx === 0 ? 22.00 : '',
+          precio: '',                  // precio va por variante
+          precio2: '', precio3: '', precio4: '',
+          stock: '',
+          trackStock: 'SI',
+          permitir_decimales: 'NO',
+          control_vencimiento: 'NO',
+          fecha_vencimiento: '',
+          control_series: 'NO',
+          mostrar_en_catalogo: idx === 0 ? 'SI' : '',
+          precio_comparacion: '',
+          imagen_url: '',
+          peso: '',
+          ubicacion: '',
+          afectacion_igv: idx === 0 ? 'GRAVADO' : '',
+          tasa_igv: '',
+          presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
+          presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
+          presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_precio: '', variante1_stock: '',
+          // Variante por fila, multi-atributo separado por coma:
           variante_atributo: 'talla,color',
-          variante_valor: combo,
-          variante_sku: '',  // se autogenera (POLO2EJES-S-ROJO, etc.)
+          variante_valor: combo,                 // ej: "S,negro"
+          variante_sku: '',                      // se autogenera (POLO-DEPORTIVO-DRY-FIT-S-NEGRO, etc.)
           variante_precio: 45.00,
           variante_stock: 8,
-        }))
+        })),
       ]
     }
 
