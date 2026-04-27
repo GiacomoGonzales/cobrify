@@ -158,26 +158,78 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
         subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
         trackStock: trackStock,
-        // Variantes (hasta 5)
+        // Variantes (3 formatos soportados):
+        //   A) variante1_atributo .. variante50_atributo  (multi en una fila, hasta 50)
+        //   B) variante_atributo / variante_valor / variante_sku / variante_precio / variante_stock
+        //      (UNA variante por fila — pensado para usar varias filas con mismo "nombre")
+        //   C) En `atributo` y `valor` se aceptan listas separadas por coma para multi-atributo
+        //      (ej. atributo="talla,color", valor="S,rojo" → variante con dos atributos)
+        // SKU autogenerado si la celda viene vacía: BASE-VAL1-VAL2 slugificado.
         ...(() => {
           const variants = []
           const attributeNames = new Set()
-          for (let vi = 1; vi <= 5; vi++) {
-            const atributo = String(row[`variante${vi}_atributo`] || row[`Variante${vi}_Atributo`] || row[`VARIANTE${vi}_ATRIBUTO`] || '').trim()
-            const valor = String(row[`variante${vi}_valor`] || row[`Variante${vi}_Valor`] || row[`VARIANTE${vi}_VALOR`] || '').trim()
-            const sku = String(row[`variante${vi}_sku`] || row[`Variante${vi}_Sku`] || row[`VARIANTE${vi}_SKU`] || '').trim()
+
+          const slug = (s) => String(s || '')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+          const addVariant = (atributoRaw, valorRaw, skuRaw, precio, stockRaw) => {
+            const atributo = String(atributoRaw || '').trim()
+            const valor = String(valorRaw || '').trim()
+            const sku = String(skuRaw || '').trim()
+            if (!atributo || !valor || !(precio > 0)) return
+
+            // Multi-atributo por coma
+            const attrParts = atributo.split(/[,;|]/).map(s => s.trim().toLowerCase()).filter(Boolean)
+            const valParts = valor.split(/[,;|]/).map(s => s.trim()).filter(Boolean)
+            const attrs = {}
+            const usedAttrs = []
+            for (let k = 0; k < attrParts.length; k++) {
+              const a = attrParts[k]
+              const v = valParts[k] !== undefined ? valParts[k] : (valParts[0] || '')
+              if (!a || !v) continue
+              attrs[a] = v
+              usedAttrs.push(a)
+              attributeNames.add(a)
+            }
+            if (Object.keys(attrs).length === 0) return
+
+            // SKU autogenerado si vacío
+            const baseForSku = sku
+              || slug(`${(row.sku || row.SKU || row.codigo_interno || row.codigo || row.code || row.nombre || 'PROD')}-${usedAttrs.map(a => attrs[a]).join('-')}`)
+
+            variants.push({
+              sku: baseForSku,
+              attributes: attrs,
+              price: precio,
+              stock: stockRaw !== undefined && stockRaw !== '' && stockRaw !== null ? parseInt(stockRaw) : null,
+            })
+          }
+
+          // A) Variantes numeradas variante1..variante50 en una sola fila
+          for (let vi = 1; vi <= 50; vi++) {
+            const atributo = row[`variante${vi}_atributo`] || row[`Variante${vi}_Atributo`] || row[`VARIANTE${vi}_ATRIBUTO`]
+            const valor = row[`variante${vi}_valor`] || row[`Variante${vi}_Valor`] || row[`VARIANTE${vi}_VALOR`]
+            const sku = row[`variante${vi}_sku`] || row[`Variante${vi}_Sku`] || row[`VARIANTE${vi}_SKU`]
             const precio = parseFloat(row[`variante${vi}_precio`] || row[`Variante${vi}_Precio`] || row[`VARIANTE${vi}_PRECIO`] || 0)
             const stock = row[`variante${vi}_stock`] || row[`Variante${vi}_Stock`] || row[`VARIANTE${vi}_STOCK`]
-            if (atributo && valor && sku && precio > 0) {
-              attributeNames.add(atributo.toLowerCase())
-              variants.push({
-                sku,
-                attributes: { [atributo.toLowerCase()]: valor },
-                price: precio,
-                stock: stock !== undefined && stock !== '' ? parseInt(stock) : null,
-              })
+            if (atributo && valor && precio > 0) {
+              addVariant(atributo, valor, sku, precio, stock)
             }
           }
+
+          // B) Una variante por fila (sin número en las columnas)
+          {
+            const atributo = row.variante_atributo || row.Variante_Atributo || row.VARIANTE_ATRIBUTO
+            const valor = row.variante_valor || row.Variante_Valor || row.VARIANTE_VALOR
+            const sku = row.variante_sku || row.Variante_Sku || row.VARIANTE_SKU
+            const precio = parseFloat(row.variante_precio || row.Variante_Precio || row.VARIANTE_PRECIO || 0)
+            const stock = row.variante_stock || row.Variante_Stock || row.VARIANTE_STOCK
+            if (atributo && valor && precio > 0) {
+              addVariant(atributo, valor, sku, precio, stock)
+            }
+          }
+
           if (variants.length > 0) {
             return {
               hasVariants: true,
@@ -593,10 +645,12 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           variante3_precio: '',
           variante3_stock: '',
         },
+        // Ejemplo 1 — Producto con UN eje (talla S/M/L) en formato compacto:
+        // todas las variantes en una sola fila usando variante1, variante2, variante3.
         {
           sku: '',
           codigo_barras: '',
-          nombre: 'Polo con Variantes',
+          nombre: 'Polo Básico (1 eje)',
           descripcion: 'Producto con tallas',
           marca: 'Mi Marca',
           ubicacion: '',
@@ -636,7 +690,65 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           variante3_sku: 'POLO-L',
           variante3_precio: 40.00,
           variante3_stock: 20,
-        }
+          variante_atributo: '',
+          variante_valor: '',
+          variante_sku: '',
+          variante_precio: '',
+          variante_stock: '',
+        },
+        // Ejemplo 2 — Producto con DOS ejes (talla × color) usando MÚLTIPLES FILAS
+        // con el mismo nombre. Cada fila aporta una variante. Los atributos y valores
+        // se separan por coma. El SKU puedes dejarlo en blanco y el sistema lo genera
+        // automáticamente como POLO-S-ROJO, POLO-M-AZUL, etc.
+        ...['S,rojo', 'M,rojo', 'L,rojo', 'S,azul', 'M,azul', 'L,azul'].map((combo, idx) => ({
+          sku: idx === 0 ? 'POLO2EJES' : '',  // Solo la primera fila lleva el SKU "padre"
+          codigo_barras: '',
+          nombre: 'Polo Premium (2 ejes)',
+          descripcion: idx === 0 ? 'Producto con talla y color' : '',
+          marca: idx === 0 ? 'Mi Marca' : '',
+          ubicacion: '',
+          costo: idx === 0 ? 25.00 : '',
+          precio: '',
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: '',
+          trackStock: 'SI',
+          mostrar_en_catalogo: 'SI',
+          unidad: 'UNIDAD',
+          categoria: idx === 0 ? 'Ropa' : '',
+          subcategoria: '',
+          afectacion_igv: idx === 0 ? 'GRAVADO' : '',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
+          variante1_atributo: '',
+          variante1_valor: '',
+          variante1_sku: '',
+          variante1_precio: '',
+          variante1_stock: '',
+          variante2_atributo: '',
+          variante2_valor: '',
+          variante2_sku: '',
+          variante2_precio: '',
+          variante2_stock: '',
+          variante3_atributo: '',
+          variante3_valor: '',
+          variante3_sku: '',
+          variante3_precio: '',
+          variante3_stock: '',
+          variante_atributo: 'talla,color',
+          variante_valor: combo,
+          variante_sku: '',  // se autogenera (POLO2EJES-S-ROJO, etc.)
+          variante_precio: 45.00,
+          variante_stock: 8,
+        }))
       ]
     }
 
@@ -801,8 +913,22 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
+            Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
           </p>
+          <details className="mt-2 text-xs text-gray-600">
+            <summary className="cursor-pointer text-primary-600 hover:text-primary-700 select-none">
+              ¿Cómo importar productos con variantes (talla, color, etc.)?
+            </summary>
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded space-y-2 text-blue-900">
+              <p><strong>Opción 1 — Un solo eje (ej. solo tallas):</strong></p>
+              <p>Usa una fila con las columnas <code>variante1_atributo</code>, <code>variante1_valor</code>, <code>variante1_sku</code>, <code>variante1_precio</code>, <code>variante1_stock</code>, repetidas para variante2, variante3... hasta 50.</p>
+              <p><strong>Opción 2 — Varios ejes (ej. talla × color):</strong></p>
+              <p>Usa varias filas con el <strong>mismo nombre de producto</strong>, una por cada combinación. En cada fila usa las columnas <code>variante_atributo</code>, <code>variante_valor</code>, <code>variante_sku</code>, <code>variante_precio</code>, <code>variante_stock</code>.</p>
+              <p>Para múltiples atributos en la misma variante separa con coma: <code>variante_atributo: "talla,color"</code> y <code>variante_valor: "S,rojo"</code>.</p>
+              <p>El <strong>SKU se autogenera</strong> si lo dejas en blanco (ej. <code>POLO-S-ROJO</code>).</p>
+              <p className="italic">Mira la plantilla descargada — incluye un ejemplo de polo con 6 variantes (talla S/M/L × color rojo/azul).</p>
+            </div>
+          </details>
         </div>
 
         {/* Upload area */}

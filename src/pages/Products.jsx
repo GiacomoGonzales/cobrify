@@ -1606,8 +1606,34 @@ export default function Products() {
             // Mostrar en catálogo público — el parser siempre lo setea (default true)
             if (product.showInCatalog !== undefined) updates.showInCatalog = product.showInCatalog
 
-            // Actualizar stock si corresponde
-            if (product.trackStock && targetWarehouse) {
+            // VARIANTES: mergear (permite usar varias filas con mismo nombre para
+            //            ir agregando variantes de un producto con muchas combinaciones).
+            //            Dedupe por SKU, suma stock al recalcular total.
+            if (product.variants && product.variants.length > 0) {
+              const existingVariants = existingProduct.variants || []
+              const skuKey = (s) => String(s || '').toLowerCase().trim()
+              const existingSkus = new Set(existingVariants.map(v => skuKey(v.sku)))
+              const newVariants = product.variants.filter(v => v.sku && !existingSkus.has(skuKey(v.sku)))
+              if (newVariants.length > 0) {
+                const mergedVariants = [...existingVariants, ...newVariants]
+                const mergedAttrs = Array.from(new Set([
+                  ...(existingProduct.variantAttributes || []),
+                  ...(product.variantAttributes || []),
+                ]))
+                updates.variants = mergedVariants
+                updates.variantAttributes = mergedAttrs
+                updates.hasVariants = true
+                // Si hay variantes, el stock total = suma de stocks de variantes
+                const totalVariantStock = mergedVariants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
+                updates.stock = totalVariantStock
+              }
+            }
+
+            // Actualizar stock si corresponde.
+            // Saltamos este bloque si el producto tiene variantes: el stock se calcula
+            // como suma de stocks de variantes (ya seteado arriba).
+            const productHasVariants = (existingProduct.hasVariants || updates.hasVariants)
+            if (product.trackStock && targetWarehouse && !productHasVariants) {
               const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
               const currentWarehouseStocks = existingProduct.warehouseStocks || []
 
@@ -1678,7 +1704,14 @@ export default function Products() {
           } else {
             // PRODUCTO NO EXISTE - Crear nuevo
             if (product.trackStock) {
-              const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
+              // Si el producto tiene variantes, su stock total = suma de stocks de variantes
+              const variantStockSum = (product.variants || []).reduce(
+                (sum, v) => sum + (parseInt(v.stock) || 0),
+                0
+              )
+              const stockValue = product.hasVariants
+                ? variantStockSum
+                : ((product.stock !== null && product.stock !== undefined) ? product.stock : 0)
               if (targetWarehouse) {
                 product.warehouseStocks = [{
                   warehouseId: targetWarehouse.id,
