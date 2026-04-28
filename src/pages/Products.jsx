@@ -4177,13 +4177,21 @@ export default function Products() {
             </h3>
 
             {/* Nombre del producto */}
-            <Input
-              label="Nombre"
-              required
-              placeholder="Nombre del producto o servicio"
-              error={errors.name?.message}
-              {...register('name')}
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre <span className="text-red-500">*</span>
+                <span className="text-xs font-normal text-gray-500 ml-1">(puedes presionar ENTER para saltar de línea)</span>
+              </label>
+              <textarea
+                placeholder="Nombre del producto o servicio"
+                rows={2}
+                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                {...register('name')}
+              />
+              {errors.name?.message && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
+            </div>
 
             {/* Imágenes (multi, máx 5) */}
             {canUseProductImages && (

@@ -468,12 +468,15 @@ export default function CreateInvoice() {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Descripción *
+                        <span className="text-xs font-normal text-gray-500 ml-1">(puedes presionar ENTER para saltar de línea)</span>
                       </label>
-                      <Input
+                      <textarea
                         placeholder="Descripción del producto/servicio"
                         value={item.name}
                         onChange={e => updateItem(index, 'name', e.target.value)}
                         disabled={!!item.productId}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500 resize-y"
                       />
                     </div>
 

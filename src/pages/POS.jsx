@@ -7577,13 +7577,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nombre del Producto/Servicio <span className="text-red-500">*</span>
+              <span className="text-xs font-normal text-gray-500 ml-1">(ENTER para saltar de línea)</span>
             </label>
-            <input
-              type="text"
+            <textarea
               value={customProduct.name}
               onChange={(e) => setCustomProduct({ ...customProduct, name: e.target.value })}
               placeholder="Ej: Servicio de instalación, Reparación, etc."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
               autoFocus
             />
           </div>

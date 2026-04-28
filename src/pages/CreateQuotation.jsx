@@ -782,21 +782,22 @@ export default function CreateQuotation() {
   }
 
   const handleCreateCustomer = async () => {
-    // Validaciones
-    if (!manualCustomer.documentNumber || !manualCustomer.name) {
-      toast.error('El número de documento y el nombre son obligatorios')
+    // Solo el nombre es obligatorio. El documento es opcional para cotizaciones.
+    if (!manualCustomer.name?.trim()) {
+      toast.error('El nombre es obligatorio')
       return
     }
 
-    // Validar longitud del documento
-    if (manualCustomer.documentType === 'DNI' && manualCustomer.documentNumber.length !== 8) {
-      toast.error('El DNI debe tener 8 dígitos')
-      return
-    }
-
-    if (manualCustomer.documentType === 'RUC' && manualCustomer.documentNumber.length !== 11) {
-      toast.error('El RUC debe tener 11 dígitos')
-      return
+    // Si ingresaron documento, validar la longitud según el tipo
+    if (manualCustomer.documentNumber) {
+      if (manualCustomer.documentType === 'DNI' && manualCustomer.documentNumber.length !== 8) {
+        toast.error('El DNI debe tener 8 dígitos')
+        return
+      }
+      if (manualCustomer.documentType === 'RUC' && manualCustomer.documentNumber.length !== 11) {
+        toast.error('El RUC debe tener 11 dígitos')
+        return
+      }
     }
 
     setIsCreatingCustomer(true)
@@ -1334,7 +1335,7 @@ export default function CreateQuotation() {
                     {/* Campo Número de Documento con botón de búsqueda */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Número de Documento <span className="text-red-500">*</span>
+                        Número de Documento <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -1367,7 +1368,7 @@ export default function CreateQuotation() {
                         </button>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        Ingrese DNI (8 dígitos) o RUC (11 dígitos) y haga clic en buscar
+                        Si lo ingresas, podemos buscar los datos automáticamente con la lupa.
                       </p>
                     </div>
 
@@ -2028,7 +2029,7 @@ export default function CreateQuotation() {
             </div>
             <div className="flex-1 min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                N° Documento <span className="text-red-500">*</span>
+                N° Documento <span className="text-gray-400 font-normal">(opcional)</span>
               </label>
               <div className="flex gap-1.5">
                 <input

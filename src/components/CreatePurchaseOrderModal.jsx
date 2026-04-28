@@ -43,7 +43,7 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, editingOrder = null }) {
-  const { user } = useAuth()
+  const { user, getBusinessId } = useAuth()
   const toast = useToast()
 
   // Estados
@@ -136,8 +136,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
     setIsLoading(true)
     try {
       const [suppliersResult, productsResult] = await Promise.all([
-        getSuppliers(user.uid),
-        getProducts(user.uid),
+        getSuppliers(getBusinessId()),
+        getProducts(getBusinessId()),
       ])
 
       if (suppliersResult.success) {
@@ -202,7 +202,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
     setIsCreatingSupplier(true)
 
     try {
-      const result = await createSupplier(user.uid, {
+      const result = await createSupplier(getBusinessId(), {
         ruc: manualSupplier.ruc,
         businessName: manualSupplier.businessName,
         address: manualSupplier.address || '',
@@ -215,7 +215,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         toast.success('Proveedor creado exitosamente')
 
         // Recargar proveedores
-        const suppliersResult = await getSuppliers(user.uid)
+        const suppliersResult = await getSuppliers(getBusinessId())
         if (suppliersResult.success) {
           setSuppliers(suppliersResult.data || [])
 
@@ -454,14 +454,14 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           notes: notes,
         }
 
-        const result = await updatePurchaseOrder(user.uid, editingOrder.id, orderData)
+        const result = await updatePurchaseOrder(getBusinessId(), editingOrder.id, orderData)
         if (!result.success) {
           throw new Error(result.error || 'Error al actualizar la orden de compra')
         }
         toast.success(`Orden de compra ${editingOrder.number} actualizada`)
       } else {
         // Crear nueva orden
-        const numberResult = await getNextPurchaseOrderNumber(user.uid)
+        const numberResult = await getNextPurchaseOrderNumber(getBusinessId())
         if (!numberResult.success) {
           throw new Error('Error al generar número de orden de compra')
         }
@@ -482,7 +482,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           sentVia: [],
         }
 
-        const result = await createPurchaseOrder(user.uid, orderData)
+        const result = await createPurchaseOrder(getBusinessId(), orderData)
         if (!result.success) {
           throw new Error(result.error || 'Error al crear la orden de compra')
         }
