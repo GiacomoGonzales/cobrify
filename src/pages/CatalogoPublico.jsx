@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
+import { getCatalogThemeClasses } from '@/themes/catalogThemes'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -2069,6 +2070,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
+  // Modo vista previa: si la URL trae ?previewTheme=tech, sobrescribimos el tema guardado.
+  // Lo usa el modal de Settings para que el dueño del negocio pruebe temas sin guardar.
+  const previewThemeFromUrl = searchParams.get('previewTheme') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -2333,38 +2337,40 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
   const onlyCarousels = groupByCategory && business?.catalogOnlyCarousels === true
-  const isDark = business?.catalogTheme === 'dark'
-  const isCafe = business?.catalogTheme === 'cafe'
+  // Tema del catálogo (registro centralizado en src/themes/catalogThemes.js).
+  // Si la URL trae ?previewTheme=, sobrescribe lo guardado (vista previa desde Settings).
+  const effectiveTheme = previewThemeFromUrl || business?.catalogTheme
+  const themeClasses = getCatalogThemeClasses(effectiveTheme)
+  // Mantenemos isDark/isCafe sólo para casos puntuales fuera del registro
+  const isDark = effectiveTheme === 'dark' || effectiveTheme === 'tech'
+  const isCafe = effectiveTheme === 'cafe'
 
-  // Theme-aware class helpers
-  const thBg = isDark ? 'bg-gray-950' : isCafe ? 'bg-[#FDF6EE]' : 'bg-gray-50'
-  const thCard = isDark ? 'bg-gray-900' : isCafe ? 'bg-[#FAF0E4]' : 'bg-white'
-  const thCardShadow = isDark ? 'bg-gray-900 shadow-gray-800/30' : isCafe ? 'bg-[#FAF0E4] shadow-amber-900/5' : 'bg-white'
-  const thText = isDark ? 'text-white' : isCafe ? 'text-[#3C2415]' : 'text-gray-900'
-  const thTextMuted = isDark ? 'text-gray-400' : isCafe ? 'text-[#7C6350]' : 'text-gray-500'
-  const thTextFaint = isDark ? 'text-gray-400' : isCafe ? 'text-[#A08B78]' : 'text-gray-600'
-  const thHeaderBg = isDark ? 'bg-gray-900 shadow-gray-800/50' : isCafe ? 'bg-[#FAF0E4] shadow-amber-900/5' : 'bg-white'
-  const thCatInactive = isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : isCafe ? 'bg-[#F0E4D4] text-[#6F4E37] hover:bg-[#E8D5C0]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-  const thViewActive = isDark ? 'bg-gray-700' : isCafe ? 'bg-[#E8D5C0]' : 'bg-gray-200'
-  const thViewHover = isDark ? 'hover:bg-gray-700' : isCafe ? 'hover:bg-[#F0E4D4]' : 'hover:bg-gray-100'
-  const thCatBadge = isDark ? 'bg-gray-800/90 text-gray-300' : isCafe ? 'bg-[#FAF0E4]/90 text-[#6F4E37]' : 'bg-white/90 text-gray-600'
-  const thListBadge = isDark ? 'bg-gray-800 text-gray-400' : isCafe ? 'bg-[#F0E4D4] text-[#6F4E37]' : 'bg-gray-100 text-gray-500'
-  const thSearchBanner = isDark
-    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700 focus:ring-gray-600'
-    : isCafe
-      ? 'bg-[#FAF0E4] text-[#3C2415] placeholder-[#A08B78] border border-[#E8D5C0] focus:ring-[#D4B896]'
-      : 'bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:ring-gray-300'
-  const thSearchClassic = isDark
-    ? 'bg-gray-800 text-white placeholder-gray-400 border border-gray-700'
-    : isCafe
-      ? 'bg-[#FAF0E4] text-[#3C2415] placeholder-[#A08B78] border border-[#E8D5C0]'
-      : 'bg-white text-gray-900 placeholder-gray-400'
-  const thObsText = isDark ? 'text-gray-300' : isCafe ? 'text-[#5C4633]' : 'text-gray-700'
-  const thBorderColor = isDark ? 'border-gray-800' : isCafe ? 'border-[#E8D5C0]' : ''
-  const thFooterPowered = isDark ? 'text-gray-500 border-gray-800' : isCafe ? 'text-[#A08B78] border-[#E8D5C0]' : 'text-gray-400'
-  const thFooterLink = isDark ? 'text-gray-400' : isCafe ? 'text-[#7C6350]' : 'text-gray-600'
-  const thCartBadgeBg = isDark ? '#fff' : isCafe ? '#3C2415' : '#000'
-  const thCartBadgeColor = isDark ? '#000' : isCafe ? '#FAF0E4' : '#fff'
+  const thBg = themeClasses.bg
+  const thCard = themeClasses.card
+  const thCardShadow = themeClasses.cardShadow
+  const thText = themeClasses.text
+  const thTextMuted = themeClasses.textMuted
+  const thTextFaint = themeClasses.textFaint
+  const thHeaderBg = themeClasses.headerBg
+  const thCatInactive = themeClasses.catInactive
+  const thViewActive = themeClasses.viewActive
+  const thViewHover = themeClasses.viewHover
+  const thCatBadge = themeClasses.catBadge
+  const thListBadge = themeClasses.listBadge
+  const thSearchBanner = themeClasses.searchBanner
+  const thSearchClassic = themeClasses.searchClassic
+  const thObsText = themeClasses.obsText
+  const thBorderColor = themeClasses.borderColor
+  const thFooterPowered = themeClasses.footerPowered
+  const thFooterLink = themeClasses.footerLink
+  const thCartBadgeBg = themeClasses.cartBadgeBg
+  const thCartBadgeColor = themeClasses.cartBadgeColor
+  // Forma + tipografía (tokens del tema)
+  const thCardRadius = themeClasses.cardRadius || 'rounded-xl'
+  const thCardShadowEffect = themeClasses.cardShadowEffect || 'shadow-sm hover:shadow-md'
+  const thProductName = themeClasses.productNameClass || 'font-semibold text-sm'
+  const thPrice = themeClasses.priceClass || 'text-base font-bold'
+  const thFontWrapper = themeClasses.fontWrapper || 'font-sans'
 
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
@@ -2568,7 +2574,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }
 
   return (
-    <div className={`min-h-screen ${thBg}`}>
+    <div className={`min-h-screen ${thBg} ${thFontWrapper}`}>
       <style>{fadeInStyle}</style>
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
@@ -2602,16 +2608,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       <header className={`${thHeaderBg} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
-            {/* Logo y nombre */}
+            {/* Logo y nombre — landscape tiene prioridad y oculta el nombre */}
+            {(() => {
+              const headerLogoSrc = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
+              const headerIsLandscape = !!business?.catalogLogoLandscape || isLogoHorizontal
+              const headerLogoSize = headerIsLandscape ? 'logo_landscape' : 'logo_square'
+              return (
             <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-              {(business?.catalogLogoUrl || business?.logoUrl) ? (
+              {headerLogoSrc ? (
                 <img
-                  src={business.catalogLogoUrl || business.logoUrl}
+                  src={optimizeImageUrl(headerLogoSrc, headerLogoSize)}
                   alt={business.name}
-                  className={`${isLogoHorizontal ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0`}
+                  className={`${headerIsLandscape ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0`}
                   onLoad={(e) => {
-                    const { naturalWidth, naturalHeight } = e.target
-                    setIsLogoHorizontal(naturalWidth / naturalHeight > 1.8)
+                    if (!business?.catalogLogoLandscape) {
+                      const { naturalWidth, naturalHeight } = e.target
+                      setIsLogoHorizontal(naturalWidth / naturalHeight > 1.8)
+                    }
                   }}
                 />
               ) : (
@@ -2626,8 +2639,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   )}
                 </div>
               )}
-              {/* Si el logo es horizontal (ej: nombre incluido en logo), ocultar texto */}
-              {!isLogoHorizontal && (
+              {/* Si el logo es horizontal (incluye el nombre), ocultar texto */}
+              {!headerIsLandscape && (
               <div className="min-w-0">
                 <h1 className={`font-bold text-base md:text-xl truncate ${thText}`}>
                   {business?.name || business?.businessName}
@@ -2638,6 +2651,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </div>
               )}
             </div>
+              )
+            })()}
 
             {/* Carrito */}
             <button
@@ -2659,36 +2674,49 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       </header>
 
-      {/* Hero / Búsqueda */}
-      {business?.catalogHeroStyle === 'banner' && business?.catalogCoverImage ? (
+      {/* Hero / Búsqueda — banner cuando hay portada, clásico (gradient) si no */}
+      {business?.catalogCoverImage ? (
         /* === ESTILO BANNER: Imagen hero grande === */
         <div className="relative overflow-hidden">
           <div className="relative h-48 md:h-72">
-            <img
-              src={business.catalogCoverImage}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              fetchPriority="high"
-              decoding="async"
-            />
+            <picture>
+              <source
+                media="(max-width: 767px)"
+                srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+              />
+              <img
+                src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                fetchPriority="high"
+                decoding="async"
+              />
+            </picture>
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
             {/* Info sobre el banner */}
             <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 max-w-7xl mx-auto">
               <div className="flex items-end gap-4">
-                {(business?.catalogLogoUrl || business?.logoUrl) && (
+                {(() => {
+                  const overlayLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
+                  const overlayIsLandscape = !!business?.catalogLogoLandscape
+                  if (!overlayLogo) return null
+                  return (
                   <img
-                    src={business.catalogLogoUrl || business.logoUrl}
+                    src={optimizeImageUrl(overlayLogo, overlayIsLandscape ? 'logo_landscape' : 'logo_square')}
                     alt={business.name}
-                    className="h-14 md:h-20 w-auto max-w-[120px] md:max-w-[180px] object-contain bg-white/90 rounded-xl p-1.5 shadow-lg flex-shrink-0"
+                    className={`${overlayIsLandscape ? 'h-12 md:h-16 max-w-[180px] md:max-w-[240px]' : 'h-14 md:h-20 max-w-[120px] md:max-w-[180px]'} w-auto object-contain bg-white/90 rounded-xl p-1.5 shadow-lg flex-shrink-0`}
                   />
-                )}
+                  )
+                })()}
                 <div className="min-w-0 pb-1">
                   {business?.catalogWelcome && (
                     <p className="text-white/80 text-sm mb-1 truncate">{business.catalogWelcome}</p>
                   )}
-                  <h2 className="text-white font-bold text-lg md:text-2xl truncate drop-shadow-lg">
-                    {business?.name || business?.businessName}
-                  </h2>
+                  {!business?.catalogLogoLandscape && (
+                    <h2 className="text-white font-bold text-lg md:text-2xl truncate drop-shadow-lg">
+                      {business?.name || business?.businessName}
+                    </h2>
+                  )}
                   {business?.catalogTagline && (
                     <p className="text-white/70 text-sm mt-0.5 truncate">{business.catalogTagline}</p>
                   )}
@@ -2697,7 +2725,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
           {/* Barra de búsqueda debajo del banner */}
-          <div className={`${isDark ? 'bg-gray-900' : isCafe ? 'bg-[#FDF6EE]' : 'bg-gray-50'} px-4 py-3`}>
+          <div className={`${themeClasses.bg} px-4 py-3`}>
             <div className="relative max-w-7xl mx-auto">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -2711,30 +2739,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       ) : (
-        /* === ESTILO CLÁSICO (default) === */
+        /* === ESTILO CLÁSICO: solo cuando NO hay portada (gradient sólido) === */
         <div
           className="relative text-white overflow-hidden"
           style={{
-            background: business?.catalogCoverImage
-              ? 'none'
-              : business?.catalogColor
-                ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
-                : 'linear-gradient(135deg, #1F2937 0%, #111827 100%)'
+            background: business?.catalogColor
+              ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
+              : 'linear-gradient(135deg, #1F2937 0%, #111827 100%)'
           }}
         >
-          {business?.catalogCoverImage && (
-            <>
-              <img
-                src={business.catalogCoverImage}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div
-                className="absolute inset-0"
-                style={{ backgroundColor: `${business?.catalogColor || '#000000'}cc` }}
-              />
-            </>
-          )}
           <div className="relative max-w-7xl mx-auto px-4 py-8 md:py-12">
             {business?.catalogWelcome && (
               <p className="text-white/80 mb-4 text-center md:text-left">
@@ -2892,7 +2905,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       return (
                         <div
                           key={`featured-${product.id}`}
-                          className={`flex-shrink-0 w-40 md:w-48 rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                          className={`flex-shrink-0 w-40 md:w-48 ${thCardRadius} ${thCardShadowEffect} overflow-hidden transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                           onClick={() => setSelectedProduct(product)}
                         >
                           <div className="relative bg-gray-100 overflow-hidden aspect-square">
@@ -2920,14 +2933,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                             )}
                           </div>
                           <div className="p-3">
-                            <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
+                            <h3 className={`${thProductName} mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
                             <div className="flex items-center justify-between">
                               {showPrices && !product.catalogHidePrice ? (
                                 <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                   {product.catalogComparePrice > 0 && (
                                     <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                                   )}
-                                  <span className={`text-sm font-bold ${thText}`}>
+                                  <span className={`${thPrice}`}>
                                     {product.hasVariants && product.variants?.length > 0
                                       ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                       : `S/ ${product.price?.toFixed(2)}`
@@ -2971,7 +2984,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                         return (
                           <div
                             key={product.id}
-                            className={`flex-shrink-0 w-40 md:w-48 rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                            className={`flex-shrink-0 w-40 md:w-48 ${thCardRadius} ${thCardShadowEffect} overflow-hidden transition-shadow cursor-pointer group ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                             onClick={() => setSelectedProduct(product)}
                           >
                             <div className="relative bg-gray-100 overflow-hidden aspect-square">
@@ -2999,14 +3012,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               )}
                             </div>
                             <div className="p-3">
-                              <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
+                              <h3 className={`${thProductName} mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
                               <div className="flex items-center justify-between">
                                 {showPrices && !product.catalogHidePrice ? (
                                   <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                     {product.catalogComparePrice > 0 && (
                                       <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
                                     )}
-                                    <span className={`text-sm font-bold ${thText}`}>
+                                    <span className={`${thPrice}`}>
                                       {product.hasVariants && product.variants?.length > 0
                                         ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                         : `S/ ${product.price?.toFixed(2)}`
@@ -3085,7 +3098,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in ${thCardRadius} ${thCardShadowEffect} overflow-hidden transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative bg-gray-100 overflow-hidden">
@@ -3127,7 +3140,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     })()}
                   </div>
                   <div className="p-4">
-                    <h3 className={`font-semibold mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
+                    <h3 className={`${thProductName} mb-1 line-clamp-2 ${thText}`}>{product.name}</h3>
                     {product.description && (
                       <p className={`text-sm mb-2 line-clamp-2 whitespace-pre-line ${thTextMuted}`}>{product.description}</p>
                     )}
@@ -3153,7 +3166,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               )
                             }
                             return (
-                              <span className={`text-lg font-bold ${thText}`}>
+                              <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -3199,7 +3212,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in rounded-2xl shadow-sm overflow-hidden md:hover:shadow-lg transition-shadow cursor-pointer flex ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in ${thCardRadius} ${thCardShadowEffect} overflow-hidden transition-shadow cursor-pointer flex ${thCardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -3230,7 +3243,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   </div>
                   <div className="flex-1 p-4 flex flex-col justify-between">
                     <div>
-                      <h3 className={`font-semibold mb-1 ${thText}`}>{product.name}</h3>
+                      <h3 className={`${thProductName} mb-1 ${thText}`}>{product.name}</h3>
                       {!selectedCategory && product.category && (() => {
                         const cat = categories.find(c => c.id === product.category)
                         if (!cat) return null
@@ -3268,7 +3281,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               )
                             }
                             return (
-                              <span className={`text-xl font-bold ${thText}`}>
+                              <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
                                   : `S/ ${product.price?.toFixed(2)}`
@@ -3315,20 +3328,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
-              {(business?.catalogLogoUrl || business?.logoUrl) ? (
-                <img
-                  src={business.catalogLogoUrl || business.logoUrl}
-                  alt={business.name}
-                  className="h-12 max-w-[200px] object-contain"
-                />
-              ) : (
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: business?.catalogColor || '#10B981' }}
-                >
-                  <Store className="w-6 h-6 text-white" />
-                </div>
-              )}
+              {(() => {
+                const footerLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
+                const footerIsLandscape = !!business?.catalogLogoLandscape
+                if (!footerLogo) {
+                  return (
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      style={{ backgroundColor: business?.catalogColor || '#10B981' }}
+                    >
+                      <Store className="w-6 h-6 text-white" />
+                    </div>
+                  )
+                }
+                return (
+                  <img
+                    src={optimizeImageUrl(footerLogo, footerIsLandscape ? 'logo_landscape' : 'logo_square')}
+                    alt={business.name}
+                    className={`${footerIsLandscape ? 'h-10 max-w-[240px]' : 'h-12 max-w-[200px]'} object-contain`}
+                  />
+                )
+              })()}
               <div>
                 <h2 className={`font-bold ${thText}`}>
                   {business?.name || business?.businessName}

@@ -33,17 +33,24 @@ export async function uploadToCloudinary(file) {
  * Optimize a Cloudinary URL with transformation parameters
  * Returns original URL unchanged if it's not a Cloudinary URL
  * @param {string} url
- * @param {'card'|'thumbnail'|'detail'} size
+ * @param {'card'|'thumbnail'|'detail'|'blur'|'logo_square'|'logo_landscape'|'cover_desktop'|'cover_mobile'} size
  * @returns {string}
  */
 export function optimizeImageUrl(url, size = 'card') {
   if (!url || !url.includes('res.cloudinary.com')) return url || ''
 
   const configs = {
+    // Producto
     thumbnail: 'c_fill,w_200,h_200,q_auto:low,f_auto,dpr_auto',
     card: 'c_limit,w_400,q_auto:eco,f_auto,dpr_auto',
     detail: 'c_limit,w_800,q_auto,f_auto,dpr_auto',
     blur: 'c_fill,w_40,h_40,q_10,f_auto,e_blur:500',
+    // Catálogo público — logos (c_limit no agranda si el original es más chico)
+    logo_square: 'c_limit,w_400,q_auto,f_auto,dpr_auto',
+    logo_landscape: 'c_limit,w_640,q_auto,f_auto,dpr_auto',
+    // Catálogo público — portadas (c_fill recorta para llenar el área)
+    cover_desktop: 'c_fill,w_1920,h_600,q_auto:good,f_auto,dpr_auto',
+    cover_mobile: 'c_fill,w_800,h_500,q_auto:good,f_auto,dpr_auto',
   }
 
   const transforms = configs[size] || configs.card

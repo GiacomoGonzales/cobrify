@@ -2,13 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2 } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2, ChevronDown } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
+import { uploadToCloudinary } from '@/utils/cloudinary'
+import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
+import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
@@ -56,7 +59,9 @@ import {
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings } = useAppContext()
+  // Preview de tema del catálogo
+  const [previewThemeId, setPreviewThemeId] = useState(null)
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -275,25 +280,22 @@ export default function Settings() {
   const [catalogSlug, setCatalogSlug] = useState('')
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
-  // Estados para Libro de Reclamaciones
-  const [complaintsBookEnabled, setComplaintsBookEnabled] = useState(false)
-  const [complaintsBookSlug, setComplaintsBookSlug] = useState('')
-  const [complaintsBookResponseDays, setComplaintsBookResponseDays] = useState(30)
-  const [complaintsBookQrDataUrl, setComplaintsBookQrDataUrl] = useState('')
-  const [catalogSubTab, setCatalogSubTab] = useState('catalogo') // 'catalogo' | 'reclamaciones'
   const [catalogColor, setCatalogColor] = useState('#10B981')
   const [catalogTheme, setCatalogTheme] = useState('light')
-  const [catalogCoverImage, setCatalogCoverImage] = useState('')
-  const [catalogHeroStyle, setCatalogHeroStyle] = useState('default')
+  const [catalogCoverImage, setCatalogCoverImage] = useState('')          // hero desktop
+  const [catalogCoverImageMobile, setCatalogCoverImageMobile] = useState('') // hero móvil (opcional)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingCoverMobile, setUploadingCoverMobile] = useState(false)
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
-  const [catalogLogoUrl, setCatalogLogoUrl] = useState('')
+  const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
+  const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
+  const [uploadingCatalogLogoLandscape, setUploadingCatalogLogoLandscape] = useState(false)
   const [businessHours, setBusinessHours] = useState({
     enabled: false,
     days: {
@@ -315,6 +317,15 @@ export default function Settings() {
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
+
+  // Secciones colapsables del tab "Mi Catálogo Online"
+  const [openSections, setOpenSections] = useState({
+    url: true,
+    identity: false,
+    appearance: false,
+    options: false,
+  })
+  const toggleSection = (id) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
 
   // Estados para QR de mesas (carta digital restaurante)
   const [tableQrCodes, setTableQrCodes] = useState([])
@@ -561,30 +572,6 @@ export default function Settings() {
     }
     generateTableQrs()
   }, [catalogSlug, catalogEnabled, businessMode, resellerCustomDomain])
-
-  // Generar QR del Libro de Reclamaciones cuando cambie el slug
-  useEffect(() => {
-    if (complaintsBookSlug && complaintsBookEnabled) {
-      const baseUrl = resellerCustomDomain
-        ? `https://${resellerCustomDomain}`
-        : PRODUCTION_URL
-      const complaintsUrl = `${baseUrl}/app/reclamos/${complaintsBookSlug}`
-      QRCode.toDataURL(complaintsUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        }
-      }).then(url => {
-        setComplaintsBookQrDataUrl(url)
-      }).catch(err => {
-        console.error('Error generating complaints QR:', err)
-      })
-    } else {
-      setComplaintsBookQrDataUrl('')
-    }
-  }, [complaintsBookSlug, complaintsBookEnabled, resellerCustomDomain])
 
   // Obtener dominio personalizado del reseller cuando hay suscripción
   useEffect(() => {
@@ -964,7 +951,7 @@ export default function Settings() {
         setCatalogColor(businessData.catalogColor || '#10B981')
         setCatalogTheme(businessData.catalogTheme || 'light')
         setCatalogCoverImage(businessData.catalogCoverImage || '')
-        setCatalogHeroStyle(businessData.catalogHeroStyle || 'default')
+        setCatalogCoverImageMobile(businessData.catalogCoverImageMobile || '')
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
@@ -972,6 +959,7 @@ export default function Settings() {
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
+        setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
         setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
@@ -981,11 +969,6 @@ export default function Settings() {
         if (businessData.businessHours) {
           setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
         }
-
-        // Cargar configuración de Libro de Reclamaciones
-        setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
-        setComplaintsBookSlug(businessData.complaintsBookSlug || '')
-        setComplaintsBookResponseDays(businessData.complaintsBookResponseDays || 30)
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -2246,12 +2229,13 @@ export default function Settings() {
   const isTrialUser = subscription?.plan === 'trial'
 
   // Tabs configuration
+  // Nota: el tab "Catálogo" se accede desde el sidebar (Mi Catálogo Online → /configuracion?tab=catalogo)
+  // y por eso ya no aparece en esta barra.
   const tabs = [
     { id: 'informacion', label: 'Mi Empresa', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
     { id: 'documentos', label: 'Documentos', icon: FileText },
-    { id: 'catalogo', label: businessMode === 'restaurant' ? 'Carta Digital' : 'Catálogo', icon: businessMode === 'restaurant' ? UtensilsCrossed : Globe },
     { id: 'series', label: 'Series', icon: Hash },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
@@ -5313,37 +5297,8 @@ export default function Settings() {
       {/* Tab Content - Catálogo Público */}
       {activeTab === 'catalogo' && (
         <div className="space-y-6">
-          {/* Sub-pestañas: Catálogo | Libro de Reclamaciones */}
-          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setCatalogSubTab('catalogo')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                catalogSubTab === 'catalogo'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {businessMode === 'restaurant' ? <UtensilsCrossed className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
-              {businessMode === 'restaurant' ? 'Carta Digital' : 'Catálogo'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCatalogSubTab('reclamaciones')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                catalogSubTab === 'reclamaciones'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              Libro de Reclamaciones
-            </button>
-          </div>
-
-          {/* ===== PESTAÑA CATÁLOGO ===== */}
-          {catalogSubTab === 'catalogo' && (
-            <>
+          {/* ===== CATÁLOGO ===== */}
+          <>
               {/* Descripción + Toggle */}
               <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                 <div className="flex items-start gap-3">
@@ -5389,12 +5344,29 @@ export default function Settings() {
               {/* Configuración del catálogo (solo si está habilitado) */}
               {catalogEnabled && (
                 <>
-                  {/* === DOS COLUMNAS EN DESKTOP === */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* === 4 TARJETAS COLAPSABLES === */}
+                  <div className="space-y-4">
 
-                    {/* COLUMNA IZQUIERDA: Enlace, QR, Dominio, WhatsApp */}
-                    <div className="space-y-5">
-                      <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Enlace y compartir</h3>
+                    {/* CARD 1: URL Y COMPARTIR */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('url')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                            <Globe className="w-5 h-5 text-emerald-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">URL y compartir</h3>
+                            <p className="text-xs text-gray-500">Configura el enlace público y comparte tu catálogo</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.url ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.url && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
                       {/* URL del catálogo */}
                       <div>
@@ -5635,23 +5607,6 @@ export default function Settings() {
                         </div>
                       )}
 
-                      {/* WhatsApp del catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          WhatsApp para pedidos del catálogo
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogWhatsapp}
-                          onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
-                          placeholder="Ej: 51987654321"
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
-                        </p>
-                      </div>
-
                       {/* Productos en el catálogo */}
                       <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
                         <div className="flex items-start gap-3">
@@ -5664,86 +5619,158 @@ export default function Settings() {
                           </div>
                         </div>
                       </div>
+                        </div>
+                      )}
                     </div>
+                    {/* FIN CARD 1: URL Y COMPARTIR */}
 
-                    {/* COLUMNA DERECHA: Personalización, Apariencia, Opciones */}
-                    <div className="space-y-5">
-                      <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Personalización</h3>
+                    {/* CARD 2: IDENTIDAD */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('identity')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <Store className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Identidad</h3>
+                            <p className="text-xs text-gray-500">Logo, nombre, mensajes y contacto</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.identity ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.identity && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
-                      {/* Logo para catálogo/menú digital */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Logo para {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'} (opcional)
-                        </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Sube un logo optimizado para tu {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'}. Recomendado: fondo transparente (PNG). Si no subes uno, se usará el logo principal de tu empresa.
-                        </p>
+                      {/* Logo del catálogo — cuadrado + horizontal */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Logo para {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'}
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Recomendado: PNG con fondo transparente. Las imágenes se optimizan automáticamente.
+                          </p>
+                        </div>
+
+                        {/* Logo cuadrado */}
                         <div className="flex items-start gap-4">
-                          {/* Preview */}
                           <div className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
                             {catalogLogoUrl ? (
-                              <img src={catalogLogoUrl} alt="Logo catálogo" className="w-full h-full object-contain p-1" />
+                              <img src={catalogLogoUrl} alt="Logo cuadrado" className="w-full h-full object-contain p-1" />
                             ) : logoUrl ? (
                               <img src={logoUrl} alt="Logo principal" className="w-full h-full object-contain p-1 opacity-40" />
                             ) : (
                               <span className="text-xs text-gray-400 text-center px-1">Sin logo</span>
                             )}
                           </div>
-                          <div className="flex-1 space-y-2">
-                            <label className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
-                              {uploadingCatalogLogo ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Subiendo...
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-4 h-4" />
-                                  Subir logo
-                                </>
+                          <div className="flex-1 space-y-1.5">
+                            <p className="text-sm font-medium text-gray-800">Logo cuadrado</p>
+                            <p className="text-xs text-gray-500">Se muestra junto al nombre del negocio en el header.</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                                {uploadingCatalogLogo ? (
+                                  <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
+                                ) : (
+                                  <><Upload className="w-4 h-4" />{catalogLogoUrl ? 'Cambiar' : 'Subir'}</>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  className="hidden"
+                                  disabled={uploadingCatalogLogo}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    setUploadingCatalogLogo(true)
+                                    try {
+                                      const url = await uploadToCloudinary(file)
+                                      setCatalogLogoUrl(url)
+                                      toast.success('Logo cuadrado subido')
+                                    } catch (err) {
+                                      console.error('Error subiendo logo cuadrado:', err)
+                                      toast.error('Error al subir el logo')
+                                    } finally {
+                                      setUploadingCatalogLogo(false)
+                                      e.target.value = ''
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {catalogLogoUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCatalogLogoUrl('')
+                                    toast.success('Logo cuadrado quitado')
+                                  }}
+                                  className="text-xs text-red-600 hover:underline"
+                                >
+                                  Quitar
+                                </button>
                               )}
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp"
-                                className="hidden"
-                                disabled={uploadingCatalogLogo}
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  setUploadingCatalogLogo(true)
-                                  try {
-                                    // Subir sin comprimir para preservar transparencia PNG
-                                    const logoRef = ref(storage, `businesses/${getBusinessId()}/catalog-logo`)
-                                    await uploadBytes(logoRef, file, { contentType: file.type })
-                                    const url = await getDownloadURL(logoRef)
-                                    setCatalogLogoUrl(url)
-                                    toast.success('Logo del catálogo subido')
-                                  } catch (err) {
-                                    console.error('Error subiendo logo catálogo:', err)
-                                    toast.error('Error al subir el logo')
-                                  } finally {
-                                    setUploadingCatalogLogo(false)
-                                    e.target.value = ''
-                                  }
-                                }}
-                              />
-                            </label>
-                            {catalogLogoUrl && (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    const logoRef = ref(storage, `businesses/${getBusinessId()}/catalog-logo`)
-                                    await deleteObject(logoRef)
-                                  } catch (e) { /* ignore if not found */ }
-                                  setCatalogLogoUrl('')
-                                  toast.success('Logo del catálogo eliminado, se usará el logo principal')
-                                }}
-                                className="text-xs text-red-600 hover:underline"
-                              >
-                                Quitar logo (usar el principal)
-                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Logo horizontal (opcional) */}
+                        <div className="flex items-start gap-4 pt-3 border-t border-gray-100">
+                          <div className="w-32 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
+                            {catalogLogoLandscape ? (
+                              <img src={catalogLogoLandscape} alt="Logo horizontal" className="w-full h-full object-contain p-1" />
+                            ) : (
+                              <span className="text-xs text-gray-400 text-center px-1">Sin logo<br/>horizontal</span>
                             )}
+                          </div>
+                          <div className="flex-1 space-y-1.5">
+                            <p className="text-sm font-medium text-gray-800">Logo horizontal <span className="text-xs font-normal text-gray-500">(opcional)</span></p>
+                            <p className="text-xs text-gray-500">Si lo subes, reemplaza al logo cuadrado y oculta el nombre del negocio en el header.</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogoLandscape ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                                {uploadingCatalogLogoLandscape ? (
+                                  <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
+                                ) : (
+                                  <><Upload className="w-4 h-4" />{catalogLogoLandscape ? 'Cambiar' : 'Subir'}</>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  className="hidden"
+                                  disabled={uploadingCatalogLogoLandscape}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    setUploadingCatalogLogoLandscape(true)
+                                    try {
+                                      const url = await uploadToCloudinary(file)
+                                      setCatalogLogoLandscape(url)
+                                      toast.success('Logo horizontal subido')
+                                    } catch (err) {
+                                      console.error('Error subiendo logo horizontal:', err)
+                                      toast.error('Error al subir el logo')
+                                    } finally {
+                                      setUploadingCatalogLogoLandscape(false)
+                                      e.target.value = ''
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {catalogLogoLandscape && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCatalogLogoLandscape('')
+                                    toast.success('Logo horizontal quitado')
+                                  }}
+                                  className="text-xs text-red-600 hover:underline"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -5779,6 +5806,23 @@ export default function Settings() {
                         />
                       </div>
 
+                      {/* WhatsApp del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          WhatsApp para pedidos del catálogo
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWhatsapp}
+                          onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
+                          placeholder="Ej: 51987654321"
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
+                        </p>
+                      </div>
+
                       {/* Observaciones del catálogo */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5794,84 +5838,31 @@ export default function Settings() {
                         />
                         <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
                       </div>
-
-                      {/* Horario de atención */}
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Horario de atención
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={businessHours.enabled}
-                              onChange={(e) => setBusinessHours(prev => ({ ...prev, enabled: e.target.checked }))}
-                              className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
-                            />
-                            <span className="text-sm text-gray-600">Activar</span>
-                          </label>
                         </div>
-                        {businessHours.enabled && (
-                          <div className="space-y-2 bg-gray-50 rounded-lg p-3">
-                            {[
-                              { key: 1, name: 'Lunes' },
-                              { key: 2, name: 'Martes' },
-                              { key: 3, name: 'Miércoles' },
-                              { key: 4, name: 'Jueves' },
-                              { key: 5, name: 'Viernes' },
-                              { key: 6, name: 'Sábado' },
-                              { key: 0, name: 'Domingo' },
-                            ].map(day => (
-                              <div key={day.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <label className="flex items-center gap-2 w-24 sm:w-28 flex-shrink-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={businessHours.days[day.key]?.open || false}
-                                    onChange={(e) => setBusinessHours(prev => ({
-                                      ...prev,
-                                      days: { ...prev.days, [day.key]: { ...prev.days[day.key], open: e.target.checked } }
-                                    }))}
-                                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
-                                  />
-                                  <span className={`text-sm ${businessHours.days[day.key]?.open ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
-                                    {day.name}
-                                  </span>
-                                </label>
-                                {businessHours.days[day.key]?.open && (
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="time"
-                                      value={businessHours.days[day.key]?.from || '09:00'}
-                                      onChange={(e) => setBusinessHours(prev => ({
-                                        ...prev,
-                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], from: e.target.value } }
-                                      }))}
-                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
-                                    />
-                                    <span className="text-gray-400 text-xs sm:text-sm">a</span>
-                                    <input
-                                      type="time"
-                                      value={businessHours.days[day.key]?.to || '18:00'}
-                                      onChange={(e) => setBusinessHours(prev => ({
-                                        ...prev,
-                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], to: e.target.value } }
-                                      }))}
-                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
-                                    />
-                                  </div>
-                                )}
-                                {!businessHours.days[day.key]?.open && (
-                                  <span className="text-xs text-red-400">Cerrado</span>
-                                )}
-                              </div>
-                            ))}
-                            <p className="text-xs text-gray-500 mt-2">Se muestra en el catálogo y bloquea pedidos fuera de horario</p>
-                          </div>
-                        )}
-                      </div>
+                      )}
+                    </div>
+                    {/* FIN CARD 2: IDENTIDAD */}
 
-                      <div className="border-t border-gray-200"></div>
-                      <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Apariencia</h3>
+                    {/* CARD 3: APARIENCIA */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('appearance')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                            <Palette className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Apariencia</h3>
+                            <p className="text-xs text-gray-500">Tema, colores y portada</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.appearance ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.appearance && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
                       {/* Color */}
                       <div>
@@ -5924,235 +5915,278 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Imagen de portada */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Imagen de portada (opcional)
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">Se muestra como fondo en la cabecera del catálogo</p>
-                        {catalogCoverImage ? (
-                          <div className="relative rounded-xl overflow-hidden h-32 mb-2">
-                            <img src={catalogCoverImage} alt="Portada" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2">
-                              <label className="px-3 py-1.5 bg-white/90 text-gray-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-white">
-                                Cambiar
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={async (e) => {
-                                    const file = e.target.files?.[0]
-                                    if (!file) return
-                                    setUploadingCover(true)
-                                    try {
-                                      const compressed = await compressImage(file, 1600, 0.85)
-                                      const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
-                                      await uploadBytes(coverRef, compressed, { contentType: 'image/jpeg' })
-                                      const url = await getDownloadURL(coverRef)
-                                      setCatalogCoverImage(url)
-                                    } catch (err) {
-                                      console.error('Error uploading cover:', err)
-                                      toast.error('Error al subir imagen')
-                                    } finally {
-                                      setUploadingCover(false)
-                                    }
-                                  }}
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
-                                    await deleteObject(coverRef).catch(() => {})
-                                  } catch {}
-                                  setCatalogCoverImage('')
-                                }}
-                                className="px-3 py-1.5 bg-red-500/90 text-white rounded-lg text-sm font-medium hover:bg-red-600"
-                              >
-                                Eliminar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                            uploadingCover ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                          }`}>
-                            {uploadingCover ? (
-                              <span className="text-sm text-gray-500">Subiendo...</span>
-                            ) : (
-                              <>
-                                <span className="text-sm text-gray-500">Click para subir imagen</span>
-                                <span className="text-xs text-gray-400 mt-1">JPG, PNG (recomendado 1200x400)</span>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              disabled={uploadingCover}
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0]
-                                if (!file) return
-                                setUploadingCover(true)
-                                try {
-                                  const coverRef = ref(storage, `businesses/${getBusinessId()}/cover`)
-                                  await uploadBytes(coverRef, file)
-                                  const url = await getDownloadURL(coverRef)
-                                  setCatalogCoverImage(url)
-                                } catch (err) {
-                                  console.error('Error uploading cover:', err)
-                                  toast.error('Error al subir imagen')
-                                } finally {
-                                  setUploadingCover(false)
-                                }
-                              }}
-                            />
+                      {/* Imagen de portada — desktop + móvil */}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Imagen de portada
                           </label>
-                        )}
-                      </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Se muestra como fondo en la cabecera del catálogo. Las imágenes se optimizan automáticamente.
+                          </p>
+                        </div>
 
-                      {/* Estilo de portada */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Estilo de portada
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setCatalogHeroStyle('default')}
-                            className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                              catalogHeroStyle === 'default'
-                                ? 'border-gray-900 shadow-md'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="w-full h-12 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-end justify-center pb-1">
-                              <div className="w-16 h-3 bg-white/80 rounded-full" />
+                        {/* Portada desktop */}
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1.5">
+                            Desktop <span className="font-normal text-gray-500">(formato ancho, recomendado 1920×600)</span>
+                          </p>
+                          {catalogCoverImage ? (
+                            <div className="relative rounded-xl overflow-hidden h-32 group">
+                              <img src={catalogCoverImage} alt="Portada desktop" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <label className="px-3 py-1.5 bg-white/90 text-gray-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-white">
+                                  Cambiar
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      setUploadingCover(true)
+                                      try {
+                                        const url = await uploadToCloudinary(file)
+                                        setCatalogCoverImage(url)
+                                        toast.success('Portada desktop subida')
+                                      } catch (err) {
+                                        console.error('Error uploading cover desktop:', err)
+                                        toast.error('Error al subir imagen')
+                                      } finally {
+                                        setUploadingCover(false)
+                                        e.target.value = ''
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCatalogCoverImage('')
+                                    toast.success('Portada desktop quitada')
+                                  }}
+                                  className="px-3 py-1.5 bg-red-500/90 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <span className="text-sm font-medium text-gray-900 block">Clásico</span>
-                              <span className="text-xs text-gray-500">Buscador con gradiente</span>
+                          ) : (
+                            <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                              uploadingCover ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            }`}>
+                              {uploadingCover ? (
+                                <span className="text-sm text-gray-500">Subiendo…</span>
+                              ) : (
+                                <>
+                                  <span className="text-sm text-gray-500">Click para subir portada desktop</span>
+                                  <span className="text-xs text-gray-400 mt-1">JPG, PNG, WebP</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingCover}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingCover(true)
+                                  try {
+                                    const url = await uploadToCloudinary(file)
+                                    setCatalogCoverImage(url)
+                                    toast.success('Portada desktop subida')
+                                  } catch (err) {
+                                    console.error('Error uploading cover desktop:', err)
+                                    toast.error('Error al subir imagen')
+                                  } finally {
+                                    setUploadingCover(false)
+                                    e.target.value = ''
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {/* Portada móvil */}
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1.5">
+                            Móvil <span className="font-normal text-gray-500">(opcional, formato más cuadrado)</span>
+                          </p>
+                          <p className="text-[11px] text-gray-500 mb-1.5">Si no la subes, en móvil se usará la portada desktop.</p>
+                          {catalogCoverImageMobile ? (
+                            <div className="relative rounded-xl overflow-hidden h-40 max-w-[220px] group">
+                              <img src={catalogCoverImageMobile} alt="Portada móvil" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <label className="px-2.5 py-1.5 bg-white/90 text-gray-700 rounded-lg text-xs font-medium cursor-pointer hover:bg-white">
+                                  Cambiar
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      setUploadingCoverMobile(true)
+                                      try {
+                                        const url = await uploadToCloudinary(file)
+                                        setCatalogCoverImageMobile(url)
+                                        toast.success('Portada móvil subida')
+                                      } catch (err) {
+                                        console.error('Error uploading cover mobile:', err)
+                                        toast.error('Error al subir imagen')
+                                      } finally {
+                                        setUploadingCoverMobile(false)
+                                        e.target.value = ''
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCatalogCoverImageMobile('')
+                                    toast.success('Portada móvil quitada')
+                                  }}
+                                  className="px-2.5 py-1.5 bg-red-500/90 text-white rounded-lg text-xs font-medium hover:bg-red-600"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogHeroStyle('banner')}
-                            className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                              catalogHeroStyle === 'banner'
-                                ? 'border-gray-900 shadow-md'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="w-full h-12 rounded-lg bg-gray-200 relative overflow-hidden">
-                              <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-black/60 to-transparent" />
-                              <div className="absolute bottom-1 left-2 w-10 h-2 bg-white/80 rounded-full" />
-                            </div>
-                            <div className="text-center">
-                              <span className="text-sm font-medium text-gray-900 block">Banner</span>
-                              <span className="text-xs text-gray-500">Imagen hero grande</span>
-                            </div>
-                          </button>
+                          ) : (
+                            <label className={`flex flex-col items-center justify-center h-24 max-w-[220px] border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                              uploadingCoverMobile ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            }`}>
+                              {uploadingCoverMobile ? (
+                                <span className="text-sm text-gray-500">Subiendo…</span>
+                              ) : (
+                                <>
+                                  <span className="text-sm text-gray-500">Subir portada móvil</span>
+                                  <span className="text-xs text-gray-400 mt-1">JPG, PNG, WebP</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingCoverMobile}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingCoverMobile(true)
+                                  try {
+                                    const url = await uploadToCloudinary(file)
+                                    setCatalogCoverImageMobile(url)
+                                    toast.success('Portada móvil subida')
+                                  } catch (err) {
+                                    console.error('Error uploading cover mobile:', err)
+                                    toast.error('Error al subir imagen')
+                                  } finally {
+                                    setUploadingCoverMobile(false)
+                                    e.target.value = ''
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
                         </div>
                       </div>
 
-                      {/* Tema del catálogo */}
+                      {/* Tema del catálogo — 3 temas en grid simple */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                           Tema visual
                         </label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {/* Tema Claro */}
-                          <button
-                            type="button"
-                            onClick={() => setCatalogTheme('light')}
-                            className={`relative flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
-                              catalogTheme === 'light'
-                                ? 'border-gray-900 shadow-lg ring-1 ring-gray-900/10'
-                                : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                            }`}
-                          >
-                            {catalogTheme === 'light' && (
-                              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            <div className="w-full aspect-[4/3] rounded-lg bg-gray-50 border border-gray-200 overflow-hidden mb-2">
-                              <div className="h-3 bg-emerald-500 w-full" />
-                              <div className="p-1.5 space-y-1">
-                                <div className="h-1.5 bg-gray-300 rounded-full w-3/4" />
-                                <div className="grid grid-cols-2 gap-1">
-                                  <div className="h-6 bg-white rounded border border-gray-200" />
-                                  <div className="h-6 bg-white rounded border border-gray-200" />
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">Claro</span>
-                            <span className="text-[10px] text-gray-500">Limpio y moderno</span>
-                          </button>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cada tema cambia tipografía, forma de tarjetas y acentos. Toca "Vista previa" para verlo con tus productos.
+                        </p>
 
-                          {/* Tema Oscuro */}
-                          <button
-                            type="button"
-                            onClick={() => setCatalogTheme('dark')}
-                            className={`relative flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
-                              catalogTheme === 'dark'
-                                ? 'border-gray-900 shadow-lg ring-1 ring-gray-900/10'
-                                : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                            }`}
-                          >
-                            {catalogTheme === 'dark' && (
-                              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {getCatalogThemesList().map((theme) => {
+                            const isSelected = catalogTheme === theme.id
+                            return (
+                              <div
+                                key={theme.id}
+                                className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                                  isSelected
+                                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogTheme(theme.id)}
+                                  className="block w-full text-left"
+                                >
+                                  {/* Mini preview card */}
+                                  <div
+                                    className="aspect-[4/3] p-3 flex flex-col gap-2"
+                                    style={{ backgroundColor: theme.swatch.bg }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="w-8 h-1.5 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5 flex-1">
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                    </div>
+                                    <div className="flex-1 rounded" style={{ backgroundColor: theme.swatch.card, opacity: 0.6 }} />
+                                  </div>
+                                  {/* Nombre + descripción */}
+                                  <div className="px-3 py-2.5 bg-white border-t border-gray-200/60">
+                                    <div className="text-sm font-semibold text-gray-900">{theme.name}</div>
+                                    <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{theme.description}</div>
+                                  </div>
+                                </button>
+                                {/* Botón "Vista previa" — siempre visible, fácil de tocar */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
+                                  className="w-full px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-t border-gray-200/60 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  Vista previa
+                                </button>
+                                {/* Check de seleccionado */}
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
+                                    <Check className="w-3.5 h-3.5 text-white" />
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            <div className="w-full aspect-[4/3] rounded-lg bg-gray-900 border border-gray-700 overflow-hidden mb-2">
-                              <div className="h-3 bg-purple-600 w-full" />
-                              <div className="p-1.5 space-y-1">
-                                <div className="h-1.5 bg-gray-600 rounded-full w-3/4" />
-                                <div className="grid grid-cols-2 gap-1">
-                                  <div className="h-6 bg-gray-800 rounded border border-gray-700" />
-                                  <div className="h-6 bg-gray-800 rounded border border-gray-700" />
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">Oscuro</span>
-                            <span className="text-[10px] text-gray-500">Look premium</span>
-                          </button>
-
-                          {/* Tema Cafetería */}
-                          <button
-                            type="button"
-                            onClick={() => setCatalogTheme('cafe')}
-                            className={`relative flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
-                              catalogTheme === 'cafe'
-                                ? 'border-gray-900 shadow-lg ring-1 ring-gray-900/10'
-                                : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                            }`}
-                          >
-                            {catalogTheme === 'cafe' && (
-                              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            <div className="w-full aspect-[4/3] rounded-lg overflow-hidden mb-2 border" style={{ backgroundColor: '#FDF6EE', borderColor: '#E8D5C0' }}>
-                              <div className="h-3 w-full" style={{ backgroundColor: '#6F4E37' }} />
-                              <div className="p-1.5 space-y-1">
-                                <div className="h-1.5 rounded-full w-3/4" style={{ backgroundColor: '#D4B896' }} />
-                                <div className="grid grid-cols-2 gap-1">
-                                  <div className="h-6 rounded" style={{ backgroundColor: '#FAF0E4', border: '1px solid #E8D5C0' }} />
-                                  <div className="h-6 rounded" style={{ backgroundColor: '#FAF0E4', border: '1px solid #E8D5C0' }} />
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">Cafetería</span>
-                            <span className="text-[10px] text-gray-500">Cálido y acogedor</span>
-                          </button>
+                            )
+                          })}
                         </div>
                       </div>
 
-                      <div className="border-t border-gray-200"></div>
-                      <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Opciones</h3>
+                        </div>
+                      )}
+                    </div>
+                    {/* FIN CARD 3: APARIENCIA */}
+
+                    {/* CARD 4: OPCIONES */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('options')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                            <Cog className="w-5 h-5 text-gray-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Opciones</h3>
+                            <p className="text-xs text-gray-500">Precios, stock, modos de pedido y horarios</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.options ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.options && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
                       {/* Opciones adicionales */}
                       <div className="space-y-3">
@@ -6274,9 +6308,88 @@ export default function Settings() {
                           A partir de cuántas unidades se aplica el precio mayorista al comprar por catálogo. Valor 1 = sin restricción. Solo afecta al catálogo, no al POS.
                         </p>
                       </div>
+
+                      {/* Horario de atención */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Horario de atención
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={businessHours.enabled}
+                              onChange={(e) => setBusinessHours(prev => ({ ...prev, enabled: e.target.checked }))}
+                              className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                            />
+                            <span className="text-sm text-gray-600">Activar</span>
+                          </label>
+                        </div>
+                        {businessHours.enabled && (
+                          <div className="space-y-2 bg-gray-50 rounded-lg p-3">
+                            {[
+                              { key: 1, name: 'Lunes' },
+                              { key: 2, name: 'Martes' },
+                              { key: 3, name: 'Miércoles' },
+                              { key: 4, name: 'Jueves' },
+                              { key: 5, name: 'Viernes' },
+                              { key: 6, name: 'Sábado' },
+                              { key: 0, name: 'Domingo' },
+                            ].map(day => (
+                              <div key={day.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <label className="flex items-center gap-2 w-24 sm:w-28 flex-shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={businessHours.days[day.key]?.open || false}
+                                    onChange={(e) => setBusinessHours(prev => ({
+                                      ...prev,
+                                      days: { ...prev.days, [day.key]: { ...prev.days[day.key], open: e.target.checked } }
+                                    }))}
+                                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                                  />
+                                  <span className={`text-sm ${businessHours.days[day.key]?.open ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
+                                    {day.name}
+                                  </span>
+                                </label>
+                                {businessHours.days[day.key]?.open && (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.from || '09:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], from: e.target.value } }
+                                      }))}
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
+                                    />
+                                    <span className="text-gray-400 text-xs sm:text-sm">a</span>
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.to || '18:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], to: e.target.value } }
+                                      }))}
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
+                                    />
+                                  </div>
+                                )}
+                                {!businessHours.days[day.key]?.open && (
+                                  <span className="text-xs text-red-400">Cerrado</span>
+                                )}
+                              </div>
+                            ))}
+                            <p className="text-xs text-gray-500 mt-2">Se muestra en el catálogo y bloquea pedidos fuera de horario</p>
+                          </div>
+                        )}
+                      </div>
+                        </div>
+                      )}
                     </div>
+                    {/* FIN CARD 4: OPCIONES */}
+
                   </div>
-                  {/* FIN DOS COLUMNAS */}
+                  {/* FIN 4 TARJETAS COLAPSABLES */}
                 </>
               )}
 
@@ -6303,8 +6416,8 @@ export default function Settings() {
                         customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,
                         catalogColor,
                         catalogTheme,
-                        catalogHeroStyle,
                         catalogCoverImage,
+                        catalogCoverImageMobile: catalogCoverImageMobile || null,
                         catalogWelcome,
                         catalogTagline,
                         catalogShowPrices,
@@ -6312,6 +6425,7 @@ export default function Settings() {
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
                         catalogLogoUrl: catalogLogoUrl || null,
+                        catalogLogoLandscape: catalogLogoLandscape || null,
                         catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
                         catalogShowAllPrices,
                         catalogAllowTakeaway,
@@ -6347,243 +6461,7 @@ export default function Settings() {
                 </Button>
               </div>
             </>
-          )}
 
-          {/* ===== PESTAÑA LIBRO DE RECLAMACIONES ===== */}
-          {catalogSubTab === 'reclamaciones' && (
-            <>
-              {/* Descripción */}
-              <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl border border-red-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
-                    <BookOpen className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-red-900">Cumple con la normativa peruana</h3>
-                    <p className="text-sm text-red-700 mt-1">
-                      Según la Ley N° 29571 y D.S. N° 011-2011-PCM, tu negocio debe contar con un Libro de Reclamaciones.
-                      Activa esta opción para que tus clientes puedan registrar sus reclamos y quejas de forma virtual.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Toggle habilitar */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-xl transition-colors hover:border-red-300">
-                <input
-                  type="checkbox"
-                  checked={complaintsBookEnabled}
-                  onChange={(e) => setComplaintsBookEnabled(e.target.checked)}
-                  className="mt-1 w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                />
-                <div className="flex-1">
-                  <span className="text-base font-semibold text-gray-900">
-                    {complaintsBookEnabled ? 'Libro de Reclamaciones habilitado' : 'Habilitar Libro de Reclamaciones'}
-                  </span>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {complaintsBookEnabled
-                      ? 'Tu Libro de Reclamaciones está activo y visible para el público'
-                      : 'Activa esta opción para crear tu Libro de Reclamaciones virtual'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Configuración (solo si está habilitado) */}
-              {complaintsBookEnabled && (
-                <div className="space-y-6">
-                  {/* URL del Libro de Reclamaciones */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      URL de tu Libro de Reclamaciones
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
-                        <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
-                          cobrifyperu.com/app/reclamos/
-                        </span>
-                        <input
-                          type="text"
-                          value={complaintsBookSlug}
-                          onChange={(e) => setComplaintsBookSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                          placeholder="mi-negocio"
-                          className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-red-500 text-gray-900"
-                        />
-                      </div>
-                      {complaintsBookSlug && (
-                        <button
-                          type="button"
-                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/${complaintsBookSlug}`, '_blank')}
-                          className="p-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                          title="Ver Libro de Reclamaciones"
-                        >
-                          <ExternalLink className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Solo letras minúsculas, números y guiones. Ejemplo: mi-negocio, ferreteria-lopez
-                    </p>
-                  </div>
-
-                  {/* Vista previa del enlace */}
-                  {complaintsBookSlug && (
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-500 mb-1">Enlace de tu Libro de Reclamaciones:</p>
-                          <p className="text-sm font-medium text-red-600 truncate">
-                            {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/{complaintsBookSlug}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/${complaintsBookSlug}`)
-                            toast.success('Enlace copiado al portapapeles')
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
-                        >
-                          <Copy className="w-4 h-4" />
-                          Copiar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Código QR */}
-                  {complaintsBookSlug && complaintsBookQrDataUrl && (
-                    <div className="p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-200">
-                      <div className="flex items-center gap-2 mb-3">
-                        <QrCode className="w-5 h-5 text-red-600" />
-                        <h4 className="font-medium text-gray-900">Código QR del Libro de Reclamaciones</h4>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <div className="bg-white p-3 rounded-xl shadow-sm">
-                          <img
-                            src={complaintsBookQrDataUrl}
-                            alt="QR del Libro de Reclamaciones"
-                            className="w-40 h-40"
-                          />
-                        </div>
-                        <div className="flex-1 text-center sm:text-left">
-                          <p className="text-sm text-gray-600 mb-3">
-                            Imprime y coloca este código QR en un lugar visible de tu establecimiento.
-                            Es obligatorio según la normativa peruana.
-                          </p>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const filename = `libro-reclamaciones-${complaintsBookSlug}-qr.png`
-                                await downloadDataUrl(complaintsBookQrDataUrl, filename, {
-                                  title: filename,
-                                  dialogTitle: 'Guardar QR del libro de reclamaciones'
-                                })
-                                toast.success('QR descargado exitosamente')
-                              } catch (err) {
-                                console.error('Error descargando QR del libro de reclamaciones:', err)
-                                toast.error('No se pudo descargar el QR')
-                              }
-                            }}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-                          >
-                            <Download className="w-4 h-4" />
-                            Descargar QR
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-200"></div>
-
-                  {/* Plazo de respuesta */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Plazo de respuesta (días calendario)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={complaintsBookResponseDays}
-                        onChange={(e) => setComplaintsBookResponseDays(parseInt(e.target.value) || 30)}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      />
-                      <span className="text-sm text-gray-500">días</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Por ley, el plazo máximo es de 30 días calendario, prorrogable 30 días más.
-                    </p>
-                  </div>
-
-                  <div className="border-t border-gray-200"></div>
-
-                  {/* Información adicional */}
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                    <div className="flex items-start gap-3">
-                      <Info className="w-5 h-5 text-blue-600 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium text-blue-900">¿Cómo funciona?</h4>
-                        <ul className="text-sm text-blue-700 mt-2 space-y-1">
-                          <li>• Tus clientes pueden registrar reclamos o quejas desde la URL pública</li>
-                          <li>• Recibirán un código de seguimiento para consultar el estado</li>
-                          <li>• Podrás ver y responder los reclamos desde el menú "Libro de Reclamos"</li>
-                          <li>• Los reclamos y respuestas quedan registrados por 2 años mínimo</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Save Button */}
-              <div className="flex justify-end pt-4 border-t border-gray-200">
-                <Button
-                  onClick={async () => {
-                    if (isDemoMode) {
-                      toast.error('No se pueden guardar cambios en modo demo.')
-                      return
-                    }
-
-                    if (complaintsBookEnabled && !complaintsBookSlug) {
-                      toast.error('Ingresa una URL para tu Libro de Reclamaciones')
-                      return
-                    }
-
-                    setIsSaving(true)
-                    try {
-                      const businessRef = doc(db, 'businesses', getBusinessId())
-                      await setDoc(businessRef, {
-                        complaintsBookEnabled,
-                        complaintsBookSlug: complaintsBookSlug.toLowerCase().trim(),
-                        complaintsBookResponseDays,
-                        updatedAt: serverTimestamp(),
-                      }, { merge: true })
-                      toast.success(complaintsBookEnabled ? 'Libro de Reclamaciones configurado exitosamente' : 'Libro de Reclamaciones deshabilitado')
-                    } catch (error) {
-                      console.error('Error al guardar Libro de Reclamaciones:', error)
-                      toast.error('Error al guardar la configuración')
-                    } finally {
-                      setIsSaving(false)
-                    }
-                  }}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Guardar Configuración
-                    </>
-                  )}
-                </Button>
-              </div>
-            </>
-          )}
         </div>
       )}
 
@@ -9191,6 +9069,23 @@ export default function Settings() {
         isOpen={showRenumberModal}
         onClose={() => setShowRenumberModal(false)}
       />
+
+      {/* Vista previa del tema del catálogo (iframe sobre el catálogo real) */}
+      {previewThemeId && CATALOG_THEMES[previewThemeId] && (
+        <CatalogThemePreview
+          theme={CATALOG_THEMES[previewThemeId]}
+          slug={businessSettings?.catalogSlug || ''}
+          enabled={!!businessSettings?.catalogEnabled}
+          isRestaurantMenu={businessMode === 'restaurant'}
+          isCurrent={catalogTheme === previewThemeId}
+          onClose={() => setPreviewThemeId(null)}
+          onApply={() => {
+            setCatalogTheme(previewThemeId)
+            setPreviewThemeId(null)
+            toast.success(`Tema "${CATALOG_THEMES[previewThemeId].name}" aplicado. No olvides guardar.`)
+          }}
+        />
+      )}
     </div>
   )
 }
