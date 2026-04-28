@@ -85,6 +85,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
 import InvoiceTicket from '@/components/InvoiceTicket'
+import { getPrimaryPet } from '@/utils/petUtils'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -508,6 +509,7 @@ export default function POS() {
     phone: '',
     studentName: '', // Campo libre para nombre de alumno
     studentSchedule: '', // Horario/turno del alumno
+    petName: '', // Nombre de la mascota (modo veterinaria)
     vehiclePlate: '', // Placa de vehículo
     vehicleModel: '', // Modelo de vehículo
     vehicleYear: '', // Año de vehículo
@@ -748,7 +750,7 @@ export default function POS() {
       holdCurrentSale()
     }
     setCart(sale.cart || [])
-    setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
+    setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', petName: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
     setSelectedCustomer(sale.selectedCustomer || null)
     setDocumentType(sale.documentType || companySettings?.defaultDocumentType || 'boleta')
     setPayments(sale.payments || [{ method: getDefaultPaymentMethod(), amount: '' }])
@@ -1146,6 +1148,7 @@ export default function POS() {
           phone: customer.phone || '',
           studentName: customer.studentName || '',
           studentSchedule: customer.studentSchedule || '',
+          petName: getPrimaryPet(customer)?.name || customer.petName || '',
           vehiclePlate: customer.vehiclePlate || '',
           vehicleModel: customer.vehicleModel || '',
           vehicleYear: customer.vehicleYear || '',
@@ -1333,6 +1336,7 @@ export default function POS() {
         phone: invoice.customer?.phone || '',
         studentName: invoice.customer?.studentName || '',
         studentSchedule: invoice.customer?.studentSchedule || '',
+        petName: invoice.customer?.petName || '',
         vehiclePlate: invoice.customer?.vehiclePlate || '',
         vehicleModel: invoice.customer?.vehicleModel || '',
         vehicleYear: invoice.customer?.vehicleYear || '',
@@ -1461,6 +1465,7 @@ export default function POS() {
         phone: invoice.customer?.phone || '',
         studentName: invoice.customer?.studentName || '',
         studentSchedule: invoice.customer?.studentSchedule || '',
+        petName: invoice.customer?.petName || '',
         vehiclePlate: invoice.customer?.vehiclePlate || '',
         vehicleModel: invoice.customer?.vehicleModel || '',
         vehicleYear: invoice.customer?.vehicleYear || '',
@@ -2939,6 +2944,7 @@ export default function POS() {
       phone: '',
       studentName: '',
       studentSchedule: '',
+      petName: '',
       vehiclePlate: '',
       vehicleModel: '',
       vehicleYear: '',
@@ -3616,6 +3622,7 @@ export default function POS() {
                 address: customerData.address || '',
                 studentName: customerData.studentName || '',
                 studentSchedule: customerData.studentSchedule || '',
+                petName: customerData.petName || '',
                 vehiclePlate: customerData.vehiclePlate || '',
                 vehicleModel: customerData.vehicleModel || '',
                 vehicleYear: customerData.vehicleYear || '',
@@ -3641,6 +3648,7 @@ export default function POS() {
                 address: '',
                 studentName: customerData.studentName || '',
                 studentSchedule: customerData.studentSchedule || '',
+                petName: customerData.petName || '',
                 vehiclePlate: customerData.vehiclePlate || '',
                 vehicleModel: customerData.vehicleModel || '',
                 vehicleYear: customerData.vehicleYear || '',
@@ -3705,6 +3713,7 @@ export default function POS() {
           address: '',
           studentName: '',
           studentSchedule: '',
+          petName: '',
           vehiclePlate: '',
           vehicleModel: '',
           vehicleYear: '',
@@ -3821,6 +3830,7 @@ export default function POS() {
               address: customerData.address || '',
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
+              petName: customerData.petName || '',
               vehiclePlate: customerData.vehiclePlate || '',
               vehicleModel: customerData.vehicleModel || '',
               vehicleYear: customerData.vehicleYear || '',
@@ -3846,6 +3856,7 @@ export default function POS() {
               address: '',
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
+              petName: customerData.petName || '',
               vehiclePlate: customerData.vehiclePlate || '',
               vehicleModel: customerData.vehicleModel || '',
               vehicleYear: customerData.vehicleYear || '',
@@ -5599,6 +5610,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               phone: '',
                               studentName: '',
                               studentSchedule: '',
+                              petName: '',
                               vehiclePlate: '',
                               vehicleModel: '',
                               vehicleYear: ''
@@ -5634,7 +5646,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   email: customer.email || '',
                                   phone: customer.phone || '',
                                   studentName: customer.studentName || '',
-                                  studentSchedule: customer.studentSchedule || ''
+                                  studentSchedule: customer.studentSchedule || '',
+                                  // Veterinaria: hidratar nombre de mascota (primera del array o legacy)
+                                  petName: getPrimaryPet(customer)?.name || customer.petName || '',
                                 })
                               }}
                               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
@@ -5723,6 +5737,48 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         />
                       </div>
                     )}
+                    {/* Modo veterinaria: nombre de mascota.
+                        Si el cliente seleccionado tiene varias mascotas, mostrar chips para cambiar
+                        rápido entre ellas (la primera carga por defecto al seleccionar cliente). */}
+                    {businessMode === 'veterinary' && (() => {
+                      const pets = selectedCustomer
+                        ? (Array.isArray(selectedCustomer.pets) && selectedCustomer.pets.length > 0
+                            ? selectedCustomer.pets
+                            : (selectedCustomer.petName
+                                ? [{ id: 'legacy', name: selectedCustomer.petName }]
+                                : []))
+                        : []
+                      return (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={customerData.petName}
+                            onChange={e => setCustomerData({ ...customerData, petName: e.target.value })}
+                            placeholder="🐾 Nombre de la mascota"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          {pets.length > 1 && (
+                            <div className="flex flex-wrap gap-1">
+                              {pets.map(p => (
+                                <button
+                                  key={p.id || p.name}
+                                  type="button"
+                                  onClick={() => setCustomerData({ ...customerData, petName: p.name })}
+                                  className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                    customerData.petName === p.name
+                                      ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                  title={p.species ? `${p.name} (${p.species})` : p.name}
+                                >
+                                  {p.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                     {companySettings?.posCustomFields?.showVehiclePlateField && (
                       <input
                         type="text"
@@ -6219,6 +6275,48 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         />
                       </div>
                     )}
+                    {/* Modo veterinaria: nombre de mascota.
+                        Si el cliente seleccionado tiene varias mascotas, mostrar chips para cambiar
+                        rápido entre ellas (la primera carga por defecto al seleccionar cliente). */}
+                    {businessMode === 'veterinary' && (() => {
+                      const pets = selectedCustomer
+                        ? (Array.isArray(selectedCustomer.pets) && selectedCustomer.pets.length > 0
+                            ? selectedCustomer.pets
+                            : (selectedCustomer.petName
+                                ? [{ id: 'legacy', name: selectedCustomer.petName }]
+                                : []))
+                        : []
+                      return (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={customerData.petName}
+                            onChange={e => setCustomerData({ ...customerData, petName: e.target.value })}
+                            placeholder="🐾 Nombre de la mascota"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          {pets.length > 1 && (
+                            <div className="flex flex-wrap gap-1">
+                              {pets.map(p => (
+                                <button
+                                  key={p.id || p.name}
+                                  type="button"
+                                  onClick={() => setCustomerData({ ...customerData, petName: p.name })}
+                                  className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                    customerData.petName === p.name
+                                      ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                  title={p.species ? `${p.name} (${p.species})` : p.name}
+                                >
+                                  {p.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                     {companySettings?.posCustomFields?.showVehiclePlateField && (
                       <input
                         type="text"

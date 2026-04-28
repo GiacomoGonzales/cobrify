@@ -16,6 +16,7 @@ import {
   runTransaction,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
+import { generatePetId, normalizePets } from '@/utils/petUtils'
 
 /**
  * Servicio para interactuar con Firestore
@@ -407,6 +408,17 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
       return existingResult
     }
 
+    // Helper: agrega una mascota al array de pets si su nombre aún no está presente.
+    // Devuelve el array actualizado o null si no hubo cambios.
+    const addPetIfNew = (existingPets, petName) => {
+      const trimmed = (petName || '').trim()
+      if (!trimmed) return null
+      const current = Array.isArray(existingPets) ? existingPets : []
+      const alreadyExists = current.some(p => (p.name || '').trim().toLowerCase() === trimmed.toLowerCase())
+      if (alreadyExists) return null
+      return [...current, { id: generatePetId(), name: trimmed, species: '', breed: '', age: '', weight: '', notes: '' }]
+    }
+
     if (existingResult.data) {
       // Cliente existe - actualizar solo si hay datos nuevos más completos
       const existing = existingResult.data
@@ -418,6 +430,16 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
       if (customerData.email && !existing.email) updates.email = customerData.email
       if (customerData.phone && !existing.phone) updates.phone = customerData.phone
       if (customerData.address && !existing.address) updates.address = customerData.address
+
+      // Mascota: si la venta trae petName y aún no existe en pets[], agregarla.
+      // Normalizamos primero para migrar campo legacy petName del cliente al array pets.
+      if (customerData.petName) {
+        const normalized = normalizePets(existing)
+        const updatedPets = addPetIfNew(normalized, customerData.petName)
+        if (updatedPets) {
+          updates.pets = updatedPets
+        }
+      }
 
       // Solo actualizar si hay cambios
       if (Object.keys(updates).length > 0) {
@@ -439,6 +461,19 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
         phone: customerData.phone || '',
         address: customerData.address || '',
         source: 'auto_from_sale' // Marcar que fue creado automáticamente
+      }
+
+      // Si la venta trae nombre de mascota, lo registramos como primera mascota del cliente
+      if (customerData.petName && customerData.petName.trim()) {
+        newCustomerData.pets = [{
+          id: generatePetId(),
+          name: customerData.petName.trim(),
+          species: '',
+          breed: '',
+          age: '',
+          weight: '',
+          notes: '',
+        }]
       }
 
       const createResult = await createCustomer(userId, newCustomerData)

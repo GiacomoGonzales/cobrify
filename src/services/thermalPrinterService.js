@@ -1050,6 +1050,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         }
       }
 
+      // Mascota (modo veterinaria) — siempre se imprime si el comprobante trae nombre
+      if (invoice.customer?.petName) {
+        printer = printer.text(convertSpanishText(`Mascota: ${invoice.customer.petName}\n`));
+      }
+
       // Placa de Vehículo (solo si está habilitado en configuración)
       if (business?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
         printer = printer.text(convertSpanishText(`Placa: ${invoice.customer.vehiclePlate.toUpperCase()}\n`));
@@ -2335,6 +2340,11 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       if (invoice.customer?.studentSchedule) {
         builder.text(`Horario: ${invoice.customer.studentSchedule}`).newLine();
       }
+    }
+
+    // Mascota (modo veterinaria) — siempre se imprime si el comprobante trae nombre
+    if (invoice.customer?.petName) {
+      builder.text(`Mascota: ${invoice.customer.petName}`).newLine();
     }
 
     // Placa de Vehículo (solo si está habilitado en configuración)

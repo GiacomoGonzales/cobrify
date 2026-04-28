@@ -783,6 +783,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             </>
           )}
 
+          {/* Mascota (modo veterinaria) — siempre visible si el comprobante trae nombre */}
+          {invoice.customer?.petName && (
+            <div className="info-row">
+              <span className="info-label">Mascota:</span>
+              <span>🐾 {invoice.customer.petName}</span>
+            </div>
+          )}
+
           {/* Placa de Vehículo (solo si está habilitado en configuración) */}
           {companySettings?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate && (
             <div className="info-row">

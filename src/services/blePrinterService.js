@@ -849,6 +849,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText('Horario: ' + customer.studentSchedule) + '\n'));
     }
 
+    // Mascota (modo veterinaria)
+    if (customer?.petName) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Mascota: ' + customer.petName) + '\n'));
+    }
+
     // Placa de Vehículo (solo si existe en los datos)
     if (customer?.vehiclePlate) {
       commands.push(ESCPOSCommands.text(convertSpanishText('Placa: ' + customer.vehiclePlate.toUpperCase()) + '\n'));
