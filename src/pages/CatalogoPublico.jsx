@@ -1292,10 +1292,15 @@ function CartDrawer({
         deliveredAt: null,
       }))
 
-      // Calcular totales
+      // Calcular totales.
+      // IMPORTANTE: la configuración fiscal vive en business.emissionConfig.taxConfig
+      // (mismo path que usa POS). Antes leíamos business.taxConfig directo y como
+      // ese campo no existe en el documento, igvExempt siempre quedaba false y se
+      // generaba IGV a empresas exoneradas.
       const orderTotal = items.reduce((sum, item) => sum + item.total, 0)
-      const igvRate = business.taxConfig?.igvRate || 18
-      const igvExempt = business.taxConfig?.igvExempt || false
+      const taxCfg = business.emissionConfig?.taxConfig || business.taxConfig || {}
+      const igvRate = taxCfg.igvRate || 18
+      const igvExempt = taxCfg.igvExempt === true
       let subtotal, tax
 
       if (igvExempt) {
