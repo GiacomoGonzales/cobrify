@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2 } from 'lucide-react'
@@ -60,7 +60,29 @@ export default function Settings() {
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState('informacion')
+  // Tab inicial: si la URL trae ?tab=xxx (ej: desde el sidebar "Mi Catálogo"
+  // que apunta a /configuracion?tab=catalogo) lo respetamos. Si no, default.
+  const _location = useLocation()
+  const _initialTab = (() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      const t = params.get('tab')
+      if (t && ['informacion', 'preferencias', 'documentos', 'catalogo'].includes(t)) return t
+    } catch {}
+    return 'informacion'
+  })()
+  const [activeTab, setActiveTab] = useState(_initialTab)
+  // Si la URL cambia (navegación entre items del sidebar), respetar el tab
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      const t = params.get('tab')
+      if (t && ['informacion', 'preferencias', 'documentos', 'catalogo'].includes(t) && t !== activeTab) {
+        setActiveTab(t)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_location.search])
   const [subscription, setSubscription] = useState(null)
   const [series, setSeries] = useState({
     factura: { serie: 'F001', lastNumber: 0 },
@@ -2238,14 +2260,37 @@ export default function Settings() {
     ...(hasFeature && hasFeature('bulkDelete') ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
   ]
 
+  // Modo "Mi Catálogo Online standalone": si llegamos a Configuración con
+  // ?tab=catalogo (vía sidebar dedicado), ocultamos las pestañas y el título
+  // genérico de Configuración para que se sienta como una página propia.
+  const isStandaloneCatalog = (() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      return params.get('tab') === 'catalogo' && activeTab === 'catalogo'
+    } catch {
+      return false
+    }
+  })()
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Configuración</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">
-          Configura la información de tu empresa
-        </p>
+        {isStandaloneCatalog ? (
+          <>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Mi Catálogo Online</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Comparte tu catálogo digital con tus clientes y recibe pedidos por WhatsApp
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Configuración</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Configura la información de tu empresa
+            </p>
+          </>
+        )}
       </div>
 
       {/* Demo Mode Alert */}
@@ -2272,7 +2317,8 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs (ocultas cuando entramos en modo Catálogo standalone) */}
+      {!isStandaloneCatalog && (
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           {tabs.map(tab => (
@@ -2310,6 +2356,7 @@ export default function Settings() {
           ))}
         </nav>
       </div>
+      )}
 
       {/* Tab Content - Información */}
       {activeTab === 'informacion' && (

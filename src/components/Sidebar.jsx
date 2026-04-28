@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import {
@@ -59,6 +59,12 @@ import {
   ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  ShoppingBasket,
+  Factory,
+  Briefcase,
   // Iconos para modo veterinaria
   PawPrint,
   Stethoscope,
@@ -76,6 +82,24 @@ function Sidebar() {
   const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
+
+  // Estado de grupos colapsables del sidebar (persistido en localStorage para no
+  // resetearse en cada navegación). Solo aplica a items con `groupId` y `children`.
+  const [openGroups, setOpenGroups] = useState(() => {
+    try {
+      const raw = localStorage.getItem('sidebar_open_groups')
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+  const toggleGroup = (groupId) => {
+    setOpenGroups(prev => {
+      const next = { ...prev, [groupId]: !prev[groupId] }
+      try { localStorage.setItem('sidebar_open_groups', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   // Si estamos en modo demo, añadir prefijo /demo, /demorestaurant o /demopharmacy a las rutas
   // Si no, añadir prefijo /app para rutas protegidas
@@ -104,12 +128,12 @@ function Sidebar() {
   // menuId: ID para personalización del menú (hiddenMenuItems)
   // pageId: ID para control de acceso de usuarios secundarios
   const retailMenuItems = [
+    // === Operación diaria (siempre visibles) ===
     {
       path: '/dashboard',
       icon: LayoutDashboard,
       label: 'Dashboard',
       pageId: 'dashboard',
-      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/pos',
@@ -117,7 +141,6 @@ function Sidebar() {
       label: 'Punto de Venta',
       badge: 'POS',
       pageId: 'pos',
-      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/pedidos-online',
@@ -138,237 +161,307 @@ function Sidebar() {
       icon: FileText,
       label: 'Ventas',
       pageId: 'invoices',
-      // No tiene menuId = módulo principal que no se puede ocultar
-    },
-    {
-      path: '/cotizaciones',
-      icon: FileCheck,
-      label: 'Cotizaciones',
-      pageId: 'quotations',
-      menuId: 'quotations',
-    },
-    {
-      path: '/guias-remision',
-      icon: Truck,
-      label: 'GRE Remitente',
-      pageId: 'dispatch-guides',
-      menuId: 'dispatch-guides',
-    },
-    {
-      path: '/guias-transportista',
-      icon: Truck,
-      label: 'GRE Transportista',
-      pageId: 'carrier-dispatch-guides',
-      menuId: 'carrier-dispatch-guides',
-      hideInDemo: true,
     },
     {
       path: '/clientes',
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
-      // No tiene menuId = módulo principal que no se puede ocultar
     },
-    {
-      path: '/control-pagos-alumnos',
-      icon: GraduationCap,
-      label: 'Control de Alumnos',
-      pageId: 'customers',
-      menuId: 'student-payments',
-      requiresStudentField: true,
-      hideInDemo: true,
-    },
-    {
-      path: '/vendedores',
-      icon: UserCog,
-      label: 'Vendedores',
-      pageId: 'sellers',
-      menuId: 'sellers',
-    },
-    // Control de Asistencia:
-    // - Sub-usuarios solo ven el link en la app nativa (donde pueden marcar con QR/GPS).
-    // - Owner/Admin lo ven siempre (en web gestionan configuración y marcaciones).
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
-      ? [{
-          path: '/asistencia',
-          icon: UserCheck,
-          label: 'Control de Asistencia',
-          menuId: 'attendance',
-        }]
-      : []),
     {
       path: '/productos',
       icon: Package,
       label: 'Productos',
       pageId: 'products',
-      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
-      pageId: 'inventory', // Permiso propio de inventario
+      pageId: 'inventory',
       menuId: 'inventory',
     },
+
+    // === Mi Catálogo Online (acceso directo a la pestaña de Settings) ===
     {
-      path: '/almacenes',
-      icon: Warehouse,
-      label: 'Almacenes',
-      pageId: 'warehouses',
-      menuId: 'warehouses',
+      path: '/configuracion?tab=catalogo',
+      icon: Globe,
+      label: 'Mi Catálogo Online',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion', // marcado como activo cuando la ruta es /configuracion
     },
+
+    // === GRUPO: Documentos ===
     {
-      path: '/movimientos',
-      icon: History,
-      label: 'Movimientos',
-      pageId: 'stock-movements',
-      menuId: 'stock-movements',
-    },
-    {
-      path: '/control-lotes',
-      icon: Package,
-      label: 'Control de Lotes',
-      pageId: 'batch-control',
-      menuId: 'batch-control',
-      requiresBatchControl: true,
-    },
-    {
-      path: '/alertas-vencimiento',
-      icon: AlertTriangle,
-      label: 'Alertas de Vencimiento',
-      pageId: 'expiry-alerts',
-      menuId: 'expiry-alerts',
-      requiresBatchControl: true,
-    },
-    {
-      path: '/proveedores',
-      icon: Truck,
-      label: 'Proveedores',
-      pageId: 'suppliers',
-      menuId: 'suppliers',
-    },
-    {
-      path: '/compras',
-      icon: ShoppingBag,
-      label: 'Compras',
-      pageId: 'purchases',
-      menuId: 'purchases',
-    },
-    {
-      path: '/ordenes-compra',
-      icon: ClipboardList,
-      label: 'Órdenes de Compra',
-      pageId: 'purchase-orders',
-      menuId: 'purchase-orders',
-    },
-    {
-      path: '/ingredientes/historial',
-      icon: History,
-      label: 'Historial de Compras',
-      pageId: 'purchase-history',
-      menuId: 'purchase-history',
-    },
-    {
-      path: '/prestamos',
-      icon: Landmark,
-      label: 'Préstamos',
-      pageId: 'loans',
-      menuId: 'loans',
-      hideInDemo: true,
-    },
-    {
-      path: '/certificados',
-      icon: Award,
-      label: 'Certificados',
-      pageId: 'certificates',
-      menuId: 'certificates',
-      requiresFeature: 'certificates',
-      hideInDemo: true,
-    },
-    {
-      path: '/ingredientes',
-      icon: Package,
-      label: 'Insumos',
-      pageId: 'ingredients',
-      menuId: 'ingredients',
-    },
-    {
-      path: '/recetas',
-      icon: ClipboardList,
-      label: 'Composición',
-      pageId: 'recipes',
-      menuId: 'recipes',
-    },
-    {
-      path: '/produccion',
-      icon: Cog,
-      label: 'Producción',
-      pageId: 'production',
-      menuId: 'production',
-    },
-    {
-      path: '/envios',
-      icon: Truck,
-      label: 'Envíos',
-      pageId: 'envios',
-      menuId: 'envios',
-    },
-    {
-      path: '/reportes',
-      icon: BarChart3,
-      label: 'Reportes',
-      pageId: 'reports',
-      menuId: 'reports',
-    },
-    {
-      path: '/meta-ads',
-      icon: Facebook,
-      label: 'Meta Ads',
-      pageId: 'meta-ads',
-      menuId: 'meta-ads',
-      requiresMetaAds: true,
-    },
-    {
-      path: '/gastos',
-      icon: Receipt,
-      label: 'Gastos',
-      pageId: 'expenses',
-      menuId: 'expenses',
-      // Ahora controlado por el usuario en Preferencias (no requiresFeature)
-    },
-    {
-      path: '/flujo-caja',
-      icon: TrendingUp,
-      label: 'Flujo de Caja',
-      pageId: 'cash-flow',
-      menuId: 'cash-flow',
-    },
-    {
-      path: '/contabilidad',
+      groupId: 'documentos',
       icon: FileCheck,
-      label: 'Contabilidad',
-      pageId: 'accounting',
-      menuId: 'accounting',
+      label: 'Documentos',
+      children: [
+        {
+          path: '/cotizaciones',
+          icon: FileCheck,
+          label: 'Cotizaciones',
+          pageId: 'quotations',
+          menuId: 'quotations',
+        },
+        {
+          path: '/guias-remision',
+          icon: Truck,
+          label: 'GRE Remitente',
+          pageId: 'dispatch-guides',
+          menuId: 'dispatch-guides',
+        },
+        {
+          path: '/guias-transportista',
+          icon: Truck,
+          label: 'GRE Transportista',
+          pageId: 'carrier-dispatch-guides',
+          menuId: 'carrier-dispatch-guides',
+          hideInDemo: true,
+        },
+      ],
     },
+
+    // === GRUPO: Compras y Proveedores ===
     {
-      path: '/reclamos',
-      icon: BookOpen,
-      label: 'Libro de Reclamos',
-      pageId: 'complaints',
-      menuId: 'complaints',
+      groupId: 'compras',
+      icon: ShoppingBasket,
+      label: 'Compras',
+      children: [
+        {
+          path: '/compras',
+          icon: ShoppingBag,
+          label: 'Compras',
+          pageId: 'purchases',
+          menuId: 'purchases',
+        },
+        {
+          path: '/ordenes-compra',
+          icon: ClipboardList,
+          label: 'Órdenes de Compra',
+          pageId: 'purchase-orders',
+          menuId: 'purchase-orders',
+        },
+        {
+          path: '/proveedores',
+          icon: Truck,
+          label: 'Proveedores',
+          pageId: 'suppliers',
+          menuId: 'suppliers',
+        },
+        {
+          path: '/ingredientes/historial',
+          icon: History,
+          label: 'Historial de Compras',
+          pageId: 'purchase-history',
+          menuId: 'purchase-history',
+        },
+      ],
     },
+
+    // === GRUPO: Producción (insumos, recetas, producción) ===
+    {
+      groupId: 'produccion',
+      icon: Factory,
+      label: 'Producción',
+      children: [
+        {
+          path: '/ingredientes',
+          icon: Package,
+          label: 'Insumos',
+          pageId: 'ingredients',
+          menuId: 'ingredients',
+        },
+        {
+          path: '/recetas',
+          icon: ClipboardList,
+          label: 'Composición',
+          pageId: 'recipes',
+          menuId: 'recipes',
+        },
+        {
+          path: '/produccion',
+          icon: Cog,
+          label: 'Producción',
+          pageId: 'production',
+          menuId: 'production',
+        },
+      ],
+    },
+
+    // === GRUPO: Inventario avanzado ===
+    {
+      groupId: 'inventario-avanzado',
+      icon: Warehouse,
+      label: 'Almacenes & Stock',
+      children: [
+        {
+          path: '/almacenes',
+          icon: Warehouse,
+          label: 'Almacenes',
+          pageId: 'warehouses',
+          menuId: 'warehouses',
+        },
+        {
+          path: '/movimientos',
+          icon: History,
+          label: 'Movimientos',
+          pageId: 'stock-movements',
+          menuId: 'stock-movements',
+        },
+        {
+          path: '/control-lotes',
+          icon: Package,
+          label: 'Control de Lotes',
+          pageId: 'batch-control',
+          menuId: 'batch-control',
+          requiresBatchControl: true,
+        },
+        {
+          path: '/alertas-vencimiento',
+          icon: AlertTriangle,
+          label: 'Alertas de Vencimiento',
+          pageId: 'expiry-alerts',
+          menuId: 'expiry-alerts',
+          requiresBatchControl: true,
+        },
+        {
+          path: '/envios',
+          icon: Truck,
+          label: 'Envíos',
+          pageId: 'envios',
+          menuId: 'envios',
+        },
+      ],
+    },
+
+    // === GRUPO: Equipo y Operaciones ===
+    {
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        {
+          path: '/vendedores',
+          icon: UserCog,
+          label: 'Vendedores',
+          pageId: 'sellers',
+          menuId: 'sellers',
+        },
+        // Control de Asistencia:
+        // - Sub-usuarios solo ven el link en la app nativa (marcan con QR/GPS).
+        // - Owner/Admin lo ven siempre (gestionan configuración y marcaciones).
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: 'Control de Asistencia',
+              menuId: 'attendance',
+            }]
+          : []),
+        {
+          path: '/control-pagos-alumnos',
+          icon: GraduationCap,
+          label: 'Control de Alumnos',
+          pageId: 'customers',
+          menuId: 'student-payments',
+          requiresStudentField: true,
+          hideInDemo: true,
+        },
+      ],
+    },
+
+    // === GRUPO: Reportes y Finanzas ===
+    {
+      groupId: 'finanzas',
+      icon: BarChart3,
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+          menuId: 'reports',
+        },
+        {
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        },
+        {
+          path: '/flujo-caja',
+          icon: TrendingUp,
+          label: 'Flujo de Caja',
+          pageId: 'cash-flow',
+          menuId: 'cash-flow',
+        },
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+        {
+          path: '/meta-ads',
+          icon: Facebook,
+          label: 'Meta Ads',
+          pageId: 'meta-ads',
+          menuId: 'meta-ads',
+          requiresMetaAds: true,
+        },
+      ],
+    },
+
+    // === GRUPO: Otros (uso poco frecuente) ===
+    {
+      groupId: 'otros',
+      icon: BookOpen,
+      label: 'Otros',
+      children: [
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+        {
+          path: '/prestamos',
+          icon: Landmark,
+          label: 'Préstamos',
+          pageId: 'loans',
+          menuId: 'loans',
+          hideInDemo: true,
+        },
+        {
+          path: '/certificados',
+          icon: Award,
+          label: 'Certificados',
+          pageId: 'certificates',
+          menuId: 'certificates',
+          requiresFeature: 'certificates',
+          hideInDemo: true,
+        },
+      ],
+    },
+
+    // === Configuración (siempre al final) ===
     {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
       pageId: 'settings',
-      // No tiene menuId = módulo principal que no se puede ocultar
     },
   ]
 
   // Menú para modo RESTAURANT (restaurantes, cafeterías, bares)
   const restaurantMenuItems = [
-    // --- Operación diaria ---
+    // === Operación diaria del restaurante ===
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -390,18 +483,18 @@ function Sidebar() {
       menuId: 'cash-register',
     },
     {
-      path: '/ordenes',
-      icon: ListOrdered,
-      label: 'Órdenes',
-      pageId: 'orders',
-      menuId: 'orders',
-    },
-    {
       path: '/mesas',
       icon: Grid3x3,
       label: 'Mesas',
       pageId: 'tables',
       menuId: 'tables',
+    },
+    {
+      path: '/ordenes',
+      icon: ListOrdered,
+      label: 'Órdenes',
+      pageId: 'orders',
+      menuId: 'orders',
     },
     {
       path: '/cocina',
@@ -411,32 +504,10 @@ function Sidebar() {
       menuId: 'kitchen',
     },
     {
-      path: '/mozos',
-      icon: Users,
-      label: 'Mozos',
-      pageId: 'waiters',
-      menuId: 'waiters',
-    },
-    {
-      path: '/envios',
-      icon: Truck,
-      label: 'Envíos',
-      pageId: 'envios',
-      menuId: 'envios',
-    },
-    // --- Ventas y clientes ---
-    {
       path: '/facturas',
       icon: FileText,
       label: 'Ventas',
       pageId: 'invoices',
-    },
-    {
-      path: '/cotizaciones',
-      icon: FileCheck,
-      label: 'Cotizaciones',
-      pageId: 'quotations',
-      menuId: 'quotations',
     },
     {
       path: '/clientes',
@@ -445,41 +516,11 @@ function Sidebar() {
       pageId: 'customers',
     },
     {
-      path: '/vendedores',
-      icon: UserCog,
-      label: 'Vendedores',
-      pageId: 'sellers',
-      menuId: 'sellers',
-    },
-    // --- Menú y cocina ---
-    {
       path: '/productos',
       icon: UtensilsCrossed,
       label: 'Menú',
       pageId: 'products',
     },
-    {
-      path: '/ingredientes',
-      icon: Carrot,
-      label: 'Ingredientes',
-      pageId: 'ingredients',
-      menuId: 'ingredients',
-    },
-    {
-      path: '/recetas',
-      icon: CookingPot,
-      label: 'Recetas',
-      pageId: 'recipes',
-      menuId: 'recipes',
-    },
-    {
-      path: '/produccion',
-      icon: Cog,
-      label: 'Producción',
-      pageId: 'production',
-      menuId: 'production',
-    },
-    // --- Inventario y compras ---
     {
       path: '/inventario',
       icon: ClipboardList,
@@ -487,88 +528,208 @@ function Sidebar() {
       pageId: 'inventory',
       menuId: 'inventory',
     },
-    {
-      path: '/almacenes',
-      icon: Warehouse,
-      label: 'Almacenes',
-      pageId: 'warehouses',
-      menuId: 'warehouses',
-    },
-    {
-      path: '/compras',
-      icon: ShoppingBag,
-      label: 'Compras',
-      pageId: 'purchases',
-      menuId: 'purchases',
-    },
-    {
-      path: '/ingredientes/historial',
-      icon: History,
-      label: 'Historial de Compras',
-      pageId: 'purchase-history',
-      menuId: 'purchase-history',
-    },
-    {
-      path: '/proveedores',
-      icon: Truck,
-      label: 'Proveedores',
-      pageId: 'suppliers',
-      menuId: 'suppliers',
-    },
-    // --- Finanzas ---
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
-      ? [{
-          path: '/asistencia',
-          icon: UserCheck,
-          label: 'Control de Asistencia',
-          menuId: 'attendance',
-        }]
-      : []),
 
+    // === Mi Carta Digital (acceso directo a la pestaña catálogo de Settings) ===
     {
-      path: '/reportes',
-      icon: BarChart3,
-      label: 'Reportes',
-      pageId: 'reports',
-      menuId: 'reports',
+      path: '/configuracion?tab=catalogo',
+      icon: UtensilsCrossed,
+      label: 'Mi Carta Digital',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion',
     },
+
+    // === GRUPO: Documentos ===
     {
-      path: '/meta-ads',
-      icon: Facebook,
-      label: 'Meta Ads',
-      pageId: 'meta-ads',
-      menuId: 'meta-ads',
-      requiresMetaAds: true,
-    },
-    {
-      path: '/gastos',
-      icon: Receipt,
-      label: 'Gastos',
-      pageId: 'expenses',
-      menuId: 'expenses',
-    },
-    {
-      path: '/flujo-caja',
-      icon: TrendingUp,
-      label: 'Flujo de Caja',
-      pageId: 'cash-flow',
-      menuId: 'cash-flow',
-    },
-    {
-      path: '/contabilidad',
+      groupId: 'documentos',
       icon: FileCheck,
-      label: 'Contabilidad',
-      pageId: 'accounting',
-      menuId: 'accounting',
+      label: 'Documentos',
+      children: [
+        {
+          path: '/cotizaciones',
+          icon: FileCheck,
+          label: 'Cotizaciones',
+          pageId: 'quotations',
+          menuId: 'quotations',
+        },
+      ],
     },
-    // --- Otros ---
+
+    // === GRUPO: Cocina & Producción ===
     {
-      path: '/reclamos',
-      icon: BookOpen,
-      label: 'Libro de Reclamos',
-      pageId: 'complaints',
-      menuId: 'complaints',
+      groupId: 'cocina-prod',
+      icon: CookingPot,
+      label: 'Cocina & Producción',
+      children: [
+        {
+          path: '/ingredientes',
+          icon: Carrot,
+          label: 'Ingredientes',
+          pageId: 'ingredients',
+          menuId: 'ingredients',
+        },
+        {
+          path: '/recetas',
+          icon: CookingPot,
+          label: 'Recetas',
+          pageId: 'recipes',
+          menuId: 'recipes',
+        },
+        {
+          path: '/produccion',
+          icon: Cog,
+          label: 'Producción',
+          pageId: 'production',
+          menuId: 'production',
+        },
+      ],
     },
+
+    // === GRUPO: Compras y Proveedores ===
+    {
+      groupId: 'compras',
+      icon: ShoppingBasket,
+      label: 'Compras',
+      children: [
+        {
+          path: '/compras',
+          icon: ShoppingBag,
+          label: 'Compras',
+          pageId: 'purchases',
+          menuId: 'purchases',
+        },
+        {
+          path: '/proveedores',
+          icon: Truck,
+          label: 'Proveedores',
+          pageId: 'suppliers',
+          menuId: 'suppliers',
+        },
+        {
+          path: '/ingredientes/historial',
+          icon: History,
+          label: 'Historial de Compras',
+          pageId: 'purchase-history',
+          menuId: 'purchase-history',
+        },
+      ],
+    },
+
+    // === GRUPO: Almacenes & Envíos ===
+    {
+      groupId: 'almacenes',
+      icon: Warehouse,
+      label: 'Almacenes & Stock',
+      children: [
+        {
+          path: '/almacenes',
+          icon: Warehouse,
+          label: 'Almacenes',
+          pageId: 'warehouses',
+          menuId: 'warehouses',
+        },
+        {
+          path: '/envios',
+          icon: Truck,
+          label: 'Envíos',
+          pageId: 'envios',
+          menuId: 'envios',
+        },
+      ],
+    },
+
+    // === GRUPO: Equipo ===
+    {
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        {
+          path: '/mozos',
+          icon: Users,
+          label: 'Mozos',
+          pageId: 'waiters',
+          menuId: 'waiters',
+        },
+        {
+          path: '/vendedores',
+          icon: UserCog,
+          label: 'Vendedores',
+          pageId: 'sellers',
+          menuId: 'sellers',
+        },
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: 'Control de Asistencia',
+              menuId: 'attendance',
+            }]
+          : []),
+      ],
+    },
+
+    // === GRUPO: Reportes & Finanzas ===
+    {
+      groupId: 'finanzas',
+      icon: BarChart3,
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+          menuId: 'reports',
+        },
+        {
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        },
+        {
+          path: '/flujo-caja',
+          icon: TrendingUp,
+          label: 'Flujo de Caja',
+          pageId: 'cash-flow',
+          menuId: 'cash-flow',
+        },
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+        {
+          path: '/meta-ads',
+          icon: Facebook,
+          label: 'Meta Ads',
+          pageId: 'meta-ads',
+          menuId: 'meta-ads',
+          requiresMetaAds: true,
+        },
+      ],
+    },
+
+    // === GRUPO: Otros ===
+    {
+      groupId: 'otros',
+      icon: BookOpen,
+      label: 'Otros',
+      children: [
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+      ],
+    },
+
     {
       path: '/configuracion',
       icon: Settings,
@@ -579,6 +740,7 @@ function Sidebar() {
 
   // Menú para modo FARMACIA (farmacias, boticas, droguerías)
   const pharmacyMenuItems = [
+    // === Operación diaria ===
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -606,24 +768,10 @@ function Sidebar() {
       pageId: 'invoices',
     },
     {
-      path: '/cotizaciones',
-      icon: FileCheck,
-      label: 'Cotizaciones',
-      pageId: 'quotations',
-      menuId: 'quotations',
-    },
-    {
       path: '/clientes',
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
-    },
-    {
-      path: '/vendedores',
-      icon: UserCog,
-      label: 'Vendedores',
-      pageId: 'sellers',
-      menuId: 'sellers',
     },
     {
       path: '/productos',
@@ -632,142 +780,229 @@ function Sidebar() {
       pageId: 'products',
     },
     {
-      path: '/laboratorios',
-      icon: FlaskConical,
-      label: 'Laboratorios',
-      pageId: 'laboratories',
-      menuId: 'laboratories',
-    },
-    {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
       pageId: 'inventory',
       menuId: 'inventory',
     },
-    {
-      path: '/almacenes',
-      icon: Warehouse,
-      label: 'Almacenes',
-      pageId: 'warehouses',
-      menuId: 'warehouses',
-    },
-    {
-      path: '/movimientos',
-      icon: History,
-      label: 'Movimientos',
-      pageId: 'stock-movements',
-      menuId: 'stock-movements',
-    },
-    {
-      path: '/control-lotes',
-      icon: Package,
-      label: 'Control de Lotes',
-      pageId: 'batch-control',
-      menuId: 'batch-control',
-    },
-    {
-      path: '/alertas-vencimiento',
-      icon: AlertTriangle,
-      label: 'Alertas Vencimiento',
-      pageId: 'expiry-alerts',
-      menuId: 'expiry-alerts',
-    },
-    {
-      path: '/proveedores',
-      icon: Truck,
-      label: 'Proveedores',
-      pageId: 'suppliers',
-      menuId: 'suppliers',
-    },
-    {
-      path: '/guias-remision',
-      icon: Truck,
-      label: 'GRE Remitente',
-      pageId: 'dispatch-guides',
-      menuId: 'dispatch-guides',
-    },
-    {
-      path: '/compras',
-      icon: ShoppingBag,
-      label: 'Compras',
-      pageId: 'purchases',
-      menuId: 'purchases',
-    },
-    {
-      path: '/ordenes-compra',
-      icon: ClipboardList,
-      label: 'Órdenes de Compra',
-      pageId: 'purchase-orders',
-      menuId: 'purchase-orders',
-    },
-    {
-      path: '/ingredientes/historial',
-      icon: History,
-      label: 'Historial de Compras',
-      pageId: 'purchase-history',
-      menuId: 'purchase-history',
-    },
-    {
-      path: '/prestamos',
-      icon: Landmark,
-      label: 'Préstamos',
-      pageId: 'loans',
-      menuId: 'loans',
-      hideInDemo: true,
-    },
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
-      ? [{
-          path: '/asistencia',
-          icon: UserCheck,
-          label: 'Control de Asistencia',
-          menuId: 'attendance',
-        }]
-      : []),
 
+    // === Mi Catálogo Online ===
     {
-      path: '/reportes',
-      icon: BarChart3,
-      label: 'Reportes',
-      pageId: 'reports',
-      menuId: 'reports',
+      path: '/configuracion?tab=catalogo',
+      icon: Globe,
+      label: 'Mi Catálogo Online',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion',
     },
+
+    // === GRUPO: Documentos ===
     {
-      path: '/meta-ads',
-      icon: Facebook,
-      label: 'Meta Ads',
-      pageId: 'meta-ads',
-      menuId: 'meta-ads',
-      requiresMetaAds: true,
-    },
-    {
-      path: '/gastos',
-      icon: Receipt,
-      label: 'Gastos',
-      pageId: 'expenses',
-      menuId: 'expenses',
-    },
-    {
-      path: '/flujo-caja',
-      icon: TrendingUp,
-      label: 'Flujo de Caja',
-      pageId: 'cash-flow',
-      menuId: 'cash-flow',
-    },
-    {
-      path: '/contabilidad',
+      groupId: 'documentos',
       icon: FileCheck,
-      label: 'Contabilidad',
-      pageId: 'accounting',
-      menuId: 'accounting',
+      label: 'Documentos',
+      children: [
+        {
+          path: '/cotizaciones',
+          icon: FileCheck,
+          label: 'Cotizaciones',
+          pageId: 'quotations',
+          menuId: 'quotations',
+        },
+        {
+          path: '/guias-remision',
+          icon: Truck,
+          label: 'GRE Remitente',
+          pageId: 'dispatch-guides',
+          menuId: 'dispatch-guides',
+        },
+      ],
     },
+
+    // === GRUPO: Control de Lotes & Vencimientos (clave en farmacia) ===
     {
-      path: '/reclamos',
-      icon: BookOpen,
-      label: 'Libro de Reclamos',
-      pageId: 'complaints',
-      menuId: 'complaints',
+      groupId: 'lotes',
+      icon: Package,
+      label: 'Lotes & Vencimientos',
+      children: [
+        {
+          path: '/control-lotes',
+          icon: Package,
+          label: 'Control de Lotes',
+          pageId: 'batch-control',
+          menuId: 'batch-control',
+        },
+        {
+          path: '/alertas-vencimiento',
+          icon: AlertTriangle,
+          label: 'Alertas Vencimiento',
+          pageId: 'expiry-alerts',
+          menuId: 'expiry-alerts',
+        },
+        {
+          path: '/laboratorios',
+          icon: FlaskConical,
+          label: 'Laboratorios',
+          pageId: 'laboratories',
+          menuId: 'laboratories',
+        },
+      ],
     },
+
+    // === GRUPO: Almacenes & Stock ===
+    {
+      groupId: 'almacenes',
+      icon: Warehouse,
+      label: 'Almacenes & Stock',
+      children: [
+        {
+          path: '/almacenes',
+          icon: Warehouse,
+          label: 'Almacenes',
+          pageId: 'warehouses',
+          menuId: 'warehouses',
+        },
+        {
+          path: '/movimientos',
+          icon: History,
+          label: 'Movimientos',
+          pageId: 'stock-movements',
+          menuId: 'stock-movements',
+        },
+      ],
+    },
+
+    // === GRUPO: Compras y Proveedores ===
+    {
+      groupId: 'compras',
+      icon: ShoppingBasket,
+      label: 'Compras',
+      children: [
+        {
+          path: '/compras',
+          icon: ShoppingBag,
+          label: 'Compras',
+          pageId: 'purchases',
+          menuId: 'purchases',
+        },
+        {
+          path: '/ordenes-compra',
+          icon: ClipboardList,
+          label: 'Órdenes de Compra',
+          pageId: 'purchase-orders',
+          menuId: 'purchase-orders',
+        },
+        {
+          path: '/proveedores',
+          icon: Truck,
+          label: 'Proveedores',
+          pageId: 'suppliers',
+          menuId: 'suppliers',
+        },
+        {
+          path: '/ingredientes/historial',
+          icon: History,
+          label: 'Historial de Compras',
+          pageId: 'purchase-history',
+          menuId: 'purchase-history',
+        },
+      ],
+    },
+
+    // === GRUPO: Equipo ===
+    {
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        {
+          path: '/vendedores',
+          icon: UserCog,
+          label: 'Vendedores',
+          pageId: 'sellers',
+          menuId: 'sellers',
+        },
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: 'Control de Asistencia',
+              menuId: 'attendance',
+            }]
+          : []),
+      ],
+    },
+
+    // === GRUPO: Reportes & Finanzas ===
+    {
+      groupId: 'finanzas',
+      icon: BarChart3,
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+          menuId: 'reports',
+        },
+        {
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        },
+        {
+          path: '/flujo-caja',
+          icon: TrendingUp,
+          label: 'Flujo de Caja',
+          pageId: 'cash-flow',
+          menuId: 'cash-flow',
+        },
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+        {
+          path: '/meta-ads',
+          icon: Facebook,
+          label: 'Meta Ads',
+          pageId: 'meta-ads',
+          menuId: 'meta-ads',
+          requiresMetaAds: true,
+        },
+      ],
+    },
+
+    // === GRUPO: Otros ===
+    {
+      groupId: 'otros',
+      icon: BookOpen,
+      label: 'Otros',
+      children: [
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+        {
+          path: '/prestamos',
+          icon: Landmark,
+          label: 'Préstamos',
+          pageId: 'loans',
+          menuId: 'loans',
+          hideInDemo: true,
+        },
+      ],
+    },
+
     {
       path: '/configuracion',
       icon: Settings,
@@ -868,6 +1103,7 @@ function Sidebar() {
 
   // Menú para modo HOTEL
   const hotelMenuItems = [
+    // === Operación diaria del hotel ===
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -889,18 +1125,18 @@ function Sidebar() {
       menuId: 'hotel-reservations',
     },
     {
-      path: '/servicios-hotel',
-      icon: ConciergeBell,
-      label: 'Servicios',
-      pageId: 'hotel-services',
-      menuId: 'hotel-services',
-    },
-    {
       path: '/housekeeping',
       icon: ClipboardCheck,
       label: 'Housekeeping',
       pageId: 'hotel-housekeeping',
       menuId: 'hotel-housekeeping',
+    },
+    {
+      path: '/servicios-hotel',
+      icon: ConciergeBell,
+      label: 'Servicios',
+      pageId: 'hotel-services',
+      menuId: 'hotel-services',
     },
     {
       path: '/auditoria-hotel',
@@ -949,64 +1185,103 @@ function Sidebar() {
       pageId: 'inventory',
       menuId: 'inventory',
     },
+
+    // === Mi Catálogo Online ===
     {
-      path: '/almacenes',
+      path: '/configuracion?tab=catalogo',
+      icon: Globe,
+      label: 'Mi Catálogo Online',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion',
+    },
+
+    // === GRUPO: Almacenes & Stock ===
+    {
+      groupId: 'almacenes',
       icon: Warehouse,
-      label: 'Almacenes',
-      pageId: 'warehouses',
-      menuId: 'warehouses',
-    },
-    ...(hasFeature && hasFeature('expenseManagement') ? [{
-      path: '/gastos',
-      icon: Receipt,
-      label: 'Gastos',
-      pageId: 'expenses',
-      menuId: 'expenses',
-    }] : []),
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
-      ? [{
-          path: '/asistencia',
-          icon: UserCheck,
-          label: 'Control de Asistencia',
-          menuId: 'attendance',
-        }]
-      : []),
-
-    {
-      path: '/contabilidad',
-      icon: FileCheck,
-      label: 'Contabilidad',
-      pageId: 'accounting',
-      menuId: 'accounting',
+      label: 'Almacenes & Stock',
+      children: [
+        {
+          path: '/almacenes',
+          icon: Warehouse,
+          label: 'Almacenes',
+          pageId: 'warehouses',
+          menuId: 'warehouses',
+        },
+      ],
     },
 
+    // === GRUPO: Equipo ===
     {
-      path: '/reportes',
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: 'Control de Asistencia',
+              menuId: 'attendance',
+            }]
+          : []),
+      ],
+    },
+
+    // === GRUPO: Reportes & Finanzas ===
+    {
+      groupId: 'finanzas',
       icon: BarChart3,
-      label: 'Reportes',
-      pageId: 'reports',
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+        },
+        ...(hasFeature && hasFeature('expenseManagement') ? [{
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        }] : []),
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+        {
+          path: '/meta-ads',
+          icon: Facebook,
+          label: 'Meta Ads',
+          pageId: 'meta-ads',
+          menuId: 'meta-ads',
+          requiresMetaAds: true,
+        },
+      ],
     },
+
+    // === GRUPO: Otros ===
     {
-      path: '/meta-ads',
-      icon: Facebook,
-      label: 'Meta Ads',
-      pageId: 'meta-ads',
-      menuId: 'meta-ads',
-      requiresMetaAds: true,
-    },
-    {
-      path: '/usuarios',
-      icon: UserCog,
-      label: 'Gestión de Usuarios',
-      pageId: 'users',
-    },
-    {
-      path: '/reclamos',
+      groupId: 'otros',
       icon: BookOpen,
-      label: 'Libro de Reclamos',
-      pageId: 'complaints',
-      menuId: 'complaints',
+      label: 'Otros',
+      children: [
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+      ],
     },
+
     {
       path: '/configuracion',
       icon: Settings,
@@ -1168,7 +1443,7 @@ function Sidebar() {
   // Menú para modo VETERINARIA (clínicas veterinarias, pet shops)
   // Ordenado por frecuencia de uso: Operación diaria → Ventas → Inventario → Compras → Finanzas → Config
   const veterinaryMenuItems = [
-    // --- Operación diaria (más usado) ---
+    // === Operación diaria (lo que usa el veterinario todos los días) ===
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -1183,17 +1458,18 @@ function Sidebar() {
       pageId: 'pos',
     },
     {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
       path: '/agenda-veterinaria',
       icon: Calendar,
       label: 'Agenda de Citas',
       pageId: 'vet-agenda',
       menuId: 'vet-agenda',
-    },
-    {
-      path: '/clientes',
-      icon: PawPrint,
-      label: 'Pacientes',
-      pageId: 'customers',
     },
     {
       path: '/alertas-veterinaria',
@@ -1202,7 +1478,6 @@ function Sidebar() {
       pageId: 'vet-alerts',
       menuId: 'vet-alerts',
     },
-    // --- Ventas y caja ---
     {
       path: '/facturas',
       icon: FileText,
@@ -1210,20 +1485,11 @@ function Sidebar() {
       pageId: 'invoices',
     },
     {
-      path: '/caja',
-      icon: Wallet,
-      label: 'Control de Caja',
-      pageId: 'cash-register',
-      menuId: 'cash-register',
+      path: '/clientes',
+      icon: PawPrint,
+      label: 'Pacientes',
+      pageId: 'customers',
     },
-    {
-      path: '/cotizaciones',
-      icon: FileCheck,
-      label: 'Cotizaciones',
-      pageId: 'quotations',
-      menuId: 'quotations',
-    },
-    // --- Catálogo e inventario ---
     {
       path: '/productos',
       icon: Heart,
@@ -1237,125 +1503,201 @@ function Sidebar() {
       pageId: 'inventory',
       menuId: 'inventory',
     },
-    {
-      path: '/almacenes',
-      icon: Warehouse,
-      label: 'Almacenes',
-      pageId: 'warehouses',
-      menuId: 'warehouses',
-    },
-    {
-      path: '/control-lotes',
-      icon: Package,
-      label: 'Control de Lotes',
-      pageId: 'batch-control',
-      menuId: 'batch-control',
-    },
-    {
-      path: '/alertas-vencimiento',
-      icon: AlertTriangle,
-      label: 'Alertas Vencimiento',
-      pageId: 'expiry-alerts',
-      menuId: 'expiry-alerts',
-    },
-    {
-      path: '/movimientos',
-      icon: History,
-      label: 'Movimientos',
-      pageId: 'stock-movements',
-      menuId: 'stock-movements',
-    },
-    // --- Compras y proveedores ---
-    {
-      path: '/compras',
-      icon: ShoppingBag,
-      label: 'Compras',
-      pageId: 'purchases',
-      menuId: 'purchases',
-    },
-    {
-      path: '/ordenes-compra',
-      icon: ClipboardList,
-      label: 'Órdenes de Compra',
-      pageId: 'purchase-orders',
-      menuId: 'purchase-orders',
-    },
-    {
-      path: '/ingredientes/historial',
-      icon: History,
-      label: 'Historial de Compras',
-      pageId: 'purchase-history',
-      menuId: 'purchase-history',
-    },
-    {
-      path: '/proveedores',
-      icon: Truck,
-      label: 'Proveedores',
-      pageId: 'suppliers',
-      menuId: 'suppliers',
-    },
-    // --- Finanzas y reportes ---
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
-      ? [{
-          path: '/asistencia',
-          icon: UserCheck,
-          label: 'Control de Asistencia',
-          menuId: 'attendance',
-        }]
-      : []),
 
+    // === Mi Catálogo Online ===
     {
-      path: '/reportes',
-      icon: BarChart3,
-      label: 'Reportes',
-      pageId: 'reports',
-      menuId: 'reports',
+      path: '/configuracion?tab=catalogo',
+      icon: Globe,
+      label: 'Mi Catálogo Online',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion',
     },
+
+    // === GRUPO: Documentos ===
     {
-      path: '/meta-ads',
-      icon: Facebook,
-      label: 'Meta Ads',
-      pageId: 'meta-ads',
-      menuId: 'meta-ads',
-      requiresMetaAds: true,
-    },
-    {
-      path: '/gastos',
-      icon: Receipt,
-      label: 'Gastos',
-      pageId: 'expenses',
-      menuId: 'expenses',
-    },
-    {
-      path: '/flujo-caja',
-      icon: TrendingUp,
-      label: 'Flujo de Caja',
-      pageId: 'cash-flow',
-      menuId: 'cash-flow',
-    },
-    {
-      path: '/contabilidad',
+      groupId: 'documentos',
       icon: FileCheck,
-      label: 'Contabilidad',
-      pageId: 'accounting',
-      menuId: 'accounting',
+      label: 'Documentos',
+      children: [
+        {
+          path: '/cotizaciones',
+          icon: FileCheck,
+          label: 'Cotizaciones',
+          pageId: 'quotations',
+          menuId: 'quotations',
+        },
+      ],
     },
-    // --- Equipo y otros ---
+
+    // === GRUPO: Lotes & Vencimientos (medicamentos veterinarios) ===
     {
-      path: '/vendedores',
-      icon: Stethoscope,
-      label: 'Veterinarios',
-      pageId: 'sellers',
-      menuId: 'sellers',
+      groupId: 'lotes',
+      icon: Package,
+      label: 'Lotes & Vencimientos',
+      children: [
+        {
+          path: '/control-lotes',
+          icon: Package,
+          label: 'Control de Lotes',
+          pageId: 'batch-control',
+          menuId: 'batch-control',
+        },
+        {
+          path: '/alertas-vencimiento',
+          icon: AlertTriangle,
+          label: 'Alertas Vencimiento',
+          pageId: 'expiry-alerts',
+          menuId: 'expiry-alerts',
+        },
+      ],
     },
+
+    // === GRUPO: Almacenes & Stock ===
     {
-      path: '/reclamos',
+      groupId: 'almacenes',
+      icon: Warehouse,
+      label: 'Almacenes & Stock',
+      children: [
+        {
+          path: '/almacenes',
+          icon: Warehouse,
+          label: 'Almacenes',
+          pageId: 'warehouses',
+          menuId: 'warehouses',
+        },
+        {
+          path: '/movimientos',
+          icon: History,
+          label: 'Movimientos',
+          pageId: 'stock-movements',
+          menuId: 'stock-movements',
+        },
+      ],
+    },
+
+    // === GRUPO: Compras y Proveedores ===
+    {
+      groupId: 'compras',
+      icon: ShoppingBasket,
+      label: 'Compras',
+      children: [
+        {
+          path: '/compras',
+          icon: ShoppingBag,
+          label: 'Compras',
+          pageId: 'purchases',
+          menuId: 'purchases',
+        },
+        {
+          path: '/ordenes-compra',
+          icon: ClipboardList,
+          label: 'Órdenes de Compra',
+          pageId: 'purchase-orders',
+          menuId: 'purchase-orders',
+        },
+        {
+          path: '/proveedores',
+          icon: Truck,
+          label: 'Proveedores',
+          pageId: 'suppliers',
+          menuId: 'suppliers',
+        },
+        {
+          path: '/ingredientes/historial',
+          icon: History,
+          label: 'Historial de Compras',
+          pageId: 'purchase-history',
+          menuId: 'purchase-history',
+        },
+      ],
+    },
+
+    // === GRUPO: Equipo (veterinarios + asistencia) ===
+    {
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        {
+          path: '/vendedores',
+          icon: Stethoscope,
+          label: 'Veterinarios',
+          pageId: 'sellers',
+          menuId: 'sellers',
+        },
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: 'Control de Asistencia',
+              menuId: 'attendance',
+            }]
+          : []),
+      ],
+    },
+
+    // === GRUPO: Reportes & Finanzas ===
+    {
+      groupId: 'finanzas',
+      icon: BarChart3,
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+          menuId: 'reports',
+        },
+        {
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        },
+        {
+          path: '/flujo-caja',
+          icon: TrendingUp,
+          label: 'Flujo de Caja',
+          pageId: 'cash-flow',
+          menuId: 'cash-flow',
+        },
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+        {
+          path: '/meta-ads',
+          icon: Facebook,
+          label: 'Meta Ads',
+          pageId: 'meta-ads',
+          menuId: 'meta-ads',
+          requiresMetaAds: true,
+        },
+      ],
+    },
+
+    // === GRUPO: Otros ===
+    {
+      groupId: 'otros',
       icon: BookOpen,
-      label: 'Libro de Reclamos',
-      pageId: 'complaints',
-      menuId: 'complaints',
+      label: 'Otros',
+      children: [
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+      ],
     },
-    // --- Configuración (siempre al final) ---
+
     {
       path: '/configuracion',
       icon: Settings,
@@ -1420,62 +1762,46 @@ function Sidebar() {
   // Obtener lista de items ocultos por el usuario
   const hiddenMenuItems = businessSettings?.hiddenMenuItems || []
 
-  // Filtrar items del menú según permisos
-  const filteredMenuItems = menuItems.filter((item) => {
-    // Si el item tiene menuId y está en la lista de ocultos, no mostrar
-    // (Solo aplica a usuarios no-demo, y solo a items con menuId definido)
-    if (item.menuId && hiddenMenuItems.includes(item.menuId) && !isDemoMode) {
-      return false
-    }
-
-    // Si requiere un feature específico, verificar que lo tenga
+  // Comprueba acceso a UN item simple (no grupo)
+  const itemPasses = (item) => {
+    if (item.menuId && hiddenMenuItems.includes(item.menuId) && !isDemoMode) return false
     if (item.requiresFeature) {
       const featureEnabled = hasFeature && hasFeature(item.requiresFeature)
       if (!featureEnabled && !isDemoMode) return false
     }
-
-    // Si requiere el campo de alumno habilitado, verificar
     if (item.requiresStudentField) {
       const studentFieldEnabled = businessSettings?.posCustomFields?.showStudentField
       if (!studentFieldEnabled && !isDemoMode) return false
     }
-
-    // Si requiere control de lotes habilitado (para retail), verificar
     if (item.requiresBatchControl) {
       const batchEnabled = businessSettings?.posCustomFields?.showBatchExpiryInPurchase
       if (!batchEnabled && !isDemoMode) return false
     }
-
-    // Si requiere Meta Ads habilitado, verificar
     if (item.requiresMetaAds) {
       const metaAdsEnabled = businessSettings?.metaAdsEnabled === true
       if (!metaAdsEnabled && !isDemoMode) return false
-      if (isDemoMode) return false // No mostrar en demo
+      if (isDemoMode) return false
     }
-
-    // Si es solo para business owner y el usuario no lo es, no mostrar
     if (item.businessOwnerOnly && !isBusinessOwner) return false
-
-    // Si está marcado para ocultar en demo, no mostrar
     if (item.hideInDemo && isDemoMode) return false
-
-    // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true
-
-    // Si es admin o business owner, mostrar todo (excepto features, ya se validó arriba)
-    if (isAdmin || isBusinessOwner) {
-      // Para features, ya se validó arriba, así que si llegó aquí es que lo tiene
-      return true
-    }
-
-    // Si no tiene pageId, permitir acceso (sin restricción)
+    if (isAdmin || isBusinessOwner) return true
     if (!item.pageId) return true
+    return hasPageAccess && hasPageAccess(item.pageId)
+  }
 
-    // Verificar si tiene permiso para esta página
-    const hasAccess = hasPageAccess && hasPageAccess(item.pageId)
-    console.log(`🔍 Verificando acceso a "${item.label}" (${item.pageId}):`, hasAccess)
-    return hasAccess
-  })
+  // Filtrar items del menú según permisos. Soporta grupos: si un item tiene
+  // `children`, filtramos sus hijos y descartamos el grupo si quedan 0 hijos.
+  const filteredMenuItems = menuItems
+    .map((item) => {
+      if (item.children) {
+        const visibleChildren = item.children.filter(itemPasses)
+        if (visibleChildren.length === 0) return null
+        return { ...item, children: visibleChildren }
+      }
+      return itemPasses(item) ? item : null
+    })
+    .filter(Boolean)
 
   console.log('✅ Items filtrados:', filteredMenuItems.length, 'de', menuItems.length)
 
@@ -1573,6 +1899,97 @@ function Sidebar() {
           </div>
         )}
         {filteredMenuItems.map(item => {
+          // === Render de GRUPO colapsable ===
+          if (item.groupId && item.children) {
+            const isOpen = !!openGroups[item.groupId]
+            // Auto-expandir si la ruta actual está dentro del grupo
+            const someChildActive = item.children.some(c => {
+              const childPath = (c.path || '').split('?')[0]
+              return location.pathname.includes(childPath)
+            })
+            const expanded = isOpen || someChildActive
+
+            return (
+              <div key={item.groupId} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.groupId)}
+                  title={item.label}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" style={{ color: '#6B7280' }} />
+                  {!sidebarCollapsed && (
+                    <>
+                      <span className="font-medium text-sm flex-1 text-left">{item.label}</span>
+                      {expanded
+                        ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                        : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                    </>
+                  )}
+                </button>
+                {expanded && !sidebarCollapsed && (
+                  <div className="ml-3 pl-3 border-l border-gray-200 space-y-0.5">
+                    {item.children.map(child => (
+                      <NavLink
+                        key={child.path}
+                        to={getPath(child.path)}
+                        onClick={() => setMobileMenuOpen(false)}
+                        title={child.label}
+                        className={({ isActive }) =>
+                          `flex items-center space-x-3 px-3 py-1.5 rounded-lg transition-colors text-sm ${
+                            isActive ? '' : 'text-gray-600 hover:bg-gray-100'
+                          }`
+                        }
+                        style={({ isActive }) => isActive ? {
+                          backgroundColor: `${branding.primaryColor}15`,
+                          color: branding.primaryColor,
+                        } : {}}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <child.icon
+                              className="w-4 h-4 flex-shrink-0"
+                              style={isActive ? { color: branding.primaryColor } : { color: '#9CA3AF' }}
+                            />
+                            <span className="font-medium">{child.label}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+                {/* En modo collapsed mostramos los children como tooltip al hover (simple: lista expandida vertical sin border) */}
+                {expanded && sidebarCollapsed && (
+                  <div className="hidden md:flex flex-col items-center space-y-0.5">
+                    {item.children.map(child => (
+                      <NavLink
+                        key={child.path}
+                        to={getPath(child.path)}
+                        onClick={() => setMobileMenuOpen(false)}
+                        title={child.label}
+                        className={({ isActive }) =>
+                          `p-2 rounded-lg transition-colors ${isActive ? '' : 'text-gray-600 hover:bg-gray-100'}`
+                        }
+                        style={({ isActive }) => isActive ? {
+                          backgroundColor: `${branding.primaryColor}15`,
+                          color: branding.primaryColor,
+                        } : {}}
+                      >
+                        {({ isActive }) => (
+                          <child.icon
+                            className="w-4 h-4"
+                            style={isActive ? { color: branding.primaryColor } : { color: '#9CA3AF' }}
+                          />
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          // === Render de ITEM normal ===
           const hasOrderAlerts = (item.pageId === 'orders' || item.pageId === 'online-orders') && orderAlertCount > 0
           return (
           <NavLink
@@ -1580,27 +1997,59 @@ function Sidebar() {
             to={getPath(item.path)}
             onClick={() => setMobileMenuOpen(false)}
             title={item.label}
-            className={({ isActive }) =>
-              `relative flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
-                isActive
+            className={({ isActive }) => {
+              // Para items con activePathMatch (ej: /configuracion?tab=catalogo
+              // que debe estar activo solo cuando estamos en /configuracion?tab=catalogo)
+              let realActive = isActive
+              if (item.activePathMatch) {
+                const params = new URLSearchParams(location.search)
+                const queryFromItem = (item.path.split('?')[1] || '')
+                const itemParams = new URLSearchParams(queryFromItem)
+                const itemTab = itemParams.get('tab')
+                const currentTab = params.get('tab')
+                realActive = location.pathname.endsWith(item.activePathMatch) && (!itemTab || itemTab === currentTab)
+              }
+              return `relative flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
+                realActive
                   ? ''
                   : hasOrderAlerts
                     ? 'text-orange-700 bg-orange-50 hover:bg-orange-100 animate-pulse'
                     : 'text-gray-700 hover:bg-gray-100'
               }`
-            }
-            style={({ isActive }) => isActive ? {
-              backgroundColor: `${branding.primaryColor}15`,
-              color: branding.primaryColor
-            } : hasOrderAlerts ? {
-              backgroundColor: '#FFF7ED',
-            } : {}}
+            }}
+            style={({ isActive }) => {
+              let realActive = isActive
+              if (item.activePathMatch) {
+                const params = new URLSearchParams(location.search)
+                const queryFromItem = (item.path.split('?')[1] || '')
+                const itemParams = new URLSearchParams(queryFromItem)
+                const itemTab = itemParams.get('tab')
+                const currentTab = params.get('tab')
+                realActive = location.pathname.endsWith(item.activePathMatch) && (!itemTab || itemTab === currentTab)
+              }
+              return realActive ? {
+                backgroundColor: `${branding.primaryColor}15`,
+                color: branding.primaryColor
+              } : hasOrderAlerts ? {
+                backgroundColor: '#FFF7ED',
+              } : {}
+            }}
           >
-            {({ isActive }) => (
+            {({ isActive }) => {
+              let realActive = isActive
+              if (item.activePathMatch) {
+                const params = new URLSearchParams(location.search)
+                const queryFromItem = (item.path.split('?')[1] || '')
+                const itemParams = new URLSearchParams(queryFromItem)
+                const itemTab = itemParams.get('tab')
+                const currentTab = params.get('tab')
+                realActive = location.pathname.endsWith(item.activePathMatch) && (!itemTab || itemTab === currentTab)
+              }
+              return (
               <>
                 <item.icon
-                  className={`w-5 h-5 flex-shrink-0 ${hasOrderAlerts && !isActive ? 'animate-bounce' : ''}`}
-                  style={isActive ? { color: branding.primaryColor } : hasOrderAlerts ? { color: '#EA580C' } : { color: '#6B7280' }}
+                  className={`w-5 h-5 flex-shrink-0 ${hasOrderAlerts && !realActive ? 'animate-bounce' : ''}`}
+                  style={realActive ? { color: branding.primaryColor } : hasOrderAlerts ? { color: '#EA580C' } : { color: '#6B7280' }}
                 />
                 <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
                 {hasOrderAlerts && !sidebarCollapsed && (
@@ -1614,7 +2063,8 @@ function Sidebar() {
                   </span>
                 )}
               </>
-            )}
+              )
+            }}
           </NavLink>
           )
         })}
