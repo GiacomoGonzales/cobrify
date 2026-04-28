@@ -746,8 +746,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
         }
 
-        // Línea 3: Código si existe
-        if (item.code) {
+        // Línea 3: Código si existe (respeta showProductCodeInInvoices)
+        if (item.code && business?.showProductCodeInInvoices !== false) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 
@@ -804,8 +804,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
         }
 
-        // Línea 3: Código si existe (alineado a la izquierda)
-        if (item.code) {
+        // Línea 3: Código si existe (alineado a la izquierda, respeta showProductCodeInInvoices)
+        if (item.code && business?.showProductCodeInInvoices !== false) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 

@@ -31,7 +31,11 @@ import CashClosureTicket from '@/components/CashClosureTicket'
 import { Capacitor } from '@capacitor/core'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings } = useAppContext()
+  // Si está activado el toggle "ocultar efectivo esperado a cajeros" y el usuario actual
+  // no es dueño/admin, escondemos el monto esperado y la diferencia para que el cajero
+  // no lo vea — solo cuente y reporte. El dueño podrá comparar después.
+  const hideExpectedForCashier = !isAdmin && !isBusinessOwner && !!businessSettings?.hideCashExpectedFromCashier
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -1770,15 +1774,19 @@ export default function CashRegister() {
                       <span className="text-sm sm:text-base font-semibold text-orange-600">{formatCurrency(totals.pendingTotal)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center py-3 bg-primary-50 px-3 rounded-lg mt-3">
-                    <span className="text-sm sm:text-base font-semibold text-primary-900">Efectivo Esperado:</span>
-                    <span className="text-lg sm:text-xl font-bold text-primary-600">
-                      {formatCurrency(totals.expected)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.salesCash)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
-                  </div>
+                  {!hideExpectedForCashier && (
+                    <>
+                      <div className="flex justify-between items-center py-3 bg-primary-50 px-3 rounded-lg mt-3">
+                        <span className="text-sm sm:text-base font-semibold text-primary-900">Efectivo Esperado:</span>
+                        <span className="text-lg sm:text-xl font-bold text-primary-600">
+                          {formatCurrency(totals.expected)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.salesCash)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
+                      </div>
+                    </>
+                  )}
                   <div className="text-xs text-gray-500 mt-2">
                     <Calendar className="w-3 h-3 inline mr-1" />
                     Abierto: {getDateFromTimestamp(currentSession.openedAt) ? formatDate(getDateFromTimestamp(currentSession.openedAt)) : 'Hoy'}
@@ -2871,15 +2879,17 @@ export default function CashRegister() {
               </div>
             )}
 
-            <div className="border-t border-gray-300 pt-2 mt-3">
-              <div className="flex justify-between">
-                <span className="text-sm font-semibold text-gray-700">Efectivo Esperado:</span>
-                <span className="text-xl font-bold text-primary-600">{formatCurrency(totals.expected)}</span>
+            {!hideExpectedForCashier && (
+              <div className="border-t border-gray-300 pt-2 mt-3">
+                <div className="flex justify-between">
+                  <span className="text-sm font-semibold text-gray-700">Efectivo Esperado:</span>
+                  <span className="text-xl font-bold text-primary-600">{formatCurrency(totals.expected)}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Inicial ({formatCurrency(currentSession?.openingAmount || 0)}) + Ventas Efectivo + Ingresos - Egresos
+                </p>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Inicial ({formatCurrency(currentSession?.openingAmount || 0)}) + Ventas Efectivo + Ingresos - Egresos
-              </p>
-            </div>
+            )}
           </div>
 
           <Input
@@ -2973,7 +2983,7 @@ export default function CashRegister() {
             />
           )}
 
-          {closingCounts.cash && (
+          {closingCounts.cash && !hideExpectedForCashier && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-gray-700 mb-1">Diferencia:</p>
               <p

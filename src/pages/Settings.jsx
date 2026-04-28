@@ -199,6 +199,10 @@ export default function Settings() {
   // Estado para ocultar lote y vencimiento en comprobantes (PDF/ticket/impresora)
   const [hideBatchAndExpiryInDocuments, setHideBatchAndExpiryInDocuments] = useState(false)
 
+  // Ocultar el monto "Efectivo Esperado" del cierre de caja a sub-usuarios (cajeros).
+  // El dueño/admin siempre lo ve para poder comparar después.
+  const [hideCashExpectedFromCashier, setHideCashExpectedFromCashier] = useState(false)
+
   // Estados para exportación a Meta Ads (Facebook Conversions API)
   const [metaAdsEnabled, setMetaAdsEnabled] = useState(false)
   const [metaAdsPhonePrefix, setMetaAdsPhonePrefix] = useState('+51')
@@ -861,6 +865,11 @@ export default function Settings() {
           setHideBatchAndExpiryInDocuments(businessData.hideBatchAndExpiryInDocuments)
         }
 
+        // Cargar flag para ocultar efectivo esperado a cajeros
+        if (businessData.hideCashExpectedFromCashier !== undefined) {
+          setHideCashExpectedFromCashier(businessData.hideCashExpectedFromCashier)
+        }
+
         // Cargar configuración de Meta Ads
         if (businessData.metaAdsEnabled !== undefined) {
           setMetaAdsEnabled(businessData.metaAdsEnabled)
@@ -1376,6 +1385,7 @@ export default function Settings() {
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
+        hideCashExpectedFromCashier: hideCashExpectedFromCashier,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -4899,6 +4909,32 @@ export default function Settings() {
                     </div>
                   </div>
                 </label>
+
+                {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
+                  <input
+                    type="checkbox"
+                    checked={hideCashExpectedFromCashier}
+                    onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {hideCashExpectedFromCashier
+                        ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
+                        : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
+                    </p>
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
+                      </span>
+                    </div>
+                  </div>
+                </label>
               </div>
 
               {/* Divider */}
@@ -5257,6 +5293,7 @@ export default function Settings() {
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
+                      hideCashExpectedFromCashier: hideCashExpectedFromCashier,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       exitNoteEnabled: exitNoteEnabled,
                       termsTemplates: termsTemplates,
