@@ -3472,10 +3472,11 @@ export default function Products() {
                 {paginatedProducts.map((product, index) => {
                   const isExpanded = expandedProduct === product.id
                   const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
+                  const isInactive = product.isActive === false
 
                   return (
                     <React.Fragment key={product.id}>
-                      <TableRow>
+                      <TableRow className={isInactive ? 'opacity-60 bg-gray-50' : ''}>
                         <TableCell>
                           <button
                             onClick={() => toggleProductSelection(product.id)}
@@ -3520,7 +3521,14 @@ export default function Products() {
                           </TableCell>
                         )}
                         <TableCell className="min-w-[150px] max-w-[200px]">
-                          <p className="text-sm font-medium truncate" title={product.name}>{product.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium truncate" title={product.name}>{product.name}</p>
+                            {isInactive && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 font-semibold tracking-wide" title="Producto inactivo: oculto del POS y del catálogo">
+                                INACTIVO
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         {visibleColumns.description && (
                           <TableCell className="hidden lg:table-cell max-w-[150px]">
@@ -6386,12 +6394,18 @@ export default function Products() {
 
           {bulkAction === 'toggleActive' && (
             <>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  Cambiarás el estado (activo/inactivo) de {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}.
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <p className="text-sm text-blue-800 font-medium">
+                  Vas a cambiar el estado de {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}.
                 </p>
-                <p className="text-sm text-blue-700 mt-1">
-                  Los productos activos se desactivarán y viceversa.
+                <p className="text-xs text-blue-700">
+                  Los productos <strong>activos</strong> aparecen en el POS, en el catálogo público y se pueden vender.
+                </p>
+                <p className="text-xs text-blue-700">
+                  Los productos <strong>inactivos</strong> quedan ocultos del POS y del catálogo, pero <strong>no se eliminan</strong> — siguen en el inventario y puedes reactivarlos cuando quieras.
+                </p>
+                <p className="text-xs text-blue-700">
+                  Esta acción <strong>invierte</strong> el estado actual de cada uno (activo → inactivo, inactivo → activo).
                 </p>
               </div>
               <div className="flex justify-end gap-2">
