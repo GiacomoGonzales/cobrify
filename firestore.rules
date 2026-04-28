@@ -627,6 +627,15 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Attendance (Control de Asistencia del Personal)
+      // Path: businesses/{userId}/attendance/{recordId}
+      // Lo escriben los sub-usuarios al marcar asistencia por QR o manualmente,
+      // y el dueño/admin para correcciones manuales o cierres automáticos.
+      match /attendance/{recordId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos

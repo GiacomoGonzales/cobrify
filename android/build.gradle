@@ -17,6 +17,14 @@ buildscript {
 
 apply from: "variables.gradle"
 
+// Kotlin 2.2.0: necesario para @capacitor/geolocation 8.2.0 (usa SpillingKt
+// introducida en stdlib 2.1+). Capacitor por defecto usa 1.9.25 vía kotlin-bom,
+// por eso tenemos que setear esta variable ANTES de aplicar plugins y forzar
+// las stdlib en resolutionStrategy.
+ext {
+    kotlin_version = '2.2.0'
+}
+
 allprojects {
     repositories {
         google()
@@ -26,9 +34,11 @@ allprojects {
 
     configurations.all {
         resolutionStrategy {
-            force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
-            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
-            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib:2.2.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.2.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-common:2.2.0'
+            force 'org.jetbrains.kotlin:kotlin-bom:2.2.0'
         }
     }
 }

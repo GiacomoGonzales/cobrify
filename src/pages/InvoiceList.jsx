@@ -13,6 +13,7 @@ import {
   FileText,
   AlertTriangle,
   AlertCircle,
+  RotateCcw,
   Printer,
   Send,
   CheckCircle,
@@ -61,13 +62,14 @@ import { exportXMLandCDR, downloadZip, generateZipFileName } from '@/services/xm
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
+import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -99,23 +101,56 @@ export default function InvoiceList() {
     return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
   }
 
-  // Helper para forzar descarga de archivos desde URL (XML, CDR)
+  // Wrapper compatible web + native (usa Capacitor Filesystem + Share en app)
   const forceDownload = async (url, filename) => {
     try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(blobUrl)
+      await downloadFromUrl(url, filename)
     } catch (error) {
       console.error('Error al descargar archivo:', error)
-      // Fallback: abrir en nueva pestaña si falla la descarga
-      window.open(url, '_blank')
+      toast.error('No se pudo descargar el archivo')
+    }
+  }
+
+  // ===== TEMPORAL: handler para revertir manualmente UNA nota convertida =====
+  // Solo visible en el modal de detalle. Pensado para corregir notas que quedaron
+  // marcadas como convertidas pero su factura fue anulada vía NC antes del fix.
+  // Cuando termines de revertir las pendientes, avísame y removemos esta opción.
+  const [revertingNotaId, setRevertingNotaId] = useState(null)
+  const handleManualRevertNota = async (nota) => {
+    if (!nota?.id || revertingNotaId) return
+    if (!window.confirm(`¿Revertir la conversión de la ${nota.documentType === 'nota_venta' ? 'Nota de Venta' : 'nota'} ${nota.number}? Volverá al listado normal y podrás convertirla nuevamente.`)) {
+      return
+    }
+    setRevertingNotaId(nota.id)
+    try {
+      const businessId = isDemoMode ? null : getBusinessId()
+      if (!businessId) {
+        toast.error('No disponible en modo demo')
+        return
+      }
+      const { doc, updateDoc, deleteField } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const ref = doc(db, 'businesses', businessId, 'invoices', nota.id)
+      await updateDoc(ref, { convertedTo: deleteField(), updatedAt: new Date() })
+      // Refrescar localmente
+      setInvoices(prev => prev.map(inv => {
+        if (inv.id !== nota.id) return inv
+        const copy = { ...inv }
+        delete copy.convertedTo
+        return copy
+      }))
+      // Si el modal de detalle lo está mostrando, también lo refrescamos
+      if (viewingInvoice?.id === nota.id) {
+        const copy = { ...viewingInvoice }
+        delete copy.convertedTo
+        setViewingInvoice(copy)
+      }
+      toast.success('Nota revertida correctamente')
+    } catch (err) {
+      console.error('Error al revertir nota:', err)
+      toast.error('No se pudo revertir la nota')
+    } finally {
+      setRevertingNotaId(null)
     }
   }
 
@@ -3011,16 +3046,9 @@ Gracias por tu preferencia.`
                         } else if (invoice.sunatResponse.cdrUrl) {
                           await forceDownload(invoice.sunatResponse.cdrUrl, cdrFilename)
                         } else if (invoice.sunatResponse.cdrData) {
-                          // Descargar CDR desde data guardada en Firestore
+                          // Descargar CDR desde data guardada en Firestore (compatible web + native)
                           const blob = new Blob([invoice.sunatResponse.cdrData], { type: 'application/xml' })
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = cdrFilename
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
+                          await downloadBlob(blob, cdrFilename)
                         }
                         toast.success('CDR descargado exitosamente')
                       }}
@@ -3041,14 +3069,7 @@ Gracias por tu preferencia.`
                           await forceDownload(invoice.voidCdrStorageUrl, cdrFilename)
                         } else if (invoice.voidCdrData) {
                           const blob = new Blob([invoice.voidCdrData], { type: 'application/xml' })
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = cdrFilename
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
+                          await downloadBlob(blob, cdrFilename)
                         }
                         toast.success('CDR de baja descargado exitosamente')
                       }}
@@ -3476,11 +3497,30 @@ Gracias por tu preferencia.`
             {/* ========== CONVERSIONES ========== */}
             {viewingInvoice.convertedTo && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="font-medium text-green-800">Nota convertida a Boleta</p>
-                  <p className="text-sm text-green-700">Boleta: <strong>{viewingInvoice.convertedTo.number}</strong></p>
+                <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-green-800">Nota convertida a {viewingInvoice.convertedTo.type === 'factura' ? 'Factura' : 'Boleta'}</p>
+                  <p className="text-sm text-green-700">{viewingInvoice.convertedTo.type === 'factura' ? 'Factura' : 'Boleta'}: <strong>{viewingInvoice.convertedTo.number}</strong></p>
                 </div>
+                {/* TEMPORAL: botón para revertir manualmente notas que quedaron mal vinculadas
+                    cuando su factura fue anulada vía NC antes del fix. Quitar cuando ya no haga falta. */}
+                {(isBusinessOwner || isAdmin) && !isDemoMode && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleManualRevertNota(viewingInvoice)}
+                    disabled={revertingNotaId === viewingInvoice.id}
+                    className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-50"
+                    title="Revertir conversión (uso temporal)"
+                  >
+                    {revertingNotaId === viewingInvoice.id ? (
+                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 mr-1.5" />
+                    )}
+                    Revertir
+                  </Button>
+                )}
               </div>
             )}
             {viewingInvoice.convertedFrom && (
@@ -3522,9 +3562,7 @@ Gracias por tu preferencia.`
                         await forceDownload(viewingInvoice.sunatResponse.cdrStorageUrl, cdrFilename)
                       } else if (viewingInvoice.sunatResponse.cdrData) {
                         const blob = new Blob([viewingInvoice.sunatResponse.cdrData], { type: 'application/xml' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a'); a.href = url; a.download = cdrFilename; a.click()
-                        URL.revokeObjectURL(url)
+                        await downloadBlob(blob, cdrFilename)
                       }
                       toast.success('CDR descargado exitosamente')
                     }}>
@@ -3559,9 +3597,7 @@ Gracias por tu preferencia.`
                         await forceDownload(viewingInvoice.voidCdrStorageUrl, cdrFilename)
                       } else if (viewingInvoice.voidCdrData) {
                         const blob = new Blob([viewingInvoice.voidCdrData], { type: 'application/xml' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a'); a.href = url; a.download = cdrFilename; a.click()
-                        URL.revokeObjectURL(url)
+                        await downloadBlob(blob, cdrFilename)
                       }
                       toast.success('CDR de baja descargado exitosamente')
                     }}>

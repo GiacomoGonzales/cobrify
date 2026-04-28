@@ -565,6 +565,30 @@ export default function CreateCreditNote() {
           pendingCreditNoteTotal: total
         })
 
+        // Si la NC es de ANULACIÓN TOTAL y la factura provino de Notas de Venta,
+        // revertir esas notas (quitar convertedTo) para que el usuario pueda volver
+        // a usarlas. Si la NC es parcial, NO se revierten porque la factura sigue
+        // siendo válida por el monto restante.
+        if (isFullCancellation && selectedInvoice.convertedFrom) {
+          try {
+            const { doc, updateDoc, deleteField } = await import('firebase/firestore')
+            const { db } = await import('@/lib/firebase')
+            const notaIds = selectedInvoice.convertedFrom.ids
+              || (selectedInvoice.convertedFrom.id ? [selectedInvoice.convertedFrom.id] : [])
+            for (const notaId of notaIds) {
+              try {
+                const notaRef = doc(db, 'businesses', user.uid, 'invoices', notaId)
+                await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
+                console.log(`✅ Nota de venta ${notaId} revertida tras NC ${creditNoteNumber}`)
+              } catch (revertError) {
+                console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
+              }
+            }
+          } catch (error) {
+            console.warn('Error al revertir notas de venta tras NC:', error)
+          }
+        }
+
         // Devolver stock si es una devolución o anulación (códigos 01, 06, 07)
         const stockReturnCodes = ['01', '06', '07']
         if (stockReturnCodes.includes(formData.discrepancyCode)) {

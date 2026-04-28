@@ -35,6 +35,68 @@ const formatDateTime = (ts) => {
   return d.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Helpers para vista del sub-usuario (jornadas)
+const tsToDate = (ts) => {
+  if (!ts) return null
+  const d = ts?.toDate ? ts.toDate() : new Date(ts)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+const dayKey = (date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// Agrupa registros por día y devuelve un objeto { 'YYYY-MM-DD': { date, marks: [{...r, _ts}] } }
+const groupRecordsByDay = (records) => {
+  const groups = {}
+  records.forEach((r) => {
+    const ts = tsToDate(r.timestamp)
+    if (!ts) return
+    const key = dayKey(ts)
+    if (!groups[key]) groups[key] = { date: ts, marks: [] }
+    groups[key].marks.push({ ...r, _ts: ts })
+  })
+  Object.values(groups).forEach((g) => g.marks.sort((a, b) => a._ts - b._ts))
+  return groups
+}
+
+// Resumen por día: primera entrada, última salida, total trabajado
+const summaryForDay = (group) => {
+  if (!group) return { inMark: null, outMark: null, totalMs: null, marks: [] }
+  const marks = group.marks
+  const inMark = marks.find((m) => m.type === 'in') || null
+  const outMark = [...marks].reverse().find((m) => m.type === 'out') || null
+  let totalMs = null
+  if (inMark && outMark && outMark._ts > inMark._ts) {
+    totalMs = outMark._ts - inMark._ts
+  }
+  return { inMark, outMark, totalMs, marks }
+}
+
+const formatTime = (date) => date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+const formatDuration = (ms) => {
+  if (ms == null || ms < 0) return '—'
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+const formatDayLabel = (date) => {
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (dayKey(date) === dayKey(today)) return 'Hoy'
+  if (dayKey(date) === dayKey(yesterday)) return 'Ayer'
+  return date.toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'short' })
+}
+
 const statusBadge = (record) => {
   if (record.autoClosed) return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Auto-cerrado</span>
   switch (record.approvalStatus) {
@@ -63,6 +125,8 @@ export default function Attendance() {
   const [loading, setLoading] = useState(true)
   const [marking, setMarking] = useState(false)
   const [lastMark, setLastMark] = useState(null)
+  // Marcaciones del usuario actual de los últimos 7 días (para vista de jornada)
+  const [myWeekRecords, setMyWeekRecords] = useState([])
 
   // Filtros en tab Marcaciones
   const [filterUser, setFilterUser] = useState('')
@@ -91,11 +155,20 @@ export default function Attendance() {
     if (!businessId) return
     setLoading(true)
     try {
-      const [branchesRes, settingsRes, usersRes, lastRes] = await Promise.all([
+      // Para sub-usuarios cargamos las marcaciones de los últimos 7 días para
+      // armar la vista de jornadas. Para owner/admin con acceso completo usamos
+      // la última marcación nada más (ellos tienen la tab "Marcaciones" con todo).
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      const [branchesRes, settingsRes, usersRes, lastRes, weekRes] = await Promise.all([
         getBranches(businessId),
         getCompanySettings(businessId),
         canManage ? getManagedUsers(businessId) : Promise.resolve({ success: true, data: [] }),
         user?.uid ? getLastAttendance(businessId, user.uid) : Promise.resolve({ success: true, data: null }),
+        user?.uid
+          ? getAttendanceRecords(businessId, { userId: user.uid, fromDate: sevenDaysAgo.toISOString(), max: 200 })
+          : Promise.resolve({ success: true, data: [] }),
       ])
       // Sucursal principal: se representa con id 'main' y se nutre de companySettings.
       // Su configuración de asistencia vive en el documento del negocio (no en branches).
@@ -110,6 +183,7 @@ export default function Attendance() {
       setBranches(mainBranch ? [mainBranch, ...realBranches] : realBranches)
       if (usersRes.success) setSubUsers(usersRes.data || [])
       if (lastRes.success) setLastMark(lastRes.data)
+      if (weekRes.success) setMyWeekRecords(weekRes.data || [])
       if (canManage) await loadRecords()
     } catch (e) {
       console.error(e)
@@ -161,35 +235,140 @@ export default function Attendance() {
     const tryNative = async () => {
       try {
         const { Geolocation } = await import('@capacitor/geolocation')
-        const perm = await Geolocation.checkPermissions()
-        if (perm.location !== 'granted') {
-          const req = await Geolocation.requestPermissions()
-          if (req.location !== 'granted') return resolve(null)
+
+        // 1. Verificar/pedir permiso
+        let permGranted = false
+        try {
+          const perm = await Geolocation.checkPermissions()
+          if (perm.location === 'granted') {
+            permGranted = true
+          } else {
+            const req = await Geolocation.requestPermissions()
+            permGranted = req.location === 'granted'
+            // Bug @capacitor/geolocation v8: llamar getCurrentPosition() inmediatamente después
+            // de requestPermissions() puede crashear en algunos Android porque la Activity
+            // todavía se está re-inicializando tras el diálogo del sistema. Esperamos 500ms.
+            if (permGranted) await new Promise((r) => setTimeout(r, 500))
+          }
+        } catch (permErr) {
+          console.warn('Error verificando permiso de ubicación:', permErr)
         }
-        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
-        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
-      } catch {
+
+        if (!permGranted) return resolve(null)
+
+        // 2. Obtener posición. enableHighAccuracy: false es más rápido y menos
+        //    propenso a crashear cuando no hay fix GPS reciente. Para asistencia
+        //    no necesitamos precisión sub-métrica.
+        try {
+          const pos = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: false,
+            timeout: 8000,
+            maximumAge: 60000, // Acepta una posición reciente cacheada (1 min)
+          })
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          })
+        } catch (gpsErr) {
+          console.warn('Error obteniendo posición GPS:', gpsErr)
+          resolve(null)
+        }
+      } catch (importErr) {
+        console.warn('Error cargando plugin Geolocation:', importErr)
         resolve(null)
       }
     }
     if (isNative) return tryNative()
     if (!navigator.geolocation) return resolve(null)
-    navigator.geolocation.getCurrentPosition(onPos, onErr, { enableHighAccuracy: true, timeout: 10000 })
+    navigator.geolocation.getCurrentPosition(onPos, onErr, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 })
   })
+
+  // Espera a que el módulo Google Barcode Scanner esté instalado.
+  // installGoogleBarcodeScannerModule() solo dispara el download — si llamamos
+  // scan() antes de que termine, la app CRASHEA. Hay que escuchar el evento de
+  // progreso y esperar a state COMPLETED.
+  const ensureBarcodeModule = async (BarcodeScanner) => {
+    try {
+      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+      if (available) return true
+    } catch { /* fallthrough */ }
+
+    toast.info('Instalando módulo de escaneo (puede tardar unos segundos)…', 5000)
+
+    return await new Promise((resolve) => {
+      let listenerHandle = null
+      let settled = false
+      const settle = (ok) => {
+        if (settled) return
+        settled = true
+        try { listenerHandle?.remove?.() } catch { /* no-op */ }
+        resolve(ok)
+      }
+
+      // Timeout de seguridad: 60s para conexiones lentas
+      const timeoutId = setTimeout(() => {
+        toast.error('La instalación del módulo demoró demasiado. Intenta de nuevo con buena señal.', 5000)
+        settle(false)
+      }, 60000)
+
+      try {
+        // Listener de progreso. Cuando state === 4 (COMPLETED) seguimos.
+        BarcodeScanner.addListener('googleBarcodeScannerModuleInstallProgress', (info) => {
+          // info.state: 1=PENDING, 2=DOWNLOADING, 3=CANCELED, 4=COMPLETED, 5=FAILED, 6=INSTALLING, 7=DOWNLOAD_PAUSED
+          if (info.state === 4) {
+            clearTimeout(timeoutId)
+            toast.success('Módulo instalado, escaneando…')
+            settle(true)
+          } else if (info.state === 3 || info.state === 5) {
+            clearTimeout(timeoutId)
+            toast.error('La instalación del módulo de escaneo falló. Verifica tu conexión.', 5000)
+            settle(false)
+          }
+        }).then((h) => { listenerHandle = h })
+
+        // Disparar el download (no bloquea)
+        BarcodeScanner.installGoogleBarcodeScannerModule().catch(() => {
+          clearTimeout(timeoutId)
+          toast.error('No se pudo iniciar la instalación del módulo de escaneo.', 5000)
+          settle(false)
+        })
+      } catch (err) {
+        clearTimeout(timeoutId)
+        console.error('Error al instalar módulo Barcode Scanner:', err)
+        settle(false)
+      }
+    })
+  }
 
   const scanQrNative = async () => {
     const { BarcodeScanner } = await import('@capacitor-mlkit/barcode-scanning')
-    try {
-      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-      if (!available) await BarcodeScanner.installGoogleBarcodeScannerModule()
-    } catch { /* no-op */ }
+
+    // 1. Permiso de cámara primero (necesario incluso para preparar la cámara)
     const { camera } = await BarcodeScanner.checkPermissions()
     if (camera !== 'granted') {
       const { camera: n } = await BarcodeScanner.requestPermissions()
       if (n !== 'granted') throw new Error('Se necesita permiso de cámara')
     }
-    const { barcodes } = await BarcodeScanner.scan()
-    await BarcodeScanner.stopScan().catch(() => {})
+
+    // 2. Asegurar que el módulo Google Barcode Scanner esté listo (evita crash)
+    const moduleReady = await ensureBarcodeModule(BarcodeScanner)
+    if (!moduleReady) {
+      throw new Error('El módulo de escaneo no está disponible. Reintenta en unos segundos.')
+    }
+
+    // 3. Escanear con manejo de errores
+    let scanResult
+    try {
+      scanResult = await BarcodeScanner.scan()
+    } catch (err) {
+      console.error('Error en BarcodeScanner.scan():', err)
+      throw new Error(err?.message || 'No se pudo abrir la cámara para escanear')
+    } finally {
+      await BarcodeScanner.stopScan().catch(() => {})
+    }
+
+    const { barcodes } = scanResult || {}
     if (!barcodes || barcodes.length === 0) throw new Error('No se detectó ningún QR')
     return barcodes[0].rawValue
   }
@@ -238,6 +417,13 @@ export default function Attendance() {
     }
     const lastRes = await getLastAttendance(businessId, user.uid)
     if (lastRes.success) setLastMark(lastRes.data)
+    // Refrescar la semana del usuario para que la card "Hoy" se actualice al instante
+    try {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      const weekRes = await getAttendanceRecords(businessId, { userId: user.uid, fromDate: sevenDaysAgo.toISOString(), max: 200 })
+      if (weekRes.success) setMyWeekRecords(weekRes.data || [])
+    } catch { /* no-op */ }
     if (canManage) await loadRecords()
   }
 
@@ -432,52 +618,63 @@ export default function Attendance() {
                     <TabsTrigger value="config" activeTab={at} setActiveTab={setAt}>Configuración</TabsTrigger>
                   </>
                 )}
-                {!canManage && isNative && (
+                {!canManage && (
                   <TabsTrigger value="myhistory" activeTab={at} setActiveTab={setAt}>Mi historial</TabsTrigger>
                 )}
               </TabsList>
 
               {/* ========== TAB: MARCAR ========== */}
               <TabsContent value="mark" activeTab={at} className="mt-4">
-                <div className="max-w-md mx-auto space-y-4">
-                  <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-                    <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mb-3">
-                      <Clock className="w-8 h-8 text-primary-600" />
-                    </div>
-                    {lastMark ? (
-                      <div className="text-sm text-gray-600 mb-4">
-                        <p className="font-medium text-gray-900">Última marcación</p>
-                        <p className="mt-1">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${lastMark.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                            {lastMark.type === 'in' ? 'Entrada' : 'Salida'}
-                          </span>
-                          <span className="ml-2">{formatDateTime(lastMark.timestamp)}</span>
-                        </p>
-                        {lastMark.branchName && <p className="text-xs text-gray-500 mt-1">en {lastMark.branchName}</p>}
+                {canManage ? (
+                  // Vista simple para owner/admin (ellos tienen su tabla en "Marcaciones")
+                  <div className="max-w-md mx-auto space-y-4">
+                    <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+                      <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mb-3">
+                        <Clock className="w-8 h-8 text-primary-600" />
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 mb-4">Todavía no registraste ninguna marcación.</p>
-                    )}
+                      {lastMark ? (
+                        <div className="text-sm text-gray-600 mb-4">
+                          <p className="font-medium text-gray-900">Última marcación</p>
+                          <p className="mt-1">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${lastMark.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                              {lastMark.type === 'in' ? 'Entrada' : 'Salida'}
+                            </span>
+                            <span className="ml-2">{formatDateTime(lastMark.timestamp)}</span>
+                          </p>
+                          {lastMark.branchName && <p className="text-xs text-gray-500 mt-1">en {lastMark.branchName}</p>}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 mb-4">Todavía no registraste ninguna marcación.</p>
+                      )}
 
-                    <Button onClick={handleMark} disabled={marking} className="w-full py-6 text-lg">
-                      {marking ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Scan className="w-5 h-5 mr-2" />}
-                      {marking ? 'Registrando...' : 'Escanear QR y marcar'}
-                    </Button>
+                      <Button onClick={handleMark} disabled={marking} className="w-full py-6 text-lg">
+                        {marking ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Scan className="w-5 h-5 mr-2" />}
+                        {marking ? 'Registrando...' : 'Escanear QR y marcar'}
+                      </Button>
 
-                    {!isNative && (
-                      <p className="text-xs text-gray-500 mt-3">
-                        En navegador web, se abrirá un cuadro para pegar el contenido del QR.
+                      {!isNative && (
+                        <p className="text-xs text-gray-500 mt-3">
+                          En navegador web, se abrirá un cuadro para pegar el contenido del QR.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-900">
+                      <p className="flex items-start gap-2">
+                        <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, la marcación quedará pendiente de aprobación.</span>
                       </p>
-                    )}
+                    </div>
                   </div>
-
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-900">
-                    <p className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                      <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, la marcación quedará pendiente de aprobación.</span>
-                    </p>
-                  </div>
-                </div>
+                ) : (
+                  // Vista de jornada para sub-usuarios
+                  <SubUserAttendanceView
+                    weekRecords={myWeekRecords}
+                    onMark={handleMark}
+                    marking={marking}
+                    isNative={isNative}
+                  />
+                )}
               </TabsContent>
 
               {/* ========== TAB: MARCACIONES (owner) ========== */}
@@ -801,6 +998,174 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
 }
 
 // Historial personal del sub-usuario
+/**
+ * Vista de jornada para sub-usuarios:
+ *  - Card "Hoy" con entrada/salida/total y botón contextual
+ *  - Mini historial de últimos 6 días con resumen por jornada
+ */
+function SubUserAttendanceView({ weekRecords, onMark, marking, isNative }) {
+  const grouped = useMemo(() => groupRecordsByDay(weekRecords || []), [weekRecords])
+
+  const today = new Date()
+  const todayKey = dayKey(today)
+  const todayGroup = grouped[todayKey]
+  const todaySummary = summaryForDay(todayGroup)
+
+  // Estado: 'idle' (no fichó), 'in' (entró pero no salió), 'done' (jornada completa)
+  let state = 'idle'
+  if (todaySummary.inMark && todaySummary.outMark) state = 'done'
+  else if (todaySummary.inMark) state = 'in'
+
+  const buttonLabel = marking
+    ? 'Registrando…'
+    : state === 'idle'
+      ? 'Marcar entrada'
+      : state === 'in'
+        ? 'Marcar salida'
+        : '✓ Jornada completa'
+
+  // Días anteriores ordenados: descendente, excluyendo hoy
+  const previousDays = Object.entries(grouped)
+    .filter(([k]) => k !== todayKey)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 6)
+
+  return (
+    <div className="max-w-md mx-auto space-y-4">
+      {/* ===== CARD HOY ===== */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-primary-600 text-white px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            <div>
+              <p className="text-xs opacity-80">Hoy</p>
+              <p className="font-semibold text-sm">
+                {today.toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long' })}
+              </p>
+            </div>
+          </div>
+          {state === 'done' && (
+            <CheckCircle2 className="w-6 h-6 text-green-300" />
+          )}
+        </div>
+
+        <div className="p-5 space-y-3">
+          {state === 'idle' ? (
+            <p className="text-center text-sm text-gray-500 py-2">
+              Aún no fichaste hoy. Pulsa el botón para escanear el QR.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold">IN</div>
+                  <div>
+                    <p className="text-xs text-green-700 font-medium">Entrada</p>
+                    <p className="text-base font-semibold text-green-900">
+                      {todaySummary.inMark ? formatTime(todaySummary.inMark._ts) : '—'}
+                    </p>
+                  </div>
+                </div>
+                {todaySummary.inMark?.gpsValid === false && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pendiente</span>
+                )}
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                todaySummary.outMark ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 border-dashed'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                    todaySummary.outMark ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
+                  }`}>OUT</div>
+                  <div>
+                    <p className={`text-xs font-medium ${todaySummary.outMark ? 'text-blue-700' : 'text-gray-500'}`}>Salida</p>
+                    <p className={`text-base font-semibold ${todaySummary.outMark ? 'text-blue-900' : 'text-gray-400 italic'}`}>
+                      {todaySummary.outMark ? formatTime(todaySummary.outMark._ts) : 'Pendiente'}
+                    </p>
+                  </div>
+                </div>
+                {todaySummary.outMark?.gpsValid === false && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pendiente</span>
+                )}
+              </div>
+
+              {todaySummary.totalMs != null && (
+                <div className="text-center pt-1">
+                  <p className="text-xs text-gray-500">Total trabajado</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatDuration(todaySummary.totalMs)}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            onClick={onMark}
+            disabled={marking || state === 'done'}
+            className={`w-full py-5 text-base ${
+              state === 'done' ? 'bg-gray-300 text-gray-500 hover:bg-gray-300' : ''
+            }`}
+          >
+            {marking ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : (state !== 'done' && <Scan className="w-5 h-5 mr-2" />)}
+            {buttonLabel}
+          </Button>
+
+          {!isNative && state !== 'done' && (
+            <p className="text-xs text-gray-500 text-center">
+              En navegador web, se abrirá un cuadro para pegar el contenido del QR.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+        <p className="flex items-start gap-2">
+          <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, la marcación quedará pendiente de aprobación.</span>
+        </p>
+      </div>
+
+      {/* ===== DÍAS ANTERIORES ===== */}
+      {previousDays.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <p className="text-sm font-semibold text-gray-700">Días anteriores</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {previousDays.map(([key, group]) => {
+              const s = summaryForDay(group)
+              return (
+                <div key={key} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 capitalize truncate">{formatDayLabel(group.date)}</p>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        {s.inMark ? formatTime(s.inMark._ts) : '—'}
+                      </span>
+                      <span className="text-gray-300">→</span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                        {s.outMark ? formatTime(s.outMark._ts) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-base font-bold text-gray-900">{formatDuration(s.totalMs)}</p>
+                    {!s.outMark && s.inMark && (
+                      <span className="text-[10px] text-yellow-600">sin salida</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MyHistory({ businessId, userId }) {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)

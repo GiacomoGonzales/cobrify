@@ -36,6 +36,7 @@ export const COMMON_PAGES = [
   // Sistema
   { id: 'settings', name: 'Configuración', path: '/configuracion', category: 'sistema' },
   { id: 'users', name: 'Gestión de Usuarios', path: '/usuarios', category: 'sistema' },
+  { id: 'attendance', name: 'Control de Asistencia', path: '/asistencia', category: 'sistema' },
   // Otros
   { id: 'accounting', name: 'Contabilidad', path: '/contabilidad', category: 'finanzas' },
   { id: 'complaints', name: 'Libro de Reclamos', path: '/reclamos', category: 'otros' },

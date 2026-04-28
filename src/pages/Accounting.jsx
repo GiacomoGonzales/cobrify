@@ -18,6 +18,7 @@ import { Share } from '@capacitor/share'
 import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { useBranding } from '@/contexts/BrandingContext'
+import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 
 // Nombres de meses en español
 const MONTHS = [
@@ -155,39 +156,20 @@ export default function Accounting() {
     return 'pending'
   }
 
-  // Helper para forzar descarga de archivos en lugar de abrirlos en el navegador
-  const forceDownload = async (url, filename) => {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(blobUrl)
-    } catch (error) {
-      console.error('Error al descargar archivo:', error)
-      window.open(url, '_blank')
-    }
-  }
-
   const downloadCdr = async (inv) => {
     const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
-    if (url) {
-      const cdrFilename = `CDR-${(inv.number || 'doc').replace(/\//g, '-')}.xml`
-      await forceDownload(url, cdrFilename)
-    } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
-      const data = inv.cdrData || inv.sunatResponse.cdrData
-      const blob = new Blob([data], { type: 'application/xml' })
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = `CDR-${inv.number || 'doc'}.xml`
-      a.click()
-      URL.revokeObjectURL(blobUrl)
+    try {
+      if (url) {
+        const cdrFilename = `CDR-${(inv.number || 'doc').replace(/\//g, '-')}.xml`
+        await downloadFromUrl(url, cdrFilename)
+      } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
+        const data = inv.cdrData || inv.sunatResponse.cdrData
+        const blob = new Blob([data], { type: 'application/xml' })
+        await downloadBlob(blob, `CDR-${inv.number || 'doc'}.xml`)
+      }
+    } catch (err) {
+      console.error('Error al descargar CDR:', err)
+      toast.error('No se pudo descargar el CDR')
     }
   }
 
@@ -197,8 +179,13 @@ export default function Accounting() {
     // 1. Intentar URL guardada (XML firmado real)
     const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
     if (url) {
-      const xmlFilename = `${(inv.number || 'doc').replace(/\//g, '-')}_XML.xml`
-      await forceDownload(url, xmlFilename)
+      try {
+        const xmlFilename = `${(inv.number || 'doc').replace(/\//g, '-')}_XML.xml`
+        await downloadFromUrl(url, xmlFilename)
+      } catch (err) {
+        console.error('Error al descargar XML:', err)
+        toast.error('No se pudo descargar el XML')
+      }
       return
     }
 
@@ -218,14 +205,9 @@ export default function Accounting() {
         return
       }
 
-      // Descargar el XML generado
+      // Descargar el XML generado (compatible web + native)
       const blob = new Blob([result.xml], { type: 'application/xml' })
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = result.fileName || `${inv.number || 'doc'}.xml`
-      a.click()
-      URL.revokeObjectURL(blobUrl)
+      await downloadBlob(blob, result.fileName || `${inv.number || 'doc'}.xml`)
       toast.success('XML descargado')
     } catch (error) {
       console.error('Error generando XML:', error)
