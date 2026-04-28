@@ -6,38 +6,31 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 /**
- * Exportar productos en formato compatible con importación
- * Este formato permite reimportar los productos después de editarlos
+ * Exportar productos en formato compatible con importación.
+ * El formato y orden de columnas coincide con la plantilla del importador,
+ * por lo que el archivo exportado se puede reimportar directamente.
+ *
+ * Productos con variantes: emite UNA fila por variante (formato multi-fila),
+ * con los campos del padre solo en la primera fila para mantener la
+ * cuenta limpia. SKU/codigo_barras del padre van vacíos (cada variante
+ * tiene su propio SKU).
  */
 export const exportProductsForImport = async (products, categories, businessMode = 'retail') => {
   const workbook = XLSX.utils.book_new();
 
-  // Helper para obtener nombre de categoría y subcategoría por ID
-  const getCategoryName = (categoryId) => {
-    if (!categoryId) return '';
-    const category = categories.find(cat => cat.id === categoryId);
-    return category ? category.name : '';
-  };
-
+  // Helper categoría/subcategoría
   const getCategoryAndSubcategory = (categoryId) => {
     if (!categoryId) return { categoria: '', subcategoria: '' };
     const category = categories.find(cat => cat.id === categoryId);
     if (!category) return { categoria: '', subcategoria: '' };
-
     if (category.parentId) {
-      // Es una subcategoría - buscar la categoría padre
       const parent = categories.find(cat => cat.id === category.parentId);
-      return {
-        categoria: parent ? parent.name : '',
-        subcategoria: category.name
-      };
+      return { categoria: parent ? parent.name : '', subcategoria: category.name };
     }
-
-    // Es una categoría raíz
     return { categoria: category.name, subcategoria: '' };
   };
 
-  // Mapear afectación IGV a texto
+  // Texto de afectación IGV
   const getTaxAffectationText = (taxAffectation) => {
     switch (taxAffectation) {
       case '20': return 'EXONERADO';
@@ -46,133 +39,210 @@ export const exportProductsForImport = async (products, categories, businessMode
     }
   };
 
-  // Preparar datos según el modo de negocio
-  let productData = [];
-
-  // Helper para sanitizar valores numéricos (evita NaN y undefined en Excel)
+  // Sanitiza números (evita NaN/undefined en celdas)
   const safeNum = (val) => {
     if (val === undefined || val === null || val === '') return '';
     const n = Number(val);
     return isNaN(n) ? '' : n;
   };
 
-  // Helper para obtener el precio efectivo (considera variantes)
-  const getEffectivePrice = (product) => {
-    if (product.hasVariants && product.variants?.length > 0) {
-      return safeNum(product.variants[0].price) || 0;
-    }
-    return safeNum(product.price) || 0;
+  // Convierte fechas (Firestore Timestamp / Date / string) a YYYY-MM-DD
+  const formatDate = (val) => {
+    if (!val) return '';
+    let d;
+    if (val?.toDate) d = val.toDate();
+    else if (val instanceof Date) d = val;
+    else d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   };
 
-  if (businessMode === 'pharmacy') {
-    // Formato farmacia con campos específicos
-    productData = products.map(product => {
-      const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
-      return {
-        sku: product.sku || '',
-        codigo_barras: product.code || '',
-        nombre: product.name || '',
-        descripcion: product.description || '',
-        nombre_generico: product.genericName || '',
-        concentracion: product.concentration || '',
-        presentacion: product.presentation || '',
-        laboratorio: product.laboratoryName || '',
-        marca: product.marca || '',
-        principio_activo: product.activeIngredient || '',
-        accion_terapeutica: product.therapeuticAction || '',
-        condicion_venta: product.saleCondition || '',
-        registro_sanitario: product.sanitaryRegistry || '',
-        ubicacion: product.location || '',
-        costo: safeNum(product.cost),
-        precio: getEffectivePrice(product),
-        precio2: safeNum(product.price2),
-        precio3: safeNum(product.price3),
-        precio4: safeNum(product.price4),
-        stock: safeNum(product.stock),
-        trackStock: product.trackStock === false ? 'NO' : 'SI',
-        unidad: product.unit || 'UNIDAD',
-        categoria,
-        subcategoria,
-        afectacion_igv: getTaxAffectationText(product.taxAffectation),
-      };
-    });
-  } else {
-    // Formato retail estándar
-    productData = products.map(product => {
-      const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
-      return {
+  // Yes/No en formato del importador
+  const yn = (v) => v ? 'SI' : 'NO';
+
+  /**
+   * Construye las filas de un producto: una si no tiene variantes,
+   * múltiples (una por variante) si las tiene.
+   */
+  const buildRowsForProduct = (product) => {
+    const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
+    const presentations = Array.isArray(product.presentations) ? product.presentations : [];
+    const p1 = presentations[0] || {};
+    const p2 = presentations[1] || {};
+    const p3 = presentations[2] || {};
+
+    // Campos farmacia (solo se llenan en modo pharmacy)
+    const pharmacyFields = businessMode === 'pharmacy' ? {
+      nombre_generico: product.genericName || '',
+      concentracion: product.concentration || '',
+      presentacion: product.presentation || '',
+      laboratorio: product.laboratoryName || '',
+      principio_activo: product.activeIngredient || '',
+      accion_terapeutica: product.therapeuticAction || '',
+      condicion_venta: product.saleCondition || '',
+      registro_sanitario: product.sanitaryRegistry || '',
+    } : {};
+
+    // Producto SIN variantes — fila única
+    if (!product.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) {
+      return [{
         sku: product.sku || '',
         codigo_barras: product.code || '',
         nombre: product.name || '',
         descripcion: product.description || '',
         marca: product.marca || '',
-        ubicacion: product.location || '',
+        categoria,
+        subcategoria,
+        unidad: product.unit || 'UNIDAD',
+        ...pharmacyFields,
         costo: safeNum(product.cost),
-        precio: getEffectivePrice(product),
+        precio: safeNum(product.price),
         precio2: safeNum(product.price2),
         precio3: safeNum(product.price3),
         precio4: safeNum(product.price4),
         stock: safeNum(product.stock),
         trackStock: product.trackStock === false ? 'NO' : 'SI',
-        unidad: product.unit || 'UNIDAD',
-        categoria,
-        subcategoria,
+        permitir_decimales: yn(product.allowDecimalQuantity),
+        control_vencimiento: yn(product.trackExpiration),
+        fecha_vencimiento: formatDate(product.expirationDate),
+        control_series: yn(product.trackSerials),
+        mostrar_en_catalogo: product.catalogVisible === false ? 'NO' : 'SI',
+        precio_comparacion: safeNum(product.catalogComparePrice),
+        imagen_url: product.imageUrl || '',
+        peso: safeNum(product.weight),
+        ubicacion: product.location || '',
         afectacion_igv: getTaxAffectationText(product.taxAffectation),
+        tasa_igv: safeNum(product.igvRate),
+        presentacion1_nombre: p1.name || '',
+        presentacion1_cantidad: safeNum(p1.factor),
+        presentacion1_precio: safeNum(p1.price),
+        presentacion2_nombre: p2.name || '',
+        presentacion2_cantidad: safeNum(p2.factor),
+        presentacion2_precio: safeNum(p2.price),
+        presentacion3_nombre: p3.name || '',
+        presentacion3_cantidad: safeNum(p3.factor),
+        presentacion3_precio: safeNum(p3.price),
+        variante_atributo: '',
+        variante_valor: '',
+        variante_sku: '',
+        variante_precio: '',
+        variante_stock: '',
+      }];
+    }
+
+    // Producto CON variantes — una fila por variante.
+    // El padre NO lleva sku/code/precio/stock (eso va en cada variante).
+    // Los demás campos solo se repiten en la primera fila para mantener limpio.
+    return product.variants.map((variant, idx) => {
+      const isFirst = idx === 0;
+      const attrs = variant.attributes || {};
+      const attrKeys = Object.keys(attrs);
+      const attrNames = attrKeys.join(',');
+      const attrValues = attrKeys.map(k => attrs[k]).join(',');
+
+      return {
+        sku: '',                      // padre sin SKU
+        codigo_barras: '',            // padre sin barcode
+        nombre: product.name || '',   // siempre el mismo nombre — agrupa al reimportar
+        descripcion: isFirst ? (product.description || '') : '',
+        marca: isFirst ? (product.marca || '') : '',
+        categoria: isFirst ? categoria : '',
+        subcategoria: isFirst ? subcategoria : '',
+        unidad: isFirst ? (product.unit || 'UNIDAD') : '',
+        ...(isFirst ? pharmacyFields : Object.fromEntries(Object.keys(pharmacyFields).map(k => [k, '']))),
+        costo: isFirst ? safeNum(product.cost) : '',
+        precio: '',                   // sin precio padre
+        precio2: '', precio3: '', precio4: '',
+        stock: '',                    // sin stock padre
+        trackStock: isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
+        permitir_decimales: isFirst ? yn(product.allowDecimalQuantity) : '',
+        control_vencimiento: isFirst ? yn(product.trackExpiration) : '',
+        fecha_vencimiento: isFirst ? formatDate(product.expirationDate) : '',
+        control_series: isFirst ? yn(product.trackSerials) : '',
+        mostrar_en_catalogo: isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
+        precio_comparacion: isFirst ? safeNum(product.catalogComparePrice) : '',
+        imagen_url: isFirst ? (product.imageUrl || '') : '',
+        peso: isFirst ? safeNum(product.weight) : '',
+        ubicacion: isFirst ? (product.location || '') : '',
+        afectacion_igv: isFirst ? getTaxAffectationText(product.taxAffectation) : '',
+        tasa_igv: isFirst ? safeNum(product.igvRate) : '',
+        presentacion1_nombre: isFirst ? (p1.name || '') : '',
+        presentacion1_cantidad: isFirst ? safeNum(p1.factor) : '',
+        presentacion1_precio: isFirst ? safeNum(p1.price) : '',
+        presentacion2_nombre: isFirst ? (p2.name || '') : '',
+        presentacion2_cantidad: isFirst ? safeNum(p2.factor) : '',
+        presentacion2_precio: isFirst ? safeNum(p2.price) : '',
+        presentacion3_nombre: isFirst ? (p3.name || '') : '',
+        presentacion3_cantidad: isFirst ? safeNum(p3.factor) : '',
+        presentacion3_precio: isFirst ? safeNum(p3.price) : '',
+        variante_atributo: attrNames,
+        variante_valor: attrValues,
+        variante_sku: variant.sku || '',
+        variante_precio: safeNum(variant.price),
+        variante_stock: safeNum(variant.stock),
       };
     });
-  }
+  };
+
+  // Construir todas las filas (puede haber más filas que productos por las variantes)
+  const productData = products.flatMap(p => buildRowsForProduct(p));
 
   // Crear hoja de cálculo
   const worksheet = XLSX.utils.json_to_sheet(productData);
 
-  // Configurar anchos de columna
-  if (businessMode === 'pharmacy') {
-    worksheet['!cols'] = [
-      { wch: 12 }, // sku
-      { wch: 16 }, // codigo_barras
-      { wch: 30 }, // nombre
-      { wch: 30 }, // descripcion
-      { wch: 18 }, // nombre_generico
-      { wch: 12 }, // concentracion
-      { wch: 12 }, // presentacion
-      { wch: 15 }, // laboratorio
-      { wch: 20 }, // principio_activo
-      { wch: 15 }, // accion_terapeutica
-      { wch: 15 }, // condicion_venta
-      { wch: 15 }, // registro_sanitario
-      { wch: 12 }, // ubicacion
-      { wch: 10 }, // costo
-      { wch: 10 }, // precio
-      { wch: 10 }, // precio2
-      { wch: 10 }, // precio3
-      { wch: 10 }, // precio4
-      { wch: 10 }, // stock
-      { wch: 12 }, // trackStock
-      { wch: 12 }, // unidad
-      { wch: 20 }, // categoria
-      { wch: 20 }, // subcategoria
-      { wch: 15 }, // afectacion_igv
-    ];
-  } else {
-    worksheet['!cols'] = [
-      { wch: 15 }, // sku
-      { wch: 18 }, // codigo_barras
-      { wch: 35 }, // nombre
-      { wch: 40 }, // descripcion
-      { wch: 15 }, // ubicacion
-      { wch: 10 }, // costo
-      { wch: 10 }, // precio
-      { wch: 10 }, // precio2
-      { wch: 10 }, // precio3
-      { wch: 10 }, // precio4
-      { wch: 10 }, // stock
-      { wch: 12 }, // trackStock
-      { wch: 12 }, // unidad
-      { wch: 20 }, // categoria
-      { wch: 20 }, // subcategoria
-      { wch: 15 }, // afectacion_igv
-    ];
-  }
+  // Anchos de columna razonables para legibilidad
+  const baseCols = [
+    { wch: 18 }, // sku
+    { wch: 16 }, // codigo_barras
+    { wch: 35 }, // nombre
+    { wch: 40 }, // descripcion
+    { wch: 15 }, // marca
+    { wch: 20 }, // categoria
+    { wch: 20 }, // subcategoria
+    { wch: 10 }, // unidad
+  ];
+  const pharmaCols = businessMode === 'pharmacy' ? [
+    { wch: 18 }, // nombre_generico
+    { wch: 14 }, // concentracion
+    { wch: 14 }, // presentacion
+    { wch: 18 }, // laboratorio
+    { wch: 22 }, // principio_activo
+    { wch: 18 }, // accion_terapeutica
+    { wch: 14 }, // condicion_venta
+    { wch: 16 }, // registro_sanitario
+  ] : [];
+  const restCols = [
+    { wch: 10 }, // costo
+    { wch: 10 }, // precio
+    { wch: 10 }, // precio2
+    { wch: 10 }, // precio3
+    { wch: 10 }, // precio4
+    { wch: 10 }, // stock
+    { wch: 12 }, // trackStock
+    { wch: 18 }, // permitir_decimales
+    { wch: 18 }, // control_vencimiento
+    { wch: 16 }, // fecha_vencimiento
+    { wch: 14 }, // control_series
+    { wch: 18 }, // mostrar_en_catalogo
+    { wch: 16 }, // precio_comparacion
+    { wch: 30 }, // imagen_url
+    { wch: 8 },  // peso
+    { wch: 14 }, // ubicacion
+    { wch: 14 }, // afectacion_igv
+    { wch: 10 }, // tasa_igv
+    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion1
+    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion2
+    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion3
+    { wch: 18 }, // variante_atributo
+    { wch: 16 }, // variante_valor
+    { wch: 18 }, // variante_sku
+    { wch: 12 }, // variante_precio
+    { wch: 12 }, // variante_stock
+  ];
+  worksheet['!cols'] = [...baseCols, ...pharmaCols, ...restCols];
 
   XLSX.utils.book_append_sheet(workbook, worksheet, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos');
 
