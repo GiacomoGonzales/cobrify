@@ -5002,8 +5002,10 @@ export default function Products() {
                     <option value="">Seleccionar acción</option>
                     <option value="Analgésico">Analgésico</option>
                     <option value="Antiinflamatorio">Antiinflamatorio</option>
+                    <option value="Corticoide">Corticoide</option>
                     <option value="Antibiótico">Antibiótico</option>
-                    <option value="Antialérgico">Antialérgico</option>
+                    <option value="Antihistamínico">Antihistamínico</option>
+                    <option value="Antigripal">Antigripal</option>
                     <option value="Antihipertensivo">Antihipertensivo</option>
                     <option value="Antiácido">Antiácido</option>
                     <option value="Antidiarreico">Antidiarreico</option>
@@ -5013,12 +5015,15 @@ export default function Products() {
                     <option value="Antipirético">Antipirético</option>
                     <option value="Antiemético">Antiemético</option>
                     <option value="Antitusivo">Antitusivo</option>
+                    <option value="Mucolítico">Mucolítico</option>
+                    <option value="Expectorante">Expectorante</option>
                     <option value="Broncodilatador">Broncodilatador</option>
                     <option value="Diurético">Diurético</option>
                     <option value="Laxante">Laxante</option>
                     <option value="Vitamina/Suplemento">Vitamina/Suplemento</option>
                     <option value="Dermatológico">Dermatológico</option>
                     <option value="Oftálmico">Oftálmico</option>
+                    <option value="Ótico">Ótico</option>
                     <option value="Otro">Otro</option>
                   </select>
                 </div>
