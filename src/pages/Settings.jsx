@@ -208,6 +208,15 @@ export default function Settings() {
   const [metaAdsPhonePrefix, setMetaAdsPhonePrefix] = useState('+51')
   const [metaAdsOrderIdPrefix, setMetaAdsOrderIdPrefix] = useState('')
 
+  // Estados para integración Rappi (modo restaurante, gated por businessSettings.rappiEnabled)
+  const [rappiClientId, setRappiClientId] = useState('')
+  const [rappiClientSecret, setRappiClientSecret] = useState('')
+  const [rappiStoreId, setRappiStoreId] = useState('')
+  const [rappiPollingEnabled, setRappiPollingEnabled] = useState(false)
+  const [rappiAutoAccept, setRappiAutoAccept] = useState(true)
+  const [showRappiSecret, setShowRappiSecret] = useState(false)
+  const [isSavingRappi, setIsSavingRappi] = useState(false)
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -879,6 +888,15 @@ export default function Settings() {
         }
         if (businessData.metaAdsOrderIdPrefix !== undefined) {
           setMetaAdsOrderIdPrefix(businessData.metaAdsOrderIdPrefix)
+        }
+
+        // Cargar configuración de Rappi
+        if (businessData.rappiConfig) {
+          setRappiClientId(businessData.rappiConfig.clientId || '')
+          setRappiClientSecret(businessData.rappiConfig.clientSecret || '')
+          setRappiStoreId(businessData.rappiConfig.storeId || '')
+          setRappiPollingEnabled(businessData.rappiConfig.pollingEnabled === true)
+          setRappiAutoAccept(businessData.rappiConfig.autoAccept !== false)
         }
 
         // Cargar cuentas bancarias estructuradas
@@ -2250,6 +2268,8 @@ export default function Settings() {
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
     { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
+    // Tab de Rappi: solo visible cuando businessSettings.rappiEnabled === true (modo restaurante)
+    ...(businessSettings?.rappiEnabled === true ? [{ id: 'rappi', label: 'Rappi', icon: Bike }] : []),
     // Solo mostrar si tiene el feature bulkDelete
     ...(hasFeature && hasFeature('bulkDelete') ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
   ]
@@ -8706,6 +8726,174 @@ export default function Settings() {
           </div>
         </div>
       </>)}
+
+      {/* Tab: Integración Rappi (gated por businessSettings.rappiEnabled) */}
+      {activeTab === 'rappi' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bike className="w-5 h-5 text-orange-600" />
+                <CardTitle>Integración con Rappi</CardTitle>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Configura las credenciales para captar pedidos de Rappi y emitir comprobantes.
+                Esta integración usa <strong>Self Mapping</strong>: tu menú lo cargas en el Portal Partners
+                de Rappi y vinculas los SKUs manualmente para que coincidan con tu catálogo de Cobrify.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Estado */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-900">
+                    <p className="font-medium">Integración en desarrollo</p>
+                    <p className="text-xs mt-1">
+                      Aún estamos finalizando la conexión con Rappi. Por ahora puedes guardar las credenciales
+                      y testear el flujo del UI con pedidos de prueba.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Client ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client ID
+                </label>
+                <Input
+                  value={rappiClientId}
+                  onChange={(e) => setRappiClientId(e.target.value)}
+                  placeholder="Identificador único otorgado por Rappi"
+                />
+              </div>
+
+              {/* Client Secret */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client Secret
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showRappiSecret ? 'text' : 'password'}
+                    value={rappiClientSecret}
+                    onChange={(e) => setRappiClientSecret(e.target.value)}
+                    placeholder="Secret otorgado por Rappi"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRappiSecret(!showRappiSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showRappiSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Las credenciales se almacenan cifradas. Solo se usan en el backend para autenticarse.
+                </p>
+              </div>
+
+              {/* Store ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Store ID (ID de tienda en Rappi)
+                </label>
+                <Input
+                  value={rappiStoreId}
+                  onChange={(e) => setRappiStoreId(e.target.value)}
+                  placeholder="ID de tu tienda Rappi"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Si manejas varias sucursales, esta es la principal. Más adelante agregaremos soporte multi-sucursal.
+                </p>
+              </div>
+
+              {/* Toggle: Polling automático */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Captar pedidos automáticamente</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Consulta nuevos pedidos en Rappi cada pocos minutos.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rappiPollingEnabled}
+                    onChange={(e) => setRappiPollingEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+
+              {/* Toggle: Auto-aceptar */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Auto-aceptar pedidos</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Confirma automáticamente la recepción del pedido a Rappi (recomendado para evitar cancelaciones).
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rappiAutoAccept}
+                    onChange={(e) => setRappiAutoAccept(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+
+              {/* Guardar */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={async () => {
+                    setIsSavingRappi(true)
+                    try {
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          pollingEnabled: rappiPollingEnabled,
+                          autoAccept: rappiAutoAccept,
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+                      if (refreshBusinessSettings) await refreshBusinessSettings()
+                      toast.success('Configuración de Rappi guardada')
+                    } catch (error) {
+                      console.error('Error guardando config Rappi:', error)
+                      toast.error('Error al guardar la configuración')
+                    } finally {
+                      setIsSavingRappi(false)
+                    }
+                  }}
+                  disabled={isSavingRappi}
+                >
+                  {isSavingRappi ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar configuración
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Tab: Limpieza de Datos */}
       {activeTab === 'limpieza' && (

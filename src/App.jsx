@@ -73,6 +73,7 @@ import Sellers from './pages/Sellers'
 import Attendance from './pages/Attendance'
 import Orders from './pages/Orders'
 import OnlineOrders from './pages/OnlineOrders'
+import RappiOrders from './pages/RappiOrders'
 import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
@@ -434,6 +435,9 @@ function App() {
 
               {/* Pedidos online (modo retail — tienda virtual) */}
               <Route path="pedidos-online" element={<OnlineOrders />} />
+
+              {/* Pedidos Rappi (modo restaurante — gated por businessSettings.rappiEnabled) */}
+              <Route path="pedidos-rappi" element={<RappiOrders />} />
 
               {/* Rutas de modo farmacia */}
               <Route path="laboratorios" element={<Laboratories />} />

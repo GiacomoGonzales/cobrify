@@ -26,7 +26,7 @@ import {
   saveProductCategories,
   getNextSkuNumber,
 } from '@/services/firestoreService'
-import { exportProductsForImport } from '@/services/productExportService'
+import { exportProductsForImport, exportProductsForRappi } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -1219,6 +1219,20 @@ export default function Products() {
     } catch (error) {
       console.error('Error al exportar productos:', error);
       toast.error('Error al generar el archivo Excel');
+    }
+  }
+
+  const handleExportForRappi = async () => {
+    try {
+      if (products.length === 0) {
+        toast.error('No hay productos para exportar')
+        return
+      }
+      await exportProductsForRappi(products, categories)
+      toast.success(`${products.length} producto(s) exportados para Self Mapping de Rappi`)
+    } catch (error) {
+      console.error('Error exportando para Rappi:', error)
+      toast.error('Error al generar el Excel para Rappi')
     }
   }
 
@@ -2857,6 +2871,17 @@ export default function Products() {
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
+          {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
+            <Button
+              variant="outline"
+              onClick={handleExportForRappi}
+              className="w-full sm:w-auto"
+              title="Exporta SKUs en formato listo para Self Mapping en Portal Partners de Rappi"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar SKUs Rappi
+            </Button>
+          )}
           <div className="flex gap-2">
             {/* Selector de columnas visibles */}
             <div className="relative">

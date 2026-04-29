@@ -1027,8 +1027,10 @@ export default function POS() {
       navigate(location.pathname, { replace: true, state: null })
     }
 
-    // Detectar si viene de un pedido online (tienda virtual retail) y cargar items + cliente
-    if (location.state?.fromOnlineOrder && !onlineOrderLoadedRef.current) {
+    // Detectar si viene de un pedido online (tienda virtual retail) o de Rappi y cargar items + cliente
+    const isFromOnlineOrder = location.state?.fromOnlineOrder
+    const isFromRappiOrder = location.state?.fromRappiOrder
+    if ((isFromOnlineOrder || isFromRappiOrder) && !onlineOrderLoadedRef.current) {
       const info = location.state
       onlineOrderLoadedRef.current = true
 
@@ -1047,7 +1049,7 @@ export default function POS() {
           price: item.price || 0,
           quantity: item.quantity || 1,
           unit: item.unit || 'NIU',
-          code: item.code || '',
+          code: item.code || item.sku || '',
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku,
@@ -1071,8 +1073,8 @@ export default function POS() {
           id: null,
           name: c.name || '',
           businessName: '',
-          documentType: 'dni',
-          documentNumber: '',
+          documentType: c.documentType || 'dni',
+          documentNumber: c.documentNumber || '',
           email: c.email || '',
           phone: c.phone || '',
           address: c.address || '',
@@ -1083,7 +1085,10 @@ export default function POS() {
         setGeneralNotes(info.notes)
       }
 
-      toast.success(`Pedido online #${info.orderNumber || ''} cargado · ${info.items?.length || 0} items`)
+      const orderLabel = isFromRappiOrder
+        ? `Pedido Rappi #${info.rappiOrderId || ''}`
+        : `Pedido online #${info.orderNumber || ''}`
+      toast.success(`${orderLabel} cargado · ${info.items?.length || 0} items`)
 
       navigate(location.pathname, { replace: true, state: null })
     }

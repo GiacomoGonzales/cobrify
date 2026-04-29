@@ -504,6 +504,14 @@ function Sidebar() {
       menuId: 'kitchen',
     },
     {
+      path: '/pedidos-rappi',
+      icon: Bike,
+      label: 'Pedidos Rappi',
+      pageId: 'rappi-orders',
+      menuId: 'rappi-orders',
+      requiresRappi: true,
+    },
+    {
       path: '/facturas',
       icon: FileText,
       label: 'Ventas',
@@ -1780,6 +1788,11 @@ function Sidebar() {
     if (item.requiresMetaAds) {
       const metaAdsEnabled = businessSettings?.metaAdsEnabled === true
       if (!metaAdsEnabled && !isDemoMode) return false
+      if (isDemoMode) return false
+    }
+    if (item.requiresRappi) {
+      const rappiEnabled = businessSettings?.rappiEnabled === true
+      if (!rappiEnabled) return false
       if (isDemoMode) return false
     }
     if (item.businessOwnerOnly && !isBusinessOwner) return false

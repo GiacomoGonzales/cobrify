@@ -496,3 +496,87 @@ export const generateProductsExcel = async (products, categories, businessData, 
     return { success: true };
   }
 };
+
+/**
+ * Exporta productos en formato simple para Self Mapping de Rappi.
+ *
+ * El merchant usa este Excel para copiar los SKUs de Cobrify al Portal Partners
+ * de Rappi (asignándolos manualmente a cada producto Rappi). Solo incluye los
+ * campos que necesita ver el merchant para hacer el mapeo: SKU, nombre, precio,
+ * descripción y categoría.
+ */
+export const exportProductsForRappi = async (products, categories) => {
+  const workbook = XLSX.utils.book_new();
+
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return '';
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return '';
+    if (category.parentId) {
+      const parent = categories.find(c => c.id === category.parentId);
+      return parent ? `${parent.name} > ${category.name}` : category.name;
+    }
+    return category.name;
+  };
+
+  const headers = ['SKU', 'Nombre', 'Precio', 'Descripción', 'Categoría'];
+  const rows = [headers];
+
+  for (const product of products) {
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((variant, idx) => {
+        rows.push([
+          variant.sku || '',
+          idx === 0
+            ? `${product.name}${variant.attributes ? ' - ' + Object.values(variant.attributes).join(' / ') : ''}`
+            : `${product.name} - ${Object.values(variant.attributes || {}).join(' / ')}`,
+          variant.price ?? product.price ?? 0,
+          product.description || '',
+          getCategoryName(product.categoryId || product.category),
+        ]);
+      });
+    } else {
+      rows.push([
+        product.sku || product.code || '',
+        product.name || '',
+        product.price ?? 0,
+        product.description || '',
+        getCategoryName(product.categoryId || product.category),
+      ]);
+    }
+  }
+
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet['!cols'] = [
+    { width: 18 },
+    { width: 40 },
+    { width: 12 },
+    { width: 50 },
+    { width: 25 },
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Productos para Rappi');
+
+  const fileName = `Productos_Rappi_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
+  const isNativePlatform = Capacitor.isNativePlatform();
+
+  if (isNativePlatform) {
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+    const result = await Filesystem.writeFile({
+      path: fileName,
+      data: excelBuffer,
+      directory: Directory.Documents,
+      recursive: true,
+    });
+    await Share.share({
+      title: fileName,
+      text: 'Productos para Self Mapping en Rappi',
+      url: result.uri,
+      dialogTitle: 'Compartir listado de SKUs',
+    });
+    return { success: true, uri: result.uri };
+  } else {
+    XLSX.writeFile(workbook, fileName);
+    return { success: true };
+  }
+};
