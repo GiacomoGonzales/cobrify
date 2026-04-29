@@ -277,7 +277,7 @@ export default function Products() {
   // Estado para impresión de etiquetas
   const [labelModalOpen, setLabelModalOpen] = useState(false)
   const [labelQuantities, setLabelQuantities] = useState({}) // { productId: cantidad }
-  const [labelSize, setLabelSize] = useState('30x20') // tamaño de etiqueta en mm
+  const [labelSize, setLabelSize] = useState('30x20') // Tamaño de etiqueta seleccionado
 
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
@@ -2184,17 +2184,24 @@ export default function Products() {
   const handlePrintLabels = () => {
     const selectedProds = products.filter(p => selectedProducts.has(p.id))
 
+    // Configuración por tamaño de etiqueta (mm y parámetros de barcode)
+    const LABEL_CONFIGS = {
+      '30x20': { width: 30, height: 20, barWidth: 1.5, barHeight: 80, fontSize: 10 },
+      '50x38': { width: 50, height: 38, barWidth: 2, barHeight: 150, fontSize: 14 },
+      '58x40': { width: 58, height: 40, barWidth: 2.2, barHeight: 160, fontSize: 16 }
+    }
+    const cfg = LABEL_CONFIGS[labelSize] || LABEL_CONFIGS['30x20']
+
     // Generar códigos de barras como SVG strings usando JsBarcode
     const generateBarcodeSVG = (code) => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       try {
-        // CODE128: más compacto que CODE39, ideal para etiquetas pequeñas 30x20mm
         JsBarcode(svg, code, {
           format: 'CODE128',
-          width: 1.5,
-          height: 80,
+          width: cfg.barWidth,
+          height: cfg.barHeight,
           displayValue: true,
-          fontSize: 10,
+          fontSize: cfg.fontSize,
           margin: 0,
           textMargin: 1
         })
@@ -2231,16 +2238,16 @@ export default function Products() {
 <head>
 <title>Etiquetas de productos</title>
 <style>
-  @page { size: 30mm 20mm; margin: 0; }
+  @page { size: ${cfg.width}mm ${cfg.height}mm; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; }
   .label {
-    width: 30mm; height: 20mm; padding: 0;
+    width: ${cfg.width}mm; height: ${cfg.height}mm; padding: 0;
     page-break-after: always; overflow: hidden;
   }
   .label:last-child { page-break-after: avoid; }
-  .barcode { width: 30mm; height: 20mm; }
-  .barcode svg { width: 30mm; height: 20mm; }
+  .barcode { width: ${cfg.width}mm; height: ${cfg.height}mm; }
+  .barcode svg { width: ${cfg.width}mm; height: ${cfg.height}mm; }
 </style>
 </head>
 <body>${labelsHTML}</body>
@@ -6511,8 +6518,24 @@ export default function Products() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Configura la cantidad de etiquetas por producto. Se imprimirán con nombre, código de barras y precio.
+            Configura el tamaño y la cantidad de etiquetas por producto.
           </p>
+
+          {/* Selector de tamaño de etiqueta */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tamaño de etiqueta
+            </label>
+            <select
+              value={labelSize}
+              onChange={(e) => setLabelSize(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+            >
+              <option value="30x20">30 × 20 mm (3 × 2 cm)</option>
+              <option value="50x38">50 × 38 mm (5 × 3.8 cm)</option>
+              <option value="58x40">58 × 40 mm (5.8 × 4 cm)</option>
+            </select>
+          </div>
 
           {/* Lista de productos seleccionados */}
           <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
@@ -6545,7 +6568,7 @@ export default function Products() {
           {/* Info */}
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-700">
-              <strong>Tamaño:</strong> 30 x 20 mm — Asegúrate de tener la impresora de etiquetas configurada en Windows con ese tamaño de papel.
+              <strong>Tamaño seleccionado:</strong> {labelSize.replace('x', ' × ')} mm — Asegúrate de tener la impresora de etiquetas configurada en Windows con ese tamaño de papel.
               Los productos sin código de barras usarán su SKU o un código generado automáticamente.
             </p>
           </div>
