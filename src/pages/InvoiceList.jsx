@@ -3451,6 +3451,73 @@ Gracias por tu preferencia.`
               </div>
             )}
 
+            {/* ========== HISTORIAL DE PAGOS REGISTRADOS ========== */}
+            {Array.isArray(viewingInvoice.paymentHistory) && viewingInvoice.paymentHistory.length > 0 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-emerald-800 flex items-center gap-2">
+                    <Receipt className="w-4 h-4" />
+                    Pagos Registrados
+                  </h4>
+                  <span className="text-xs text-emerald-700">
+                    {viewingInvoice.paymentHistory.length} pago{viewingInvoice.paymentHistory.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {viewingInvoice.paymentHistory.map((pago, i) => {
+                    const fecha = pago.date?.toDate
+                      ? pago.date.toDate()
+                      : (pago.date ? new Date(pago.date) : null)
+                    const fechaTxt = fecha
+                      ? fecha.toLocaleString('es-PE', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit', hour12: true
+                        })
+                      : '—'
+                    return (
+                      <div key={i} className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                {pago.method || 'Efectivo'}
+                              </span>
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {fechaTxt}
+                              </span>
+                            </div>
+                            {(pago.recordedByName || pago.recordedBy) && (
+                              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                <User className="w-3 h-3" />
+                                {pago.recordedByName || pago.recordedBy}
+                              </p>
+                            )}
+                          </div>
+                          <span className="font-bold text-emerald-700 whitespace-nowrap">
+                            {formatCurrency(pago.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Totales del crédito */}
+                <div className="mt-3 pt-3 border-t border-emerald-200 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-emerald-700">Total pagado</p>
+                    <p className="font-bold text-emerald-900">{formatCurrency(viewingInvoice.amountPaid || 0)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-emerald-700">Saldo pendiente</p>
+                    <p className={`font-bold ${(viewingInvoice.balance || 0) > 0 ? 'text-amber-700' : 'text-emerald-900'}`}>
+                      {formatCurrency(viewingInvoice.balance || 0)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ========== PAGOS MÚLTIPLES ========== */}
             {viewingInvoice.payments?.length > 1 && (
               <div className="border border-gray-200 rounded-xl p-4">
