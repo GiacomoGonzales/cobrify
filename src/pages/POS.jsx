@@ -946,7 +946,10 @@ export default function POS() {
         setPendingQuotationId(quotationInfo.quotationId)
       }
 
-      // Cargar items de la cotización al carrito
+      // Cargar items de la cotización al carrito.
+      // IMPORTANTE: preservar metadata de variante (isVariant, variantSku, variantAttributes).
+      // Sin estos campos, al emitir la venta el descuento de stock cae al stock general
+      // del producto en vez de descontar de la variante específica → bug reportado.
       if (quotationInfo.items && quotationInfo.items.length > 0) {
         const cartItems = quotationInfo.items.map(item => ({
           id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
@@ -958,6 +961,15 @@ export default function POS() {
           unit: item.unit || 'NIU',
           code: item.code || '',
           observations: item.observations || '',
+          ...(item.isVariant && {
+            isVariant: true,
+            variantSku: item.variantSku || '',
+            variantAttributes: item.variantAttributes || {},
+          }),
+          ...(item.presentationName && {
+            presentationName: item.presentationName,
+            presentationFactor: item.presentationFactor || 1,
+          }),
         }))
         setCart(cartItems)
       }

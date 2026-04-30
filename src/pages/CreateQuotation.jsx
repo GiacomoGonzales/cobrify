@@ -582,6 +582,18 @@ export default function CreateQuotation() {
     newItems[index].therapeuticAction = product.therapeuticAction || ''
     newItems[index].saleCondition = product.saleCondition || ''
     newItems[index].sanitaryRegistry = product.sanitaryRegistry || ''
+    // Persistir metadata de variante. Sin estos campos, al convertir la cotización
+    // a venta el POS no sabría qué variante descontar y el stock de la variante
+    // queda sin actualizar (aunque el movimiento se registra).
+    if (selectedVariant) {
+      newItems[index].isVariant = true
+      newItems[index].variantSku = selectedVariant.sku || ''
+      newItems[index].variantAttributes = selectedVariant.attributes || {}
+    } else {
+      delete newItems[index].isVariant
+      delete newItems[index].variantSku
+      delete newItems[index].variantAttributes
+    }
     setQuotationItems(newItems)
     setShowProductSearch(null)
     setPendingProductSelection(null)
