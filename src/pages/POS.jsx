@@ -3400,31 +3400,39 @@ export default function POS() {
       setEmissionDate(emissionDateToUse)
     }
 
-    // Validar stock de ingredientes de recetas (solo si no permite venta sin stock)
-    if (!companySettings?.allowNegativeStock) {
+    // Validar stock de ingredientes de recetas.
+    // IMPORTANTE: esta validación corre SIEMPRE, incluso con allowNegativeStock=true,
+    // porque allowNegativeStock aplica al stock de productos terminados; una receta
+    // requiere ingredientes reales — sin ellos la venta no se puede preparar.
+    {
       const allMissingIngredients = []
 
       for (const item of cart) {
         // Solo verificar productos que no sean personalizados
         if (item.isCustom) continue
 
-        // Si la receta es modo "producción" (deductOnSale=false), los ingredientes
-        // ya se descontaron al producir y el stock se controla en el producto terminado.
-        // No validar stock de ingredientes aquí para no bloquear la venta del producto ya producido.
-        const recipeResult = await getRecipeByProductId(businessId, item.id)
-        if (recipeResult.success && recipeResult.data?.deductOnSale === false) continue
+        try {
+          // Si la receta es modo "producción" (deductOnSale=false), los ingredientes
+          // ya se descontaron al producir y el stock se controla en el producto terminado.
+          // No validar stock de ingredientes aquí para no bloquear la venta del producto ya producido.
+          const recipeResult = await getRecipeByProductId(businessId, item.id)
+          if (recipeResult.success && recipeResult.data?.deductOnSale === false) continue
 
-        const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
-        if (stockCheck.success && !stockCheck.hasStock) {
-          stockCheck.missingIngredients.forEach(ing => {
-            allMissingIngredients.push({
-              product: item.name,
-              ingredient: ing.name,
-              available: ing.available,
-              needed: ing.needed,
-              unit: ing.unit
+          const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
+          if (stockCheck.success && !stockCheck.hasStock) {
+            stockCheck.missingIngredients.forEach(ing => {
+              allMissingIngredients.push({
+                product: item.name,
+                ingredient: ing.name,
+                available: ing.available,
+                needed: ing.needed,
+                unit: ing.unit
+              })
             })
-          })
+          }
+        } catch (error) {
+          // No bloquear la venta si la verificación misma falla (red, permisos, etc.)
+          console.warn(`No se pudo verificar receta de ${item.name}:`, error)
         }
       }
 
@@ -3440,10 +3448,13 @@ export default function POS() {
         }, {})
 
         const missingList = Object.entries(ingredientSummary)
-          .map(([name, data]) => `${name}: necesitas ${data.needed.toFixed(2)} ${data.unit}, tienes ${data.available.toFixed(2)}`)
-          .join('\n')
+          .map(([name, data]) => `${name} (necesitas ${data.needed.toFixed(2)} ${data.unit}, disponible ${data.available.toFixed(2)})`)
+          .join(' · ')
 
-        abortCheckout(`Stock insuficiente de ingredientes:\n${missingList}`, { duration: 6000 })
+        abortCheckout(
+          `No hay suficiente stock para procesar la venta. Faltan ingredientes: ${missingList}`,
+          { duration: 7000 }
+        )
         return
       }
     }

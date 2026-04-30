@@ -1196,7 +1196,10 @@ export default function Products() {
         setDeletingProduct(null)
         loadProducts()
       } else {
-        throw new Error(result.error)
+        // Mostrar el mensaje específico devuelto por el servicio
+        // (ej. "No se puede eliminar... tiene X unidades en stock").
+        // Usamos warning en vez de error porque es una restricción esperada, no un fallo del sistema.
+        toast.warning(result.error || 'No se pudo eliminar el producto', 6000)
       }
     } catch (error) {
       console.error('Error al eliminar producto:', error)
@@ -2319,7 +2322,10 @@ export default function Products() {
         toast.success(`${successCount} producto(s) eliminado(s) exitosamente`)
       }
       if (errorCount > 0) {
-        toast.error(`${errorCount} producto(s) no pudieron ser eliminados`)
+        toast.warning(
+          `${errorCount} producto(s) no se pudieron eliminar (probablemente porque tienen stock o están en uso). Ajusta el inventario a 0 antes de borrar.`,
+          7000
+        )
       }
 
       closeBulkActionModal()
