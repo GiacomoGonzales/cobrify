@@ -3894,8 +3894,10 @@ export const retryPendingInvoices = onSchedule(
           continue // Saltar negocios sin configuración SUNAT
         }
 
-        // Respetar configuración de envío automático: si está desactivado, no reenviar
-        if (businessData.autoSendToSunat === false) {
+        // Respetar configuración de envío automático: solo reenviar si está EXPLÍCITAMENTE activado.
+        // Usar !== true (no === false) para que negocios con el campo undefined caigan al default OFF,
+        // consistente con el frontend (POS.jsx) y con cómo el toggle se muestra apagado en Settings.jsx.
+        if (businessData.autoSendToSunat !== true) {
           continue
         }
 
@@ -4184,8 +4186,10 @@ export const resendPendingBoletas = onRequest(
           continue
         }
 
-        // Respetar configuración de envío automático: si está desactivado, no reenviar
-        if (businessData.autoSendToSunat === false) {
+        // Respetar configuración de envío automático: solo reenviar si está EXPLÍCITAMENTE activado.
+        // Usar !== true (no === false) para que negocios con el campo undefined caigan al default OFF,
+        // consistente con el frontend (POS.jsx) y con cómo el toggle se muestra apagado en Settings.jsx.
+        if (businessData.autoSendToSunat !== true) {
           continue
         }
 
@@ -4394,8 +4398,10 @@ export const testRetryPendingInvoices = onRequest(
           continue
         }
 
-        // Respetar configuración de envío automático: si está desactivado, no reenviar
-        if (businessData.autoSendToSunat === false) {
+        // Respetar configuración de envío automático: solo reenviar si está EXPLÍCITAMENTE activado.
+        // Usar !== true (no === false) para que negocios con el campo undefined caigan al default OFF,
+        // consistente con el frontend (POS.jsx) y con cómo el toggle se muestra apagado en Settings.jsx.
+        if (businessData.autoSendToSunat !== true) {
           continue
         }
 
