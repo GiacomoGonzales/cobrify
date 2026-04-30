@@ -763,6 +763,13 @@ function Sidebar() {
       pageId: 'pos',
     },
     {
+      path: '/pedidos-online',
+      icon: ShoppingBag,
+      label: 'Pedidos Online',
+      pageId: 'online-orders',
+      menuId: 'online-orders',
+    },
+    {
       path: '/caja',
       icon: Wallet,
       label: 'Control de Caja',
@@ -1464,6 +1471,13 @@ function Sidebar() {
       label: 'Punto de Venta',
       badge: 'POS',
       pageId: 'pos',
+    },
+    {
+      path: '/pedidos-online',
+      icon: ShoppingBag,
+      label: 'Pedidos Online',
+      pageId: 'online-orders',
+      menuId: 'online-orders',
     },
     {
       path: '/caja',
