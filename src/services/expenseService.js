@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -101,7 +102,14 @@ export async function getExpenses(userId, filters = {}) {
 }
 
 /**
- * Crear un nuevo gasto
+ * Crear un nuevo gasto.
+ *
+ * Si se pasa `clientRequestId` en expenseData, se usa como ID del documento
+ * (idempotencia: múltiples llamadas con el mismo id sobrescriben en lugar de duplicar).
+ * Esto es crítico para el caso offline donde el usuario puede hacer click varias veces
+ * y la SDK de Firestore encola cada write hasta que vuelva la conexión.
+ *
+ * Si no se pasa, cae al comportamiento legacy con addDoc (ID auto-generado por Firestore).
  */
 export async function createExpense(userId, expenseData) {
   try {
@@ -121,10 +129,18 @@ export async function createExpense(userId, expenseData) {
       createdBy: expenseData.createdBy || 'unknown'
     }
 
-    const docRef = await addDoc(expensesRef, newExpense)
+    let docId
+    if (expenseData.clientRequestId) {
+      docId = expenseData.clientRequestId
+      const expenseRef = doc(expensesRef, docId)
+      await setDoc(expenseRef, newExpense)
+    } else {
+      const docRef = await addDoc(expensesRef, newExpense)
+      docId = docRef.id
+    }
 
     return {
-      id: docRef.id,
+      id: docId,
       ...newExpense,
       date: newExpense.date.toDate(),
       createdAt: newExpense.createdAt.toDate()

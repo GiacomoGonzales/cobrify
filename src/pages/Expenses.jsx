@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import Button from '@/components/ui/Button'
 import {
   getExpenses,
@@ -140,6 +141,7 @@ const getLocalDateString = (date = new Date()) => {
 export default function Expenses() {
   const { user, isDemoMode, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
+  const { isOffline } = useOnlineStatus()
 
   // Estados
   const [expenses, setExpenses] = useState([])
@@ -164,6 +166,11 @@ export default function Expenses() {
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  // ID idempotente generado al abrir el modal de creación.
+  // Garantiza que múltiples submits del MISMO formulario apunten al mismo doc
+  // (sobreescriben en lugar de duplicar). Evita gastos repetidos cuando el
+  // usuario hace click varias veces sin internet y la SDK encola los writes.
+  const [clientRequestId, setClientRequestId] = useState(null)
 
   // Mobile menu states
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -328,6 +335,11 @@ export default function Expenses() {
       notes: '',
       branchId: ''
     })
+    // Generar ID único para esta sesión de "nuevo gasto" → idempotencia ante duplicados.
+    const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `expense_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    setClientRequestId(newId)
     setShowModal(true)
   }
 
@@ -378,13 +390,16 @@ export default function Expenses() {
 
       if (editingExpense) {
         await updateExpense(user.uid, editingExpense.id, expenseData)
-        toast.success('Gasto actualizado')
+        toast.success(isOffline ? 'Cambios encolados · se sincronizarán al reconectar' : 'Gasto actualizado')
       } else {
-        await createExpense(user.uid, expenseData)
-        toast.success('Gasto registrado')
+        // Pasar clientRequestId para idempotencia: múltiples submits del mismo
+        // formulario sobrescriben el mismo doc en lugar de crear duplicados.
+        await createExpense(user.uid, { ...expenseData, clientRequestId })
+        toast.success(isOffline ? 'Gasto encolado · se sincronizará al reconectar' : 'Gasto registrado')
       }
 
       setShowModal(false)
+      setClientRequestId(null)
       loadExpenses()
     } catch (error) {
       toast.error('Error al guardar el gasto')
@@ -926,6 +941,14 @@ export default function Expenses() {
                 </button>
               </div>
 
+              {isOffline && (
+                <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 flex items-start gap-2">
+                  <Receipt className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>
+                    Sin conexión a internet. El gasto se guardará en este dispositivo y se enviará al servidor cuando vuelvas a estar online.
+                  </span>
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {/* Monto */}
               <div>
