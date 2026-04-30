@@ -937,6 +937,23 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           commands.push(ESCPOSCommands.text('  ' + itemObservations + '\n'));
         }
 
+        // Modificadores con precio (modo restaurante).
+        // Solo se imprimen los que suman al total (priceAdjustment > 0).
+        // Los gratis (mayonesa, ketchup) no aparecen en el comprobante; sí en la comanda de cocina.
+        if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
+          for (const modifier of item.modifiers) {
+            for (const option of (modifier.options || [])) {
+              if (!(Number(option.priceAdjustment) > 0)) continue;
+              const qtyPrefix = option.quantity > 1 ? option.quantity + 'x ' : '';
+              const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
+              commands.push(ESCPOSCommands.text(
+                '  + ' + qtyPrefix + convertSpanishText(option.optionName) +
+                ' (+S/ ' + totalAdj.toFixed(2) + ')\n'
+              ));
+            }
+          }
+        }
+
         // Espacio entre items (solo para 80mm)
         if (paperWidth === 80) {
           commands.push(ESCPOSCommands.lineFeed());
