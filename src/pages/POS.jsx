@@ -4328,9 +4328,54 @@ export default function POS() {
               // Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
 
-              const stockUpdates = bgCart
-                .filter(item => !item.isCustom)
-                .map(async item => {
+              // Agrupar items con número de serie por (productId|variantSku|warehouseId).
+              // Cada serie se agrega al carrito como item separado con quantity:1, lo que generaba
+              // N transacciones concurrentes sobre el mismo doc Firestore — varias agotaban
+              // reintentos y fallaban silenciosamente. Consolidamos en 1 transacción por grupo.
+              const serialGroupKey = (item) => `${item.id}|${item.variantSku || ''}|${bgSelectedWarehouse?.id || ''}`
+              const serialGroups = new Map()
+              const nonSerialItems = []
+              bgCart.filter(item => !item.isCustom).forEach(item => {
+                if (item.serialNumber) {
+                  const key = serialGroupKey(item)
+                  if (!serialGroups.has(key)) serialGroups.set(key, [])
+                  serialGroups.get(key).push(item)
+                } else {
+                  nonSerialItems.push(item)
+                }
+              })
+
+              const stockUpdates = []
+
+              // Una transacción por grupo de series del mismo producto/variante/almacén
+              for (const items of serialGroups.values()) {
+                const firstItem = items[0]
+                const productData = bgProducts.find(p => p.id === firstItem.id)
+                if (!productData) continue
+                if (productData.trackStock === false) continue
+                const totalQty = items.reduce((sum, it) => sum + it.quantity * (it.presentationFactor || 1), 0)
+                const saleDate = Timestamp.fromDate(new Date())
+                const serialsPayload = items.map(it => ({
+                  serialNumber: it.serialNumber,
+                  saleId: bgInvoiceId || null,
+                  saleDate
+                }))
+                stockUpdates.push(
+                  updateProductStockTransaction(
+                    businessId,
+                    firstItem.id,
+                    bgSelectedWarehouse?.id || '',
+                    -totalQty,
+                    {},
+                    firstItem.variantSku || null,
+                    serialsPayload
+                  )
+                )
+              }
+
+              // Items sin número de serie: mantienen el procesamiento individual con lógica de lotes
+              nonSerialItems.forEach(item => {
+                stockUpdates.push((async () => {
                   const productData = bgProducts.find(p => p.id === item.id)
                   if (!productData) return
                   if (productData.trackStock === false) return
@@ -4424,15 +4469,6 @@ export default function POS() {
                     batchBreakdownByItemId[item.cartId || item.id] = batchBreakdown
                   }
 
-                  // Si el item tiene número de serie, pasar datos para que la transacción
-                  // marque la serie como 'sold' usando el estado FRESCO del producto (evita
-                  // race condition cuando hay varias series del mismo producto en el carrito).
-                  const serialToMarkSold = item.serialNumber ? {
-                    serialNumber: item.serialNumber,
-                    saleId: bgInvoiceId || null,
-                    saleDate: Timestamp.fromDate(new Date())
-                  } : null
-
                   // Usar transacción para evitar race conditions entre ventas simultáneas
                   return updateProductStockTransaction(
                     businessId, item.id,
@@ -4440,9 +4476,10 @@ export default function POS() {
                     -quantityToDeduct,
                     extraUpdates,
                     item.variantSku || null,
-                    serialToMarkSold
+                    null
                   )
-                })
+                })())
+              })
 
               await Promise.all(stockUpdates)
 

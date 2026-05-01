@@ -642,16 +642,19 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
       const product = productDoc.data()
       if (product.trackStock === false) return
 
-      // Si hay que marcar una serie como vendida, computarlo desde el estado FRESCO del producto.
-      // Esto evita race conditions cuando múltiples transacciones concurrentes modifican distintas
-      // series del mismo producto (cada una reescribía el array completo y se pisaban entre sí).
+      // Si hay que marcar series como vendidas, computarlo desde el estado FRESCO del producto.
+      // Acepta un objeto único o un array para permitir consolidar varias series en una sola
+      // transacción (evita race conditions al vender N series del mismo producto en una venta).
       let finalExtraUpdates = extraUpdates
-      if (serialToMarkSold && product.serials?.length > 0) {
-        const updatedSerials = product.serials.map(s =>
-          s.serialNumber === serialToMarkSold.serialNumber
-            ? { ...s, status: 'sold', saleId: serialToMarkSold.saleId || null, saleDate: serialToMarkSold.saleDate }
-            : s
-        )
+      const serialsToMark = Array.isArray(serialToMarkSold)
+        ? serialToMarkSold
+        : (serialToMarkSold ? [serialToMarkSold] : [])
+      if (serialsToMark.length > 0 && product.serials?.length > 0) {
+        const updatedSerials = product.serials.map(s => {
+          const match = serialsToMark.find(stm => stm.serialNumber === s.serialNumber)
+          if (!match) return s
+          return { ...s, status: 'sold', saleId: match.saleId || null, saleDate: match.saleDate }
+        })
         finalExtraUpdates = { ...extraUpdates, serials: updatedSerials }
       }
 
