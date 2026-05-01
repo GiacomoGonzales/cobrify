@@ -1,0 +1,3913 @@
+  Guía de Elaboración de
+       Documentos XML
+      Boleta Electrónica
+               UBL 2.1
+
+PROYECTO DE COMPROBANTES DE PAGO
+                     ELECTRONICOS
+
+                           Versión 1.0
+
+                       Mayo 2017
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+                                        INDICE
+
+1  BOLETA ELECTRONICA...............................................................................................3
+
+   1.1 Contenido de la boleta electrónica ...................................................................................... 3
+
+   1.2 Estructura de Boleta electrónica vs Formato XML ............................................................11
+
+   1.3 Normas de Uso del Formato de la Boleta Electrónica .......................................................16
+
+   A Normas de Uso..................................................................................................................16
+
+   A.1 Elementos de la Boleta electrónica ....................................................................................16
+
+   1. Firma Digital. .........................................................................................................................17
+
+   2. Versión del UBL. ...................................................................................................................19
+
+   3. Versión de la estructura del documento. ..............................................................................19
+
+   4. Tipo de Operación. ...............................................................................................................19
+
+   5. Numeración, conformada por serie y número correlativo.....................................................21
+
+   6. Fecha de emisión..................................................................................................................21
+
+   7. Hora de emisión. ...................................................................................................................22
+
+   8 Código de Tipo de documento...............................................................................................22
+
+   9. Leyendas...............................................................................................................................23
+
+   10 Tipo de moneda. ..................................................................................................................25
+
+   11 Tipo y número de la guía de remisión relacionada con la operación por la que se emite la
+             boleta. ...........................................................................................................................26
+
+   12 Tipo y número de otro documento y/ código documento relacionado con la operación .....27
+
+   13 Nombre Comercial. ..............................................................................................................28
+
+   14 Apellidos y nombres o denominación o razón social del emisor. ........................................28
+
+   15 Tipo y Número de RUC del Emisor. ....................................................................................29
+
+   16 Código del domicilio fiscal o de local anexo del emisor. .....................................................30
+
+   17 Apellidos y nombres o denominación o razón social del adquirente o usuario. ..................30
+
+   18 Tipo y número de documento de identidad del adquirente o usuario..................................31
+
+   19 Descuento Global ................................................................................................................32
+
+   20 Monto Total de Impuestos. ..................................................................................................33
+
+   21 Sumatoria ISC......................................................................................................................33
+
+   22 Sumatoria IGV. ....................................................................................................................34
+
+   23 Total valor de venta - operaciones gravadas.......................................................................35
+
+   24 Total valor de venta - operaciones inafectas. ......................................................................36
+
+   25 Total valor de venta - operaciones exoneradas...................................................................38
+
+   26 Total Valor de Venta de Operaciones gratuitas...................................................................39
+
+   27 Sumatoria otros tributos.......................................................................................................41
+
+   28 Total Valor de Venta. ...........................................................................................................42
+
+   29 Total Precio de Venta. .........................................................................................................43
+
+   30 Total de Descuentos. ...........................................................................................................43
+
+   31 Sumatoria otros Cargos. ......................................................................................................44
+
+Boleta Electrónica                                            ~1~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+    32 Importe total de la venta, de la cesión en uso o del servicio prestado. ...............................44
+    33 Número de orden del Ítem. ..................................................................................................45
+    34 Cantidad de unidades por ítem............................................................................................45
+    35 Valor de venta por ítem........................................................................................................46
+    36 Precio de venta unitario por ítem y código. .........................................................................46
+    37 Valor referencial unitario por ítem en operaciones no onerosas y código ..........................47
+    38 Descuentos por ítem ............................................................................................................48
+    39 Cargos por ítem ...................................................................................................................48
+    40 Afectación al IGV por ítem. ..................................................................................................49
+    41 Sistema de ISC por ítem......................................................................................................51
+    42 Descripción detallada...........................................................................................................52
+    43 Código de producto del Ítem................................................................................................53
+    44 Código de producto SUNAT. ...............................................................................................54
+    45 Valor unitario por ítem..........................................................................................................54
+ B.2 Detalle de elementos complejos ...........................................................................................55
+    B.2.1 Tag UBLExtension...........................................................................................................55
+    1.4 Ejemplos de casos identificados.........................................................................................59
+    A. Boleta de Venta Gravada con dos ítems y una bonificación.............................................59
+
+Boleta Electrónica  ~2~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+1 BOLETA ELECTRONICA
+
+     La boleta electrónica es la boleta regulada por el Reglamento de Comprobantes de pago
+     (RS 007-99/SUNAT) soportada en un formato digital que cumple con las especificaciones
+     reguladas en la R.S.097-2012/SUNAT, R.S.177-2017/SUNAT y modificatorias, que se
+     encuentra firmada digitalmente.
+
+1.1 Contenido de la boleta electrónica
+
+     En el cuadro siguiente, se describe el contenido (campos) de la Boleta electrónica. Para tal
+     efecto, es necesario establecer previamente, la nomenclatura de representación del valor
+     de los datos, para una comprensión correcta del referido cuadro:
+
+a                   carácter alfabético
+n                   carácter numérico
+an                  carácter alfanumérico
+a3                  3 caracteres alfabéticos de longitud fija
+n3                  3 caracteres numéricos de longitud fija
+an3                 3 caracteres alfa-numéricos de longitud fija
+a...3               hasta 3 caracteres alfabéticos
+n...3               hasta 3 caracteres numéricos
+an...3              hasta 3 caracteres alfa-numéricos
+
+Asimismo, la obligatoriedad o no de un determinado elemento se identifica por la siguiente
+nomenclatura:
+
+M: Mandatorio u obligatorio
+C: Condicional u opcional
+
+En relación a la identificación del formato de los elementos de datos se especifica lo
+siguiente:
+
+n(12,2)             elemento numérico hasta12 enteros + punto decimal + hasta
+                    dos decimales
+n(2,2)              elemento numérico hasta 2 enteros +
+                    punto decimal + hasta dos decimales
+F#####              elemento inicia con la letra F seguida de cinco dígitos
+YYYY-MM-DD          formato fecha yyyy=año, mm=mes, dd=día
+
+En el siguiente cuadro se muestran las características de los requisitos solicitados por SUNAT
+para la Boleta electrónica:
+
+Boleta Electrónica                                                             ~3~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+                                                    CONTENIDO DE LA BOLETA ELECTRONICA
+
+Raíz                Nodo                     Atributo                   DATO                            Cardinalidad             Valor/                 Observ.
+                                                                                                             UBL                Formato
+
+/Invoice                                                                                                          -
+                                                                                                                0..1
+/Invoice/ext:UBLExtensions                                                                                      1..n
+
+/Invoice/ext:UBLExtensions/ext:UBLExtension                                                                      1
+
+/Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent
+
+          ds:Signature                                 Firma Digital
+
+          cbc:UBLVersionID                             Versión del UBL                                  0..1                      "2.1"
+
+          cbc:CustomizationID                          Versión de la estructura del documento           0..1                      "2.0"
+
+          cbc:ProfileID                                Código de tipo de operación                      0..1                      an2                   Catálogo 51
+
+                                    @schemeName        -                                                0..1          "SUNAT:Identificador de Tipo de
+                                                                                                                      Operación"
+
+                                    @schemeAgencyName -                                                 0..1          "PE:SUNAT"
+
+                                    @schemeURI         -                                                0..1          "urn:pe:gob:sunat:cpe:see:gem:ca
+                                                                                                                      talogos:catalogo17"
+
+          cbc:ID                                       Serie y número del comprobante                   1                      F###-NNNNNNNN
+          cbc:IssueDate                                Fecha de emisión
+          cbc:IssueTime                                Hora de emisión                                  1                       yyyy-mm-dd
+          cbc:DueDate                                  Fecha de vencimiento
+          cbc:InvoiceTypeCode                          Código de tipo de documento                      0..1                    hh-mm-ss.0z
+                                                       -
+                                                                                                        0..1                    yyyy-mm-dd
+                                                       -
+                                                                                                        0..1                      an2                   Catálogo 01
+
+                                    @listAgencyName                                                     0..1                    "PE:SUNAT"
+                                    @listName
+                                                                                                        0..1          "SUNAT:Identificador de Tipo de
+                                                                                                                      Documento"
+
+                                    @listURI           -                                                0..1          "urn:pe:gob:sunat:cpe:see:gem:ca
+                                    @languageLocaleID                                                                 talogos:catalogo01"
+                                                       Leyenda
+          cbc:Note                                                                                      0..n          an..100
+                                                       Código de leyenda
+                                                                                                        0..1          "urn:pe:gob:sunat:cpe:see:gem:ca  Catálogo 52
+                                                       Código de tipo de moneda en la cual se emite la                talogos:catalogo52"
+                                                       boleta electrónica
+          cbc:DocumentCurrencyCode                     -                                                0..1                      an3                   Catálogo 02
+                                                       -
+                                    @listID                                                             0..1          "ISO 4217 Alpha"
+                                    @listName
+                                                                                                        0..1          Currency
+
+                                    @listAgencyName    -                                                0..1          United Nations Economic
+                                                                                                                      Commission for Europe
+
+Boleta Electrónica                                                                                                                                      ~4~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:DespatchDocumentReference                                                                                0..n
+             cbc:ID
+                                                                    Número de guía de remisión relacionada con la     1     NNNN-NNNNNNNN/
+                                                                    operación que se emite la boleta                         R###-NNNNNNNN
+
+cbc:DocumentTypeCode                                                Código de tipo de guía de remisión relacionada    0..1  an2                               Catálogo 01
+                                                                    con la operación que se emite la boleta
+                        @listAgencyName                             -                                                 0..1  "PE:SUNAT"
+                        @listName
+                                                                    -                                                 0..1  "SUNAT:Identificador de guía
+                                                                                                                                       relacionada"
+                                                                    -
+                                                          @listURI                                                    0..1  "urn:pe:gob:sunat:cpe:see:gem:ca
+/Invoice/cac:AdditionalDocumentReference                            Número de documento relacionado con la                           talogos:catalogo12"
+                                                                    operación que se emite la boleta
+             cbc:ID                                                 Código de tipo de documento relacionado con la    0..n
+                                                                    operación que se emite la boleta
+                                                                    -                                                 1     an..30
+
+cbc:DocumentTypeCode                                                -                                                 0..1  an2                               Catálogo 12
+
+                        @listAgencyName                                                                               0..1  "PE:SUNAT"
+                        @listName
+                                                                                                                      0..1  "SUNAT:Identificador de
+                                                                                                                            documento relacionado"
+
+                        @listURI                                    -                                                 0..1  "urn:pe:gob:sunat:cpe:see:gem:ca
+                                                                                                                                     talogos:catalogo12"
+
+/Invoice/cac:Signature                                              Información adicional de la firma                 0..n
+                                                                                                                      0..n
+/Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName
+
+cbc:Name                                                            Nombre Comercial del emisor                       1..1  an..100
+
+/Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme                                                     0..n
+
+cbc:RegistrationName                                                Nombre o razón social del emisor                  0..1  an..100
+
+cbc:CompanyID                                                       Número de RUC del emisor                          0..1  n11
+
+                        @schemeID                                   Tipo de Documento de Identidad del Emisor         0..1  an1                               Catálogo 06
+
+                        @schemeName                                 -                                                 0..1  "SUNAT:Identificador de
+                                                                                                                            Documento de Identidad"
+
+                        @schemeAgencyName -                                                                           0..1  "PE:SUNAT"
+
+                        @schemeURI                                  -                                                 0..1  "urn:pe:gob:sunat:cpe:see:gem:ca
+                                                                                                                                     talogos:catalogo06"
+
+/Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress                             0..1
+
+cbc:AddressTypeCode                                                 Código del domicilio fiscal o de local anexo del  0..1  n4
+                                                                    emisor
+
+Boleta Electrónica                                                                                                                                            ~5~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme                               0..n
+
+cbc:RegistrationName                            Nombre o razón social del adquirente o usuario  0..1  an..100
+
+cbc:CompanyID                                   Número de RUC del adquirente o usuario          0..1  n11
+
+                             @schemeID          Tipo de Documento de Identidad del Emisor       0..1  an1                               Catálogo 06
+
+                             @schemeName        -                                               0..1  "SUNAT:Identificador de
+                                                                                                      Documento de Identidad"
+
+                             @schemeAgencyName -                                                0..1  "PE:SUNAT"
+
+                             @schemeURI         -                                               0..1  "urn:pe:gob:sunat:cpe:see:gem:ca
+                                                                                                               talogos:catalogo06"
+
+/Invoice/cac:Delivery/cac:Shipment/cac:Delivery/cac:DeliveryAddress                             0..1
+
+cbc:CountrySubentityCode                        Direccion del punto de llegada (Código de       0..1  n6                                Catálogo 13
+                                                ubigeo)
+
+/Invoice/cac:Delivery/cac:Shipment/cac:Delivery/cac:DeliveryAddress/cac:AddressLine             0..n
+
+cbc:Line                                        Direccion del punto de llegada (Dirección       1     an..100
+                                                completa y detallada)
+
+/Invoice/cac:PrepaidPayment                                                                     0..n
+
+                                                                                                      NNNN-NNNNNNNN/
+
+                                                Serie y número de comprobante del anticipo            F###-NNNNNNNN/
+                                                (para el caso de reorganización de empresas,
+cbc:ID                                          incluye el RUC)                                 0..1  NNNNNNNNNNN-NNNN-
+
+                                                                                                      NNNNNNNN/NNNNNNNNNNN-
+
+                                                                                                      F###-NNNNNNNN
+
+                             @schemeID          Código de tipo de documento                     0..1  n2                                Catálogo 12
+
+                             @schemeName        -                                               0..1    "SUNAT:Identificador de
+                             @schemeAgencyName                                                        Documentos Relacionados"
+                             @currencyID        -
+                                                                                                0..1  "PE:SUNAT"
+                             @schemeID          Monto prepagado o anticipado
+cbc:PaidAmount                                                                                  0..1  n(15,2)
+cbc:InstructionID                               Código de tipo de moneda del monto prepagado
+                                                o anticipado                                    1     an3                               Catálogo 02
+                                                Número de RUC del emisor del comprobante de
+                                                anticipo                                        0..1  n11
+
+                                                Código de tipo de documento del comprobante     0..1  "6"                               Catálogo 06
+                                                de anticipo
+
+Boleta Electrónica                                                                                                                      ~6~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:AllowanceCharge                                                                                          0..n
+
+             cbc:ChargeIndicator                                       Indicador del cargo/descuento global           1     "true"/"false"             Catálogo 53
+             cbc:AllowanceChargeReason                                                                                          an..2                  Catálogo 53
+             Code                                                      Código del motivo del cargo/descuento global   0..1      n(3,5)                 Catálogo 53
+             cbc:MultiplierFactorNumeric                                                                                       n(12,2)                 Catálogo 02
+                                                                       Factor del cargo/descuento del ítem            0..1       an3
+             cbc:Amount                                                                                                        n(12,2)                 Catálogo 02
+                                                                       Monto del cargo/descuento global               1          an3
+                                                                                                                                                       Catálogo 02
+                                          @currencyID                  Código de tipo de moneda del monto del         1        n(12,2)
+                                                                       cargo/descuento global                                    an3
+
+             cbc:BaseAmount                                            Monto de base de cargo/descuento global        1
+
+                                                          @currencyID  Código de tipo de moneda del monto de base     1
+/Invoice/cac:TaxTotal                                                  del cargo/descuento global
+
+             cbc:TaxAmount                                                                                            0..n
+                                                          @currencyID
+                                                                       Monto total del impuestos                      1
+/Invoice/cac:TaxTotal/cac:TaxSubtotal
+             cbc:TaxableAmount                                         Código de tipo de moneda del monto total del   1
+                                                                       tributo
+
+                                                                                                                      0..n
+
+                                                                       Monto las operaciones                          0..1
+                                                                       gravadas/exoneradas/inafectas del impuesto
+
+                                                                       Código de tipo de moneda del monto de las
+
+                                                          @currencyID  operaciones gravadas/exoneradas/inafectas del  1       an3                      Catálogo 02
+             cbc:TaxAmount                                                                                                  n(12,2)                    Catálogo 02
+                                                                       impuesto
+                                                          @currencyID                                                         an3
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory                  Monto total del impuesto                       1
+
+                                                                       Código de tipo de moneda del monto total del   1
+                                                                       impuesto
+
+                                                                                                                      1
+
+cbc:ID                                                                 Categoría de impuestos                         0..1                             Catálogo 05
+
+                                          @schemeID                    -                                              0..1        "UN/ECE 5305"        Catálogo 05
+                                                                                                                              Tax Category Identifier  Catálogo 05
+                                          @schemeName                  -                                              0..1  "United Nations Economic   Catálogo 05
+                                                                                                                             Commission for Europe"
+                                          @schemeAgencyName -                                                         0..1                                    ~7~
+                                                                                                                                          an..3
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme                                                   1           "UN/ECE 5153"
+
+cbc:ID                                                                 Código de tributo                              0..1                 "6"
+                                                                                                                                          an..6
+                                          @schemeID                    -                                              0..1                an4
+
+                                          @schemeAgencyID              -                                              0..1
+
+cbc:Name                                                               Nombre de tributo                              0..1
+
+cbc:TaxTypeCode                                                        Código internacional tributo                   0..1
+
+Boleta Electrónica
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:LegalMonetaryTotal                                                                         1
+
+cbc:LineExtensionAmount                                Total valor de venta                             0..1  n(12,2)
+                                                                                                                an3
+                                 @currencyID           Código de tipo de moneda del total valor de      1                              Catálogo 02
+                                                       venta                                                  n(12,2)                  Catálogo 02
+                                                                                                                an3                    Catálogo 02
+cbc:TaxInclusiveAmount                                 Total precio de venta (incluye impuestos)        0..1                           Catálogo 02
+cbc:AllowanceTotalAmount                                                                                      n(12,2)                  Catálogo 02
+cbc:ChargeTotalAmount            @currencyID           Código de tipo de moneda del total precio de     1       an3                    Catálogo 02
+cbc:PrepaidAmount                @currencyID           venta (incluye impuestos)
+cbc:PayableAmount                @currencyID                                                                  n(12,2)
+                                 @currencyID           Monto total de descuentos globales del           0..1    an3
+                                                       comprobante
+                                                                                                              n(15,2)
+                                                       Código de tipo de moneda del monto total de      1       an3
+                                                       descuentos globales del comprobante
+                                                                                                              n(12,2)
+                                                       Monto total de otros cargos del comprobante      0..1
+                                                                                                                an3
+                                                       Código de tipo de moneda del monto total de      1
+                                                       otros cargos del comprobante
+
+                                                       Monto total de anticipos del comprobante         0..1
+
+                                                       Código de tipo de moneda del monto total de      1
+                                                       anticipos del comprobante
+
+                                                       Importe total de la venta, cesión en uso o del   1
+                                                       servicio prestado
+
+                                 @currencyID           Código tipo de moneda del importe total de la    1
+                                                       venta, cesión en uso o del servicio prestado
+
+/Invoice/cac:InvoiceLine                                                                                1..n
+
+cbc:ID                                                 Número de orden del Ítem                         1                   n..3
+                                                                                                                         n(12,10)
+cbc:InvoicedQuantity                                   Cantidad de unidades del ítem                    0..1
+                                                                                                                           an..3
+                                 @unitCode             Código de unidad de medida del ítem              0..1        UN/ECE rec 20      Catálogo 03
+                                                                                                                                       Catálogo 02
+                                 @unitCodeListID       -                                                0..1  United Nations Economic
+                                                                                                               Commission for Europe
+                                 @unitCodeListAgencyN  -                                                0..1
+                                 ame                                                                                      n(12,2)
+                                                                                                                            an3
+cbc:LineExtensionAmount                                Valor de venta del ítem                          1
+
+                                 @currencyID           Código de tipo de moneda del valor de venta del  1
+                                                       ítem
+
+Boleta Electrónica                                                                                                                     ~8~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:InvoiceLine/cac:PricingReference/cac:AlternativeConditionPrice                            0..n
+
+cbc:PriceAmount                                         Precio de venta unitario/ Valor referencial    1     n(12,10)
+                                                        unitario en operaciones no onerosas
+                                       @currencyID                                                     1     an3                               Catálogo 02
+                                                        Código de tipo de moneda del precio de venta
+                                                        unitario o valor referencial unitario
+
+cbc:PriceTypeCode                                       Código de tipo de precio                       0..1  an2                               Catálogo 16
+
+                                       @listName        -                                              0..1  "SUNAT:Indicador de Tipo de
+                                                                                                                            Precio"
+
+                                       @listAgencyName  -                                              0..1  "PE:SUNAT"
+
+                                       @listURI                                                        0..1  "urn:pe:gob:sunat:cpe:see:gem:ca
+                                                                                                                      talogos:catalogo16"
+
+/Invoice/cac:InvoiceLine/cac:AllowanceCharge                                                           0..n
+
+cbc:ChargeIndicator                                     Indicador del cargo/descuento del ítem         1     "true"/"false"                    Catálogo 53
+
+             cbc:Amount                                 Monto del cargo/descuento del ítem             1     n(12,2)
+/Invoice/cac:InvoiceLine/cac:TaxTotal
+                                       @currencyID      Código de tipo de moneda del monto de          1     an3                               Catálogo 02
+                                                        cargo/descuento del ítem
+
+                                                                                                       0..n
+
+cbc:TaxAmount                                           Monto de tributo del ítem                      1     n(12,2)
+
+                                       @currencyID      Código de tipo de moneda del monto de tributo  1     an3                               Catálogo 02
+                                                        del ítem
+
+/Invoice/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal                                                  0..n
+
+cbc:TaxAmount                                           Monto de tributo del ítem                      1     n(12,2)
+
+                                       @currencyID      Código de tipo de moneda del monto de tributo  1     an3                               Catálogo 02
+                                                        del ítem
+
+/Invoice/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory                                  1
+
+cbc:ID                                                  Categoría de impuestos                         0..1                                    Catálogo 05
+
+                                       @schemeID        -                                              0..1  "UN/ECE 5305"
+
+                                       @schemeAgencyID  -                                              0..1  "6"
+
+cbc:Percent                                             Porcentaje del impuesto                        0..1  n(3,5)
+                                                        Código de tipo de afectación del IGV
+cbc:TaxExemptionReasonCod                                                                              0..1  an2                               Catálogo 07
+e
+
+                                       @listName        -                                              0..1  "SUNAT:Codigo de Tipo de
+                                                                                                                  Afectación del IGV"
+
+                                       @listAgencyName  -                                              0..1  "PE:SUNAT"
+
+                                       @listURI         -                                                    urn:pe:gob:sunat:cpe:see:gem:cat
+                                                                                                                       alogos:catalogo07
+
+cbc:TierRange                                           Código de tipo de sistema de ISC               0..1  an2                               Catálogo 08
+
+Boleta Electrónica                                                                                                                             ~9~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+/Invoice/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme                                 1
+
+cbc:ID                                                           Código internacional tributo                       0..1                an..3       Catálogo 05
+                                                                                                                                "UN/ECE 5153"
+                                    @schemeID                    -                                                  0..1    Tax Scheme Identifier   Catálogo 05
+                                                                                                                                                    Catálogo 05
+                                    @schemeName                  -                                                        "United Nations Economic
+                                                                                                                           Commission for Europe"
+                                    @schemeAgencyName -                                                             0..1
+                                                                                                                                        an..6
+cbc:Name                                                         Nombre de tributo                                  0..1                an4
+
+cbc:TaxTypeCode                                                  Código del tributo                                 0..1
+
+/Invoice/cac:InvoiceLine/cac:Item                                                                                   1
+
+                                                                 Descripción detallada del servicio prestado, bien
+
+cbc:Description                                                  vendido o cedido en uso, indicando las             0..n  an..250
+
+                                                                 características.
+
+/Invoice/cac:InvoiceLine/cac:Item/cac:SellersItemIdentification                                                     0..1
+
+cbc:ID                                                           Código de producto del ítem                        1             an..30
+
+/Invoice/cac:InvoiceLine/cac:Item/cac:CommodityClassification                                                       0..1            n8
+                                                                                                                               UNSPSC
+cbc:ItemClassificationCode                                       Código de producto (SUNAT)                         1           GS1 US
+                                                                                                                          Item Classification
+                                    @listID                                                                         0..1
+                                                                                                                                n(12,10)
+                                    @listAgencyName                                                                 0..1           an3
+
+                                    @listName                                                                       0..1
+
+/Invoice/cac:InvoiceLine/cac:Price                                                                                  0..1
+
+cbc:PriceAmount                                                  Valor unitario del ítem                            1
+
+                                    @currencyID                  Código de tipo de moneda del valor unitario del    1                               Catálogo 02
+                                                                 ítem
+
+Boleta Electrónica                                                                                                                                  ~ 10 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+1.2 Estructura de Boleta electrónica vs Formato XML
+
+N°                  REQUISITO
+
+1 Firma Digital
+
+    <ext:UBLExtensions>
+
+    <ext:UBLExtension>
+
+    <ext:ExtensionContent>
+
+                    <ds:Signature Id="signatureKG">
+
+                     <ds:SignedInfo>
+
+                               <ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-
+
+    20010315#WithComments"/>
+
+                               <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/>
+
+                               <ds:Reference URI="">
+
+                               <ds:Transforms>
+
+                               <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-
+
+    signature"/>
+
+                               </ds:Transforms>
+
+                               <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+
+    <ds:DigestValue>+pruib33lOapq6GSw58GgQLR8VGIGqANloj4EqB1cb4=</ds:DigestValue>
+
+                                      </ds:Reference>
+                                </ds:SignedInfo>
+           <ds:SignatureValue>Oatv5xMfFInuGqiX9SoLDTy2yuLf0tTlMFkWtkdw1z/Ss6kiDz+vIgZhgKfIaxp+JbVy57 GT52f1
+      0VLMLatdwPVRbrWmz1/NIy5CWp1xWMaM6fC/9SXV0O1Lqopk0UeX2I2yuf05QhmVfjgUu6GnS3m6
+      o6zM9J36iDvMVZyj7vbJTwI8SfWjTSNqxXlqPQ==</ds:SignatureValue>
+                                <ds:KeyInfo>
+
+                                      <ds:X509Data>
+           <ds:X509Certificate>MIIF9TCCBN2gAwIBAgIGAK0oRTg/MA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNVB
+      AYTAlRSMUowSAYD
+    VQQDDEFNYWxpIE3DvGjDvHIgRWxla3Ryb25payBTZXJ0aWZpa2EgSGl6bWV0IFNhxJ9sYXnEsWPE
+    sXPEsSAtIFRlc3QgMTAeFw0wOTEwMjAxMTM3MTJaFw0xNDEwMTkxMTM3MTJaMIGgMRowGAYDVQQL
+    DBFHZW5lbCBNw7xkw7xybMO8azEUMBIGA1UEBRMLMTAwMDAwMDAwMDIxbDBqBgNVBAMMY0F5ZMSx
+    biBHcm91cCAtIFR1cml6bSDEsHRoYWxhdCDEsGhyYWNhdCBUZWtzdGlsIMSwbsWfYWF0IFBhemFy
+    iMwtPnC2DRjdsyGv3bxwRZr9wXMRrMNwRjyFe9JPA7bSscEgaXwzDUG5FCvfS/PNT+XCce+VECAx
+    6Q3R1ZRSA49fYz6tDB4Ia5HVBXZODmrCs26XisHF6kuS5N/yGg8E7VC1BRr/SmxXeLTdjQYAfo7l
+    xCz4dT6wP5TOiBvF+lyWW1bi9nbliXyb/e5HjCp4k/ra9LTskjbY/Ukl5O8G9JEAViZkjvxDX7T0yVRHgMGiioIKVMwU6Lrtln607B
+    NurLwED0OeoZ4wBgkBiB5vXofreXrfN2pHZ2=
+    </ds:X509Certificate>
+
+                                      </ds:X509Data>
+                                </ds:KeyInfo>
+                          </ds:Signature>
+                     </ext:ExtensionContent>
+                </ext:UBLExtension>
+     </ext:UBLExtensions>
+
+2   Versión del UBL
+
+    <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+
+3 Versión de la estructura del documento
+
+          <cbc:CustomizationID>2.0</cbc:CustomizationID>
+4 Código de tipo de operación
+
+    <cbc:ProfileID
+
+    schemeName=" SUNAT:Identificador de Tipo de Operación"
+
+    schemeAgencyName="PE:SUNAT"
+
+    schemeURI=" urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17" >0101</cbc:ProfileID>
+
+5 Numeración, conformada por serie y número correlativo
+          <cbc:ID>F002-10</cbc:ID>
+
+6 Fecha de emisión
+          <cbc:IssueDate>2017-05-17</cbc:IssueDate>
+
+7 Hora de emisión
+
+          <cbc:IssueTime>17:09:51</cbc:IssueTime>
+8 Tipo de documento (Boleta)
+
+    <cbc:InvoiceTypeCode
+
+    listAgencyName="PE:SUNAT"
+
+    listName="SUNAT:Identificador de Tipo de Documento"
+
+    listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">03</cbc:InvoiceTypeCode>
+
+Boleta Electrónica                                                                                    ~ 11 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  9 Leyenda
+ 10 Código interno generado por el software de emisión de la Boleta
+
+            <cbc:Note
+
+            languageLocaleID="1000">MIL OCHOCIENTOS CINCUENTA Y OCHO CON 59/100 Soles</cbc:Note>
+
+            <cbc:Note
+           languageLocaleID="3000">05010020170428000005</cbc:Note>
+
+ 11 Tipo de moneda en la cual se emite la boleta electrónica
+            <cbc:DocumentCurrencyCode
+            listID="ISO 4217 Alpha"
+            listName="Currency"
+            listAgencyName="United Nations Economic Commission for Europe">PEN</cbc:DocumentCurrencyCode>
+
+ 12 Tipo y número de la guía de remisión relacionada con la operación
+            <cac:DespatchDocumentReference>
+                 <cbc:ID>031-002020</cbc:ID>
+                  <cbc:DocumentTypeCode
+                  listAgencyName="PE:SUNAT"
+                  listName="SUNAT:Identificador de guía relacionada"
+                  listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">09</cbc:DocumentTypeCode>
+
+          </cac:DespatchDocumentReference>
+
+ 13 Tipo y número de otro documento y código relacionado con la operación
+            <cac:AdditionalDocumentReference>
+                  <cbc:ID>024099</cbc:ID>
+                  <cbc:DocumentTypeCode
+                  listAgencyName="PE:SUNAT"
+                  listName="SUNAT: Identificador de documento relacionado"
+                  listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12">99</cbc:DocumentTypeCode>
+            </cac:AdditionalDocumentReference>
+
+ 14 Información adicional de la firma
+                              <cac:Signature>
+                                    <cbc:ID>IDSignKG</cbc:ID>
+
+                                    <cac:SignatoryParty>
+
+                                         <cac:PartyIdentification>
+
+                                               <cbc:ID>20100113612</cbc:ID>
+
+                                         </cac:PartyIdentification>
+
+                                        <cac:PartyName>
+
+                                              <cbc:Name><![CDATA[K&G Laboratorios]]></cbc:Name>
+
+                                        </cac:PartyName>
+                                    </cac:SignatoryParty>
+                                    <cac:DigitalSignatureAttachment>
+
+                                          <cac:ExternalReference>
+
+                                                 <cbc:URI>#signatureKG</cbc:URI>
+
+                                          </cac:ExternalReference>
+
+                                    </cac:DigitalSignatureAttachment>
+
+                               </cac:Signature>
+
+ 15 Nombre Comercial del emisor
+ 16 Apellidos y nombres, denominación o razón social del emisor
+ 17 Número de RUC del emisor
+ 18 Tipo de Documento de Identidad del Emisor
+ 19 Código del domicilio fiscal o de local anexo del emisor
+
+            <cac:AccountingSupplierParty>
+                       <cac:Party>
+                            <cac:PartyName>
+                                  <cbc:Name><![CDATA[K&G Laboratorios]]></cbc:Name>
+                            </cac:PartyName>
+                            <cac:PartyTaxScheme>
+                                  <cbc:RegistrationName><![CDATA[K&G Asociados S. A.]]></cbc:RegistrationName>
+                                  <CompanyID
+                                  schemeID="6"
+                                  schemeName="SUNAT:Identificador de Documento de Identidad" schemeAgencyName="PE:SUNAT"
+                                  schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20100113612</CompanyID>
+                                 <cac:RegistrationAddress>
+                                    <cbc:AddressTypeCode>0001</cbc:AddressTypeCode>
+                                 </cac:RegistrationAddress>
+                                 <cac:TaxScheme>
+                                    <cbc:ID>-</cbc:ID>
+                                 </cac:TaxScheme>
+                            </cac:PartyTaxScheme>
+                       </cac:Party>
+
+            </cac:AccountingSupplierParty>
+
+Boleta Electrónica  ~ 12 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+ 20 Tipo y número de documento de identidad del adquirente o usuario Apellidos y
+ 21 nombres, denominación o razón social del adquirente o usuario
+
+                  <cac:AccountingCustomerParty>
+                       <cac:Party>
+                            <cac:PartyTaxScheme>
+                                  <cbc:RegistrationName><![CDATA[PAZOS ATOCHE LUANA]]></cbc:RegistrationName>
+                                  <cbc:CompanyID
+                                  schemeID="1"
+                                  schemeName="SUNAT:Identificador de Documento de Identidad" schemeAgencyName="PE:SUNAT"
+                                  schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">46237547</cbc:CompanyID>
+                                 <cac:TaxScheme>
+                                    <cbc:ID>-</cbc:ID>
+                                 </cac:TaxScheme>
+                            </cac:PartyTaxScheme>
+                       </cac:Party>
+
+            </cac:AccountingCustomerParty>
+
+ 22 Serie y número de comprobante del anticipo (para el caso de reorganización de empresas, incluye el RUC)
+ 23 Código de tipo de documento
+ 24 Monto prepagado o anticipado
+ 25 Código de tipo de moneda del monto prepagado o anticipado
+ 26 Número de RUC del emisor del comprobante de anticipo
+
+            <cac:PrepaidPayment>
+               <cbc:ID
+               schemeID="02"
+               schemeName="SUNAT:Identificador de Documentos Relacionados"
+               schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12">BA01-
+               2121</cbc:ID>
+               <cbc:PaidAmount currencyID="PEN">100.00</cbc:PaidAmount>
+               <cbc:InstructionID schemeID="6">20102030201</cbc:InstructionID>
+
+            </cac:PrepaidPayment>
+
+ 27 Descuento Global
+
+            <cac:AllowanceCharge>
+               <cbc:ChargeIndicator>False</cbc:ChargeIndicator>
+               <cbc:AllowanceChargeReasonCode>00</cbc:AllowanceChargeReasonCode>
+               <cbc:Amount currencyID="PEN">60.00</cbc:Amount>
+               <cbc:BaseAmount currencyID="PEN">1439.48</cbc:BaseAmount>
+
+            </cac:AllowanceCharge>
+
+Boleta Electrónica  ~ 13 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+ 28 Monto total del impuestos
+ 29 Monto las operaciones gravadas/exoneradas/inafectas del impuesto
+ 30 Sumatoria de IGV
+ 31 Sumatoria de ISC (Ver Ejemplo en la página 51)
+ 32 Sumatoria de Otros Tributos
+
+                  <cac:TaxTotal>
+                       <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                       <cac:TaxSubtotal>
+                            <cbc:TaxableAmount currencyID="PEN">1439.48</cbc:TaxableAmount>
+                            <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                            <cac:TaxCategory>
+                                  <cbc:ID
+                                  schemeID="UN/ECE 5305"
+                                  schemeName="Tax Category Identifier"
+                                  schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                  <cac:TaxScheme>
+                                       <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">1000</cbc:ID>
+                                       <cbc:Name>IGV</cbc:Name>
+                                       <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+                                  </cac:TaxScheme>
+                            </cac:TaxCategory>
+                       </cac:TaxSubtotal>
+                       <cac:TaxSubtotal>
+                            <cbc:TaxableAmount currencyID="PEN">320.00</cbc:TaxableAmount>
+                            <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+                            <cac:TaxCategory>
+                                  <cbc:ID
+                                  schemeID="UN/ECE 5305"
+                                  schemeName="Tax Category Identifier"
+                                 schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                  <cac:TaxScheme>
+                                       <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">9999</cbc:ID>
+                                       <cbc:Name>OTROS</cbc:Name>
+                                       <cbc:TaxTypeCode>OTH</cbc:TaxTypeCode>
+                                  </cac:TaxScheme>
+                            </cac:TaxCategory>
+                       </cac:TaxSubtotal>
+
+                 </cac:TaxTotal>
+
+ 33 Total valor de venta
+ 34 Total precio de venta (incluye impuestos)
+ 35 Monto total de descuentos
+ 36 Monto total de otros cargos del comprobante
+ 37 Importe total de la venta, cesión en uso o del servicio prestado
+
+                 <cac:LegalMonetaryTotal>
+                                  <cbc:LineExtensionAmount currencyID="PEN">1439.48</cbc:LineExtensionAmount>
+                                  <cbc:TaxInclusiveAmount currencyID="PEN">1698.59</cbc:TaxInclusiveAmount>
+                                  <cbc:AllowanceTotalAmount currencyID="PEN">60.00</cbc:AllowanceTotalAmount>
+                                  <cbc:ChargeTotalAmount currencyID="PEN">320.00</cbc:ChargeTotalAmount>
+                                  <cbc:PrepaidAmount currencyID="PEN">100.00</cbc:PrepaidAmount>
+                                  <cbc:PayableAmount currencyID="PEN">1858.59</cbc:PayableAmount>
+
+                 </cac:LegalMonetaryTotal>
+
+ 38 Número de orden del Ítem
+ 39 Unidad de medida por ítem Cantidad de
+ 40 unidades por ítem
+ 41 Valor de venta del ítem
+
+                  <cac:InvoiceLine>
+                       <cbc:ID>1</cbc:ID>
+                       <cbc:InvoicedQuantity
+                       unitCode="CS"
+                       unitCodeListID="UN/ECE rec 20"
+                       unitCodeListAgencyName="United Nations Economic Commission for Europe">50</cbc:InvoicedQuantity>
+                      <cbc:LineExtensionAmount currencyID="PEN">1439.48</cbc:LineExtensionAmount>
+
+                 ....
+
+            </cac:InvoiceLine>
+
+Boleta Electrónica  ~ 14 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+ 42 Precio de venta unitario por item y código
+
+          <cac:InvoiceLine>
+                      ...
+                       <cac:PricingReference>
+                            <cac:AlternativeConditionPrice>
+                                  <cbc:PriceAmount currencyID="PEN">34.99</cbc:PriceAmount>
+                                  <cbc:PriceTypeCode
+                                  listName="SUNAT:Indicador de Tipo de Precio"
+                                  listAgencyName="PE:SUNAT"
+                                  listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+                            </cac:AlternativeConditionPrice>
+                        </cac:PricingReference>
+                        ...
+
+           </cac:InvoiceLine>
+
+ 43 Valor referencial unitario por ítem en operaciones no onerosas
+
+          <cac:InvoiceLine>
+                      ...
+                       <cac:PricingReference>
+                            <cac:AlternativeConditionPrice>
+                                  <cbc:PriceAmount currencyID="PEN">250.00</cbc:PriceAmount>
+                                  <cbc:PriceTypeCode
+                                  listName="SUNAT:Indicador de Tipo de Precio"
+                                  listAgencyName="PE:SUNAT"
+                                  listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">02</cbc:PriceTypeCode>
+                            </cac:AlternativeConditionPrice>
+                        </cac:PricingReference>
+                        ...
+
+            </cac:InvoiceLine>
+
+ 44 Descuentos por item
+
+            <cac:InvoiceLine>
+            ....
+
+                       <cac:AllowanceCharge>
+                            <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+                            <cbc:Amount currencyID="PEN">60.00</cbc:Amount>
+
+                       </cac:AllowanceCharge>
+           ...
+            </cac:InvoiceLine>
+
+ 45 Monto de tributo del ítem
+
+                    <cac:InvoiceLine>
+                      ...
+                       <cac:TaxTotal>
+                            <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                            <cac:TaxSubtotal>
+                                  <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                                  <cac:TaxCategory>
+                                  <cbc:ID
+                                  schemeID="UN/ECE 5305"
+                                  schemeName="Tax Category Identifier"
+                                  schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                       <cbc:Percent>18.00</cbc:Percent>
+                                 <cbc:TaxExemptionReasonCode
+                                 listAgencyName="PE:SUNAT"
+                                 listName="SUNAT:Codigo de Tipo de Afectación del IGV"
+                                 listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode>
+                                       <cac:TaxScheme>
+                                  <cbc:ID schemeID="UN/ECE 5153" schemeName="Tax Scheme Identifier"
+                                             schemeAgencyName="United Nations Economic Commission for Europe">1000</cbc:ID>
+                                             <cbc:Name>IGV</cbc:Name>
+                                             <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+                                       </cac:TaxScheme>
+                                  </cac:TaxCategory>
+                            </cac:TaxSubtotal>
+                       </cac:TaxTotal>
+                        ...
+
+                    </cac:InvoiceLine>
+
+Boleta Electrónica  ~ 15 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+ 46 Descripción detallada del servicio prestado, bien vendido o cedido en uso, indicando las características
+
+          <cac:InvoiceLine>
+            <cac:Item>
+
+                       <cbc:Description><![CDATA[CAPTOPRIL 1000mg X 30]]></cbc:Description>
+          ...
+
+            </cac:Item>
+            </cac:InvoiceLine>
+ 47 Código de producto
+ 48 Código de producto SUNAT
+
+          <cac:InvoiceLine>
+            <cac:Item>
+            ...
+
+                       <cbc: SellersItemIdentification>
+                            <ID> Cap-258963</ID>
+
+                       </cbc: SellersItemIdentification>
+                       <cac:CommodityClassification>
+
+                                 <ItemClassificationCode
+                                 listID="UNSPSC"
+                                 listAgencyName="GS1 US"
+                                 listName="Item Classification">51121703</ ItemClassificationCode>
+                       </cac:CommodityClassification>
+          ...
+            </cac:Item>
+            </cac:InvoiceLine>
+
+ 49 Valor unitario del ítem
+
+          <cac:InvoiceLine>
+             <cac:Item>
+
+          ...
+                                <cbc:PriceAmount CurrencyID="PEN">785.20</cbc:PriceAmount>
+
+          ...
+            </cac:Item>
+            </cac:InvoiceLine>
+
+1.3 Normas de Uso del Formato de la Boleta Electrónica
+
+A Normas de Uso
+
+Como se ha indicado, el formato UBL está basado en el uso de un documento XML para
+presentar todos los datos de forma jerárquica. El formato especifica que para un archivo se
+especifique toda la información de una y solo una boleta. Como dicha representación se basa en
+XML debe existir un único tag que engloba a todos los demás, dicha etiqueta es Invoice.
+
+<Invoice>
+......
+</Invoice>
+
+Para un mejor entendimiento de la estructura del archivo XML, se describe a continuación los
+elementos que conforman la boleta electrónica, así como también los elementos complejos más
+importantes.
+
+A.1 Elementos de la Boleta electrónica
+
+A continuación se detallan los elementos que forman parte del documento Boleta.
+
+En cada uno de ellos se muestra una explicación de la información que almacena, si es
+obligatorio o no para obtener un documento correcto, su ubicación dentro del documento, un
+ejemplo así como una breve explicación de acuerdo al estándar UBL (Descripción UBL).
+Cabe señalar, que se describen solo aquellos tags que son necesarios para el uso tributario y
+que son requeridos por la SUNAT.
+
+Boleta Electrónica                                                               ~ 16 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  1. Firma Digital.
+
+Obligatorio. Es el conjunto de datos asociados al documento electrónico que se firma y
+permite la identificación del signatario (emisor de la boleta electrónica) y ha sido creada por
+medios que éste mantiene bajo su control, de manera que está vinculada únicamente al
+signatario y a los datos a los que refiere. La firma deberá realizarse con el certificado digital
+que el emisor de la boleta comunicó previamente a SUNAT.
+
+Ubicación
+
+    //Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/ds:Signature
+
+    //Invoice/cac:Signature
+
+Ejemplo
+
+Un ejemplo de declaración de firma electrónica en el contenedor UBLExtensions sería:
+
+        <ext:UBLExtensions>
+              <ext:UBLExtension>
+                   <ext:ExtensionContent>
+                        <ds:Signature Id="signatureKG">
+                              <ds:SignedInfo>
+                                   <ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-
+
+   20010315#WithComments"/>
+                                   <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/>
+                                   <ds:Reference URI="">
+                                        <ds:Transforms>
+                                              <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-
+
+   signature"/>
+                                        </ds:Transforms>
+                                        <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+
+        <ds:DigestValue>+pruib33lOapq6GSw58GgQLR8VGIGqANloj4EqB1cb4=</ds:DigestValue>
+                                   </ds:Reference>
+
+                              </ds:SignedInfo>
+        <ds:SignatureValue>Oatv5xMfFInuGqiX9SoLDTy2yuLf0tTlMFkWtkdw1z/Ss6kiDz+vIgZhgKfIaxp+JbVy57GT5
+   0VLMLatdwPVRbrWmz1/NIy5CWp1xWMaM6fC/9SXV0O1Lqopk0UeX2I2yuf05QhmVfjgUu6GnS3m6
+   o6zM9J36iDvMVZyj7vbJTwI8SfWjTSNqxXlqPQ==</ds:SignatureValue>
+
+                              <ds:KeyInfo>
+                                    <ds:X509Data>
+                                         <ds:X509Certificate>MIIF9TCCBN2gAwIBAgIGAK0oRTg/MA0GCSqGSIb3DQEBCwU
+                                         AMFkxCzAJBgNVBAY TAlRSMUowSAYD
+
+   xCz4dT6wP5TOiBvF+lyWW1bi9nbliXyb/e5HjCp4k/ra9LTskjbY/Ukl5O8G9JEAViZkjvxDX7T0
+   yVRHgMGiioIKVMwU6Lrtln607BNurLwED0OeoZ4wBgkBiB5vXofreXrfN2pHZ24=
+
+                                        </ds:X509Certificate>
+                                   </ds:X509Data>
+                              </ds:KeyInfo>
+                        </ds:Signature>
+                   </ext:ExtensionContent>
+              </ext:UBLExtension>
+        </ext:UBLExtensions>
+
+Un ejemplo de declaración de firma electrónica en el contenedor cac:Signature sería:
+
+   <cac:Signature>
+        <cbc:ID>IDSignKG</cbc:ID>
+        <cac:SignatoryParty>
+              <cac:PartyIdentification>
+                   <cbc:ID>20100113612</cbc:ID>
+              </cac:PartyIdentification>
+           <cac:PartyName>
+                   <cbc:Name><![CDATA[K&G Laboratorios]]></cbc:Name>
+              </cac:PartyName>
+        </cac:SignatoryParty>
+        <cac:DigitalSignatureAttachment>
+              <cac:ExternalReference>
+                   <cbc:URI>#signatureKG</cbc:URI>
+                              </cac:ExternalReference>
+        </cac:DigitalSignatureAttachment>
+
+   </cac:Signature>
+
+Boleta Electrónica                                            ~ 17 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+   Descripción UBL
+   UBLExtensions. Contenedor de Componentes de extensión. Se incorporan definiciones
+   estructuradas cuando sean de interés para emisores y receptores, y siempre que no estén
+   definidas en el esquema de la boleta. Se detalla más adelante (punto B.2.1).
+   Se utilizará el componente Extensions de UBL 2.1 para incorporar la firma electrónica
+   XMLDSIG1.
+
+    cac:Signature. Utilizado para identificar al firmante y otro tipo de información relacionada
+    con el mismo. Su uso se da principalmente para especificar la ubicación de la firma
+    electrónica ya sea que este embebida (dentro del mensaje) o desacoplada.
+
+  
+
+  cbc:ID. Obligatorio. Identificador de la firma
+
+  o cac:SignatoryParty. Obligatorio. Asociación con la parte firmante, la cual
+
+                    para nuestro caso deberá estar relacionado con el emisor de la boleta
+
+  o PartyIdentification. Obligatorio. A través del elemento ID, se consigna el
+
+                    RUC de la parte firmante.
+
+  o PartyName. Obligatorio. A través del elemento Name, se consigna el nombre
+
+                    o razón social de la parte firmante.
+
+  cac:DigitalSignatureAttachment. Obligatorio. En este componente se puede
+
+  referenciar la firma del documento como una ExternalReference a una URI local
+
+  o remota.
+
+  o ExternalReference. Obligatorio. Información acerca de un documento
+      vinculado. Los vínculos pueden ser externos (referenciados mediante un
+      elemento URI), internos (accesibles mediante un elemento MIME) o pueden
+      estar contenidos dentro del mismo documento en el que se alude a ellos
+      (mediante elementos Documento Incrustado). Este último será el caso a
+      utilizar, es decir una referencia dentro del mismo documento invoice,
+      específicamente en el componente UBLExtensions.
+
+1 Es un estándar creado por la W3C que recoge las reglas básicas de creación y procesamiento de firmas de electrónicas
+documentos, principalmente en XML. Las firmas [XMLDSig] son firmas digitales creadas y pensadas para transacciones XML.
+Dentro de la firma electrónica en formato XML, existen diferentes "subtipos de formatos", dentro de los cuales destacan por
+encima de todos el XML Dsig y la variante de este, el XML Advanced Electronic Signatures (XAdES).
+
+Boleta Electrónica                                                                         ~ 18 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  2. Versión del UBL.
+
+   Obligatorio. Versión del esquema UBL que define todos los elementos que se podrían
+   encontrar en este documento. Para la presente guía se ha utilizado la versión "2.1".
+
+   Ubicación
+       //Invoice/cbc:UBLVersionID
+
+   Ejemplo
+                  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+
+   Descripción UBL
+   cbc:UBLVersionID
+   Versión UBL usada para esquematizar y definir los elementos contenidos en el documento.
+
+  3. Versión de la estructura del documento.
+
+   Obligatorio. Identifica una personalización de UBL definida para un uso específico. Para
+   nuestro caso corresponderá a la versión 2.0 de la boleta electrónica. Por cada variación o
+   adecuación del esquema se deberá de aumentar la versión, la cual contemplará las nuevas
+   validaciones para los elementos de datos establecidos.
+
+   Ubicación
+       //Invoice/cbc:CustomizationID
+
+   Ejemplo
+              <cbc:CustomizationID>2.0</cbc:CustomizationID>
+
+   Descripción UBL
+   cbc:CustomizationID
+   Elemento usado para identificar la personalización, definida por el usuario de UBL, sobre los
+   documentos asociados.
+
+  4. Tipo de Operación.
+
+   Para efectos de identificar la transacción se deberá indicar el código de operación que
+   corresponda de acuerdo al catálogo N° 51 del Anexo 8 aprobado por la Resolución de
+   Superintendencia N° 097-2012/SUNAT y modificatorias.
+   Ubicación
+
+       //invoice/cbc:ProfileID @schemeName @schemeAgencyName @schemeURI
+   Ejemplo
+
+               <cbc:ProfileID schemeName=" SUNAT:Identificador de Tipo de Operación"
+               schemeAgencyName="PE:SUNAT" schemeURI=" urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17"
+               >0102</cbc:ProfileID>
+
+Boleta Electrónica  ~ 19 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+Descripción UBL
+ProfileID: Señala el tipo de operación que se está llevando a cabo.
+Atributos
+
+schemeName          SUNAT:Identificador de Tipo de Operación
+
+schemeAgencyName PE:SUNAT
+
+schemeURI           urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17
+
+Valor de Códigos Catálogo N°51
+
+cbc: ProfileID
+
+Código Concepto                                               Descripción
+
+0101 Venta lnterna     Para la venta en el país de bienes muebles ubicados en el
+                       territorio nacional, que se realice en cualquiera de las etapas del
+                       ciclo de producción y distribución, sean éstos nuevos o usados,
+                       independientemente del lugar en que se celebre el contrato, o
+                       del lugar en que se realice el pago. Así mismo, se consideran
+                       dentro de este código a la prestación de servicios en territorio
+                       nacional.
+
+0102 Exportación       Cuando la venta de bienes muebles lo realiza un sujeto
+                       domiciliado en el país a favor de un sujeto no domiciliado,
+                       independientemente de que la transferencia de propiedad ocurra
+                       en el país o en el exterior, siempre que dichos bienes sean
+                       objeto del trámite aduanero de exportación definitiva.
+
+0103 No Domiciliados   Tratándose de ventas y/o prestación de servicios que son
+                       llevadas a cabo en territorio nacional pero el cliente es un no
+0104  Venta Interna ­  domiciliado. Este código no se debe utilizar para exportaciones.
+      Anticipos
+                       Tratandose de anticipos (Pagos realizados antes de la entrega
+0105 Venta Itinerante  de los bienes y/o prestación del servicio)
+
+                       Cuando las operaciones de venta de los bienes trasladados se
+                       concretan durante el recorrido que efectúa el emisor itinerante y
+                       no en una oportunidad previa.
+
+0106 Factura Guía      Cuando se realiza el traslado de los bienes con la boleta en vez
+                       de la guía de remisión remitente ó transportista.
+0107  Venta Arroz
+      Pilado           Se utilizará para indicar que la operación que se está informando
+                       está sujeta al Impuesto a la Venta del Arroz Pilado (IVAP)
+                       aprobado por Ley 28211 y modificatorias.
+
+0108  Factura          Cuando la cancelación del íntegro del precio de venta y del
+      Comprobante      monto de la percepción respectiva se efectúe hasta la
+      de Percepción    oportunidad de la boleta electrónica correspondiente.
+
+Boleta Electrónica                                                         ~ 20 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+0110  Factura - Guía  Cuando se realiza el traslado de los bienes con la boleta en vez
+      remitente       de la guía de remisión remitente.
+
+5. Numeración, conformada por serie y número correlativo.
+
+Obligatorio. Identificador de boleta de venta. Para el caso peruano este elemento contendrá
+
+el numero de serie de la boleta de venta más el número correlativo. La serie debe ser
+
+alfanumérica de cuatro (4) caracteres, siendo el primer caracter de la izquierda la letra B
+(Ejemplo: BG01). El número correlativo podrá tener hasta ocho (8) caracteres y se iniciará en
+1. Este número correlativo será independiente del número correlativo de la boleta de venta
+emitida en formato impreso y/o importado por imprentaautorizada.
+
+Ubicación
+     //Invoice/cbc:ID
+
+Ejemplo
+
+            <cbc:ID>BA12-16</cbc:ID>
+
+Descripción UBL
+
+cbc:ID Identificador único de la boleta asignada por el emisor.
+
+6. Fecha de emisión.
+
+ Obligatorio. Corresponde a:
+
+ En el caso de bienes, fecha en que se produce la transferencia, el momento en que se
+     entregue o en el momento en que se efectúe el pago; lo que ocurra primero.
+
+ En el caso que la transferencia sea concertada por Internet, teléfono, telefax u otros
+     medios similares, en los que el pago se efectúe mediante tarjeta de crédito o de débito y/o
+     abono en cuenta con anterioridad a la entrega del bien, la fecha de emisión será aquella en
+     que se reciba la conformidad de la operación por parte del administrador del medio de
+     pago o se perciba el ingreso, según sea el caso.
+
+ En el caso de retiro de bienes, la fecha de retiro.
+ En la transferencia de bienes inmuebles, fecha en que se perciba el ingreso o fecha que se
+
+     celebra el contrato, lo que ocurra primero.
+ En la primera venta de bienes inmuebles que realice el constructor, fecha en que se
+
+     perciba el ingreso, por el monto que se perciba, sea total o parcial.
+ En el caso de naves y aeronaves, fecha en que se suscribe el respectivo contrato.
+
+ Por los pagos parciales recibidos anticipadamente a la entrega del bien o puesta a
+
+     disposición del mismo, en la fecha en que se perciba el pago.
+ En la prestación de servicios, incluyendo el arrendamiento y arrendamiento financiero,
+
+     cuando alguno de los siguientes supuestos ocurra primero:
+                    La culminación del servicio.
+                    La percepción de la retribución, parcial o total.
+                    El vencimiento del plazo o de cada uno de los plazos fijados o convenidos
+                         para el pago del servicio.
+
+Sin embargo, la fecha de emisión de la boleta podrá ser anterior a las fechas antes señaladas.
+
+Boleta Electrónica                                            ~ 21 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ubicación
+   //Invoice/cbc:IssueDate
+
+   Ejemplo
+
+               <cbc:IssueDate>2017-05-17</cbc:IssueDate>
+
+   Descripción UBL
+   cbc:IssueDate. Fecha de emisión del documento. El tipo DateType se corresponde con el
+   tipo Date de XML por lo que el formato deberá ser yyyy-mm-dd.
+
+  7. Hora de emisión.
+
+   Obligatorio. Es la hora que corresponde a la emisión del comprobante de pago. Esta asociada
+   a la fecha de emisión del comprobante de pago, indicado en el numeral anterior.
+
+   Ubicación
+   //Invoice/cbc:IssueTime
+
+   Ejemplo
+
+               <cbc:IssueTime>07:20:45</cbc:IssueTime>
+
+   Descripción UBL
+   cbc:IssueTime. Representa la hora de emisión del día de emisión de la boleta en el formato
+   hh:mm:ss.sss. Donde hh representa la hora, mm los minutos, ss.sss los segundos. La hora
+   esta basada en el período de 24 horas, de modo que la hora se debe representar de 00 a 24.
+
+     Valores Válidos                                  Comentario
+13:20:00               13:20
+13:20:30.5555          13:20 y 30.5555 segundos
+00:00:00               Medianoche
+24:00:00               Medianoche
+
+   Valores No Válidos                                  Comentario
+5:20:00
+                       Horas, minutos y segundos deben ser de dos dígitos cada
+13:20                  uno
+13:20.5:00             Segundos se deben especificar, incluso si es 00
+13:65:00               Los valores de horas y minutos deben ser enteros
+                       El valor debe ser una hora válida
+
+8 Código de Tipo de documento.
+Obligatorio. Tipo de comprobante de pago.
+
+Ubicación
+    //Invoice/cbc:InvoiceTypeCode@listAgencyName @listName @listURI
+
+Ejemplo
+
+           <cbc:InvoiceTypeCode listAgencyName="PE:SUNAT" listName="SUNAT:Identificador de Tipo de
+           Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">03</cbc:InvoiceTypeCode>
+
+Boleta Electrónica                                                              ~ 22 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+Descripción UBL
+cbc:InvoiceTypeCode Código que especifica el tipo de documento.
+Atributos
+
+ listAgencyName     PE:SUNAT
+ listName           SUNAT:Identifi cador de Tipo de Documento
+ listURI            urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01
+Valor de Código
+
+Código Descripción
+   03 BOLETA
+
+9. Leyendas.
+
+Elemento utilizado para consignar mensajes que deben formar parte del comprobante de
+pago, acorde con lo regulado por el Reglamento de Comprobantes de Pago, u otras
+disposiciones, que buscan entre otros, diferenciar operaciones y/o agregar información
+complementaria al documento.
+
+Las leyendas que se encuentra definidas son las siguientes:
+
+          Monto expresado en letras. Opcional
+
+      Elemento utilizado para consignar en el documento el monto expresado en letras.
+      En el atributo @languageLocaleID se debe consignar el código "1000" (según Catálogo No.
+      52).
+
+          "Transferencia gratuita" o "Servicio prestado Gratuitamente"
+
+      Aplicable solo en el caso que todas las operaciones (líneas o ítems) comprendidas en la
+      boleta electrónica sean gratuitas. En el atributo @languageLocaleID se debe consignar el
+      código "1002" (según Catálogo No. 52).
+
+          "Comprobante De Percepcion".
+
+      Elemento utilizado en operaciones de venta sujetas al Régimen de Percepción del IGV,
+      en aquellos casos en que la normativa permite que el mismo comprobante de pago
+      acredite la Percepción. En el atributo @languageLocaleID se debe consignar el código
+      "2000" (según Catálogo No. 52).
+
+          "Bienes transferidos en la Amazonía".
+
+      Dicha leyenda se consignará en aquellas operaciones exoneradas del Impuesto General
+      a las Ventas de acuerdo a lo señalado en el art. 10° del Decreto Supremo N° 103-99-EF,
+      Reglamento de las Disposiciones Tributarias contenidas en la Ley de Promoción de la
+      inversión en la Amazonía. En el atributo @languageLocaleID se debe consignar el código
+      "2001" (según Catálogo No. 52).
+
+Boleta Electrónica                                                     ~ 23 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+             "Servicios prestados en la Amazonía".
+
+         Dicha leyenda se consignará en aquellas operaciones exoneradas del Impuesto General
+         a las Ventas de acuerdo a lo señalado en el art. 10° del Decreto Supremo N° 103-99-EF,
+         Reglamento de las Disposiciones Tributarias contenidas en la Ley de Promoción de la
+         inversión en la Amazonía. En el atributo @languageLocaleID se debe consignar el código
+         "2002" (según Catálogo No. 52).
+
+             "Contratos de construcción ejecutados en la Amazonía".
+
+         Dicha leyenda se consignará en aquellas operaciones exoneradas del Impuesto General
+         a las Ventas de acuerdo a lo señalado en el art. 10° del Decreto Supremo N° 103-99-EF,
+         Reglamento de las Disposiciones Tributarias contenidas en la Ley de Promoción de la
+         inversión en la Amazonía. En el atributo @languageLocaleID se debe consignar el
+         código "2003" (según Catálogo No. 52).
+
+             "Agencia de Viaje - Paquete turístico".
+
+         Dicha leyenda se consignará cuando se trate de agencias de viajes y turismo incluidas
+         como tal en el Directorio Nacional de Prestadores de Servicios Turísticos Calificados,
+         publicado por el Ministerio de Comercio Exterior y Turismo. En el atributo
+         @languageLocaleID se debe consignar el código "2004" (según Catálogo No. 52).
+
+             "Venta realizada por emisor itinerante".
+
+         Dicha leyenda se consignará cuando el otorgamiento de comprobantes de pago supone el
+         desplazamiento de bienes destinados a la venta, operación esta que recién se concreta
+         durante el recorrido del emisor y no antes del inicio del traslado de los bienes. En el
+         atributo @languageLocaleID se debe consignar el código "2005" (según Catálogo No. 52).
+
+             "Operación sujeta a detracción".
+
+         Dicha leyenda se consignará cuando la operación este sujeta al Sistema de Pago de
+         Obligaciones Tributarias con el Gobierno Central a que se refiere el decreto legislativo N°
+         940 y sus normas modificatorias y complementarias. En el atributo @languageLocaleID se
+         debe consignar el código "2006" (según Catálogo No. 52).
+
+             Código interno generado por el software de Facturación.
+
+         Se consignará la llave única o clave única o clave primaria del software donde se generó el
+         ingreso de información para la generación del comprobante de pago electrónico.
+
+         Tratándode de software contables intregados (ERP) se podrá consignar el código contable
+         del asiento del libro diario que generó la transacción. En el atributo @languageLocaleID se
+         debe consignar el código "2006" (según Catálogo No. 52).
+
+         Ubicación
+         //Invoice/cbc:Note@languageLocaleID
+
+Boleta Electrónica  ~ 24 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+         Ejemplo
+
+                   <Invoice>
+                   ...
+
+                     <cbc:Note
+                     languageLocaleID="1000">MIL OCHOCIENTOS CINCUENTA Y OCHO CON 59/100 Soles</cbc:Note>
+                     <cbc:Note
+
+                            languageLocaleID="3000">05010020170428000005</cbc:Note>
+                   ...
+                   </Invoice>
+
+         Descripción UBL
+
+         cbc:Note
+
+         Para hacer uso de este elemento, es necesario consignar el atributo que identifique la
+
+         leyenda que se está utilizando (languageLocaleID) y el texto de la leyenda o valor según
+
+         fuera el caso (cbc:Note).
+
+10 Tipo de moneda.
+
+Obligatorio. Código de moneda empleada genéricamente en la boleta. Los códigos se
+especifican en un archivo de tipo CodeList incluido en los esquemas UBL y que corresponde
+a la norma ISO 4217 ­ Currency.
+
+Ubicación
+//Invoice/cbc:DocumentCurrencyCode@listID @listName @listAgencyName
+
+Ejemplo
+
+           <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency" listAgencyName="United
+           Nations Economic Commission for Europe">PEN</cbc:DocumentCurrencyCode>
+
+Descripción UBL
+cbc:DocumentCurrencyCode
+Moneda en la que el documento se presenta. Tener en cuenta que el código de moneda
+también debe colocarse como atributo en todos aquellos campos que almacenan un monto
+de tipo monetario.
+
+Atributos
+
+listID          "ISO 4217 Alpha"
+
+listName        Currency
+listAgencyName  United Nations Economic Commission for Europe
+
+   Valor de Código Catálogo N° 2                                               ~ 25 ~
+   cbc: DocumentCurrencyCode
+
+    Código Descripción
+      PEN Sol
+
+   El resto de códigos se puede descargar desde el siguiente link: Clic Aquí.
+
+Boleta Electrónica
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   11 Tipo y número de la guía de remisión relacionada con la operación por
+  la que se emite la boleta.
+
+   Referencia a las guías de remisión remitente o transportista, según corresponda, autorizadas
+   por la SUNAT para sustentar el traslado de los bienes. Pueden existir múltiples guías de
+   remisión, por lo que el número de elementos de este tipo es ilimitado. Se utilizará el
+   Catálogo N° 01: "Código de Tipo de Documento".
+
+   Ubicación
+       //Invoice/cac:DespatchDocumentReference/cbc:ID
+       //Invoice/cac:DespatchDocumentReference/cbc:DocumentTypeCode@listAgencyName @listName
+       @listURI
+
+   Ejemplo
+
+                     <cac:DespatchDocumentReference>
+                          <cbc:ID>0001-002020</cbc:ID>
+
+                     <cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="SUNAT:Identificador de guía
+                     relacionada"
+                     listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">09</cbc:DocumentTypeCode>
+                     </cac:DespatchDocumentReference>
+
+   Descripción UBL
+
+   cac:DespatchDocumentReference
+   Tag que hace referencia a documentos de transporte asociados a la boleta.
+   De los elementos que componen este tipo complejo y que serán utilizados en el documento de
+   tipo boleta tenemos:
+
+       cbc:ID: Obligatorio. Identificación del número de guía autorizado por SUNAT. Estará
+       conformado por la serie y el número de documento, separado por un guión.
+       cbc:DocumentTypeCode: Obligatorio. Corresponde al código del tipo de documento al
+       que se hace referencia. Se utilizará de acuerdo al catálogo de códigos establecidos para
+       documentos (Catálogo No. 01).
+
+Atributos        "PE:SUNAT"
+ listAgencyName  "SUNAT:Identificador de guía relacionada"
+ listName        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01"
+ listURI
+
+   Valor de Código (Catálogo N°1)                                     ~ 26 ~
+   Cbc:DocumentTypeCode
+
+    Código Descripción
+        09 GUIA DE REMISIÓN REMITENTE
+
+Boleta Electrónica
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  12 Tipo y número de otro documento y/ código documento relacionado con
+  la operación
+
+   Repetible. Referencia a cualquier otro documento, distintos a los señalados en el numeral
+   anterior, asociado a la boleta. Podrán especificarse documentos como comprobantes de
+   retención, percepción, etc. Pueden existir documentos de distintos tipos asociados a una
+   misma boleta, por lo que el número de elementos de este tipo es ilimitado. Se utilizará el
+   Catálogo No. 12: "Códigos - Documentos Relacionados Tributarios".
+
+Ubicación
+    //Invoice/cac:AdditionalDocumentReference/cbc:ID
+    //Invoice/cac:AdditionalDocumentReference/cbc:DocumentTypeCode @listAgencyName
+    @listName @listURI
+
+Ejemplo
+
+           <cac:AdditionalDocumentReference>
+                 <cbc:ID>024099</cbc:ID>
+                 <cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="SUNAT: Identificador de documento
+                 relacionado"
+                 listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12">99</cbc:DocumentTypeCode>
+
+         </cac:AdditionalDocumentReference>
+
+Descripción UBL
+
+cac:AdditionalDocumentReference
+Tag que hace referencia a documentos asociados a la boleta.
+
+De los elementos que componen este tipo complejo y que serán utilizados en el documento
+de tipo boleta tenemos:
+
+    cbc:ID: Obligatorio. Identificación del número de documento asociado a la boleta.
+
+    cbc:DocumentTypeCode: Obligatorio. Corresponde al código del tipo de documento al
+    que se hace referencia. Se utilizarán los códigos definidos en el Catálogo No. 12
+
+Atributos           "PE:SUNAT"
+ listAgencyName     "SUNAT:Identifi cador de documento relacionado"
+ listName           "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12"
+ listURI
+
+Valor de Código (Catálogo N°12)
+
+ Código Descripción
+
+     03 Boleta de Venta ­ emitida por anticipos
+     04 Ticket de Salida ­ ENAPU
+     05 Código SCOP
+     99 Otros
+
+Boleta Electrónica                                                       ~ 27 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  13 Nombre Comercial.
+
+   Corresponde al Nombre Comercial del emisor de la boleta, obligatorio sólo en el caso de
+   haber sido declarado en el RUC. En este caso debe ser conforme al registrado en el Registro
+   Único de Contribuyentes ­ RUC.
+
+   Este requisito se encuentra contenido en el elemento complejo cac:Party ubicado en el
+   componente cac:AccountingSupplierParty.
+
+   Ubicación
+    //Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name
+
+   Ejemplo
+
+                   <cac:AccountingSupplierParty>
+                          <cac:Party>
+                               ...
+                               <cac:PartyName>
+                                     <cbc:Name><![CDATA[K&G Laboratorios]]></cbc:Name>
+                               </cac:PartyName>
+                               ...
+                          </cac:Party>
+
+                     </cac:AccountingSupplierParty>
+
+   Descripción UBL
+
+   cac:PartyName
+   Se usará para alojar el elemento Name, donde se indica el nombre comercial.
+
+  14 Apellidos y nombres o denominación o razón social del emisor.
+
+   Obligatorio. Corresponde a los apellidos y nombres o denominación o razón social del
+   emisor de la boleta electrónica. Este debe ser acorde a lo registrado en el Registro Único de
+   Contribuyentes - RUC. Este requisito se encuentra contenido en el elemento complejo
+   cac:Party ubicado en el componente cac:AccountingSupplierParty.
+
+   Ubicación
+
+   //Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:RegistrationName
+
+   Ejemplo
+
+                   <cac:AccountingSupplierParty>
+                          <cac:Party>
+                               <cac:PartyTaxScheme>
+                                     ...
+                                     <cbc:RegistrationName><![CDATA[K&G Asociados S. A.]]></cbc:RegistrationName>
+                                     ...
+                               </cac:PartyTaxScheme>
+                          </cac:Party>
+
+                     </cac:AccountingSupplierParty>
+
+   Descripción UBL
+
+   cbc:RegistrationName
+   Se usa para indicar el nombre o razón social del contribuyente de acuerdo a la información
+   proporcianada al momento de su inscripción o modificación hacia la SUNAT.
+
+Boleta Electrónica  ~ 28 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  15 Tipo y Número de RUC del Emisor.
+
+   Obligatorio. El tipo de documento del emisor siempre es 6, que corresponde al RUC.
+   Además de esto se debe consignar el número de RUC del emisor de la boleta electrónica el
+   cual debe ser válido.
+   Ubicación
+
+   //Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID @schemeID
+   @schemeName @schemeAgencyName @schemeURI
+
+   Ejemplo
+
+             <cac:AccountingSupplierParty>
+                   <cac:Party>
+                         <cac:PartyTaxScheme>
+                              ...
+                              <cbc:CompanyID schemeID="1" schemeName="SUNAT:Identificador de Documento de Identidad"
+                              schemeAgencyName="PE:SUNAT"
+                              schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">46237547</cbc:CompanyID>
+                              ...
+                         </cac:PartyTaxScheme>
+                   </cac:Party>
+
+              </cac:AccountingSupplierParty>
+
+   Descripción UBL
+
+   cac:AccountingSupplierParty
+    Estructura de datos del emisor. Tipo complejo que a su vez contiene un elemento Party que
+    se especificará más adelante.
+
+           cbc:RegistrationName. Obligatorio. Nombre o denominación o razón social del
+                    emisor del comprobante electrónico.
+
+           cbc:CompanyID. Obligatorio. Identificación del emisor de la boleta, deberá de
+                    indicarse el Número de RUC del Emisor.
+
+   Atributos
+
+schemeName          "SUNAT:Identificador de Documento de Identidad"
+
+schemeAgencyName "PE:SUNAT"
+
+schemeURI           "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06"
+
+   Valor de Códigos Catálogo N° 06
+   cbc: CompanyID
+
+Código                       Concepto
+
+6       REG. UNICO DE CONTRIBUYENTES
+
+    cac:Party. Tener en cuenta el punto anterior.
+
+Boleta Electrónica                                                       ~ 29 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  16 Código del domicilio fiscal o de local anexo del emisor.
+
+   Corresponde informar el código del establecimiento donde se esta realizando la venta de los
+   bienes.
+   Ubicación
+
+       //Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cb
+       c:AddressTypeCode
+
+   Ejemplo
+
+               <cac:AccountingSupplierParty>
+                          ...
+                               <cac:Party>
+                               ...
+                                     <cac:PartyTaxScheme>
+                                         ...
+                                         <cac:RegistrationAddress>
+                                                <cbc:AddressTypeCode>0011</cbc:AddressTypeCode>
+                                         </cac:RegistrationAddress>
+                                        <cac:TaxScheme>
+                                                <cbc:ID>-</cbc:ID>
+                                        </cac:TaxScheme>
+                                         ...
+                                     </cac:PartyTaxScheme>
+                               </cac:Party>
+
+             </cac:AccountingSupplierParty>
+
+   Descripción UBL
+
+   cac:AddressTypeCode. Código de cuatro dígitos asignado por SUNAT, que identifica al
+
+   establecimiento anexo. Dicho código se genera al momento la respectiva comunicación del
+
+   establecimiento. Tratándose del domicilio fiscal y en el caso de no poder determinar el lugar de
+
+   la venta, informar "0000".
+
+  17 Apellidos y nombres o denominación o razón social del adquirente o
+  usuario.
+
+   Obligatorio. Corresponde a los apellidos y nombres o denominación o razón social del
+
+   adquirente o usuario.
+
+   Ubicación
+   /Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:RegistrationName
+
+   Ejemplo
+
+               <cac:AccountingCustomerParty>
+                     ...
+                     <cac:Party>
+                       <cac:PartyTaxScheme>
+                            <cbc:RegistrationName><![CDATA[PÁZOS ATOCHE LUANA]]></cbc:RegistrationName>
+                       </cac:PartyTaxScheme>
+                      </cac:Party>
+
+                </cac:AccountingCustomerParty>
+
+   Descripción UBL
+
+   cbc:RegistrationName
+   Se usará para indicar el nombre o razón social, según fuera el caso del cliente.
+
+Boleta Electrónica  ~ 30 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  18 Tipo y número de documento de identidad del adquirente o usuario.
+
+Obligatorio. El tipo de documento será RUC, salvo en operaciones de exportación en cuyo
+caso la boleta es emitida a un sujeto no domiciliado y únicamente deberá consignarse el(los)
+nombre(s) y apellido(s), denominación o razón social del adquirente o usuario.
+
+Para definir el tipo de documento de identidad, se tomará en consideración el Catálogo N°
+06 del anexo N° 8: "Códigos de Tipos de Documentos de Identidad". Tratándose de
+operaciones de exportación el código a utilizar será "-".
+
+Ubicación
+
+     /Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID
+    @schemeID @schemeName @schemeAgencyName @schemeURI
+
+Ejemplo
+
+                 <cac:AccountingCustomerParty>
+                      <cac:Party>
+                           <cac:PartyTaxScheme>
+                                 <cbc:RegistrationName><![CDATA[PAZOS ATOCHE LUANA]]></cbc:RegistrationName>
+                                 <cbc:CompanyID schemeID="6" schemeName="SUNAT:Identificador de Documento de
+                                 Identidad" schemeAgencyName="PE:SUNAT" schemeURI="
+                                 urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">46237547</cbc:CompanyID>
+                                 <cac:TaxScheme>
+                                    <cbc:ID>-</cbc:ID>
+                                 </cac:TaxScheme>
+                           </cac:PartyTaxScheme>
+                      </cac:Party>
+
+         </cac:AccountingCustomerParty>
+
+Descripción UBL
+
+cac: AccountingCustomerParty
+ Estructura de datos del clienter. Tipo complejo que a su vez contiene un elemento Party que
+ se especificará más adelante.
+
+    cbc:RegistrationName. Obligatorio. Nombre o denominación o razón social del
+             cliente.
+
+    cbc:CompanyID. Obligatorio. Identificación del cliente, deberá de indicarse el
+             documento de identidad.
+
+   Atributos
+
+schemeName          "SUNAT:Identificador de Documento de Identidad"
+
+schemeAgencyName "PE:SUNAT"
+
+schemeURI           "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06"
+
+   Valor de Códigos Catálogo N° 06
+
+   cbc: CompanyID
+
+Código                           Concepto
+
+0       DOC.TRIB.NO.DOM.SIN.RUC
+
+1       DOC. NACIONAL DE IDENTIDAD
+
+4       CARNET DE EXTRANJERIA
+
+6       REG. UNICO DE CONTRIBUYENTES
+
+Boleta Electrónica                                                                    ~ 31 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+Código               Concepto
+
+7         PASAPORTE
+
+A         CED. DIPLOMATICA DE IDENTIDAD
+
+B         DOC.IDENT.PAIS.RESIDENCIA-NO.D
+
+C         Tax Identification Number - TIN ­ Doc Trib PP.NN
+
+D         Identification Number - IN ­ Doc Trib PP. JJ
+
+    cac:Party. Tener en cuenta el punto anterior en relación a este elemento.
+
+19 Descuento Global
+
+Este elemento es distinto al elemento Total Descuentos definido en el punto 38.
+
+Su propósito es permitir consignar en el comprobante de pago, un descuento a nivel global o
+total. Este campo no debe ser usado para contener la suma de los descuentos de línea o ítem.
+
+Ubicación
+
+    //Invoice/cac:AllowanceCharge
+
+Ejemplo
+
+           <cac:AllowanceCharge>
+             <cbc:ChargeIndicator>False</cbc:ChargeIndicator>
+             <cbc:AllowanceChargeReasonCode>00</cbc:AllowanceChargeReasonCode>
+             <cbc:MultiplierFactorNumeric>0.10</cbc:MultiplierFactorNumeric>
+             <cbc:Amount currencyID="PEN">60.00</cbc:Amount>
+             <cbc:BaseAmount currencyID="PEN">1439.48</cbc:BaseAmount>
+
+         </cac:AllowanceCharge>
+
+Descripción UBL
+
+No.       53                                                  Charge Indicator
+          Códigos de cargos o descuentos                            "false"
+Catálogo
+  Código                                Descripción
+    00
+          OTROS DESCUENTOS
+
+cbc:ChargeIndicator
+
+Dado que no es un cargo, se debe asignar indicador "false".
+cbc:AllowanceChargeReasonCode
+
+Se debe considerar el código 00 de acuerdo al catálogo N° 53.
+cbc:MultiplierFactorNumeric
+
+En este elemento se especifica el porcentaje que corresponde del descuento global aplicado.
+Se expresa en números decimales por ejemplo 5% será 0.05.
+cbc:Amount
+
+Este campo representa el importe del descuento global
+cbc:BaseAmount
+
+A través de este campo se debe indicar el importe sobre el cual se está aplicando el
+descuento global.
+
+Boleta Electrónica                                                             ~ 32 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  20 Monto Total de Impuestos.
+
+   Corresponde al importe total de impuestos ISC, IGV e IVAP de Corresponder.
+
+   Ubicación
+       //Invoice/cac:TaxTotal/cbc:TaxAmount
+
+   Ejemplo
+
+                     <cac:TaxTotal>
+                          <cbc:TaxAmount currencyID="PEN">59210.65</cbc:TaxAmount>
+                          ...
+
+                     </cac:TaxTotal>
+
+   Descripción UBL
+   cbc:TaxAmount
+
+   Este campo se consigna dentro de un elemento complejo cac:TaxTotal. Se deberá colocar la
+   sumatoria total de los impuestos.
+
+  21 Sumatoria ISC.
+
+   Corresponde al ISC Total de la boleta. La sumatoria no debe contener el ISC que corresponde
+   a las transferencias de bienes o servicios prestados a título gratuito comprendidos en la boleta y
+   que estuviesen gravados con el ISC.
+
+   Ubicación
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount @currencyID
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+       @schemeAgencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode
+
+   Ejemplo
+
+                     <cac:TaxTotal>
+                          ...
+                          <cac:TaxSubtotal>
+                               <cbc:TaxableAmount currencyID="PEN">6450.00</cbc:TaxableAmount>
+                               <cbc:TaxAmount currencyID="PEN">1096.50</cbc:TaxAmount>
+                               <cac:TaxCategory>
+                                     <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                     schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                     <cac:TaxScheme>
+                                          <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">2000</cbc:ID>
+                                          <cbc:Name> ISC</cbc:Name>
+                                          <cbc:TaxTypeCode>EXC</cbc:TaxTypeCode>
+                                     </cac:TaxScheme>
+                               </cac:TaxCategory>
+                          </cac:TaxSubtotal>
+                          ...
+
+                    </cac:TaxTotal>
+
+Boleta Electrónica  ~ 33 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+Descripción UBL
+cac:TaxSubTotal
+Para hacer uso de este elemento, es necesario consignar el monto base sobre el cual se está
+aplicando el impuesto informado, esto se consigna en el elemento cbc:TaxableAmount. Así
+mismo, el importe del ISC se coloca en el elemento cbc:TaxAmount.
+cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeName          Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+
+   Valor de Códigos cbc:ID Catálogo N° 05
+
+Código                   Descripción
+
+S         ISC
+
+cac:TaxScheme
+Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5, que para el
+caso de ISC es el código 2000 y a los siguientes atributos:
+Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeAgencyID      "6"
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: ISC (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando se encuentra inafecta, el valor de acuerdo Catálogo N° 5 es: EXC.
+
+22 Sumatoria IGV.
+
+Corresponde al IGV Total de la boleta. Esta asociada estrechamente con el siguiente numeral.
+La sumatoria no debe contener el IGV que corresponde a las transferencias de bienes o
+servicios prestados a título gratuito comprendidos en la boleta y que estuviesen gravados con el
+IGV.
+El IGV = 18% de la suma: [Total valor de venta operaciones gravadas] + [Sumatoria ISC].
+
+Ubicación
+    //Invoice/cac:TaxTotal/cbc:TaxAmount
+
+Boleta Electrónica                                                ~ 34 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ejemplo
+
+                     <cac:TaxTotal>
+                          <cac:TaxSubtotal>
+                          ...
+                          <cbc:TaxAmount currencyID="PEN">59210.65</cbc:TaxAmount>
+                          ...
+                          <cac:TaxSubtotal>
+
+                     </cac:TaxTotal>
+
+Descripción UBL
+cbc:TaxAmount
+Este campo se consigna dentro de un elemento complejo cac:TaxSubTotal. Se deberá
+colocar la sumatoria total del IGV en el elemento cbc:TaxAmount con su respectivo atributo
+(@currencyID) de indicador de moneda. La identificación del Impuesto se realiza con las
+especificaciones del siguiente numeral.
+
+23 Total valor de venta - operaciones gravadas.
+
+Este elemento es usado solo si al menos una línea de ítem está gravada con el IGV.
+Contiene a la sumatoria de los valores de venta gravados por ítem (ver definición de valor
+de venta en punto 35) y la deducción de descuentos globales si lo hubiere. El total valor de
+venta no incluye IGV, ISC, cargos y otros Tributos si los hubiera.
+
+La sumatoria tampoco debe contener el valor de venta de las transferencias de bienes o
+servicios prestados a título gratuito comprendidos en la boleta y que estuviesen gravados con
+el IGV.
+
+Ubicación
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount @currencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+
+    @schemeAgencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTyp eCode
+
+Ejemplo
+
+                 <cac:TaxTotal>
+                      ...
+                      <cac:TaxSubtotal>
+                           <cbc:TaxableAmount currencyID="PEN">8560.00</cbc:TaxableAmount>
+                           <cbc:TaxAmount currencyID="PEN">1540.80</cbc:TaxAmount>
+                           <cac:TaxCategory>
+                                 <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                 schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                 <cac:TaxScheme>
+                                      <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">1000</cbc:ID>
+                                      <cbc:Name> IGV</cbc:Name>
+                                      <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+                                 </cac:TaxScheme>
+                           </cac:TaxCategory>
+                      </cac:TaxSubtotal>
+                      ...
+
+                </cac:TaxTotal>
+
+Boleta Electrónica                                                                  ~ 35 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Descripción UBL
+   cac:TaxSubTotal
+   Para hacer uso de este elemento, es necesario consignar el monto base sobre el cual se está
+   aplicando el impuesto informado, esto se consigna en el elemento cbc:TaxableAmount. Así
+   mismo, el importe del IGV se coloca en el elemento cbc:TaxAmount.
+
+cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeName          Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+
+   Valor de Códigos cbc:ID Catálogo N° 05
+
+Código              Descripción
+
+S         IGV
+
+cac:TaxScheme
+Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5, que para el
+caso de IGV es el código 1000 y a los siguientes atributos:
+Atributos
+
+schemeID            "UN/ECE 5305"
+schemeAgencyID      "6"
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: IGV (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando se encuentra inafecta, el valor de acuerdo Catálogo N° 5 es: VAT.
+
+24 Total valor de venta - operaciones inafectas.
+
+Este elemento es usado solo si al menos una línea de ítem se encuentra inafecta al IGV.
+Contiene a la sumatoria de valor de venta por item inafectos, y la deducción de descuentos
+globales si los hubiere (ver definición de valor de venta x ítem en punto 35). El valor de
+venta no incluye ISC, cargos u otros tributos si los hubiera. La sumatoria tampoco debe
+contener el valor de venta de las transferencias de bienes o servicios prestados a título
+gratuito comprendidos en la boleta y que estuviesen inafectos al IGV.
+
+Boleta Electrónica                                                ~ 36 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ubicación
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount @currencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+
+       @schemeAgencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode
+
+   Ejemplo
+
+                     <cac:TaxTotal>
+                     ...
+
+                          <cac:TaxSubtotal>
+                               <cbc:TaxableAmount currencyID="PEN">320.00</cbc:TaxableAmount>
+                               <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+                               <cac:TaxCategory>
+                                     <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                     schemeAgencyName="United Nations Economic Commission for Europe">O</cbc:ID>
+                                     <cac:TaxScheme>
+                                          <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9998</cbc:ID>
+                                          <cbc:Name> INAFECTO</cbc:Name>
+                                          <cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>
+                                     </cac:TaxScheme>
+                               </cac:TaxCategory>
+
+                          </cac:TaxSubtotal>
+                          ...
+                    </cac:TaxTotal>
+
+Descripción UBL
+
+cac:TaxSubTotal
+Para hacer uso de este elemento, es necesario consignar el monto que se está informando
+(cbc:TaxableAmount) con su respectivo atributo de tipo de moneda que le corresponda
+(@currencyID). Ahora bien, dado que estamos ante operaciones inafectas del impuesto
+general a las ventas el elemento cbc:TaxAmount irá con 0.00 y el atributo @currencyID con el
+valor "PEN".
+
+cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeName          Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+       Valor de Códigos cbc:ID Catálogo N° 05
+
+Código              Descripción
+
+O         Inafecto
+
+Boleta Electrónica                                                ~ 37 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+cac:TaxScheme
+Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5, que para el
+caso de operaciones inafectas es el código 9998 y a los siguientes atributos:
+Atributos
+
+schemeID            "UN/ECE 5305"
+schemeAgencyID      "6"
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: INAFECTO (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando se encuentra inafecta, el valor de acuerdo Catálogo N° 5 es: FRE.
+
+25 Total valor de venta - operaciones exoneradas.
+
+Este elemento es usado solo si al menos una línea de ítem se encuentra exonerada al IGV.
+Contiene a la sumatoria de valor de venta por ítem exonerados por item (ver definición de
+valor de venta x ítem en punto 35) y la deducción de descuentos globales si lo hubiere. El
+valor de venta no incluye ISC, cargos u otros Tributos si los hubiera. La sumatoria tampoco
+debe contener el valor de venta de las transferencias de bienes o servicios prestados a título
+gratuito comprendidos en la boleta y que estuviesen exonerados del IGV.
+
+Ubicación
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount @currencyID
+
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+@schemeAgencyID
+
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode
+
+Ejemplo
+
+                <cac:TaxTotal>
+                      <cac:TaxSubtotal>
+                           <cbc:TaxableAmount currencyID="PEN">8560.00</cbc:TaxableAmount>
+                           <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+                           <cac:TaxCategory>
+                                <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                schemeAgencyName="United Nations Economic Commission for Europe">E</cbc:ID>
+                                <cac:TaxScheme>
+                                      <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9997</cbc:ID>
+                                      <cbc:Name> EXONERADO</cbc:Name>
+                                      <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+                                </cac:TaxScheme>
+                           </cac:TaxCategory>
+                      </cac:TaxSubtotal>
+
+                </cac:TaxTotal>
+
+Boleta Electrónica                                                                    ~ 38 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+Descripción UBL
+cac:TaxSubTotal
+Para hacer uso de este elemento, es necesario consignar el monto que se está informando
+(cbc:TaxableAmount) con su respectivo atributo de tipo de moneda que le corresponda
+(@currencyID). Ahora bien, dado que estamos ante operaciones exoneradas del impuesto
+general a las ventas el elemento cbc:TaxAmount irá con 0.00 y el atributo @currencyID con el
+valor "PEN".
+cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID             "UN/ECE 5305"
+
+schemeName           Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+
+   Valor de Códigos cbc:ID Catálogo N° 05
+
+Código                    Descripción
+
+E         Exonerado
+
+cac:TaxScheme
+Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5, que para el
+caso de operaciones exoneradas es el código 9997 y a los siguientes atributos:
+Atributos
+
+schemeID             "UN/ECE 5305"
+
+schemeAgencyID       "6"
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: EXONERADO (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando se encuentra exonerado, el valor de acuerdo Catálogo N° 5 es: VAT.
+
+26 Total Valor de Venta de Operaciones gratuitas.
+
+Este elemento, se utilizará cuando exista transferencia de bienes o de servicios que se realice
+gratuitamente. Representa la sumatoria de los ítems, que correspondan a operaciones
+gratuitas, identificados con el elemento o tag descrito en el punto 35.
+
+Es decir, además del tag o campo indicado en el punto 35, se deberá consignar el Total Valor
+de venta de las operaciones gratuitas.
+
+Boleta Electrónica                                                ~ 39 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ubicación
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc: TaxableAmount @currencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+       @schemeAgencyID
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+       /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode
+
+   Ejemplo
+
+                     <cac:TaxTotal>
+                          <cac:TaxSubtotal>
+                               <cbc:TaxableAmount currencyID="PEN">5620.00</cbc:TaxableAmount>
+                               <cbc:TaxAmount currencyID="PEN">1011.60</cbc:TaxAmount>
+                               <cac:TaxCategory>
+                                     <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                     schemeAgencyName="United Nations Economic Commission for Europe">Z</cbc:ID>
+                                     <cac:TaxScheme>
+                                          <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9996</cbc:ID>
+                                          <cbc:Name>GRATUITO</cbc:Name>
+                                          <cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>
+                                     </cac:TaxScheme>
+                               </cac:TaxCategory>
+                          </cac:TaxSubtotal>
+
+                    </cac:TaxTotal>
+
+   Descripción UBL
+   cac:TaxSubTotal
+   Para hacer uso de este elemento, es necesario consignar el monto que se está informando
+   (cbc:TaxableAmount) con su respectivo atributo de tipo de moneda que le corresponda
+   (@currencyID). Ahora bien, si la operación está sujeta al IGV se deberá colocar el importe
+   en el elemento cbc:TaxAmount, en caso contrario irá con 0.00 y el atributo @currencyID con
+   el valor "PEN".
+
+cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeName          Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+
+   Valor de Códigos cbc:ID Catálogo N° 05
+
+Código              Descripción
+
+Z         Gratuito
+
+Boleta Electrónica                                                ~ 40 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   cac:TaxScheme
+   Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+   el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5, que para el
+   caso de operaciones gratuitas es el código 9996 y a los siguientes atributos:
+
+Atributos           "UN/ECE 5305"
+schemeID            "6"
+schemeAgencyID
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: GRATUITO (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando operaciones gratuitas, el valor de acuerdo Catálogo N° 5 es: FRE.
+
+27 Sumatoria otros tributos.
+
+Corresponde al total de los otros tributos, distintos al IGV o ISC.
+Dichos importes formarán parte de este elemento cuando conforme a la regulación pertinente
+correspondan consignarse en el comprobante de pago. No forman parte del(os) valor(es) de
+venta señalados anterioremente.
+
+Ubicación
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount @currencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cbc:TaxAmount @currencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID @schemeID
+
+    @schemeAgencyID
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name
+
+    /Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode
+
+Ejemplo
+
+                <cac:TaxTotal>
+                ...
+
+                      <cac:TaxSubtotal>
+                           <cbc:TaxableAmount currencyID="PEN">5890.00</cbc:TaxableAmount>
+                           <cbc:TaxAmount currencyID="PEN">445.00</cbc:TaxAmount>
+                           <cac:TaxCategory>
+                                <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+                                schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                <cac:TaxScheme>
+                                      <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9999</cbc:ID>
+                                      <cbc:Name>OTROS CONCEPTOS DE PAGO</cbc:Name>
+                                      <cbc:TaxTypeCode>OTH</cbc:TaxTypeCode>
+                                </cac:TaxScheme>
+                           </cac:TaxCategory>
+
+                      </cac:TaxSubtotal>
+                      ...
+                </cac:TaxTotal>
+
+Boleta Electrónica                 ~ 41 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Descripción UBL
+   cbc:TaxSubTotal
+   Para hacer uso de este elemento, es necesario consignar el monto base sobre el cual se está
+   aplicando los impuestos que se están informando, esto se consigna en el elemento
+   cbc:TaxableAmount. Así mismo, el importe de los referidos tributos se colocan en el elemento
+   cbc:TaxAmount.
+
+Cac:TaxCategory
+Así mismo, se hace necesario especificar la categoría del impuesto por el cual se está
+reportando esto se realiza con el elemento cbc:ID y los atributos:
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeName          Tax Category Identifier
+
+schemeAgencyName "United Nations Economic Commission for Europe"
+
+   Valor de Códigos cbc:ID Catálogo N° 05
+
+Código                             Descripción
+
+S         Otros conceptos de pago
+
+cac:TaxScheme
+Por otro lado, es importante indicar la clase de impuesto que se está informando para ello con
+el elemento cbc:ID reportaremos de acuerdo a la información del Catálogo N° 5 y a los
+siguientes atributos.
+
+   Atributos
+
+schemeID            "UN/ECE 5305"
+
+schemeAgencyID      "6"
+
+    cbc:Name
+Este elemento se utiliza para expresar en letras que la información que se está reportando se
+encuentra: OTROS CONCEPTOS DE PAGO (Se sigue el formato del Catálogo N° 5).
+
+    cbc:TaxTypeCode
+Este elemento se utiliza para expresar a través de un código que la información que se está
+reportando se encuentra exonerado, el valor de acuerdo Catálogo N° 5 es: 9999.
+
+28 Total Valor de Venta.
+
+A través de este elemento se debe indicar el valor de venta total de la operación. Es decir el
+importe total de la venta sin considerar los descuentos, impuestos u otros tributos a que se
+refiere el numeral anterior, pero que incluye cualquier monto de redondeo aplicable.
+
+Boleta Electrónica                                                ~ 42 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ubicación
+       //Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+
+   Ejemplo
+
+               <cac:LegalMonetaryTotal>
+                                     <cbc:LineExtensionAmount currencyID="PEN">1439.48</cbc:LineExtensionAmount>
+
+             </cac:LegalMonetaryTotal>
+
+   Descripción UBL
+   cbc:LineExtensionAmount
+   Se informa el valor de la venta total con su respectivo atributo de tipo de moneda que le
+   corresponda (@currencyID). Este elemento se descibe en el numeral 10.
+
+  29 Total Precio de Venta.
+
+   A través de este elemento se debe indicar el valor de venta total de la operación incluido los
+   impuestos.
+
+   Ubicación
+       //Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount
+
+   Ejemplo
+
+               <cac:LegalMonetaryTotal>
+                                     <cbc:TaxInclusiveAmount currencyID="PEN">9420.50</cbc:TaxInclusiveAmount>
+
+             </cac:LegalMonetaryTotal>
+
+   Descripción UBL
+   cbc:TaxInclusiveAmount
+   Se informa el valor de la venta total incluido impuestos con su respectivo atributo de tipo de
+   moneda que le corresponda (@currencyID). Este elemento se descibe en el numeral 10.
+
+  30 Total de Descuentos.
+
+   A través de este elemento se debe indicar el valor total de los descuentos realizados de ser el
+   caso.
+
+   Este elemento es distinto al elemento Descuentos Globales definido en el punto 19. Su
+   propósito es permitir consignar en el comprobante de pago:
+
+              la sumatoria de los descuentos de cada línea (descuentos por ítem), o
+              la sumatoria de los descuentos de línea (ítem) + descuentos globales
+
+   Ubicación
+       //Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount
+
+   Ejemplo
+
+               <cac:LegalMonetaryTotal>
+                                     <cbc:AllowanceTotalAmount currencyID="PEN">9420.50</cbc:AllowanceTotalAmount>
+
+             </cac:LegalMonetaryTotal>
+
+Boleta Electrónica  ~ 43 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Descripción UBL
+   cbc:AllowanceTotalAmount
+   Para hacer uso de este elemento, es necesario consignar el valor del monto con su
+   respectivo atributo de tipo de moneda (@ currencyID). Revisar punto 10.
+
+  31 Sumatoria otros Cargos.
+
+   Corresponde al total de otros cargos cobrados al adquirente o usuario y que no forman parte
+   de la operación que se boleta, es decir no forman parte del(os) valor(es) de ventas señaladas
+   anteriormente, pero sí forman parte del importe total de la Venta (Ejemplo: propinas,
+   garantías para devolución de envases, etc.)
+
+   Ubicación
+       //Invoice/cac:LegalMonetaryTotal/cbc:ChargeTotalAmount
+
+   Ejemplo
+
+               <cac:LegalMonetaryTotal>
+                                     ...
+                                     <cbc:ChargeTotalAmount currencyID="PEN">9420.50</cbc:ChargeTotalAmount>
+                                     ...
+
+             </cac:LegalMonetaryTotal>
+
+Descripción UBL
+cbc:ChargeTotal Amount
+Este campo se consigna el importe total de otros cargos.
+
+32 Importe total de la venta, de la cesión en uso o del servicio prestado.
+
+Corresponde al importe total de la venta, de la cesión en uso o del servicio prestado. Es la
+sumatoria de los elementos 37.
+
+Ubicación
+    //Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount
+
+Ejemplo
+
+         <cac:LegalMonetaryTotal>
+               ...
+               <cbc:PayableAmount currencyID="PEN">45.34</cbc:PayableAmount>
+
+         </cac:LegalMonetaryTotal>
+
+Descripción UBL                                                     elemento  complejo
+cbc:PayableAmount
+El campo cbc:PayableAmount se consigna dentro del
+cac:LegalMonetaryTotal, cuyo detalle se describe en el numeral 37.
+
+Boleta Electrónica                                                            ~ 44 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+  33 Número de orden del Ítem.
+
+   Obligatorio. Número de la línea que es secuencial y se encuentra en cada línea que
+   contiene la boleta.
+
+   Ubicación
+       //Invoice/cac:InvoiceLine/cbc:ID
+
+   Ejemplo
+
+               <cac:InvoiceLine>
+                          <cbc:ID>1</cbc:ID>
+
+                   ....
+                   </cac:InvoiceLine>
+
+   Descripción UBL
+
+   cac:InvoiceLine
+   Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine, se detalle en
+   forma numérica en el orden que corresponde al ítem a informar.
+
+34 Cantidad de unidades por ítem.
+
+Obligatorio Se consignará la cantidad de productos vendidos o servicios prestados en la
+operación. En el caso de retiro de bienes, se consignará la cantidad de bienes transferidos a
+titulo gratuito.
+
+Cuando se trate de servicios o cualquier otra operación no cuantificable se deberá consignar
+el valor uno (1).
+
+Ubicación
+
+    /Invoice/cac:InvoiceLine/cbc:InvoicedQuantity @unitCode @unitCodeListID
+    @unitCodeListAgencyName
+
+Ejemplo
+
+                <cbc:InvoicedQuantity unitCode="CS" unitCodeListID="UN/ECE rec 20"
+                unitCodeListAgencyName="United Nations Economic Commission for
+                Europe">50</cbc:InvoicedQuantity>
+
+Descripción UBL
+cbc:InvoicedQuantity
+Este campo se encuentra ubicado en el elemento complejo cac:InvoiceLine, aquí se detalla
+la cantidad de unidades de acuerdo a la unidad de medida que se esté informando.
+
+Atributos
+
+unitCode            Catálogo N° 3
+
+unitCodeListID      "UN/ECE rec 20"
+
+unitCodeListAgencyName "United Nations Economic Commission for Europe"
+
+Boleta Electrónica                                                                  ~ 45 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+    Valor de Códigos cbc:ID Catálogo N° 03*
+
+Código                      Descripción
+
+NIU UNIDAD (BIENES)
+
+ZZ      UNIDAD (SERVICIOS)
+
+*El resto de códigos se pueden verificar en el anexo II del siguiente link: Clic Aquí.
+
+35 Valor de venta por ítem
+
+Obligatorio. Este elemento es el producto de la cantidad por el valor unitario (Q x Valor
+Unitario) y la deducción de los descuentos aplicados a dicho ítem (de existir). Este importe
+no incluye los tributos (IGV, ISC y otros Tributos), los descuentos globales o cargos.
+
+Ubicación
+    //Invoice/cac:InvoiceLine/cbc:LineExtensionAmount @currencyID
+
+Ejemplo
+
+           <cac:InvoiceLine>
+           ...
+           <cbc:LineExtensionAmount currencyID="PEN">172890.0</cbc:LineExtensionAmount>
+           ...
+           </cac:InvoiceLine>
+
+Descripción UBL
+
+cbc:LineExtensionAmount
+Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine. Su atributo
+@currencyID se encuentra especificado en el punto 10.
+
+36 Precio de venta unitario por ítem y código.
+
+Obligatorio.Dentro del ámbito tributario, es el monto correspondiente al precio unitario del
+
+bien vendido o servicio vendido. Este monto es la suma total que queda obligado a pagar el
+adquirente o usuario por cada bien o servicio. Esto incluye los tributos (IGV, ISC y otros
+Tributos) y la deducción de descuentos por ítem. Para identificar este monto se debe
+consignar el código "01" (Catálogo No. 16).
+
+Ubicación
+
+    //Invoice/cac:InvoiceLine/cac:PricingReference/cac:AlternativeConditionPrice @currencyID
+
+Ejemplo
+
+           <cac:InvoiceLine>
+                           ...
+                           <cac:PricingReference>
+                                <cac:AlternativeConditionPrice>
+                                      <cbc:PriceAmount currencyID="PEN">18.75</cbc:PriceAmount>
+                                      <cbc:PriceTypeCode
+                                      listName="SUNAT:Indicador de Tipo de Precio"
+                                      listAgencyName="PE:SUNAT"
+                                      listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+                                </cac:AlternativeConditionPrice>
+                            </cac:PricingReference>
+                            ...
+
+           </cac:InvoiceLine>
+
+Boleta Electrónica                                                                      ~ 46 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Descripción UBL
+    cac:PricingReference
+   Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine. Su atributo
+   @currencyID se encuentra especificado en el punto 10.
+   cac:PriceTypeCode
+   Este elemento se encuentra ubicado en el elemento complejo cac:AlternativeConditionPrice y
+   indica si estamos ante una operación onerosa o no.
+
+       Atributos    "SUNAT:Indicador de Tipo de Precio"
+listName            "PE:SUNAT"
+listAgencyName      "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16"
+listURI
+
+    Valor de Códigos cbc:ID Catálogo N° 16
+
+Código              Descripción
+
+01      Precio unitario (incluye el IGV)
+
+02      Valor referencial unitario en operaciones no onerosas
+
+37 Valor referencial unitario por ítem en operaciones no onerosas y código
+
+Cuando la transferencia de bienes o de servicios se efectúe gratuitamente, se consignará el
+
+importe del valor de venta unitario que hubiera correspondido a dicho bien o servicio, en
+
+operaciones onerosas con terceros. En su defecto se aplicará el valor de mercado.
+
+Para identificar este valor, se debe de consignar el código "02" (incluido en el Catálogo No.
+
+16).
+
+Ubicación
+
+    //Invoice/cac:InvoiceLine/cac:PricingReference/cac:AlternativeConditionPrice
+
+Ejemplo
+
+           <cac:InvoiceLine>
+                           ...
+                           <cac:PricingReference>
+                                <cac:AlternativeConditionPrice>
+                                      <cbc:PriceAmount currencyID="PEN">18.75</cbc:PriceAmount>
+                                      <cbc:PriceTypeCode listName="SUNAT:Indicador de Tipo de Precio"
+                                      listAgencyName="PE:SUNAT"
+                                      listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">02</cbc:PriceTypeCode>
+                                </cac:AlternativeConditionPrice>
+                            </cac:PricingReference>
+                            ...
+
+           <cac:InvoiceLine>
+
+Boleta Electrónica                                                       ~ 47 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Descripción UBL
+
+   cac:PricingReference
+
+   Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine. Su atributo
+
+   @currencyID se encuentra especificado en el punto 10.
+   El elemento cbc: PriceTypeCode se detalla en el numeral anterior.
+
+  38 Descuentos por ítem
+
+   Su propósito es permitir consignar en el comprobante de pago, un descuento a nivel de línea
+   o ítem.
+
+   Ubicación
+       //Invoice/cac:InvoiceLine/cac:Allowancecharge
+
+   Descripción UBL
+
+    AllowanceCharge: Opcional. Descuentos aplicados a los ítems boleteados en la línea.
+    ChargeIndicator: Obligatorio. Si es descuento (False).
+    Amount: Monto del descuento del ítem .Se debe especificar la moneda en la que se emite el
+
+       descuento, para ello se utiliza el atributo currencyID.
+
+   Ejemplo
+
+            <cac:InvoiceLine>
+            ....
+
+                       <cac:AllowanceCharge>
+                            <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+                            <cbc:Amount currencyID="PEN">71.97</cbc:Amount>
+
+                       </cac:AllowanceCharge>
+           ...
+          </cac:InvoiceLine>
+
+  39 Cargos por ítem
+
+   Su propósito es permitir consignar en el comprobante de pago, un cargo a nivel de línea o
+   ítem.
+
+   Ubicación
+       //Invoice/cac:InvoiceLine/cac:Allowancecharge
+
+   Descripción UBL
+
+     AllowanceCharge: Opcional. Cargos aplicados a los ítems boleteados en la línea.
+          
+
+    ChargeIndicator: Obligatorio. Si es cargo ("true").
+    Amount: Monto del descuento del ítem .Se debe especificar la moneda en la que se emite el
+
+       descuento, para ello se utiliza el atributo currencyID.
+
+Boleta Electrónica  ~ 48 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ejemplo
+
+            <cac:InvoiceLine>
+            ....
+
+                       <cac:AllowanceCharge>
+                            <cbc:ChargeIndicator>true</cbc:ChargeIndicator>
+                            <cbc:Amount currencyID="PEN">44.82</cbc:Amount>
+
+                       </cac:AllowanceCharge>
+           ...
+          </cac:InvoiceLine>
+
+40 Afectación al IGV por ítem.
+
+Obligatorio. Indica si el bien transferido, vendido o cedido en uso, servicio prestado u
+operación por la que se emite la boleta está gravada, exonerada o inafecta al IGV. Se
+utilizará el Catálogo N° 07: "Código tipo de afectación del IGV".
+
+                AFECTACIÓN                                   DESCRIPCIÓN
+Gravado - Operación
+Onerosa                     Indicador que la operación se encuentra dentro del ámbito de
+                            aplicación del impuesto.
+Gravado ­ Premio
+Gravado ­ Donación          Indicador de transferencia de bienes a terceros, que no son
+Gravado - Retiro            bienes producidos o comercializados por el transferente y
+                            que están destinados a promocionar o fidelizar un producto o
+Gravado - Publicidad        marca a través de sorteos, concursos, loterías, canjes.
+
+Gravado - Bonificaciones    Transferencias señaladas en el primer acápite del primer párrafo
+                            del inciso c) del Numeral 3 del Art. 2° del Reglamento de la Ley
+                            del IGV.
+                            La afectación al IGV corresponde cuando se ha sobrepasado el
+                            límite establecido en el cuarto acápite del segundo párrafo del
+                            Numeral 3 del Art. 2° del Reglamento de la Ley del IGV.
+
+                            Indicador de transferencia de bienes a terceros con un fin
+                            altruista.
+
+                            Indicador para todos aquellos retiros de bienes que no tengan
+                            una clasificación expresa en esta tabla, por los cuales existe
+                            obligación de emitir un comprobante de pago y que para efectos
+                            del IGV se consideran venta en atención a lo dispuesto en el
+                            Numeral 2 del Art. 3° del TUO de la Ley del IGV y el Numeral 3
+                            del Art. 2° del Reglamento de la Ley del IGV.
+
+                            Indicador de transferencia de bienes a clientes o potenciales
+                            clientes de bienes producidos o comercializados por el
+                            transferente, destinados a promocionar un producto o una
+                            marca a través de entregas de muestras, degustaciones.
+
+                            Transferencias señaladas en el primer acápite del primer párrafo
+                            del inciso c) del Numeral 3 del Art. 2° del Reglamento de la Ley
+                            del IGV.
+
+                            La afectación al IGV corresponde cuando se ha sobrepasado el
+                            límite establecido en el cuarto acápite del segundo párrafo del
+                            Numeral 3 del Art. 2° del Reglamento de la Ley del IGV.
+
+                            Indicador de transferencia de bienes a clientes y cuya entrega
+                            está directamente relacionado con la(s) compra(s), pues a
+                            diferencia de la publicidad, la emisión de boletas de estos retiros
+                            se encuentra en el mismo comprobante de pago de la venta.
+
+                            La afectación al IGV corresponde cuando se ha sobrepasado el
+                            límite establecido en el cuarto acápite del segundo párrafo del
+                            Numeral 3 del Art. 2° del Reglamento de la Ley del IGV.
+
+Boleta Electrónica                                                           ~ 49 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+                AFECTACIÓN                                    DESCRIPCIÓN
+
+Gravado - Entrega a          Identificación de aquellos bienes entregados a los trabajadores y
+trabajadores                 que son de libre disposición y no son necesarios para la
+                             prestación de sus servicios.
+Exonerado - Operación
+Onerosa                      Transferencias señaladas en el cuarto acápite del primer párrafo
+                             del inciso c) del Numeral 3 del Art. 2° del Reglamento de la Ley
+                             del IGV.
+
+                             Indicador general de la línea, tratándose de operaciones que se
+                             encuentran dentro del ámbito de aplicación del impuesto pero,
+                             de acuerdo a las normas vigentes, se excluyen del ámbito de
+                             aplicación en función a determinada(s) variable(s).
+
+Inafecto - Operación         Indicador general de la línea, tratándose de operaciones que no
+Onerosa                      se encuentran dentro del ámbito de aplicación del impuesto.
+Inafecto ­ Premio
+                             Indicador de transferencia de bienes a terceros, que no son
+Inafecto - Publicidad        bienes producidos o comercializados por el transferente y
+Inafecto - Bonificación      que están destinados a promocionar o fidelizar un producto o
+Inafecto - Retiro            marca a través de sorteos, concursos, loterías, canjes.
+
+                             Transferencias señaladas en el primer acápite del primer párrafo
+                             del inciso c) del Numeral 3 del Art. 2° del Reglamento
+                             de la Ley del IGV.
+
+                             Indicador de transferencia de bienes a clientes o potenciales
+                             clientes de bienes producidos o comercializados por el
+                             transferente, destinados a promocionar un producto o una
+                             marca a través de entregas de muestras, degustaciones.
+
+                             Transferencias señaladas en el primer acápite del primer párrafo
+                             del inciso c) del Numeral 3 del Art. 2° del Reglamento de la Ley
+                             del IGV.
+
+                             Indicador de transferencia de bienes a clientes y cuya entrega
+                             está directamente relacionado con la(s) compra(s)
+
+                             Indicador para todos aquellos retiros de bienes que no tengan
+                             una clasificación expresa en esta tabla, por los cuales existe
+                             obligación de emitir un comprobante de pago y que para efectos
+                             del IGV no se consideran venta en atención a lo dispuesto en el
+                             Numeral 2 del Art. 3° del TUO de la Ley del IGV y el Numeral 3
+                             del Art. 2° del Reglamento de la Ley del IGV.
+
+Inafecto - Muestras Médicas  Identificación de aquellos bienes entregados a título gratuito en
+                             calidad de muestras médicas, que no se consideran retiros
+Inafecto - Retiro por        conforme al Numeral 3 del Art. 2° del Reglamento de la Ley del
+Convenio Colectivo           IGV.
+
+Exportación                  Identificación de aquellos bienes que son entregados a los
+                             trabajadores pactados por Convenios Colectivos y que se
+                             consideran condición de trabajo y que son indispensables para
+                             que el trabajador pueda prestar sus servicios, bienes que no se
+                             consideran retiros conforme al Numeral 2 del Art. 3° del TUO
+                             de la Ley del IGV.
+
+                             Indicador general de la línea, para operaciones que no se
+                             encuentran afectas al impuesto al tratarse de transferencias
+                             que se realizan fuera del territorio nacional
+
+Boleta Electrónica                                            ~ 50 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Para el caso peruano los elementos para identificar al tributo contenido en:
+
+    .../cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/...
+   Adoptarán los valores "1000", "IGV" y "VAT" respectivamente.
+
+   Ubicación
+
+   //Invoice/cac:InvoiceLine/
+
+   /Invoice/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode
+
+   Ejemplo
+
+              <cac:InvoiceLine>
+                ...
+                 <cac:TaxTotal>
+                      <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                      <cac:TaxSubtotal>
+                            <cbc:TaxableAmount currencyID="PEN">1439.48</cbc:TaxableAmount>
+                            <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
+                            <cac:TaxCategory>
+                            <cbc:ID
+                            schemeID="UN/ECE 5305"
+                            schemeName="Tax Category Identifier"
+                            schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                 <cbc:Percent>18.00</cbc:Percent>
+                           <cbc:TaxExemptionReasonCode
+                           listAgencyName="PE:SUNAT"
+                           listName="SUNAT:Codigo de Tipo de Afectación del IGV"
+                           listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReason
+                           Code>
+                                 <cac:TaxScheme>
+                                      <cbc:ID>1000</cbc:ID>
+                                      <cbc:Name>IGV</cbc:Name>
+                                      <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+                                 </cac:TaxScheme>
+                            </cac:TaxCategory>
+                      </cac:TaxSubtotal>
+                 </cac:TaxTotal>
+                  ...
+
+              </cac:InvoiceLine>
+
+   Descripción UBL
+
+   cbc:TaxExemptionReasonCode
+
+   Este campo se consigna dentro de un elemento complejo cac:TaxTotal. Para hacer uso de
+
+   este elemento, es necesario además colocar datos que permitan identificar el tributo que se
+
+   está informando y el monto del tributo (cbc:TaxAmount), el cual es obligatorio de acuerdo al
+
+   estándar UBL. Además, se debe tomar en cuenta que el campo cbc:TaxAmount se consigna
+
+   a nivel del cac:TaxTotal y a nivel del cac:TaxSubtotal. En los dos casos los importes serán
+
+   iguales ya que corresponden a un mismo ítem.
+
+  41 Sistema de ISC por ítem
+
+   Opcional. Indica el tipo de sistema de cálculo del ISC, utilizado para determinar la base
+
+   imponible cuando el bien transferido o vendido esta gravado con el ISC. Se utilizará el
+
+   Catálogo No. 08: "Códigos de Tipos de Sistema de Cálculo del ISC".
+
+   Para el caso peruano los elementos para identificar al tributo contenido en:
+
+    .../cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/...
+
+   Adoptarán los valores "2000", "ISC" y "EXC" respectivamente.
+
+Boleta Electrónica  ~ 51 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+   Ubicación
+
+       //Invoice/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TierRange
+
+   Ejemplo
+
+                     <cac:InvoiceLine>
+                        ...
+                         <cac:TaxTotal>
+                              <cbc:TaxAmount currencyID="PEN">1750.52</cbc:TaxAmount>
+                              <cac:TaxSubtotal>
+                                   <cbc:TaxableAmount currencyID="PEN">8752.60</cbc:TaxableAmount>
+                                   <cbc:TaxAmount currencyID="PEN">1750.52</cbc:TaxAmount>
+                                   <cac:TaxCategory>
+                                   <cbc:ID
+                                   schemeID="UN/ECE 5305"
+                                   schemeName="Tax Category Identifier"
+                                   schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+                                         <cbc:Percent>20.00</cbc:Percent>
+                                   <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName=" SUNAT:Codigo
+                                   de Tipo de Afectación del IGV"
+                                   listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReason
+                                   Code>
+                                         <cbc:TierRange>01</cbc:TierRange>
+                                         <cac:TaxScheme>
+                                              <cbc:ID>2000</cbc:ID>
+                                              <cbc:Name>ISC</cbc:Name>
+                                              <cbc:TaxTypeCode>EXC</cbc:TaxTypeCode>
+                                         </cac:TaxScheme>
+                                   </cac:TaxCategory>
+                              </cac:TaxSubtotal>
+                         </cac:TaxTotal>
+                          ...
+
+                     </cac:InvoiceLine>
+
+Descripción UBL
+cbc:TierRange
+Este campo se consigna el código de tipo de Sistema de ISC Aplicado, puede tomar los
+siguientes valores:
+01- Sistema al valor (Apéndice IV, lit. A ­ T.U.O IGV e ISC)
+02- Aplicación del Monto Fijo (Apéndice IV, lit. B ­ T.U.O IGV e ISC)
+03- Sistema de Precios de Venta al Público (Apéndice IV, lit. C ­ T.U.O IGV e ISC)
+
+ IMPORTANTE
+
+ La boleta electrónica deberá tener información de los por lo menos uno de siguientes
+ campos definidos como opcionales: 18. Total valor de venta ­ operaciones gravadas, 19.
+ Total valor de venta ­ operaciones inafectas o 20. Total valor de vento - operaciones
+ exoneradas.
+
+42 Descripción detallada.
+
+Obligatorio. Descripción detallada del servicio prestado, bien vendido o cedido en uso,
+indicando el nombre y las características, tales como marca del bien vendido o cedido en
+uso.
+Otras consideraciones:
+ Se deberá colocar el número de serie y/o número de motor, si se trata de un bien
+
+    identificable, de corresponder, salvo que no fuera posible su consignación al momento de
+    la emisión del comprobante de pago.
+
+Boleta Electrónica  ~ 52 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+    Tratándose de la venta de medicamentos y/o insumos para tratamiento de enfermedades
+       oncológicas y del VIH/SIDA, se consignará adicionalmente la(s) partida(s) arancelaria(s)
+       correspondiente(s). En este casoel comprobante de pago no podrá incluir bienes que no
+       sean materia de dicho beneficio.
+
+    Si el emisor electrónico lleva por lo menos un Registro de Inventario Permanente en
+       Unidades Físicas, al amparo de las normas del Impuesto a la Renta, podrá consignar en
+       reemplazo de la descripción detallada, la descripción requerida por el Reglamento de
+       Comprobantes de Pago para las boletas, en la medida que añada el código que las
+       normas que regulan el llevado de libros y registros denominan como código de existencia.
+
+Ubicación
+    //Invoice/cac:InvoiceLine/cac:Item/cbc:Description
+
+Ejemplo
+
+                    <cac:Item>
+                         <cbc:Description><![CDATA[CAPTOPRIL 25mg X 30]]></cbc:Description>
+                          ...
+
+                    </cac:Item>
+
+Descripción UBL
+
+cbc:Description
+Este campo se encuentra ubicado en el elemento complejo cac:InvoiceLine, aquí se detalla
+en forma detallada la descripción del ítem que se está vendiendo.
+
+43 Código de producto del Ítem.
+
+Opcional. Código del producto de acuerdo al tipo de codificación interna que se utilice.
+
+Su uso será obligatorio si el emisor electrónico, opta por consignar este código, en reemplazo
+de la descripción detallada. Para tal efecto el código a usar será aquél, que las normas que
+regulan el llevado de libros y registros, denominan como código de existencia.
+
+Ubicación
+    //Invoice/cac:InvoiceLine/cac:Item/cac:SellersItemIdentification/cbc:ID
+
+Ejemplo
+
+         <cac:Item>
+              ...
+              <cac:SellersItemIdentification>
+                   <cbc:ID>Cap-258963</cbc:ID>
+              </cac:SellersItemIdentification>
+              ...
+
+         </cac:Item>
+
+Descripción UBL
+
+cac:SellersItemIdentification
+Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine.
+
+Boleta Electrónica                                                                           ~ 53 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+44 Código de producto SUNAT.
+
+Opcional. Código del producto de acuerdo al estándar internacional de la ONU denominado:
+United Nations Standard Products and Services Code - Código de productos y servicios
+estándar de las Naciones Unidas - UNSPSC v14_0801, a que hace referencia el catálogo N° 15
+del Anexo N° 8 de la Resolución de Superintendencia N° 097-2012/SUNAT y modificatorias.
+
+Ubicación
+    //Invoice/cac:InvoiceLine/cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode
+
+Ejemplo
+
+          <cac:Item>
+               ...
+                  <cac:CommodityClassification>
+                       <cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US" listName="Item
+                       Classification">51121703</cbc:ItemClassificationCode>
+                  </cac:CommodityClassification>
+               ...
+
+          </cac:Item>
+
+Descripción UBL
+
+cbc:ItemClassificationCode
+Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine.
+
+      Atributos
+
+listID              "UNSPSC"
+listAgencyName      "GS1 US"
+
+listName            "Item Classifi cation"
+
+Valor de Códigos cbc:ID Catálogo N° 25
+
+Código                        Descripción
+
+43233201 Software de Servicios de Autenticación
+
+El resto de códigos se pueden consultar en el siguiente link: Clic Aquí.
+
+45 Valor unitario por ítem.
+
+Obligatorio. Se consignará el importe correspondiente al valor o monto unitario del bien
+
+vendido, cedido o servicio prestado, indicado en una línea o ítem de la boleta. Este importe
+
+no incluye los tributos (IGV, ISC y otros Tributos) ni los cargos globales. Ubicación
+
+    //Invoice/cac:InvoiceLine/cac:Price/cbc:PriceAmount
+
+Ejemplo
+
+         <Invoice>
+         ...
+
+                      <cac:Price>
+                           <cbc:PriceAmount currencyID="PEN">678.0</cbc:PriceAmount>
+
+                      </cac:Price>
+         ...
+         </Invoice>
+
+Descripción UBL
+cbc:PriceAmount
+Este elemento se encuentra ubicado en el elemento complejo cac:InvoiceLine.
+
+Boleta Electrónica                                                                             ~ 54 ~
+ Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+B.2 Detalle de elementos complejos
+
+En esta sección se describe aquellos tag que por su complejidad requieren de una mayor
+explicación.
+
+B.2.1 Tag UBLExtension
+
+Uno o más <ext:UBLExtension> están contenidos dentro de un elemento
+<ext:UBLExtensions> descendiente directo del elemento raíz del documento. Estos
+elementos están disponibles en UBL 2.1 para la inclusión de datos no [UBL], como es nuestro
+caso.
+
+Se hará uso de este tipo de componente de extensión para especificar solamente la firma digital.
+
+   1. ext:UBLExtension/ext:ExtensionContent/ds:Signature
+
+    No es objeto de este informe especificar el tipo de firma que se utilizará en el contexto de la
+    boleta electrónica, sin embargo se sientan las bases para declarar un certificado y se tomará
+    como ejemplo una firma sencilla XMLdSig.
+
+    La firma digital será alojada dentro del elemento <ext:UBLExtension>
+
+      ExtensionContent. Dentro de éste elemento es donde se incluyen las firmas [XMLDSig]
+          de todos los firmantes del documento. Por tanto, en el documento únicamente habrá un
+          solo <ext:UBLExtension> para la inclusión de firmas.
+
+      La firma se realizará sobre el documento completo y podrá llevarse a cabo con un
+          componente propio o externo de firma de documentos XML. En cualquier caso la firma
+          satisfará como mínimo los requerimientos de "Firma Electrónica". Se deberá utilizar
+          [XMLDSig].
+
+      Se utilizará para firmar la clave privada de un certificado digital X509 válido no vencido. Se
+          firma todo el documento (nodo raíz). En esta implementación no podrán añadirse nuevos
+          datos al documento después de firmar, ni siquiera extensiones en el formato acordado,
+          puesto que la validación fallaría.
+
+      Puesto que una firma digital XML es un proceso matemático por el que los datos a firmar
+          se transforman siguiendo una serie de reglas y cálculos basados en una clave y cuyos
+          resultados son guardados en elementos XML y adjuntados o no a los datos primitivos del
+          proceso, en el estándar [XMLDSig22] encontramos:
+                o Definición de la estructura XML en la que almacenar la firma
+                o Definición del proceso de firma
+                o Definición del proceso de validación de firma
+                o Agrupación y aceptación de los algoritmos y procesos para la transformación
+                     en forma canónica de los datos firmados y de la firma
+                o Agrupación y aceptación de los algoritmos y procesos de transformación para la
+                     obtención de la firma
+
+     A continuación se mencionan el detalle de los elementos de la extensión:
+          
+
+2 El esquema de datos XML del estándar puede encontrarse en: http://www.w3.org/TR/xmldsig-core/  ~ 55 ~
+   Boleta Electrónica
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+     ds:Signature: Es un elemento simple que contiene información de lo que se está
+          firmando, la propia firma, las claves utilizadas para firmar. A continuación veremos sus
+          atributos y elementos uno por uno:
+
+         El atributo Id es opcional pero es muy útil para identificar la firma dentro de un documento,
+         sobre todo cuando se trabaja con firmas múltiples.
+         Por ejemplo: <ds:Signature Id="signatureKG">
+
+o ds:SignedInfo: Este elemento puede dividirse en dos partes desde el punto de
+     vista conceptual: información sobre el valor de la firma e información sobre los
+     datos a firmar.
+
+                     ds:CanonicalizationMethod: Posee un atributo Algorithm que indica
+                         cómo se debe transformar a forma canónica el elemento
+                         <ds:SignedInfo> antes de realizar la firma.
+
+                         Distintos XML pueden diferir en su forma de ser escritos y sin embargo
+                         significar lo mismo. Como la firma se realiza a nivel de bytes, aunque un
+                         documento signifique lo mismo y tenga la misma información que otro,
+                         ambos pueden tener firmas diferentes si no están escritos exactamente
+                         igual. Habrá que elegir entre una de todas las formas posibles de escribir
+                         un documento XML, la forma canónica, y transformar los documentos a
+                         esta forma sin que su información y significado se vean alterados.
+
+                         A este proceso se le llama transformación en forma canónica. Habrá varias
+
+Boleta Electrónica  ~ 56 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+                               formas canónicas dependiendo del algoritmo que se utilice. Dos
+                               documentos están en la misma forma canónica si los algoritmos utilizados
+                               para su obtención son equivalentes.
+
+                           ds: SignatureMethod: Especifica qué tipo de algoritmo de firma se
+                               utilizará para obtener la firma. La firma se realiza aplicando este
+                               algoritmo matemático sobre el elemento <ds:SignedInfo> que, puesto
+                               que contiene los valores hash de los distintos datos que se quieren firmar
+                               ­como se verá a continuación-, será diferente en cada caso.
+
+                           ds: Reference: Cada elemento Reference incluye el hash de un objeto de
+                               datos y las transformaciones aplicadas a ese objeto para producir dicho
+                               hash. El atributo URI (<ds:Reference URI="">)identifica al objeto de
+                               datos que se va a firmar. Éste puede ser un objeto fuera del documento
+                               en el que está la firma o bien un objeto dentro del propio documento. Si
+                               su valor es cadena vacía identifica al documento completo que contiene
+                               la firma. Por supuesto puede haber varios
+                               <ds:Reference> permitiendo a una misma firma [XMLDSig] cubrir
+                               múltiples objetos.
+
+Boleta Electrónica   ds:Transforms: es opcional aunque es el elemento con más
+                         fuerza de <ds:Reference>.Si aparece, contendrá una lista de
+                         <ds:Transform> en la que cada uno de sus elementos indica un
+                         paso realizado en el procesamiento de cálculo del hash. Cada
+                         paso tiene como entrada la salida del anterior y puede incluir
+                         operaciones como transformación en forma canónica,
+                         codificación/decodificación, transformaciones XSL, validación de
+                         esquemas, etc. La salida del último <ds:Transform> es la
+                         entrada de la función de cálculo del hash.
+
+                         Al permitir que se puedan firmar distintas porciones de un
+                         documento, las modificaciones posteriores a la firma de las
+                         porciones no incluidas no afectarán en nada a la validación de la
+                         firma.
+
+                     ds:DigestMethod: Define la función hash utilizada a través del
+                         atributo Algorithm.
+                         
+
+                     ds: DigestValue: Es el valor hash codificado en Base64.
+
+                                                                                                                 ~ 57 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+               o ds:SignatureValue: contiene la firma codificada en Base64. La firma es el
+                    resultado de una serie de transformaciones sobre los datos binarios del elemento
+                    <ds:SignedInfo>. El elemento <ds:SignatureValue> contiene este valor binario
+                    de la firma codificado en Base64.
+
+               o ds: KeyInfo: Es una estructura opcional que identifica al firmante. Su contenido
+                    suele utilizarse en procesos de verificación de firmas, de ahí la importancia de
+                    que lo que se incluya en su interior sean los elementos de:
+
+                           ds:X509Data: Contiene información del certificado firmante.
+
+                           ds: KeyValue: Contiene información de la clave pública.
+                    La información que proporciona <ds:KeyInfo> en todos sus elementos debe
+                    corresponder al mismo certificado o clave.
+
+En caso de no incluir la estructura <ds:KeyInfo>, la firma no podría considerarse
+como "Firma Electrónica Avanzada" puesto que el firmante no podría ser
+identificado.
+
+Boleta Electrónica  ~ 58 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+     1.4 Ejemplos de casos identificados
+
+A. Boleta de Venta Gravada con dos ítems y una bonificación
+
+La empresa "Electrodomésticos Cruz de Motupe" de Carlos Enrique Vega Poblete,
+identificada con RUC 10200545523; debe emitir la boleta de venta electrónica N° BC01-
+3652 con la siguiente información:
+
+Fecha de Emisión : 24 de junio del 2017
+Adquirente o Usuario: Luana Karina Pazos Atoche
+DNI: 46237547
+
+Bienes vendidos:
+
+Código  Código      Unidad   Cantidad  Descripción                         Afectación al   Precio
+        SUNAT          de                                                         IGV     Unitario
+
+                    Medida             Refrigeradora marca "AXM" no frost                  998.00
+
+REF564  52141501     Unidad  1                                             Gravado         750.00
+                                         de 200 ltrs.
+
+                                       Cocina a gas GLP, marca "AXM" de 5
+
+COC124  95141606    Unidad   1                                             Gravado
+                                         hornillas
+
+Información adicional:
+      Los precios son en monedanacional
+      Descuento de 5% por ser clientefrecuente
+      Regalo de 10 sixpack de gaseosa "Guerené" de 400 ml. (código BON012) con un
+          valor de venta total de S/.48.00
+      Código de Software de Facturación 050100201706240046
+      Código de establecimiento 0014
+
+Información Tributaria
+      Conforme el inciso b) del Art. 14° de la Ley delIGV
+
+    " Art.14°...
+    No forman parte del valor de venta, de construcción o de los ingresos por servicios, en su
+    caso, los conceptos siguientes:
+    ....
+    b. Los descuentos que consten en el comprobante del pago, en tanto resulten normales
+    en el comercio y siempre que no constituyan retiro de bienes."
+
+Boleta Electrónica                                                                        ~ 59 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+                                  REQUISITO                                          CASO 1
+Fecha de emisión                                                   24/06/2017
+Firma Digital (Firma electrónica)
+Apellidos y nombres o denominación o razón social                  Vega Poblete Carlos Enrique
+Nombre Comercial                                                   Electrodomésticos Cruz de Motupe
+Número de RUC                                                      10200545523
+Tipo de documento                                                  03
+Numeración, conformada por serie y número correlativo              BC01-3652
+Tipo y número de documento de identidad del adquirente o           1
+usuario
+                                                                   46237547
+Apellidos y nombres o denominación o razón social del adquirente
+o usuario                                                          Pazos Atoche Luana Karina
+Número de orden del Ítem
+Unidad de medida de los bienes vendidos por ítem                          1          2            3
+Cantidad de unidades vendidas por item (Q)                              NIU        NIU           NIU
+Código de producto                                                                                10
+Descripción detallada del bien vendido o cedido en uso,                   1          1        NOB012
+descripción o tipo de servicio prestado por ítem                      REF564     COC124
+                                                                                 Cocina      Sixpack de
+Precio de venta unitario por item                                  Refrigerador  a gas        gaseosa
+Valor referencial unitario por ítem en operaciones no onerosas     a marca       GLP,
+Afectación al IGV por ítem                                         "AXM" no      marca       "Guerené"
+IGV del item                                                       frost de 200  "AXM"       de 400 ml
+Total valor de venta - operaciones gravadas                        ltrs.         de 5
+Total valor de venta - operaciones gratuitas                                     hornilla       0.00
+Sumatoria IGV                                                         998.00     s750.00        4.80
+Total descuentos (5%)                                                                             31
+Importe total de la venta, de la cesión en uso o del servicio            10         10          0.00
+Lpereyestnaddao                                                       152.24     114.41
+
+Valor de venta unitario por ítem                                   1,407.29
+Valor de venta por item
+Valor referencial unitario por ítem en operaciones no onerosas     48.00
+Versión del UBL                                                    253.31
+Versión de la estructura del documento                             74.07
+Tipo de moneda en la cual se emite la boleta de venta electrónica  1,660.60
+Tasa de IGV                                                        SON MIL SEISCIENTOS SESENTA Y
+                                                                   60/100
+
+                                                                      845.76 635.59 0.00
+                                                                      845.76 635.59 0.00
+
+                                                                                                     4.80
+                                                                   2.1
+                                                                   2.0
+                                                                   PEN
+                                                                   18%
+
+Boleta Electrónica                                                                            ~ 60 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+xmlns:ccts="urn:un:unece:uncefact:documentation:2"
+xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+xmlns:qdt="urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2"
+xmlns:udt="urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<ext:UBLExtensions>
+<ext:UBLExtension>
+<ext:ExtensionContent>
+<ds:Signature Id="signatureKG">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-
+20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference URI="">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#envelopedsignature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>ld6X+TvM42Fe+F1KM/OB jiKpnko=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>W6DbMHJEFmU7G
+uiU0O+HRUqVzQZZW3QndYtUyeL0VxXuTafHu2vBC+OXvnnali43VXRGQ+/E0tPl
+ZAssqI/PEPfzIU79Wufq6saxYGHKvzdnBi6hnaMuCSG5THHNFppx4aT1KNg7p/koBB3U8PT9C6m6
+UnkJJNUquHkFc9BCqI8=</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509SubjectName>1.2
+.840.113549.1.9.1=#161a4253554c434140534f55544845524e504552552e434f4d2e5045,CN=Carlos
+Vega,OU=10200545523,O=Vega Poblete Carlos Enrique,L=CHICLAYO,ST=LAMBAYEQUE,
+C=PE</ds:X509SubjectName>
+<ds:X509Certificate>MIIESTCCAz
+GgAwIBAgIKWOCRzgAAAAAAIjANBgkqhkiG9w0BAQUFADAnMRUwEwYKCZImiZPyLGQB
+GRYFU1VOQVQxDjAMBgNVBAMTBVNVTkFUMB4XDTEwMTIyODE5NTExMFoXDTExMTIyODIwMDExMFow
+gZUxCzAJBgNVBAYTAlBFMQ0wCwYDVQQIEwRMSU1BMQ0wCwYDVQQHEwRMSU1BMREwDwYDVQQKEwhT
+T1VUSEVSTjEUMBIGA1UECxMLMjAxMDAxNDc1MTQxFDASBgNVBAMTC0JvcmlzIFN1bGNhMSkwJwYJ
+KoZIhvcNAQkBFhpCU1VMQ0FAU09VVEhFUk5QRVJVLkNPTS5QRTCBnzANBgkqhkiG9w0BAQEFAAOB
+jQAwgYkCgYEAtRtcpfBLzyajuEmYt4mVH8EE02KQiETsdKStUThVYM7g3Lkx5zq3SH5nLH00EKGC
+tota6RR+V40sgIbnh+Nfs1SOQcAohNwRfWhho7sKNZFR971rFxj4cTKMEvpt8Dr98UYFkJhph6Wn
+sniGM2tJDq9KJ52UXrlScMfBityx0AsCAwEAAaOCAYowggGGMA4GA1UdDwEB/wQEAwIE8DBEBgkq
+hkiG9w0BCQ8ENzA1MA4GCCqGSIb3DQMCAgIAgDAOBggqhkiG9w0DBAICAIAwBwYFKw4DAgcwCgYI
+KoZIhvcNAwcwHQYDVR0OBBYEFG/m6twbiRNzRINavjq+U0j/sZECMBMGA1UdJQQMMAoGCCsGAQUF
+BwMCMB8GA1UdIwQYMBaAFN9kHQDqWONmozw3xdNSIMFW2t+7MFkGA1UdHwRSMFAwTqBMoEqGImh0
+dHA6Ly9wY2IyMjYvQ2VydEVucm9sbC9TVU5BVC5jcmyGJGZpbGU6Ly9cXHBjYjIyNlxDZXJ0RW5y
+b2xsXFNVTkFULmNybDB+BggrBgEFBQcBAQRyMHAwNQYIKwYBBQUHMAKGKWh0dHA6Ly9wY2IyMjYv
+Q2VydEVucm9sbC9wY2IyMjZfU1VOQVQuY3J0MDcGCCsGAQUFBzAChitmaWxlOi8vXFxwY2IyMjZc
+Q2VydEVucm9sbFxwY2IyMjZfU1VOQVQuY3J0MA0GCSqGSIb3DQEBBQUAA4IBAQBI6wJ/QmRpz3C3
+rorBflOvA9DOa3GNiiB7rtPIjF4mPmtgfo2pK9gvnxmV2pST3ovfu0nbG2kpjzzaaelRjEodHvkc
+M3abGsOE53wfxqQF5uf/jkzZA9hbLHtE1aLKBD0Mhzc6cvI072alnE6QU3RZ16ie9CYsHmMrs+sP
+HMy8DJU5YrdnqHdSn2D3nhKBi4QfT/WURPOuo6DF4iWgrCyMf3eJgmGKSUN3At5fK4HSpfyURT0k
+boaJKNBgQwy0HhGh5BLM7DsTi/KwfdUYkoFgrY71Pm23+ra+xTow1Vk9gj5NqrlpMY5gAVQXEIo1
+++GxDtaK/5EiVKSqzJ6geIfz</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature>
+</ext:ExtensionContent></ext:UBLExtension>
+</ext:UBLExtensions>
+
+Boleta Electrónica                                            ~ 61 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+<cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+<cbc:CustomizationID>2.0</cbc:CustomizationID>
+<cbc:ProfileID schemeName="SUNAT:Identificador de Tipo de Operación"
+schemeAgencyName="PE:SUNAT"
+schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17">0101</cbc:ProfileID>
+<cbc:ID>BC01-3652</cbc:ID>
+<cbc:IssueDate>2017-06-24</cbc:IssueDate>
+<cbc:IssueTime>18:01:29</cbc:IssueTime>
+<cbc:InvoiceTypeCode listAgencyName="PE:SUNAT" listName="SUNAT:Identificador de Tipo de
+Documento"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">03</cbc:InvoiceTypeCode>
+<cbc:Note languageLocaleID="1000">SON MIL SEISCIENTOS SESENTA Y 60/100</cbc:Note>
+<cbc:Note languageLocaleID="3000">050100201706240046</cbc:Note>
+<cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency"
+listAgencyName=" United Europe">PEN</cbc:DocumentCurrencyCode>
+<cac:Signature>
+<cbc:ID>IDSignKG</cbc:ID>
+<cac:SignatoryParty>
+<cac:PartyIdentification>
+<cbc:ID>10200545523</cbc:ID>
+</cac:PartyIdentification>
+<cac:PartyName>
+<cbc:Name>VEGA POBLETE CARLOS ENRIQUE</cbc:Name>
+</cac:PartyName>
+</cac:SignatoryParty>
+<cac:DigitalSignatureAttachment>
+<cac:ExternalReference>
+<cbc:URI>#SignatureKG</cbc:URI>
+</cac:ExternalReference>
+</cac:DigitalSignatureAttachment>
+</cac:Signature>
+<cac:AccountingSupplierParty>
+<cac:Party>
+<cac:PartyName>
+<cbc:Name>Electrodomésticos Cruz de Motupe</cbc:Name>
+</cac:PartyName>
+<cac:PartyTaxScheme>
+<cbc:RegistrationName>
+<![CDATA[Vega Poblete Carlos Enrique]]></cbc:RegistrationName>
+<CompanyID schemeID="6" schemeName="SUNAT:Identificador de Documento de
+Identidad" schemeAgencyName="PE:SUNAT"
+schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">10200545523</CompanyID>
+<cac:RegistrationAddress>
+<cbc:AddressTypeCode>0014</cbc:AddressTypeCode>
+</cac:RegistrationAddress>
+<cac:TaxScheme>
+<cbc:ID>-</cbc:ID>
+</cac:TaxScheme>
+</cac:PartyTaxScheme>
+</cac:Party>
+</cac:AccountingSupplierParty>
+<cac:AccountingCustomerParty>
+<cac:Party>
+<cac:PartyTaxScheme>
+<cbc:RegistrationName>Pazos Atoche Luana Karina</cbc:RegistrationName>
+<CompanyID schemeID="1" schemeName="SUNAT:Identificador de Documento de
+Identidad" schemeAgencyName="PE:SUNAT"
+schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">46237547</CompanyID>
+<cac:TaxScheme>
+<cbc:ID>-</cbc:ID>
+</cac:TaxScheme>
+</cac:PartyTaxScheme>
+</cac:Party>
+</cac:AccountingCustomerParty>
+
+Boleta Electrónica                                            ~ 62 ~
+         Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+<cac:TaxTotal>
+<cbc:TaxAmount currencyID="PEN">253.31</cbc:TaxAmount>
+<cac:TaxSubtotal>
+<cbc:TaxableAmount currencyID="PEN">1407.29</cbc:TaxableAmount>
+<cbc:TaxAmount currencyID="PEN">253.31</cbc:TaxAmount>
+<cac:TaxCategory>
+<cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+<cac:TaxScheme>
+<cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">1000</cbc:ID>
+<cbc:Name>IGV</cbc:Name>
+<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+</cac:TaxScheme>
+</cac:TaxCategory>
+</cac:TaxSubtotal>
+</cac:TaxTotal>
+<cac:LegalMonetaryTotal>
+<cbc:LineExtensionAmount currencyID="PEN">1407.29</cbc:LineExtensionAmount>
+<cbc:TaxInclusiveAmount currencyID="PEN">1660.60</cbc:TaxInclusiveAmount>
+<cbc:AllowanceTotalAmount currencyID="PEN">0.00</cbc:AllowanceTotalAmount>
+<cbc:PayableAmount currencyID="PEN">1660.60</cbc:PayableAmount>
+</cac:LegalMonetaryTotal>
+<cac:InvoiceLine>
+<cbc:ID>1</cbc:ID>
+<cbc:InvoicedQuantity unitCode="NIU" unitCodeListID="UN/ECE rec 20"
+unitCodeListAgencyName=" United Nations Economic Commission for
+Europe">1</cbc:InvoicedQuantity>
+<cbc:LineExtensionAmount currencyID="PEN">845.76</cbc:LineExtensionAmount>
+<cac:PricingReference>
+<cac:AlternativeConditionPrice>
+<cbc:PriceAmount currencyID="PEN">998.00</cbc:PriceAmount>
+<cbc:PriceTypeCode listName="SUNAT:Indicador de Tipo de Precio" listAgencyName=
+"PE:SUNAT"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+</cac:AlternativeConditionPrice>
+</cac:PricingReference>
+<cac:TaxTotal>
+<cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+<cac:TaxSubtotal>
+<cbc:TaxAmount currencyID="PEN">152.24</cbc:TaxAmount>
+<cac:TaxCategory>
+<cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+<cbc:Percent>18.00</cbc:Percent>
+<cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="SUNAT:Codigo de
+Tipo de Afectación del IGV"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionRe
+asonCode>
+<cac:TaxScheme>
+<cbc:ID schemeID="UN/ECE 5153" schemeName="Tax Scheme Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">1000</cbc:ID>
+<cbc:Name>IGV</cbc:Name>
+<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+</cac:TaxScheme>
+</cac:TaxCategory>
+</cac:TaxSubtotal>
+</cac:TaxTotal>
+
+Boleta Electrónica  ~ 63 ~
+Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+<cac:Item>
+<cbc:Description>Refrigeradora marca "AXM" no frost de 200 ltrs.</cbc:Description>
+<cac:SellersItemIdentification>
+<cbc:ID>REF564</cbc:ID>
+</cac:SellersItemIdentification>
+<cac:CommodityClassification>
+<cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US"
+listName="Item Classification">52141501</cbc:ItemClassificationCode>
+</cac:CommodityClassification>
+</cac:Item>
+<cac:Price>
+<cbc:PriceAmount currencyID="PEN">845.76</cbc:PriceAmount>
+</cac:Price>
+</cac:InvoiceLine>
+<cac:InvoiceLine>
+<cbc:ID>2</cbc:ID>
+<cbc:InvoicedQuantity unitCode="NIU" unitCodeListID="UN/ECE rec 20"
+unitCodeListAgencyName=" United Nations Economic Commission for
+Europe">1</cbc:InvoicedQuantity>
+<cbc:LineExtensionAmount currencyID="PEN">635.59</cbc:LineExtensionAmount>
+<cac:PricingReference>
+<cac:AlternativeConditionPrice>
+<cbc:PriceAmount currencyID="PEN">750.00</cbc:PriceAmount>
+<cbc:PriceTypeCode listName="SUNAT:Indicador de Tipo de Precio" listAgencyName=
+"PE:SUNAT"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+</cac:AlternativeConditionPrice>
+</cac:PricingReference>
+<cac:TaxTotal>
+<cbc:TaxAmount currencyID="PEN">114.41</cbc:TaxAmount>
+<cac:TaxSubtotal>
+<cbc:TaxAmount currencyID="PEN">114.41</cbc:TaxAmount>
+<cac:TaxCategory>
+<cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">S</cbc:ID>
+<cbc:Percent>18.00</cbc:Percent>
+<cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="SUNAT:Codigo de
+Tipo de Afectación del IGV"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionRe
+asonCode>
+<cac:TaxScheme>
+<cbc:ID schemeID="UN/ECE 5153" schemeName="Tax Scheme Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">1000</cbc:ID>
+<cbc:Name>IGV</cbc:Name>
+<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+</cac:TaxScheme>
+</cac:TaxCategory>
+</cac:TaxSubtotal>
+</cac:TaxTotal>
+<cac:Item>
+<cbc:Description>Cocina a gas GLP, marca "AXM" de 5 hornillas</cbc:Description>
+<cac:SellersItemIdentification>
+<cbc:ID>COC124</cbc:ID>
+</cac:SellersItemIdentification>
+<cac:CommodityClassification>
+<cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US"
+listName="Item Classification">95141606</cbc:ItemClassificationCode>
+</cac:CommodityClassification>
+</cac:Item>
+<cac:Price>
+<cbc:PriceAmount currencyID="PEN">635.59</cbc:PriceAmount>
+</cac:Price>
+</cac:InvoiceLine>
+
+Boleta Electrónica                                            ~ 64 ~
+          Guía de elaboración de documentos electrónicos XML - UBL 2.1
+
+<cac:InvoiceLine>
+<cbc:ID>3</cbc:ID>
+<cbc:InvoicedQuantity unitCode="NIU" unitCodeListID="UN/ECE rec 20"
+unitCodeListAgencyName="United Nations Economic Commission for
+Europe">1</cbc:InvoicedQuantity>
+<cbc:LineExtensionAmount currencyID="PEN">0.00</cbc:LineExtensionAmount>
+<cac:PricingReference>
+<cac:AlternativeConditionPrice>
+<cbc:PriceAmount currencyID="PEN">4.80</cbc:PriceAmount>
+<cbc:PriceTypeCode listName="SUNAT:Indicador de Tipo de Precio" listAgencyName=
+"PE:SUNAT"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">02</cbc:PriceTypeCode>
+</cac:AlternativeConditionPrice>
+</cac:PricingReference>
+<cac:TaxTotal>
+<cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+<cac:TaxSubtotal>
+<cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+<cac:TaxCategory>
+<cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">O</cbc:ID>
+<cbc:Percent>18.00</cbc:Percent>
+<cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="SUNAT:Codigo de
+Tipo de Afectación del IGV"
+listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">31</cbc:TaxExemptionRe
+asonCode>
+<cac:TaxScheme>
+<cbc:ID schemeID="UN/ECE 5153" schemeName="Tax Scheme Identifier"
+schemeAgencyName="United Nations Economic Commission for Europe">9998</cbc:ID>
+<cbc:Name>INAFECTO</cbc:Name>
+<cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>
+</cac:TaxScheme>
+</cac:TaxCategory>
+</cac:TaxSubtotal>
+</cac:TaxTotal>
+<cac:Item>
+<cbc:Description>Sixpack de gaseosa "Guerené" de 400 ml</cbc:Description>
+<cac:SellersItemIdentification>
+<cbc:ID>NOB012</cbc:ID>
+</cac:SellersItemIdentification>
+<cac:CommodityClassification>
+<cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US"
+listName="Item Classification">24121803</cbc:ItemClassificationCode>
+</cac:CommodityClassification>
+</cac:Item>
+<cac:Price>
+<cbc:PriceAmount currencyID="PEN">0.00</cbc:PriceAmount>
+</cac:Price>
+</cac:InvoiceLine>
+</Invoice>
+
+Boleta Electrónica  ~ 65 ~
+
