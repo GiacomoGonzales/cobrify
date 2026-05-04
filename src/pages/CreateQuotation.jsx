@@ -337,7 +337,8 @@ export default function CreateQuotation() {
             }
           }
 
-          // Cargar items
+          // Cargar items (preservar metadata de variante/presentación para que
+          // al re-guardar no se pierda y la conversión a venta descuente bien el stock)
           if (q.items && q.items.length > 0) {
             setQuotationItems(q.items.map(item => ({
               productId: item.productId || '',
@@ -347,6 +348,15 @@ export default function CreateQuotation() {
               unitPrice: item.unitPrice || 0,
               unit: item.unit || 'NIU',
               searchTerm: item.name || '',
+              ...(item.isVariant && {
+                isVariant: true,
+                variantSku: item.variantSku || '',
+                variantAttributes: item.variantAttributes || {},
+              }),
+              ...(item.presentationName && {
+                presentationName: item.presentationName,
+                presentationFactor: item.presentationFactor || 1,
+              }),
             })))
           }
 
@@ -420,7 +430,8 @@ export default function CreateQuotation() {
             }
           }
 
-          // Cargar items
+          // Cargar items (preservar metadata de variante/presentación para que
+          // al re-guardar no se pierda y la conversión a venta descuente bien el stock)
           if (q.items && q.items.length > 0) {
             setQuotationItems(q.items.map(item => ({
               productId: item.productId || '',
@@ -430,6 +441,15 @@ export default function CreateQuotation() {
               unitPrice: item.unitPrice || 0,
               unit: item.unit || 'NIU',
               searchTerm: item.name || '',
+              ...(item.isVariant && {
+                isVariant: true,
+                variantSku: item.variantSku || '',
+                variantAttributes: item.variantAttributes || {},
+              }),
+              ...(item.presentationName && {
+                presentationName: item.presentationName,
+                presentationFactor: item.presentationFactor || 1,
+              }),
             })))
           }
 
@@ -948,6 +968,18 @@ export default function CreateQuotation() {
           therapeuticAction: item.therapeuticAction || '',
           saleCondition: item.saleCondition || '',
           sanitaryRegistry: item.sanitaryRegistry || '',
+          // Persistir metadata de variante / presentación. Sin estos campos, al
+          // convertir la cotización a venta el POS no sabe qué variante descontar
+          // y el stock se desincroniza (movimiento sin variantSku).
+          ...(item.isVariant && {
+            isVariant: true,
+            variantSku: item.variantSku || '',
+            variantAttributes: item.variantAttributes || {},
+          }),
+          ...(item.presentationName && {
+            presentationName: item.presentationName,
+            presentationFactor: item.presentationFactor || 1,
+          }),
         }
       })
 
