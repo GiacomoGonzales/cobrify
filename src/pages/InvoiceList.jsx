@@ -31,6 +31,7 @@ import {
   Code,
   FileCheck,
   Archive,
+  ArchiveRestore,
   Store,
   User,
   ShoppingCart,
@@ -158,6 +159,10 @@ export default function InvoiceList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  // Cuando false (default): se ocultan los comprobantes archivados y no suman a los totales/resúmenes.
+  // Cuando true: se muestran SOLO los archivados (para revisarlos o desarchivarlos).
+  const [showArchived, setShowArchived] = useState(false)
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false)
   const [filterSeller, setFilterSeller] = useState('all')
   const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
@@ -1374,6 +1379,46 @@ Gracias por tu preferencia.`
   }
 
   // Convertir múltiples notas de venta en un solo comprobante
+  const handleBulkArchive = async (shouldArchive) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const ids = Array.from(selectedInvoiceIds)
+    if (ids.length === 0) return
+
+    setIsBulkArchiving(true)
+    try {
+      const businessId = getBusinessId()
+      const results = await Promise.all(
+        ids.map(id => updateInvoice(businessId, id, { archived: shouldArchive }))
+      )
+      const failed = results.filter(r => !r.success).length
+
+      // Actualizar estado local sin recargar
+      setInvoices(prev => prev.map(inv =>
+        selectedInvoiceIds.has(inv.id) ? { ...inv, archived: shouldArchive } : inv
+      ))
+      clearSelection()
+
+      if (failed > 0) {
+        toast.error(`${failed} comprobante(s) no se pudieron ${shouldArchive ? 'archivar' : 'desarchivar'}`)
+      } else {
+        toast.success(
+          shouldArchive
+            ? `${ids.length} comprobante(s) archivado(s). Ya no suman al total ni aparecen en reportes.`
+            : `${ids.length} comprobante(s) desarchivado(s).`
+        )
+      }
+    } catch (error) {
+      console.error('Error en bulk archive:', error)
+      toast.error('Error al actualizar los comprobantes')
+    } finally {
+      setIsBulkArchiving(false)
+    }
+  }
+
   const handleBulkConvertNotasVenta = () => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -1835,6 +1880,7 @@ Gracias por tu preferencia.`
 
   // Filtrar facturas
   const filteredInvoices = invoices
+    .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {
       const search = searchTerm.toLowerCase()
@@ -2019,10 +2065,14 @@ Gracias por tu preferencia.`
     }
   }
 
-  // Facturas filtradas por período (para estadísticas, sin filtros de texto/tipo/estado/vendedor)
+  // Facturas filtradas por período (para estadísticas, sin filtros de texto/tipo/estado/vendedor).
+  // También aplica el toggle de archivados: por defecto los archivados se EXCLUYEN del resumen y
+  // de la lista. Cuando el usuario activa "Ver archivados" se muestran SOLO los archivados.
   const dateFilteredInvoices = useMemo(() => {
-    return invoices.filter(filterByDateRange)
-  }, [invoices, dateFilter, filterStartDate, filterEndDate])
+    return invoices
+      .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
+      .filter(filterByDateRange)
+  }, [invoices, dateFilter, filterStartDate, filterEndDate, showArchived])
 
   // Estadísticas (basadas en el período seleccionado)
   // Solo contar ventas reales: boletas, facturas, notas de venta (no convertidas)
@@ -2044,7 +2094,7 @@ Gracias por tu preferencia.`
     paid: salesInvoices.filter(i => i.status === 'paid').length,
     pending: salesInvoices.filter(i => i.status === 'pending').length,
     totalAmount: salesInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
-    totalAll: invoices.filter(isValidSale).length,
+    totalAll: invoices.filter(i => i.archived !== true).filter(isValidSale).length,
   }
 
   if (isLoading) {
@@ -2295,6 +2345,28 @@ Gracias por tu preferencia.`
               <option value="converted">Notas convertidas</option>
               <option value="not_converted">Notas sin convertir</option>
             </select>
+          </div>
+
+          {/* Toggle archivados */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => {
+                  setShowArchived(e.target.checked)
+                  clearSelection()
+                }}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <Archive className="w-4 h-4 text-gray-500" />
+              <span>Ver comprobantes archivados</span>
+            </label>
+            {showArchived && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                Mostrando solo archivados — no suman al total
+              </span>
+            )}
           </div>
 
           {/* Botón limpiar filtros */}
@@ -2728,9 +2800,24 @@ Gracias por tu preferencia.`
               </>
             )}
           </Button>
+          <Button
+            onClick={() => handleBulkArchive(!showArchived)}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving}
+            className="bg-amber-500 text-white hover:bg-amber-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
+            title={showArchived ? 'Desarchivar seleccionados' : 'Archivar seleccionados (se ocultan y no suman al total)'}
+          >
+            {isBulkArchiving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : showArchived ? (
+              <ArchiveRestore className="w-4 h-4" />
+            ) : (
+              <Archive className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">{showArchived ? 'Desarchivar' : 'Archivar'}</span>
+          </Button>
           <button
             onClick={clearSelection}
-            disabled={isBulkPrinting || isBulkDownloadingPDF}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving}
             className="text-gray-400 hover:text-white transition-colors p-1"
             title="Cancelar selección"
           >

@@ -346,6 +346,10 @@ export default function Reports() {
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     // - Filtrar por sucursal si está seleccionada
     const validInvoices = invoices.filter(invoice => {
+      // Comprobantes archivados manualmente desde Ventas: no aparecen en reportes ni totales
+      if (invoice.archived === true) {
+        return false
+      }
       // Si es una nota de venta ya convertida a comprobante, no contar (se cuenta la boleta/factura)
       if (invoice.convertedTo) {
         return false
