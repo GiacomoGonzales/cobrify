@@ -844,6 +844,23 @@ export default function POS() {
           ? `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items (${courtesyCount} cortesía${courtesyCount > 1 ? 's' : ''} omitida${courtesyCount > 1 ? 's' : ''} del comprobante)`
           : `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`
         toast.success(toastMsg)
+
+        // Cargar descuento global aplicado en la precuenta (si existe)
+        if (tableInfo.discount && tableInfo.discount.value > 0) {
+          const billableItemsTotal = billableSourceItems.reduce((sum, it) => sum + (it.total || 0), 0)
+          if (tableInfo.discount.type === 'percent') {
+            const pct = Math.min(parseFloat(tableInfo.discount.value) || 0, 100)
+            setDiscountPercentage(pct.toString())
+            const amount = (billableItemsTotal * pct / 100)
+            setDiscountAmount(amount.toFixed(2))
+          } else {
+            const amount = Math.min(parseFloat(tableInfo.discount.value) || 0, billableItemsTotal)
+            setDiscountAmount(amount.toFixed(2))
+            if (billableItemsTotal > 0) {
+              setDiscountPercentage(((amount / billableItemsTotal) * 100).toFixed(2))
+            }
+          }
+        }
       }
 
       // Limpiar el state de navegación para evitar recarga

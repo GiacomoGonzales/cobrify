@@ -1597,6 +1597,9 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
 
     let subtotal, tax, total, recargoConsumo = 0;
     total = order.total || 0;
+    const orderDiscount = order.discount || null;
+    const itemsBaseTotal = (order.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+    const discountAmount = orderDiscount && orderDiscount.amount ? orderDiscount.amount : 0;
 
     if (taxConfig.igvExempt) {
       // Si está exonerado, el total es igual al subtotal y no hay IGV
@@ -1656,11 +1659,24 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
 
     // Construir texto de totales según si está exonerado o no
     let totalsText = '';
+
+    // Agregar línea de descuento si aplica
+    if (discountAmount > 0) {
+      totalsText += `Subtotal Productos: S/ ${itemsBaseTotal.toFixed(2)}\n`;
+      const discountLabel = orderDiscount.type === 'percent'
+        ? `Descuento (-${orderDiscount.value}%)`
+        : 'Descuento';
+      totalsText += `${discountLabel}: -S/ ${discountAmount.toFixed(2)}\n`;
+      if (orderDiscount.reason) {
+        totalsText += `Motivo: ${convertSpanishText(orderDiscount.reason)}\n`;
+      }
+    }
+
     if (!taxConfig.igvExempt) {
-      totalsText = `Subtotal: S/ ${subtotal.toFixed(2)}\n` +
-                   `IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}\n`;
+      totalsText += `Subtotal: S/ ${subtotal.toFixed(2)}\n` +
+                    `IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}\n`;
     } else {
-      totalsText = '*** Empresa exonerada de IGV ***\n';
+      totalsText += '*** Empresa exonerada de IGV ***\n';
     }
 
     // Agregar Recargo al Consumo si aplica
@@ -2890,6 +2906,9 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
     // Calcular totales
     let subtotal, tax, total, recargoConsumo = 0;
     total = order.total || 0;
+    const orderDiscount = order.discount || null;
+    const itemsBaseTotal = (order.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+    const discountAmount = orderDiscount && orderDiscount.amount ? orderDiscount.amount : 0;
 
     if (taxConfig.igvExempt) {
       subtotal = total;
@@ -2981,6 +3000,18 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
 
     builder.text(format.halfSeparator).newLine()
       .alignRight();
+
+    // Línea de descuento global (si aplica)
+    if (discountAmount > 0) {
+      builder.text(`Subtotal Productos: S/ ${itemsBaseTotal.toFixed(2)}`).newLine();
+      const discountLabel = orderDiscount.type === 'percent'
+        ? `Descuento (-${orderDiscount.value}%)`
+        : 'Descuento';
+      builder.text(`${discountLabel}: -S/ ${discountAmount.toFixed(2)}`).newLine();
+      if (orderDiscount.reason) {
+        builder.text(`Motivo: ${orderDiscount.reason}`).newLine();
+      }
+    }
 
     // Totales
     if (!taxConfig.igvExempt) {

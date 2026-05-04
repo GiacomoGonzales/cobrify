@@ -14,6 +14,7 @@ import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import SplitTableModal from '@/components/restaurant/SplitTableModal'
+import ApplyDiscountModal from '@/components/restaurant/ApplyDiscountModal'
 import IndividualPaymentModal from '@/components/restaurant/IndividualPaymentModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import KitchenTicket from '@/components/KitchenTicket'
@@ -73,6 +74,7 @@ export default function Tables() {
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [isSplitTableModalOpen, setIsSplitTableModalOpen] = useState(false)
   const [isIndividualPaymentModalOpen, setIsIndividualPaymentModalOpen] = useState(false)
+  const [isApplyDiscountModalOpen, setIsApplyDiscountModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Estado para división de cuenta por items
@@ -526,6 +528,15 @@ export default function Tables() {
 
   const handleEditOrder = () => {
     setIsEditOrderModalOpen(true)
+  }
+
+  const handleApplyDiscount = () => {
+    if (!selectedOrder) {
+      toast.error('No hay orden activa para aplicar descuento')
+      return
+    }
+    setIsActionModalOpen(false)
+    setIsApplyDiscountModalOpen(true)
   }
 
   // Marcar/desmarcar un ítem como servido al cliente
@@ -1716,6 +1727,7 @@ export default function Tables() {
         onUnmergeTable={handleUnmergeTable}
         onOpenPrimary={handleOpenPrimary}
         onPrintPreBill={handlePrintPreBill}
+        onApplyDiscount={handleApplyDiscount}
         onPrintKitchenTicket={handlePrintKitchenTicket}
         onToggleItemServed={handleToggleItemServed}
         onMarkAllServed={handleMarkAllServed}
@@ -1771,6 +1783,18 @@ export default function Tables() {
         order={selectedOrder}
         tables={tables}
         onConfirm={handleConfirmSplitTable}
+      />
+
+      {/* Modal para aplicar descuento global a la orden */}
+      <ApplyDiscountModal
+        isOpen={isApplyDiscountModalOpen}
+        onClose={() => {
+          setIsApplyDiscountModalOpen(false)
+          setIsActionModalOpen(true)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onSuccess={reloadSelectedTableAndOrder}
       />
 
       {/* Modal para cerrar mesa y generar comprobante */}

@@ -47,6 +47,36 @@ const calculateOrderTotals = (total, taxConfig = { igvRate: 18, igvExempt: false
 }
 
 /**
+ * Helper: Aplica un descuento a un total facturable y devuelve los totales finales.
+ * Si el descuento de monto fijo supera el total facturable, se recorta. Si el total
+ * facturable queda en 0, retorna el descuento removido (pasa a null).
+ * @param {number} billableTotal - Suma de items NO cortesía (con IGV)
+ * @param {Object|null} discount - {type, value, ...} existente
+ * @param {Object} taxConfig
+ * @returns {Object} - {subtotal, tax, total, discount} (discount puede recortarse)
+ */
+const applyDiscountAndRecalc = (billableTotal, discount, taxConfig) => {
+  if (!discount || billableTotal <= 0) {
+    const { subtotal, tax } = calculateOrderTotals(billableTotal, taxConfig)
+    return { subtotal, tax, total: billableTotal, discount: billableTotal <= 0 ? null : discount }
+  }
+  let discountAmount = discount.type === 'percent'
+    ? billableTotal * ((discount.value || 0) / 100)
+    : (discount.value || 0)
+  discountAmount = Math.min(discountAmount, billableTotal)
+  discountAmount = Math.round(discountAmount * 100) / 100
+
+  const newTotal = Math.max(0, billableTotal - discountAmount)
+  const { subtotal, tax } = calculateOrderTotals(newTotal, taxConfig)
+  return {
+    subtotal,
+    tax,
+    total: newTotal,
+    discount: { ...discount, amount: discountAmount },
+  }
+}
+
+/**
  * Servicio para gestión de órdenes de restaurante
  */
 
@@ -314,9 +344,9 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
       ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
-    // Recalcular totales usando función helper con taxConfig dinámico
-    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
+    // Recalcular totales reaplicando descuento existente si lo hay
+    const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
 
     // Si se agregan nuevos items, la orden vuelve a estar activa
     const overallStatus = 'active'
@@ -327,6 +357,7 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
       subtotal,
       tax,
       total,
+      discount: discount || null,
       overallStatus,
       updatedAt: serverTimestamp(),
     })
@@ -460,9 +491,9 @@ export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy
       ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
-    // Recalcular totales usando función helper con taxConfig dinámico
-    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
+    // Recalcular totales reaplicando descuento existente si lo hay
+    const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -470,6 +501,7 @@ export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy
       subtotal,
       tax,
       total,
+      discount: discount || null,
       updatedAt: serverTimestamp(),
     })
 
@@ -558,9 +590,9 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
       ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
-    // Recalcular totales usando función helper con taxConfig dinámico
-    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
+    // Recalcular totales reaplicando descuento existente si lo hay
+    const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -568,6 +600,7 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
       subtotal,
       tax,
       total,
+      discount: discount || null,
       updatedAt: serverTimestamp(),
     })
 
@@ -687,14 +720,15 @@ export const toggleItemCourtesy = async (businessId, orderId, itemIndex, markAsC
       ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
-    const total = items.reduce((sum, it) => sum + (it.total || 0), 0)
-    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
+    const billableTotal = items.reduce((sum, it) => sum + (it.total || 0), 0)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
 
     await updateDoc(orderRef, {
       items,
       subtotal,
       tax,
       total,
+      discount: discount || null,
       updatedAt: serverTimestamp(),
     })
 
@@ -711,6 +745,146 @@ export const toggleItemCourtesy = async (businessId, orderId, itemIndex, markAsC
     return { success: true, data: { subtotal, tax, total } }
   } catch (error) {
     console.error('Error al cambiar estado de cortesía:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Aplicar un descuento global a la orden (porcentaje o monto fijo)
+ * El descuento se calcula sobre la suma de items NO cortesía y reduce el total a cobrar.
+ *
+ * @param {string} businessId
+ * @param {string} orderId
+ * @param {object} discountData
+ * @param {'percent'|'amount'} discountData.type
+ * @param {number} discountData.value - porcentaje (0-100) o monto fijo
+ * @param {string} [discountData.reason] - motivo opcional
+ * @param {{uid:string, name:string}} [discountData.appliedBy]
+ */
+export const applyOrderDiscount = async (businessId, orderId, discountData) => {
+  try {
+    const { type, value, reason, appliedBy } = discountData
+    if (!['percent', 'amount'].includes(type)) {
+      return { success: false, error: 'Tipo de descuento inválido' }
+    }
+    const numericValue = parseFloat(value)
+    if (isNaN(numericValue) || numericValue <= 0) {
+      return { success: false, error: 'Valor de descuento inválido' }
+    }
+    if (type === 'percent' && numericValue > 100) {
+      return { success: false, error: 'El porcentaje no puede superar 100%' }
+    }
+
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+    const orderData = orderSnap.data()
+    const items = orderData.items || []
+
+    // Total facturable (excluyendo cortesías, que ya tienen total=0)
+    const billableTotal = items.reduce((sum, it) => sum + (it.total || 0), 0)
+    if (billableTotal <= 0) {
+      return { success: false, error: 'No hay items facturables para aplicar descuento' }
+    }
+
+    // Calcular monto del descuento (sobre el total con IGV incluido)
+    let discountAmount = type === 'percent'
+      ? billableTotal * (numericValue / 100)
+      : numericValue
+    discountAmount = Math.min(discountAmount, billableTotal)
+    discountAmount = Math.round(discountAmount * 100) / 100
+
+    const newTotal = Math.max(0, billableTotal - discountAmount)
+
+    // Recalcular subtotal/tax con la config fiscal del negocio
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
+      : { igvRate: 18, igvExempt: false }
+    const { subtotal, tax } = calculateOrderTotals(newTotal, taxConfig)
+
+    const discount = {
+      type,
+      value: numericValue,
+      amount: discountAmount,
+      reason: reason || '',
+      appliedAt: new Date(),
+      appliedBy: appliedBy?.uid || null,
+      appliedByName: appliedBy?.name || 'Usuario',
+    }
+
+    await updateDoc(orderRef, {
+      discount,
+      subtotal,
+      tax,
+      total: newTotal,
+      updatedAt: serverTimestamp(),
+    })
+
+    if (orderData.tableId) {
+      try {
+        const { updateTableAmount } = await import('./tableService')
+        await updateTableAmount(businessId, orderData.tableId, newTotal)
+      } catch (err) {
+        console.warn('No se pudo actualizar monto de la mesa:', err)
+      }
+    }
+
+    return { success: true, data: { discount, subtotal, tax, total: newTotal } }
+  } catch (error) {
+    console.error('Error al aplicar descuento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Quitar el descuento de la orden y restaurar totales originales
+ */
+export const removeOrderDiscount = async (businessId, orderId) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+    const orderData = orderSnap.data()
+    if (!orderData.discount) {
+      return { success: false, error: 'La orden no tiene descuento aplicado' }
+    }
+
+    const items = orderData.items || []
+    const billableTotal = items.reduce((sum, it) => sum + (it.total || 0), 0)
+
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
+      : { igvRate: 18, igvExempt: false }
+    const { subtotal, tax } = calculateOrderTotals(billableTotal, taxConfig)
+
+    await updateDoc(orderRef, {
+      discount: null,
+      subtotal,
+      tax,
+      total: billableTotal,
+      updatedAt: serverTimestamp(),
+    })
+
+    if (orderData.tableId) {
+      try {
+        const { updateTableAmount } = await import('./tableService')
+        await updateTableAmount(businessId, orderData.tableId, billableTotal)
+      } catch (err) {
+        console.warn('No se pudo actualizar monto de la mesa:', err)
+      }
+    }
+
+    return { success: true, data: { subtotal, tax, total: billableTotal } }
+  } catch (error) {
+    console.error('Error al quitar descuento:', error)
     return { success: false, error: error.message }
   }
 }
@@ -1009,6 +1183,8 @@ export default {
   removeOrderItem,
   updateOrderItemQuantity,
   toggleItemCourtesy,
+  applyOrderDiscount,
+  removeOrderDiscount,
   updateOrderStatus,
   getOrdersByStatus,
   getOrdersByTable,

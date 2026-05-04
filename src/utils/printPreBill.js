@@ -85,16 +85,26 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
   let subtotal, tax, total
   const orderTotal = order.total || 0
+  const orderDiscount = order.discount || null
 
-  // Determinar el total a mostrar
+  // Calcular subtotal de items (antes del descuento) para mostrar la línea de descuento
+  const itemsBaseTotal = (itemsToShow || []).reduce((sum, item) => sum + (item.total || 0), 0)
+
+  // Determinar el total a mostrar (post-descuento si aplica al monto base)
+  // Nota: order.total ya viene con el descuento aplicado a nivel orden completa.
+  let discountAmount = 0
   if (overrideTotal !== null) {
-    // División igual/custom: usar monto asignado a esta persona
+    // División igual/custom: usar monto asignado a esta persona (ya post-descuento si lo tenía)
     total = overrideTotal
   } else if (itemFilter) {
-    // División por items: calcular total de los items filtrados
+    // División por items: calcular total de los items filtrados (sin descuento global)
     total = itemFilter.reduce((sum, item) => sum + (item.total || 0), 0)
   } else {
     total = orderTotal
+    // Aplica solo cuando se imprime la precuenta completa
+    if (orderDiscount && orderDiscount.amount) {
+      discountAmount = orderDiscount.amount
+    }
   }
 
   let recargoConsumo = 0
@@ -521,6 +531,21 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
       `}).join('')}
 
       <div class="totals">
+        ${discountAmount > 0 ? `
+        <div class="row">
+          <span>SUBTOTAL PRODUCTOS:</span>
+          <span>S/ ${itemsBaseTotal.toFixed(2)}</span>
+        </div>
+        <div class="row" style="color: #059669;">
+          <span>DESCUENTO${orderDiscount && orderDiscount.type === 'percent' ? ` (-${orderDiscount.value}%)` : ''}:</span>
+          <span>- S/ ${discountAmount.toFixed(2)}</span>
+        </div>
+        ${orderDiscount && orderDiscount.reason ? `
+        <div class="row" style="font-size: ${webPrintLegible ? (is58mm ? '8pt' : '9pt') : (is58mm ? '6pt' : '7pt')}; font-style: italic;">
+          <span>MOTIVO: ${orderDiscount.reason.toUpperCase()}</span>
+        </div>
+        ` : ''}
+        ` : ''}
         ${!taxConfig.igvExempt ? `
         <div class="row">
           <span>SUBTOTAL:</span>

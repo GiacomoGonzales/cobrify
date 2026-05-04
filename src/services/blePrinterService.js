@@ -1328,6 +1328,9 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     // Calcular totales
     let subtotal, tax, recargoConsumo = 0;
     let total = order.total || 0;
+    const orderDiscount = order.discount || null;
+    const itemsBaseTotal = (order.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+    const discountAmount = orderDiscount && orderDiscount.amount ? orderDiscount.amount : 0;
 
     if (taxConfig.igvExempt) {
       subtotal = total;
@@ -1397,6 +1400,18 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
 
     commands.push(ESCPOSCommands.text(halfSeparator + '\n'));
     commands.push(ESCPOSCommands.align(2)); // Derecha
+
+    // Línea de descuento global (si aplica)
+    if (discountAmount > 0) {
+      commands.push(ESCPOSCommands.text('Subtotal Productos: S/ ' + itemsBaseTotal.toFixed(2) + '\n'));
+      const discountLabel = orderDiscount.type === 'percent'
+        ? 'Descuento (-' + orderDiscount.value + '%)'
+        : 'Descuento';
+      commands.push(ESCPOSCommands.text(discountLabel + ': -S/ ' + discountAmount.toFixed(2) + '\n'));
+      if (orderDiscount.reason) {
+        commands.push(ESCPOSCommands.text('Motivo: ' + convertSpanishText(orderDiscount.reason) + '\n'));
+      }
+    }
 
     // Totales
     if (!taxConfig.igvExempt) {

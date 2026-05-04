@@ -64,6 +64,8 @@ export default function CloseTableModal({
         subtotal: order.subtotal,
         tax: order.tax,
         total: order.total,
+        // Descuento aplicado a la orden (se carga en POS para reflejar en el comprobante)
+        discount: order.discount || null,
         // Información del mozo
         waiterId: table.waiterId || order.waiterId || null,
         waiterName: table.waiter || order.waiterName || null,
@@ -109,6 +111,14 @@ export default function CloseTableModal({
             </span>
           </div>
           <div className="text-sm text-gray-600 space-y-1">
+            {order.discount && (
+              <div className="flex justify-between text-green-700 font-medium">
+                <span>
+                  Descuento aplicado{order.discount.type === 'percent' ? ` (-${order.discount.value}%)` : ''}:
+                </span>
+                <span>- S/ {(order.discount.amount || 0).toFixed(2)}</span>
+              </div>
+            )}
             {!taxConfig.igvExempt && (
               <>
                 <div className="flex justify-between">

@@ -260,11 +260,12 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
               const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
               return (
                 <div key={index} className={`py-2 px-2 transition-colors ${isCourtesy ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
-                  <div className="flex items-center gap-2">
+                  {/* Móvil: nombre en su propia línea (completo). Desktop: nombre + controles en una sola fila */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
                     {/* Nombre + precio unitario */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-sm font-medium text-gray-900 truncate ${isCourtesy ? 'line-through text-gray-500' : ''}`}>{item.name}</span>
+                      <div className="flex items-start gap-1.5 flex-wrap">
+                        <span className={`text-sm font-medium text-gray-900 break-words sm:truncate ${isCourtesy ? 'line-through text-gray-500' : ''}`}>{item.name}</span>
                         {isCourtesy && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-600 text-white font-bold tracking-wide shrink-0">
                             CORTESÍA
@@ -274,62 +275,65 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                       <div className={`text-xs text-gray-500 ${isCourtesy ? 'line-through' : ''}`}>S/ {(displayPriceUnit || 0).toFixed(2)} c/u</div>
                     </div>
 
-                    {/* Controles de cantidad */}
-                    <div className="flex items-center gap-1 shrink-0">
+                    {/* Fila de controles (en móvil va debajo del nombre) */}
+                    <div className="flex items-center gap-1 sm:gap-1 shrink-0 justify-between sm:justify-end">
+                      {/* Controles de cantidad */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleUpdateQuantity(index, item.quantity, -1)}
+                          disabled={isUpdating || item.quantity <= 1}
+                          className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-8 text-center text-sm font-medium">
+                          {isRowBusy ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : item.quantity}
+                        </span>
+                        <button
+                          onClick={() => handleUpdateQuantity(index, item.quantity, 1)}
+                          disabled={isUpdating}
+                          className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Total */}
+                      <div className="w-20 text-right text-sm font-semibold shrink-0">
+                        {isCourtesy ? (
+                          <div className="flex flex-col items-end leading-tight">
+                            <span className="text-gray-400 line-through text-xs">S/ {(displayTotal || 0).toFixed(2)}</span>
+                            <span className="text-green-700">S/ 0.00</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-900">S/ {item.total.toFixed(2)}</span>
+                        )}
+                      </div>
+
+                      {/* Cortesía */}
                       <button
-                        onClick={() => handleUpdateQuantity(index, item.quantity, -1)}
-                        disabled={isUpdating || item.quantity <= 1}
-                        className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-8 text-center text-sm font-medium">
-                        {isRowBusy ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : item.quantity}
-                      </span>
-                      <button
-                        onClick={() => handleUpdateQuantity(index, item.quantity, 1)}
+                        onClick={() => handleToggleCourtesy(index, item)}
                         disabled={isUpdating}
-                        className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className={`w-7 h-7 flex items-center justify-center rounded shrink-0 disabled:opacity-40 ${
+                          isCourtesy
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'text-green-600 hover:bg-green-50 hover:text-green-700'
+                        }`}
+                        title={isCourtesy ? 'Quitar cortesía' : 'Marcar como cortesía'}
                       >
-                        <Plus className="w-3 h-3" />
+                        <Gift className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Eliminar */}
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        disabled={isUpdating}
+                        className="w-7 h-7 flex items-center justify-center rounded text-red-500 hover:bg-red-50 hover:text-red-700 shrink-0 disabled:opacity-40"
+                        title="Eliminar"
+                      >
+                        {isRowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                       </button>
                     </div>
-
-                    {/* Total */}
-                    <div className="w-20 text-right text-sm font-semibold shrink-0">
-                      {isCourtesy ? (
-                        <div className="flex flex-col items-end leading-tight">
-                          <span className="text-gray-400 line-through text-xs">S/ {(displayTotal || 0).toFixed(2)}</span>
-                          <span className="text-green-700">S/ 0.00</span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-900">S/ {item.total.toFixed(2)}</span>
-                      )}
-                    </div>
-
-                    {/* Cortesía */}
-                    <button
-                      onClick={() => handleToggleCourtesy(index, item)}
-                      disabled={isUpdating}
-                      className={`w-7 h-7 flex items-center justify-center rounded shrink-0 disabled:opacity-40 ${
-                        isCourtesy
-                          ? 'bg-green-600 text-white hover:bg-green-700'
-                          : 'text-green-600 hover:bg-green-50 hover:text-green-700'
-                      }`}
-                      title={isCourtesy ? 'Quitar cortesía' : 'Marcar como cortesía'}
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Eliminar */}
-                    <button
-                      onClick={() => handleRemoveItem(index)}
-                      disabled={isUpdating}
-                      className="w-7 h-7 flex items-center justify-center rounded text-red-500 hover:bg-red-50 hover:text-red-700 shrink-0 disabled:opacity-40"
-                      title="Eliminar"
-                    >
-                      {isRowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
                   </div>
 
                   {/* Modificadores y notas debajo, en línea fina */}
