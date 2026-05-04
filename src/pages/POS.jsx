@@ -568,6 +568,21 @@ export default function POS() {
     }
   }, [isLoading])
 
+  // Tras agregar un item al carrito (por click en lista, modal de variante, lote, serie,
+  // presentación, precio múltiple o modificadores) limpiar el buscador y devolver el foco al input.
+  // Sin esto, el foco queda en el botón clickeado y el Enter de la pistola lectora re-activa
+  // ese botón en lugar de buscar el código escaneado.
+  const previousCartLengthRef = useRef(cart.length)
+  useEffect(() => {
+    if (cart.length > previousCartLengthRef.current) {
+      setSearchTerm('')
+      if (window.innerWidth >= 1024) {
+        searchInputRef.current?.focus()
+      }
+    }
+    previousCartLengthRef.current = cart.length
+  }, [cart.length])
+
   // Auto-actualizar fecha de emisión cuando la pestaña vuelve a estar activa
   // (cubre: PC apagada/encendida, pestaña en segundo plano, suspensión del sistema)
   useEffect(() => {
