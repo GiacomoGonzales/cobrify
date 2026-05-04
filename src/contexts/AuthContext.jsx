@@ -715,9 +715,7 @@ export const AuthProvider = ({ children }) => {
 
   // Función helper para verificar si un feature está habilitado
   const hasFeature = (featureName) => {
-    const result = userFeatures?.[featureName] === true
-    console.log(`🔍 hasFeature('${featureName}'):`, result, '| userFeatures:', userFeatures)
-    return result
+    return userFeatures?.[featureName] === true
   }
 
   const value = {

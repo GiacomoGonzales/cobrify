@@ -71,7 +71,7 @@ import {
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
-import { getRecipeByProductId, checkRecipeStock } from '@/services/recipeService'
+import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
@@ -3440,6 +3440,11 @@ export default function POS() {
   const handleCheckout = async () => {
     if (!user?.uid) return
     if (isProcessing || checkoutGuardRef.current) return
+    console.log('🛒 handleCheckout: iniciando proceso de venta', {
+      itemsEnCarrito: cart.length,
+      tipoDoc: documentType,
+      total: amounts?.total,
+    })
     // Validaciones rápidas (antes de bloquear UI)
     if (companySettings?.requireOpenCashRegister && !cashRegisterOpen) {
       toast.error('Debe abrir la caja diaria antes de emitir ventas')
@@ -3483,8 +3488,10 @@ export default function POS() {
           // Si la receta es modo "producción" (deductOnSale=false), los ingredientes
           // ya se descontaron al producir y el stock se controla en el producto terminado.
           // No validar stock de ingredientes aquí para no bloquear la venta del producto ya producido.
+          // Para recetas legacy sin deductOnSale, aplicamos el mismo default que el formulario
+          // de Composición (restaurant=descontar, otros=no descontar).
           const recipeResult = await getRecipeByProductId(businessId, item.id)
-          if (recipeResult.success && recipeResult.data?.deductOnSale === false) continue
+          if (recipeResult.success && !shouldDeductIngredients(recipeResult.data, businessMode)) continue
 
           const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
           if (stockCheck.success && !stockCheck.hasStock) {
@@ -3519,11 +3526,19 @@ export default function POS() {
           .map(([name, data]) => `${name} (necesitas ${data.needed.toFixed(2)} ${data.unit}, disponible ${data.available.toFixed(2)})`)
           .join(' · ')
 
+        // Log explícito en consola para depurar cuando el toast pase desapercibido.
+        console.error('🛑 Venta abortada: faltan ingredientes de receta', {
+          ingredientes: ingredientSummary,
+          detalle: allMissingIngredients,
+        })
+
         abortCheckout(
           `No hay suficiente stock para procesar la venta. Faltan ingredientes: ${missingList}`,
           { duration: 7000 }
         )
         return
+      } else {
+        console.log('✅ Validación de ingredientes OK')
       }
     }
 
@@ -4617,14 +4632,15 @@ export default function POS() {
               // 4.5. Descontar ingredientes del inventario
               // - Recetas con deductOnSale=true (default en restaurantes): descontar al vender
               // - Recetas con deductOnSale=false (producción): NO descontar, ya se descontó al producir
+              // - Recetas legacy (deductOnSale=undefined): se aplica el mismo default del formulario
+              //   (restaurant=descontar, otros=no descontar) vía shouldDeductIngredients.
               for (const item of bgCart) {
                 if (item.isCustom) continue
                 try {
                   const recipeResult = await getRecipeByProductId(businessId, item.id)
                   if (recipeResult.success && recipeResult.data) {
                     const recipe = recipeResult.data
-                    // Si deductOnSale es false, los ingredientes se manejan por producción
-                    if (recipe.deductOnSale === false) continue
+                    if (!shouldDeductIngredients(recipe, businessMode)) continue
                     const ingredientsToDeduct = recipe.ingredients.map(ing => ({
                       ...ing,
                       quantity: ing.quantity * item.quantity

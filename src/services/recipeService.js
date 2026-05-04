@@ -15,6 +15,26 @@ import { db } from '@/lib/firebase'
 import { getIngredient, convertUnit } from './ingredientService'
 
 /**
+ * Determina si una receta debe descontar/validar stock de ingredientes al vender.
+ *
+ * El campo `deductOnSale` se introdujo después de que ya existían recetas en producción.
+ * Las recetas creadas antes de esa fecha tienen `deductOnSale === undefined`. Para esas,
+ * aplicamos el mismo default que usa el formulario de Composición (Recipes.jsx):
+ *   - businessMode === 'restaurant' → true (descontar al vender, comportamiento clásico)
+ *   - cualquier otro modo            → false (modo "producción", no descontar al vender)
+ *
+ * Esto evita que negocios no-restaurant con recetas legacy queden bloqueados por la
+ * validación de stock de ingredientes (ver POS.jsx handleCheckout) cuando el dueño
+ * nunca configuró explícitamente que se descuente.
+ */
+export const shouldDeductIngredients = (recipe, businessMode) => {
+  if (!recipe) return false
+  if (recipe.deductOnSale === true) return true
+  if (recipe.deductOnSale === false) return false
+  return businessMode === 'restaurant'
+}
+
+/**
  * Calcular el costo de una receta basado en sus ingredientes
  */
 export const calculateRecipeCost = async (businessId, ingredients) => {

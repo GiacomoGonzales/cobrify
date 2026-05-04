@@ -70,7 +70,7 @@ import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -734,16 +734,18 @@ Gracias por tu preferencia.`
             }
           }
 
-          // Revertir ingredientes descontados por recetas con deductOnSale
+          // Revertir ingredientes descontados por recetas con deductOnSale.
+          // Usar el mismo default que en POS para que solo se restaure lo que efectivamente
+          // se descontó al vender (consistente para recetas legacy con deductOnSale=undefined).
           try {
-            const { getRecipeByProductId } = await import('@/services/recipeService')
+            const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
             const { restoreIngredients } = await import('@/services/ingredientService')
 
             for (const item of voidingInvoice.items) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
-                if (recipeResult.success && recipeResult.data && recipeResult.data.deductOnSale !== false) {
+                if (recipeResult.success && recipeResult.data && shouldDeductIngredients(recipeResult.data, businessMode)) {
                   const recipe = recipeResult.data
                   const ingredientsToRestore = recipe.ingredients.map(ing => ({
                     ...ing,
@@ -974,16 +976,17 @@ Gracias por tu preferencia.`
             }
           }
 
-          // Revertir ingredientes descontados por recetas con deductOnSale
+          // Revertir ingredientes descontados por recetas con deductOnSale.
+          // Usa el mismo default que POS para mantener consistencia con recetas legacy.
           try {
-            const { getRecipeByProductId } = await import('@/services/recipeService')
+            const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
             const { restoreIngredients } = await import('@/services/ingredientService')
 
             for (const item of voidingSunatInvoice.items) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
-                if (recipeResult.success && recipeResult.data && recipeResult.data.deductOnSale !== false) {
+                if (recipeResult.success && recipeResult.data && shouldDeductIngredients(recipeResult.data, businessMode)) {
                   const recipe = recipeResult.data
                   const ingredientsToRestore = recipe.ingredients.map(ing => ({
                     ...ing,
