@@ -69,6 +69,7 @@ const routeToPageId = {
   '/app/alertas-veterinaria': 'vet-alerts',
   '/app/agenda-veterinaria': 'vet-agenda',
   '/app/contabilidad': 'accounting',
+  '/app/asistencia': 'attendance',
 }
 
 export default function MainLayout() {
@@ -540,6 +541,7 @@ export default function MainLayout() {
         'vet-alerts': '/app/alertas-veterinaria',
         'vet-agenda': '/app/agenda-veterinaria',
         'accounting': '/app/contabilidad',
+        'attendance': '/app/asistencia',
       }
       const firstAllowedRoute = pageRouteMap[allowedPages[0]] || '/app/pos'
       return <Navigate to={firstAllowedRoute} replace />

@@ -503,6 +503,7 @@ export const AuthProvider = ({ children }) => {
               'waiters': '/app/mozos',
               'loans': '/app/prestamos',
               'certificates': '/app/certificados',
+              'attendance': '/app/asistencia',
             }
             const firstRoute = pageRouteMap[pages[0]] || '/app/pos'
             navigate(firstRoute)
