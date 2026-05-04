@@ -2373,20 +2373,32 @@ export default function POS() {
 
   // Resolver precio para un nivel dado, considerando: precio manual > porcentaje automático > precio base.
   // La base del % se controla en Configuración → Ventas:
-  //   'public' (default histórico): Precio N = Público × (1 - %)
-  //   'cost':                       Precio N = Costo × (1 + %). Si no hay costo registrado, no se muestra el nivel.
+  //   'public' (default histórico): Precio N = Público × (1 - %). No aplica a price1 (es la base).
+  //   'cost':                       Precio N = Costo × (1 + %). Aplica también a price1 si está configurado.
+  //                                  Si no hay costo registrado, se cae al precio manual o null.
   // parentProduct: cuando priceSource es una variante, permite heredar el costo del producto padre.
   const resolvePrice = (priceSource, priceKey, parentProduct = null) => {
-    if (priceKey === 'price1') return priceSource.price
-    if (priceSource[priceKey]) return priceSource[priceKey]
+    // El campo del precio manual: para price1 es 'price', para los demás es la propia key
+    const manualField = priceKey === 'price1' ? 'price' : priceKey
+    const manualValue = priceSource[manualField]
+    // Si hay precio manual ingresado, usarlo (preserva comportamiento histórico)
+    if (manualValue) return manualValue
+
     const pctConfig = businessSettings?.pricePercentages?.[priceKey]
-    if (!pctConfig?.enabled || !(pctConfig.discount > 0)) return null
+    if (!pctConfig?.enabled || !(pctConfig.discount > 0)) {
+      // Sin % configurado: para price1 devolver el valor manual aunque sea 0/null (compatibilidad);
+      // para price2/3/4, no hay forma de derivar → null.
+      return priceKey === 'price1' ? manualValue : null
+    }
+
     const base = businessSettings?.priceCalculationBase || 'public'
     if (base === 'cost') {
       const cost = parseFloat(priceSource.cost) || parseFloat(parentProduct?.cost) || 0
-      if (cost <= 0) return null
+      if (cost <= 0) return priceKey === 'price1' ? manualValue : null
       return Math.round(cost * (1 + pctConfig.discount / 100) * 100) / 100
     }
+    // base === 'public': el % solo aplica a price2/3/4. price1 ES la referencia.
+    if (priceKey === 'price1') return manualValue
     return Math.round(priceSource.price * (1 - pctConfig.discount / 100) * 100) / 100
   }
 

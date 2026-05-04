@@ -37,7 +37,7 @@ import {
   getDocumentPrinterConfig
 } from '@/services/thermalPrinterService'
 import { getWarehouses } from '@/services/warehouseService'
-import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
+import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import { getTables } from '@/services/tableService'
@@ -256,6 +256,9 @@ export default function Settings() {
     price4: 'Especial'
   })
   const [pricePercentages, setPricePercentages] = useState({
+    // price1 solo aplica cuando priceCalculationBase === 'cost' (margen sobre costo).
+    // En modo 'public' no tiene sentido aplicar % al propio precio público.
+    price1: { enabled: false, discount: 0 },
     price2: { enabled: false, discount: 0 },
     price3: { enabled: false, discount: 0 },
     price4: { enabled: false, discount: 0 }
@@ -264,6 +267,10 @@ export default function Settings() {
   //   'public' → Precio N = Precio público × (1 - %)  (descuento sobre público, default histórico)
   //   'cost'   → Precio N = Costo × (1 + %)           (margen sobre costo)
   const [priceCalculationBase, setPriceCalculationBase] = useState('public')
+  const [showBulkRecalcModal, setShowBulkRecalcModal] = useState(false)
+  const [isBulkRecalculating, setIsBulkRecalculating] = useState(false)
+  const [bulkRecalcProgress, setBulkRecalcProgress] = useState({ current: 0, total: 0 })
+  const [bulkRecalcStats, setBulkRecalcStats] = useState(null)
 
   // Estado para presentaciones de venta
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
@@ -491,6 +498,70 @@ export default function Settings() {
       department: dept?.name || '',
       province: prov?.name || '',
       district: dist?.name || ''
+    }
+  }
+
+  // Recalcula el precio de venta de todos los productos como Costo × (1 + % Precio 1).
+  // Salta productos sin costo. Para productos con variantes, usa cost de la variante con
+  // fallback al cost del producto padre, y actualiza variant.price y product.price.
+  const handleBulkRecalcPrices = async () => {
+    const pct = pricePercentages.price1?.discount
+    if (!pct || pct <= 0) {
+      toast.error('Configura primero un porcentaje para Precio 1')
+      return
+    }
+
+    setIsBulkRecalculating(true)
+    setBulkRecalcStats(null)
+    try {
+      const businessId = getBusinessId()
+      const result = await getProducts(businessId)
+      if (!result.success) throw new Error(result.error || 'Error al cargar productos')
+      const allProducts = result.data || []
+
+      const candidates = allProducts.filter(p => {
+        // Producto con costo propio O con variantes que tengan algún costo
+        if (parseFloat(p.cost) > 0) return true
+        if (Array.isArray(p.variants) && p.variants.some(v => parseFloat(v.cost) > 0 || parseFloat(p.cost) > 0)) return true
+        return false
+      })
+
+      setBulkRecalcProgress({ current: 0, total: candidates.length })
+      let updated = 0
+      const factor = 1 + pct / 100
+      const round2 = (n) => Math.round(n * 100) / 100
+
+      for (const p of candidates) {
+        const updates = {}
+        const parentCost = parseFloat(p.cost) || 0
+        if (parentCost > 0) {
+          updates.price = round2(parentCost * factor)
+        }
+        if (Array.isArray(p.variants) && p.variants.length > 0) {
+          updates.variants = p.variants.map(v => {
+            const vCost = parseFloat(v.cost) || parentCost || 0
+            return vCost > 0 ? { ...v, price: round2(vCost * factor) } : v
+          })
+        }
+        if (Object.keys(updates).length === 0) continue
+
+        const r = await updateProduct(businessId, p.id, updates)
+        if (r.success) updated++
+        setBulkRecalcProgress(prev => ({ ...prev, current: prev.current + 1 }))
+      }
+
+      setBulkRecalcStats({
+        total: allProducts.length,
+        candidates: candidates.length,
+        updated,
+        skipped: allProducts.length - updated,
+      })
+      toast.success(`${updated} producto(s) actualizado(s) con margen del ${pct}%`)
+    } catch (err) {
+      console.error('Error en bulk recalc:', err)
+      toast.error(err.message || 'Error al recalcular precios')
+    } finally {
+      setIsBulkRecalculating(false)
     }
   }
 
@@ -956,6 +1027,7 @@ export default function Settings() {
         }
         if (businessData.pricePercentages) {
           setPricePercentages({
+            price1: businessData.pricePercentages.price1 || { enabled: false, discount: 0 },
             price2: businessData.pricePercentages.price2 || { enabled: false, discount: 0 },
             price3: businessData.pricePercentages.price3 || { enabled: false, discount: 0 },
             price4: businessData.pricePercentages.price4 || { enabled: false, discount: 0 }
@@ -4337,7 +4409,9 @@ export default function Settings() {
                           </div>
 
                           <div className="space-y-3">
-                            {['price2', 'price3', 'price4'].map((key, idx) => (
+                            {/* Precio 1 solo aparece cuando la base es Costo: aplicar % al precio público
+                                solo tiene sentido si se calcula como margen sobre costo. */}
+                            {(priceCalculationBase === 'cost' ? ['price1', 'price2', 'price3', 'price4'] : ['price2', 'price3', 'price4']).map((key) => (
                               <div key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                                 <input
                                   type="checkbox"
@@ -4349,7 +4423,7 @@ export default function Settings() {
                                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                 />
                                 <span className="text-sm text-gray-700 min-w-[80px]">
-                                  {priceLabels[key] || `Precio ${idx + 2}`}
+                                  {priceLabels[key] || key}
                                 </span>
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-gray-500">{priceCalculationBase === 'cost' ? '+' : '-'}</span>
@@ -4380,6 +4454,26 @@ export default function Settings() {
                             Si un producto ya tiene un precio manual ingresado, se usará ese precio en lugar del porcentaje.
                             {priceCalculationBase === 'cost' && ' Los productos sin costo registrado no mostrarán este nivel de precio.'}
                           </p>
+
+                          {/* Bulk recalc: solo cuando base es Costo y el % de Precio 1 está activo */}
+                          {priceCalculationBase === 'cost' && pricePercentages.price1?.enabled && pricePercentages.price1?.discount > 0 && (
+                            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                              <p className="text-xs text-amber-900 font-medium mb-1">Aplicar margen a productos existentes</p>
+                              <p className="text-xs text-amber-800 mb-3">
+                                Recalcula el precio de venta de todos los productos con costo registrado, usando: <strong>Costo × (1 + {pricePercentages.price1.discount}%)</strong>. Esta acción es destructiva: los precios manuales serán sobrescritos.
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowBulkRecalcModal(true)}
+                                disabled={isBulkRecalculating}
+                                className="text-amber-900 border-amber-300 hover:bg-amber-100"
+                              >
+                                {isBulkRecalculating ? `Recalculando ${bulkRecalcProgress.current}/${bulkRecalcProgress.total}...` : 'Aplicar a productos existentes'}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -9262,6 +9356,67 @@ export default function Settings() {
       </Modal>
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
+      {/* Modal de confirmación: Aplicar margen a productos existentes */}
+      <Modal
+        isOpen={showBulkRecalcModal}
+        onClose={() => {
+          if (!isBulkRecalculating) {
+            setShowBulkRecalcModal(false)
+            setBulkRecalcStats(null)
+          }
+        }}
+        title="Aplicar margen a productos existentes"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {!bulkRecalcStats && (
+            <>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                Se recalculará el <strong>precio de venta</strong> de cada producto con costo registrado usando la fórmula:
+                <p className="mt-2 font-mono text-center bg-white rounded py-1">precio = costo × (1 + {pricePercentages.price1?.discount || 0}%)</p>
+              </div>
+              <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
+                <li>Los productos sin costo registrado <strong>se saltan</strong>.</li>
+                <li>En productos con variantes se actualiza cada variante usando su costo (o el del padre si no tiene).</li>
+                <li>Los precios manuales serán <strong>sobrescritos</strong>.</li>
+                <li>Los precios 2/3/4 manuales no se tocan; se recalculan en POS según la configuración.</li>
+              </ul>
+              {isBulkRecalculating && (
+                <div className="text-sm text-gray-700">
+                  Procesando {bulkRecalcProgress.current} / {bulkRecalcProgress.total}…
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowBulkRecalcModal(false)} disabled={isBulkRecalculating}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleBulkRecalcPrices} disabled={isBulkRecalculating}>
+                  {isBulkRecalculating ? 'Procesando…' : 'Confirmar y aplicar'}
+                </Button>
+              </div>
+            </>
+          )}
+          {bulkRecalcStats && (
+            <>
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900">
+                <p className="font-medium mb-1">Recálculo completado</p>
+                <ul className="text-xs space-y-0.5">
+                  <li>Productos totales: {bulkRecalcStats.total}</li>
+                  <li>Candidatos (con costo): {bulkRecalcStats.candidates}</li>
+                  <li>Actualizados: <strong>{bulkRecalcStats.updated}</strong></li>
+                  <li>Saltados (sin costo): {bulkRecalcStats.skipped}</li>
+                </ul>
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button onClick={() => { setShowBulkRecalcModal(false); setBulkRecalcStats(null); }}>
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
       <Modal
         isOpen={showTermsTemplateModal}
         onClose={() => setShowTermsTemplateModal(false)}
