@@ -2356,24 +2356,36 @@ export default function POS() {
     setProductForModifiers(null)
   }
 
-  // Resolver precio para un nivel dado, considerando: precio manual > porcentaje automático > precio base
-  const resolvePrice = (priceSource, priceKey) => {
+  // Resolver precio para un nivel dado, considerando: precio manual > porcentaje automático > precio base.
+  // La base del % se controla en Configuración → Ventas:
+  //   'public' (default histórico): Precio N = Público × (1 - %)
+  //   'cost':                       Precio N = Costo × (1 + %). Si no hay costo registrado, no se muestra el nivel.
+  // parentProduct: cuando priceSource es una variante, permite heredar el costo del producto padre.
+  const resolvePrice = (priceSource, priceKey, parentProduct = null) => {
     if (priceKey === 'price1') return priceSource.price
-    // Si el producto tiene precio manual, usarlo
     if (priceSource[priceKey]) return priceSource[priceKey]
-    // Si hay porcentaje configurado, calcularlo
     const pctConfig = businessSettings?.pricePercentages?.[priceKey]
-    if (pctConfig?.enabled && pctConfig.discount > 0) {
-      return Math.round(priceSource.price * (1 - pctConfig.discount / 100) * 100) / 100
+    if (!pctConfig?.enabled || !(pctConfig.discount > 0)) return null
+    const base = businessSettings?.priceCalculationBase || 'public'
+    if (base === 'cost') {
+      const cost = parseFloat(priceSource.cost) || parseFloat(parentProduct?.cost) || 0
+      if (cost <= 0) return null
+      return Math.round(cost * (1 + pctConfig.discount / 100) * 100) / 100
     }
-    return null
+    return Math.round(priceSource.price * (1 - pctConfig.discount / 100) * 100) / 100
   }
 
   // Verificar si un nivel de precio está disponible (manual o por porcentaje)
-  const hasPriceLevel = (priceSource, priceKey) => {
+  const hasPriceLevel = (priceSource, priceKey, parentProduct = null) => {
     if (priceSource[priceKey]) return true
     const pctConfig = businessSettings?.pricePercentages?.[priceKey]
-    return pctConfig?.enabled && pctConfig.discount > 0
+    if (!pctConfig?.enabled || !(pctConfig.discount > 0)) return false
+    const base = businessSettings?.priceCalculationBase || 'public'
+    if (base === 'cost') {
+      const cost = parseFloat(priceSource.cost) || parseFloat(parentProduct?.cost) || 0
+      return cost > 0
+    }
+    return true
   }
 
   // Manejar selección de precio desde el modal
@@ -2381,7 +2393,7 @@ export default function POS() {
     // Manejar variante con múltiples precios
     if (variantForPriceSelection) {
       const { product, variant } = variantForPriceSelection
-      const selectedPrice = resolvePrice(variant, priceLevel) || variant.price
+      const selectedPrice = resolvePrice(variant, priceLevel, product) || variant.price
 
       // Agregar variante al carrito con el precio seleccionado
       addVariantToCart(product, variant, selectedPrice)
@@ -2539,13 +2551,13 @@ export default function POS() {
 
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
     const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (
-      hasPriceLevel(variant, 'price2') || hasPriceLevel(variant, 'price3') || hasPriceLevel(variant, 'price4')
+      hasPriceLevel(variant, 'price2', product) || hasPriceLevel(variant, 'price3', product) || hasPriceLevel(variant, 'price4', product)
     )
     if (hasMultiplePrices && selectedPrice === null) {
       // Si el cliente tiene un nivel de precio asignado, usarlo automáticamente
       if (selectedCustomer?.priceLevel) {
         const priceKey = selectedCustomer.priceLevel
-        const autoPrice = resolvePrice(variant, priceKey) || variant.price
+        const autoPrice = resolvePrice(variant, priceKey, product) || variant.price
         return addVariantToCart(product, variant, autoPrice)
       }
       // Mostrar modal de selección de precio
@@ -7991,6 +8003,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         {(productForPriceSelection || variantForPriceSelection) && (() => {
           // Determinar si estamos mostrando precios de variante o producto
           const priceSource = variantForPriceSelection ? variantForPriceSelection.variant : productForPriceSelection
+          const parentProduct = variantForPriceSelection ? variantForPriceSelection.product : null
           const variantInfo = variantForPriceSelection?.variant
 
           return (
@@ -8037,10 +8050,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   { key: 'price3', color: 'amber', label: businessSettings?.priceLabels?.price3 || 'Precio 3' },
                   { key: 'price4', color: 'purple', label: businessSettings?.priceLabels?.price4 || 'Precio 4' }
                 ].map(({ key, color, label }) => {
-                  const resolved = resolvePrice(priceSource, key)
+                  const resolved = resolvePrice(priceSource, key, parentProduct)
                   if (!resolved) return null
                   const isAutomatic = !priceSource[key]
                   const pctDiscount = businessSettings?.pricePercentages?.[key]?.discount
+                  const calcBase = businessSettings?.priceCalculationBase || 'public'
+                  const automaticLabel = calcBase === 'cost'
+                    ? `+${pctDiscount}% sobre el costo`
+                    : `-${pctDiscount}% del precio base`
                   return (
                     <button
                       key={key}
@@ -8051,7 +8068,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <div>
                           <p className="font-medium text-gray-900">{label}</p>
                           <p className="text-xs text-gray-500">
-                            {isAutomatic ? `-${pctDiscount}% del precio base` : 'Precio manual'}
+                            {isAutomatic ? automaticLabel : 'Precio manual'}
                           </p>
                         </div>
                         <p className={`text-xl font-bold text-${color}-600`}>

@@ -260,6 +260,10 @@ export default function Settings() {
     price3: { enabled: false, discount: 0 },
     price4: { enabled: false, discount: 0 }
   })
+  // Base sobre la que se aplica el porcentaje:
+  //   'public' → Precio N = Precio público × (1 - %)  (descuento sobre público, default histórico)
+  //   'cost'   → Precio N = Costo × (1 + %)           (margen sobre costo)
+  const [priceCalculationBase, setPriceCalculationBase] = useState('public')
 
   // Estado para presentaciones de venta
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
@@ -957,6 +961,7 @@ export default function Settings() {
             price4: businessData.pricePercentages.price4 || { enabled: false, discount: 0 }
           })
         }
+        setPriceCalculationBase(businessData.priceCalculationBase || 'public')
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
@@ -4295,8 +4300,42 @@ export default function Settings() {
 
                         <div className="mt-4 pt-4 border-t border-gray-200">
                           <p className="text-xs text-gray-500 mb-3">
-                            Descuento automático por porcentaje (opcional). Si lo activas, los productos que no tengan un precio manual asignado calcularán el precio automáticamente a partir del precio base.
+                            Cálculo automático por porcentaje (opcional). Si lo activas, los productos que no tengan un precio manual asignado calcularán el precio automáticamente.
                           </p>
+
+                          {/* Base de cálculo */}
+                          <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <p className="text-xs font-medium text-gray-700 mb-2">Base de cálculo</p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-primary-300">
+                                <input
+                                  type="radio"
+                                  name="priceCalculationBase"
+                                  value="public"
+                                  checked={priceCalculationBase === 'public'}
+                                  onChange={(e) => setPriceCalculationBase(e.target.value)}
+                                  className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                                />
+                                <span className="text-xs text-gray-700">
+                                  <strong>Precio público</strong> — el % se descuenta del precio público (Precio N = Público × (1 − %))
+                                </span>
+                              </label>
+                              <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-primary-300">
+                                <input
+                                  type="radio"
+                                  name="priceCalculationBase"
+                                  value="cost"
+                                  checked={priceCalculationBase === 'cost'}
+                                  onChange={(e) => setPriceCalculationBase(e.target.value)}
+                                  className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                                />
+                                <span className="text-xs text-gray-700">
+                                  <strong>Costo</strong> — el % se suma sobre el costo del producto (Precio N = Costo × (1 + %))
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+
                           <div className="space-y-3">
                             {['price2', 'price3', 'price4'].map((key, idx) => (
                               <div key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -4313,11 +4352,11 @@ export default function Settings() {
                                   {priceLabels[key] || `Precio ${idx + 2}`}
                                 </span>
                                 <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">-</span>
+                                  <span className="text-xs text-gray-500">{priceCalculationBase === 'cost' ? '+' : '-'}</span>
                                   <input
                                     type="number"
                                     min="0"
-                                    max="100"
+                                    max={priceCalculationBase === 'cost' ? '1000' : '100'}
                                     step="1"
                                     value={pricePercentages[key]?.discount || ''}
                                     onChange={(e) => setPricePercentages(prev => ({
@@ -4328,13 +4367,18 @@ export default function Settings() {
                                     className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
                                     placeholder="0"
                                   />
-                                  <span className="text-xs text-gray-500">% menos que {priceLabels.price1 || 'Precio 1'}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {priceCalculationBase === 'cost'
+                                      ? '% sobre el costo del producto'
+                                      : `% menos que ${priceLabels.price1 || 'Precio 1'}`}
+                                  </span>
                                 </div>
                               </div>
                             ))}
                           </div>
                           <p className="text-xs text-gray-400 mt-2 italic">
                             Si un producto ya tiene un precio manual ingresado, se usará ese precio en lugar del porcentaje.
+                            {priceCalculationBase === 'cost' && ' Los productos sin costo registrado no mostrarán este nivel de precio.'}
                           </p>
                         </div>
                       </div>
@@ -4571,6 +4615,7 @@ export default function Settings() {
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,
+                      priceCalculationBase: priceCalculationBase,
                       presentationsEnabled: presentationsEnabled,
                       showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),
