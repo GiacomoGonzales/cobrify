@@ -11,15 +11,19 @@ export function cn(...inputs) {
 }
 
 /**
- * Formatea un número como moneda peruana (PEN)
+ * Formatea un número como moneda peruana (PEN).
+ * Si el valor no es un número finito (undefined, null, NaN, string vacío)
+ * se formatea como 0 para evitar mostrar "S/ NaN" en la UI.
  * @param {number} amount - Monto a formatear
  * @returns {string} - Monto formateado
  */
 export function formatCurrency(amount) {
+  const n = Number(amount)
+  const safe = Number.isFinite(n) ? n : 0
   return new Intl.NumberFormat('es-PE', {
     style: 'currency',
     currency: 'PEN',
-  }).format(amount)
+  }).format(safe)
 }
 
 /**
