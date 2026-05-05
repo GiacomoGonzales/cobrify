@@ -68,24 +68,30 @@ import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeServ
 import { getCompanySettings } from '@/services/firestoreService'
 
 /**
- * Devuelve el precio "representativo" de un item para mostrar en la tabla.
- * - Si el item NO tiene variantes: usa item.price.
- * - Si tiene variantes: usa el precio MÍNIMO entre variantes con precio > 0.
- *   Esto evita "S/ NaN" cuando el padre no guarda precio (porque va por variante).
+ * Formatea el precio de un item para mostrar en la tabla.
+ * - Si NO tiene variantes: formatea item.price (S/ X.XX).
+ * - Si tiene variantes con precios IGUALES: formatea ese precio único.
+ * - Si tiene variantes con precios DISTINTOS: devuelve un rango "S/ X – Y".
+ *
+ * Acepta variantes sin precio (filtra). Si no hay precios válidos devuelve "S/ 0.00".
  *
  * @param {Object} item - Producto o ingrediente
- * @returns {number} - Precio numérico (0 si no hay datos válidos)
+ * @returns {string} - Precio o rango formateado
  */
-const getItemDisplayPrice = (item) => {
-  if (!item) return 0
+const formatItemPrice = (item) => {
+  if (!item) return formatCurrency(0)
   if (item.hasVariants && Array.isArray(item.variants) && item.variants.length > 0) {
     const prices = item.variants
       .map((v) => Number(v?.price))
       .filter((p) => Number.isFinite(p) && p > 0)
-    if (prices.length === 0) return 0
-    return Math.min(...prices)
+    if (prices.length === 0) return formatCurrency(0)
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    return min === max
+      ? formatCurrency(min)
+      : `${formatCurrency(min)} – ${formatCurrency(max)}`
   }
-  return Number(item.price) || 0
+  return formatCurrency(Number(item.price) || 0)
 }
 
 // Helper functions for category hierarchy
@@ -2398,7 +2404,7 @@ export default function Inventory() {
                                 {item.isIngredient ? realStock.toFixed(2) : realStock} {item.unit || 'uds'}
                               </span>
                             )}
-                            <span className="text-sm text-gray-700">{formatCurrency(isProduct ? getItemDisplayPrice(item) : (item.averageCost || 0))}</span>
+                            <span className="text-sm text-gray-700">{isProduct ? formatItemPrice(item) : formatCurrency(item.averageCost || 0)}</span>
                             {realStock !== null && (
                               <span className="text-sm font-semibold">{formatCurrency(isProduct && item.hasVariants ? item.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0) * (Number(v.price) || 0), 0) || 0 : realStock * (isProduct ? (Number(item.price) || 0) : (item.averageCost || 0)))}</span>
                             )}
@@ -2893,7 +2899,7 @@ export default function Inventory() {
                         </TableCell>
                         <TableCell className="text-right lg:w-[8%]">
                           <span className="text-sm">
-                            {formatCurrency(isProduct ? getItemDisplayPrice(item) : (item.averageCost || 0))}
+                            {isProduct ? formatItemPrice(item) : formatCurrency(item.averageCost || 0)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right lg:w-[10%]">
