@@ -446,7 +446,45 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       validProducts.push(product)
     })
 
-    return { validProducts, errors }
+    // Agrupación: cuando el usuario carga varias filas con el MISMO nombre,
+    // cada una con UNA variante (formato B / multi-fila), las fusionamos en
+    // un solo producto con todas las variantes juntas. Esto es lo que el usuario
+    // espera al usar el flujo "una fila por combinación talla×color".
+    //
+    // Reglas:
+    // - Solo agrupa productos que tengan hasVariants = true.
+    // - La key es el nombre normalizado (trim + lowercase).
+    // - Se conservan los demás campos del PRIMER producto encontrado.
+    // - variants se concatena, variantAttributes se mergea (set).
+    // - Productos sin variantes (servicios, retail clásico) NO se agrupan
+    //   aunque compartan nombre.
+    const groupedByName = new Map()
+    const finalProducts = []
+    for (const p of validProducts) {
+      if (!p.hasVariants) {
+        finalProducts.push(p)
+        continue
+      }
+      const key = (p.name || '').trim().toLowerCase()
+      if (!key) {
+        finalProducts.push(p)
+        continue
+      }
+      if (groupedByName.has(key)) {
+        const existing = groupedByName.get(key)
+        existing.variants.push(...(p.variants || []))
+        const attrSet = new Set([
+          ...(existing.variantAttributes || []),
+          ...(p.variantAttributes || []),
+        ])
+        existing.variantAttributes = [...attrSet]
+      } else {
+        groupedByName.set(key, p)
+        finalProducts.push(p)
+      }
+    }
+
+    return { validProducts: finalProducts, errors }
   }
 
   const handleImport = async () => {
@@ -1250,31 +1288,54 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {previewData.slice(0, 50).map((product, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm text-gray-900">{product.sku || '-'}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{product.code || '-'}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900">{product.name}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900">S/ {product.price.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{product.stock ?? 'N/A'}</td>
-                      <td className="px-3 py-2 text-sm">
-                        {product.trackStock ? (
-                          <span className="text-green-600 font-medium">SÍ</span>
-                        ) : (
-                          <span className="text-gray-400">NO</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-sm">
-                        {product.taxAffectation === '20' ? (
-                          <span className="text-blue-600 font-medium">EXO</span>
-                        ) : product.taxAffectation === '30' ? (
-                          <span className="text-orange-600 font-medium">INA</span>
-                        ) : (
-                          <span className="text-green-600 font-medium">GRA</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {previewData.slice(0, 50).map((product, index) => {
+                    const hasVar = product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
+                    let priceCell = `S/ ${(product.price || 0).toFixed(2)}`
+                    let stockCell = product.stock ?? 'N/A'
+                    if (hasVar) {
+                      const prices = product.variants.map(v => Number(v.price)).filter(p => p > 0)
+                      if (prices.length > 0) {
+                        const min = Math.min(...prices)
+                        const max = Math.max(...prices)
+                        priceCell = min === max ? `S/ ${min.toFixed(2)}` : `S/ ${min.toFixed(2)} – ${max.toFixed(2)}`
+                      }
+                      const totalStock = product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+                      stockCell = totalStock || 0
+                    }
+                    return (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-900">
+                          {hasVar
+                            ? <span className="text-purple-700 font-medium text-xs">{product.variants.length} variantes</span>
+                            : (product.sku || '-')}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600">
+                          {hasVar
+                            ? <span className="text-xs text-gray-400 italic">por variante</span>
+                            : (product.code || '-')}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{product.name}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{priceCell}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{stockCell}</td>
+                        <td className="px-3 py-2 text-sm">
+                          {product.trackStock ? (
+                            <span className="text-green-600 font-medium">SÍ</span>
+                          ) : (
+                            <span className="text-gray-400">NO</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-sm">
+                          {product.taxAffectation === '20' ? (
+                            <span className="text-blue-600 font-medium">EXO</span>
+                          ) : product.taxAffectation === '30' ? (
+                            <span className="text-orange-600 font-medium">INA</span>
+                          ) : (
+                            <span className="text-green-600 font-medium">GRA</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
               {previewData.length > 50 && (
