@@ -15,6 +15,12 @@ import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
 import { loginRappi, getStoreOrders, getOrdersV2 } from './src/services/rappiApi.js'
+import {
+  isCloudinaryUrl,
+  isAlreadyOptimized,
+  parseCloudinaryUrl,
+  migrateOneUrl,
+} from './src/services/cloudinaryAdmin.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -8922,6 +8928,208 @@ export const testRappiConnection = onCall(
       if (err instanceof HttpsError) throw err
       console.error('testRappiConnection error:', err)
       return { ok: false, step: 'unknown', message: err.message || String(err) }
+    }
+  }
+)
+
+/**
+ * Migración masiva de imágenes ya almacenadas en Cloudinary a WebP optimizado.
+ *
+ * Recorre todos los businesses y sus productos buscando URLs de Cloudinary que
+ * NO estén en formato webp/avif. Para cada candidate:
+ *   1. Re-uploadea desde la URL original (Cloudinary aplica la incoming
+ *      transformation del preset cobrify_unsigned: q_auto:eco,f_auto,c_limit,w_1600).
+ *   2. Borra el asset original (libera storage).
+ *   3. Actualiza la URL en Firestore.
+ *
+ * Soporta dryRun y resumeFrom para no timeoutear con catálogos grandes.
+ *
+ * Solo admin (giiacomo@gmail.com en colección 'admins') puede ejecutarla.
+ */
+export const migrateCloudinaryImages = onCall(
+  {
+    region: 'us-central1',
+    cors: true,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: ['CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists) {
+      throw new HttpsError('permission-denied', 'Solo administradores')
+    }
+
+    const dryRun = request.data?.dryRun !== false // default true por seguridad
+    const resumeFrom = request.data?.resumeFrom || null
+    const onlyBusinessId = request.data?.businessId || null
+
+    const startMs = Date.now()
+    const TIME_BUDGET_MS = 8 * 60 * 1000 // 8 min, margen vs timeout de 9
+
+    const stats = {
+      dryRun,
+      scanned: 0,
+      candidates: 0,
+      migrated: 0,
+      errors: 0,
+      freedBytes: 0,
+      sampleCandidates: [], // primeras URLs candidate (debug)
+      lastProcessed: null,  // {phase, businessId, productId?}
+      resumeFrom: null,     // si timeout, info para reintentar
+      doneAt: null,
+    }
+
+    const BUSINESS_FIELDS = [
+      'catalogLogoUrl',
+      'catalogLogoLandscape',
+      'catalogCoverImage',
+      'catalogCoverImageMobile',
+    ]
+
+    const timeUp = () => Date.now() - startMs > TIME_BUDGET_MS
+
+    // Procesa una URL de un campo de un doc concreto.
+    // Si dryRun, solo cuenta. Si no, re-uploadea + borra original + actualiza Firestore.
+    async function processField({ docRef, fieldName, indexInArray, currentUrl }) {
+      stats.scanned++
+      if (!isCloudinaryUrl(currentUrl)) return
+      if (isAlreadyOptimized(currentUrl)) return
+
+      stats.candidates++
+      if (stats.sampleCandidates.length < 10) {
+        stats.sampleCandidates.push(currentUrl)
+      }
+
+      if (dryRun) return
+
+      try {
+        const result = await migrateOneUrl(currentUrl, { dryRun: false })
+        stats.migrated++
+        stats.freedBytes += result.freed || 0
+
+        // Actualizar Firestore con la nueva URL
+        if (indexInArray == null) {
+          await docRef.update({ [fieldName]: result.newUrl })
+        } else {
+          // Es un elemento de un array; releer + reemplazar
+          const fresh = await docRef.get()
+          const arr = Array.isArray(fresh.data()?.[fieldName])
+            ? [...fresh.data()[fieldName]]
+            : []
+          if (arr[indexInArray] === currentUrl) {
+            arr[indexInArray] = result.newUrl
+            await docRef.update({ [fieldName]: arr })
+          }
+        }
+      } catch (err) {
+        stats.errors++
+        console.error(`Migración falló para ${currentUrl}:`, err.message)
+      }
+    }
+
+    try {
+      // Listar businesses (filtrar si onlyBusinessId)
+      let businessIds = []
+      if (onlyBusinessId) {
+        businessIds = [onlyBusinessId]
+      } else {
+        const snap = await db.collection('businesses').orderBy('__name__').get()
+        businessIds = snap.docs.map(d => d.id)
+      }
+
+      // Si hay resumeFrom, saltar businesses ya procesados
+      if (resumeFrom?.businessId) {
+        const idx = businessIds.indexOf(resumeFrom.businessId)
+        if (idx >= 0) businessIds = businessIds.slice(idx)
+      }
+
+      for (const bId of businessIds) {
+        if (timeUp()) {
+          stats.resumeFrom = { businessId: bId, phase: 'business' }
+          break
+        }
+
+        // Fase 1: campos del business mismo (logos/portadas)
+        const businessRef = db.collection('businesses').doc(bId)
+        const businessSnap = await businessRef.get()
+        if (businessSnap.exists) {
+          const data = businessSnap.data()
+          for (const field of BUSINESS_FIELDS) {
+            if (timeUp()) {
+              stats.resumeFrom = { businessId: bId, phase: 'business' }
+              break
+            }
+            if (data[field]) {
+              await processField({
+                docRef: businessRef,
+                fieldName: field,
+                indexInArray: null,
+                currentUrl: data[field],
+              })
+            }
+          }
+        }
+        if (stats.resumeFrom) break
+
+        // Fase 2: productos del business
+        // Cursor de productos dentro de este business si veníamos a la mitad
+        let productsQuery = businessRef.collection('products').orderBy('__name__')
+        if (resumeFrom?.businessId === bId && resumeFrom?.productId) {
+          productsQuery = productsQuery.startAfter(resumeFrom.productId)
+        }
+        const productsSnap = await productsQuery.get()
+
+        for (const prodDoc of productsSnap.docs) {
+          if (timeUp()) {
+            stats.resumeFrom = { businessId: bId, productId: prodDoc.id, phase: 'products' }
+            break
+          }
+          const pdata = prodDoc.data()
+
+          // imageUrl (single)
+          if (pdata.imageUrl) {
+            await processField({
+              docRef: prodDoc.ref,
+              fieldName: 'imageUrl',
+              indexInArray: null,
+              currentUrl: pdata.imageUrl,
+            })
+          }
+
+          // imageUrls (array)
+          if (Array.isArray(pdata.imageUrls)) {
+            for (let i = 0; i < pdata.imageUrls.length; i++) {
+              if (timeUp()) {
+                stats.resumeFrom = { businessId: bId, productId: prodDoc.id, phase: 'products' }
+                break
+              }
+              if (pdata.imageUrls[i]) {
+                await processField({
+                  docRef: prodDoc.ref,
+                  fieldName: 'imageUrls',
+                  indexInArray: i,
+                  currentUrl: pdata.imageUrls[i],
+                })
+              }
+            }
+          }
+
+          stats.lastProcessed = { phase: 'products', businessId: bId, productId: prodDoc.id }
+          if (stats.resumeFrom) break
+        }
+        if (stats.resumeFrom) break
+      }
+
+      stats.doneAt = stats.resumeFrom ? null : new Date().toISOString()
+      return stats
+    } catch (err) {
+      console.error('migrateCloudinaryImages error:', err)
+      stats.errors++
+      throw new HttpsError('internal', err.message || String(err))
     }
   }
 )

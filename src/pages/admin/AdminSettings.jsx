@@ -24,8 +24,11 @@ import {
   Wrench,
   Plus,
   Edit2,
-  X
+  X,
+  Image as ImageIcon
 } from 'lucide-react'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '@/lib/firebase'
 
 export default function AdminSettings() {
   const [loading, setLoading] = useState(true)
@@ -1239,6 +1242,9 @@ function MaintenanceSection() {
             </div>
           </div>
 
+          {/* Migración de imágenes Cloudinary → WebP */}
+          <CloudinaryMigrationCard />
+
           {/* Info */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <div className="flex items-center gap-2 text-blue-800">
@@ -1248,6 +1254,167 @@ function MaintenanceSection() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function formatBytes(b) {
+  if (!b || b < 0) return '0 B'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0; let n = b
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
+  return `${n.toFixed(n < 10 ? 2 : 1)} ${u[i]}`
+}
+
+function CloudinaryMigrationCard() {
+  const [scanning, setScanning] = useState(false)
+  const [migrating, setMigrating] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [migrateResult, setMigrateResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function runDryRun() {
+    setScanning(true)
+    setError(null)
+    setScanResult(null)
+    try {
+      const fn = httpsCallable(functions, 'migrateCloudinaryImages')
+      const r = await fn({ dryRun: true })
+      setScanResult(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  async function runMigrate() {
+    if (!confirm(
+      'Esto va a re-subir y reemplazar las imágenes PNG/JPG por versiones WebP optimizadas, ' +
+      'borrando los originales de Cloudinary. La operación es irreversible.\n\n¿Continuar?'
+    )) return
+
+    setMigrating(true)
+    setError(null)
+    setMigrateResult(null)
+
+    let cumulative = {
+      scanned: 0, candidates: 0, migrated: 0, errors: 0, freedBytes: 0,
+    }
+    let resumeFrom = null
+    let calls = 0
+    const MAX_CALLS = 20 // safety
+
+    try {
+      const fn = httpsCallable(functions, 'migrateCloudinaryImages')
+      do {
+        calls++
+        const r = await fn({ dryRun: false, resumeFrom })
+        const d = r.data
+        cumulative.scanned   += d.scanned   || 0
+        cumulative.candidates+= d.candidates|| 0
+        cumulative.migrated  += d.migrated  || 0
+        cumulative.errors    += d.errors    || 0
+        cumulative.freedBytes+= d.freedBytes|| 0
+        setMigrateResult({ ...cumulative, runs: calls, doneAt: d.doneAt })
+        resumeFrom = d.resumeFrom
+      } while (resumeFrom && calls < MAX_CALLS)
+
+      if (resumeFrom) {
+        setError('Migración pausada después de ' + MAX_CALLS + ' iteraciones. Volvé a apretar para continuar.')
+      }
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setMigrating(false)
+    }
+  }
+
+  return (
+    <div className="bg-purple-50 rounded-lg p-5 border border-purple-200">
+      <div className="flex items-start gap-3">
+        <ImageIcon className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Migrar imágenes Cloudinary a WebP</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Recorre todos los productos y catálogos buscando imágenes PNG/JPG en Cloudinary,
+            las re-sube optimizadas (q_auto:eco,f_auto,c_limit,w_1600), borra los originales
+            y actualiza las URLs en Firestore.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Cada run dura hasta ~8 min. Si hay muchas imágenes, el botón "Ejecutar migración"
+            se reinvoca automáticamente hasta terminar.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={runDryRun}
+              disabled={scanning || migrating}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 disabled:opacity-50"
+            >
+              {scanning ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Escaneando...</>
+              ) : (
+                <><Info className="w-4 h-4" /> Escanear (dry run)</>
+              )}
+            </button>
+            <button
+              onClick={runMigrate}
+              disabled={scanning || migrating}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              {migrating ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Migrando...</>
+              ) : (
+                <><ImageIcon className="w-4 h-4" /> Ejecutar migración</>
+              )}
+            </button>
+          </div>
+
+          {scanResult && (
+            <div className="mt-3 p-3 bg-white rounded-lg border border-purple-200 text-sm space-y-1">
+              <p><strong>Escaneadas:</strong> {scanResult.scanned}</p>
+              <p><strong>Candidates a migrar:</strong> {scanResult.candidates}</p>
+              {scanResult.sampleCandidates?.length > 0 && (
+                <details className="text-xs text-gray-600 mt-1">
+                  <summary className="cursor-pointer">Ver muestra de URLs</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {scanResult.sampleCandidates.map((u, i) => (
+                      <li key={i} className="truncate">• {u}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {scanResult.resumeFrom && (
+                <p className="text-xs text-amber-700">
+                  ⚠ El escaneo no terminó (timeout). Apretá de nuevo para continuar.
+                </p>
+              )}
+            </div>
+          )}
+
+          {migrateResult && (
+            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-sm space-y-1">
+              <p className="font-medium text-emerald-900">
+                {migrateResult.doneAt ? '✓ Migración completada' : `Progreso (${migrateResult.runs} run${migrateResult.runs > 1 ? 's' : ''})`}
+              </p>
+              <p>Migradas: <strong>{migrateResult.migrated}</strong> de {migrateResult.candidates} candidates</p>
+              <p>Storage liberado: <strong>{formatBytes(migrateResult.freedBytes)}</strong></p>
+              {migrateResult.errors > 0 && (
+                <p className="text-amber-700">⚠ Errores: {migrateResult.errors} (revisá los logs)</p>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200 text-sm text-red-800">
+              {error}
+            </div>
+          )}
         </div>
       </div>
     </div>
