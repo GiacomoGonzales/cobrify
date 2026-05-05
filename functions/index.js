@@ -8978,8 +8978,8 @@ export const migrateCloudinaryImages = onCall(
       errors: 0,
       freedBytes: 0,
       sampleCandidates: [], // primeras URLs candidate (debug)
-      lastProcessed: null,  // {phase, businessId, productId?}
-      resumeFrom: null,     // si timeout, info para reintentar
+      lastProcessed: null,
+      resumeFrom: null,
       doneAt: null,
     }
 
@@ -8992,8 +8992,30 @@ export const migrateCloudinaryImages = onCall(
 
     const timeUp = () => Date.now() - startMs > TIME_BUDGET_MS
 
-    // Procesa una URL de un campo de un doc concreto.
-    // Si dryRun, solo cuenta. Si no, re-uploadea + borra original + actualiza Firestore.
+    // Cache de migraciones DENTRO de este run (oldUrl → newUrl).
+    // Evita re-uploadear cuando una misma URL aparece en imageUrl + imageUrls[0]
+    // del mismo o distintos productos.
+    const urlMap = new Map()
+
+    // Migra una URL única (o devuelve la cacheada). NO escribe Firestore.
+    async function migrateUrl(oldUrl) {
+      if (urlMap.has(oldUrl)) return urlMap.get(oldUrl)
+      try {
+        const result = await migrateOneUrl(oldUrl, { dryRun: false })
+        stats.migrated++
+        stats.freedBytes += result.freed || 0
+        urlMap.set(oldUrl, result.newUrl)
+        return result.newUrl
+      } catch (err) {
+        // Cualquier error (404 de original ya borrado, network, etc): registrar y skipear.
+        stats.errors++
+        console.error(`Migración falló para ${oldUrl}: ${err.message}`)
+        urlMap.set(oldUrl, null) // marca como fallida para no reintentar en este run
+        return null
+      }
+    }
+
+    // Procesa una URL en un campo de un doc.
     async function processField({ docRef, fieldName, indexInArray, currentUrl }) {
       stats.scanned++
       if (!isCloudinaryUrl(currentUrl)) return
@@ -9003,32 +9025,63 @@ export const migrateCloudinaryImages = onCall(
       if (stats.sampleCandidates.length < 10) {
         stats.sampleCandidates.push(currentUrl)
       }
-
       if (dryRun) return
 
-      try {
-        const result = await migrateOneUrl(currentUrl, { dryRun: false })
-        stats.migrated++
-        stats.freedBytes += result.freed || 0
+      const newUrl = await migrateUrl(currentUrl)
+      if (!newUrl) return
 
-        // Actualizar Firestore con la nueva URL
+      // Actualizar Firestore con la nueva URL
+      try {
         if (indexInArray == null) {
-          await docRef.update({ [fieldName]: result.newUrl })
+          await docRef.update({ [fieldName]: newUrl })
         } else {
-          // Es un elemento de un array; releer + reemplazar
           const fresh = await docRef.get()
           const arr = Array.isArray(fresh.data()?.[fieldName])
             ? [...fresh.data()[fieldName]]
             : []
           if (arr[indexInArray] === currentUrl) {
-            arr[indexInArray] = result.newUrl
+            arr[indexInArray] = newUrl
             await docRef.update({ [fieldName]: arr })
           }
         }
       } catch (err) {
         stats.errors++
-        console.error(`Migración falló para ${currentUrl}:`, err.message)
+        console.error(`Firestore update failed (${docRef.path}.${fieldName}):`, err.message)
       }
+    }
+
+    // Procesa todos los campos de un producto (en paralelo dentro del producto).
+    async function processProduct(prodDoc) {
+      const pdata = prodDoc.data()
+      const tasks = []
+      if (pdata.imageUrl) {
+        tasks.push(processField({
+          docRef: prodDoc.ref, fieldName: 'imageUrl', indexInArray: null, currentUrl: pdata.imageUrl,
+        }))
+      }
+      if (Array.isArray(pdata.imageUrls)) {
+        for (let i = 0; i < pdata.imageUrls.length; i++) {
+          if (pdata.imageUrls[i]) {
+            tasks.push(processField({
+              docRef: prodDoc.ref, fieldName: 'imageUrls', indexInArray: i, currentUrl: pdata.imageUrls[i],
+            }))
+          }
+        }
+      }
+      await Promise.all(tasks)
+    }
+
+    // Concurrency pool: ejecuta `worker(item)` con `limit` paralelas.
+    async function pool(items, limit, worker) {
+      let idx = 0
+      const runners = Array.from({ length: limit }, async () => {
+        while (idx < items.length) {
+          const myIdx = idx++
+          if (timeUp()) return
+          await worker(items[myIdx])
+        }
+      })
+      await Promise.all(runners)
     }
 
     try {
@@ -9049,79 +9102,61 @@ export const migrateCloudinaryImages = onCall(
 
       for (const bId of businessIds) {
         if (timeUp()) {
-          stats.resumeFrom = { businessId: bId, phase: 'business' }
+          stats.resumeFrom = { businessId: bId }
           break
         }
 
-        // Fase 1: campos del business mismo (logos/portadas)
         const businessRef = db.collection('businesses').doc(bId)
-        const businessSnap = await businessRef.get()
-        if (businessSnap.exists) {
-          const data = businessSnap.data()
-          for (const field of BUSINESS_FIELDS) {
-            if (timeUp()) {
-              stats.resumeFrom = { businessId: bId, phase: 'business' }
-              break
-            }
-            if (data[field]) {
-              await processField({
-                docRef: businessRef,
-                fieldName: field,
-                indexInArray: null,
-                currentUrl: data[field],
-              })
-            }
-          }
-        }
-        if (stats.resumeFrom) break
 
-        // Fase 2: productos del business
-        // Cursor de productos dentro de este business si veníamos a la mitad
-        let productsQuery = businessRef.collection('products').orderBy('__name__')
-        if (resumeFrom?.businessId === bId && resumeFrom?.productId) {
-          productsQuery = productsQuery.startAfter(resumeFrom.productId)
-        }
-        const productsSnap = await productsQuery.get()
-
-        for (const prodDoc of productsSnap.docs) {
-          if (timeUp()) {
-            stats.resumeFrom = { businessId: bId, productId: prodDoc.id, phase: 'products' }
-            break
-          }
-          const pdata = prodDoc.data()
-
-          // imageUrl (single)
-          if (pdata.imageUrl) {
-            await processField({
-              docRef: prodDoc.ref,
-              fieldName: 'imageUrl',
-              indexInArray: null,
-              currentUrl: pdata.imageUrl,
-            })
-          }
-
-          // imageUrls (array)
-          if (Array.isArray(pdata.imageUrls)) {
-            for (let i = 0; i < pdata.imageUrls.length; i++) {
+        // Fase 1: campos del business mismo (logos/portadas) — solo si no
+        // estamos retomando dentro de los products del mismo business.
+        const skipBusinessFields = resumeFrom?.businessId === bId && resumeFrom?.productId
+        if (!skipBusinessFields) {
+          const businessSnap = await businessRef.get()
+          if (businessSnap.exists) {
+            const data = businessSnap.data()
+            for (const field of BUSINESS_FIELDS) {
               if (timeUp()) {
-                stats.resumeFrom = { businessId: bId, productId: prodDoc.id, phase: 'products' }
+                stats.resumeFrom = { businessId: bId }
                 break
               }
-              if (pdata.imageUrls[i]) {
+              if (data[field]) {
                 await processField({
-                  docRef: prodDoc.ref,
-                  fieldName: 'imageUrls',
-                  indexInArray: i,
-                  currentUrl: pdata.imageUrls[i],
+                  docRef: businessRef,
+                  fieldName: field,
+                  indexInArray: null,
+                  currentUrl: data[field],
                 })
               }
             }
           }
-
-          stats.lastProcessed = { phase: 'products', businessId: bId, productId: prodDoc.id }
-          if (stats.resumeFrom) break
         }
         if (stats.resumeFrom) break
+
+        // Fase 2: productos. Usamos startAt (no startAfter) para no perder
+        // docs parcialmente procesados; las URLs ya migradas pasan el chequeo
+        // isAlreadyOptimized y se skippan.
+        let productsQuery = businessRef.collection('products').orderBy('__name__')
+        if (resumeFrom?.businessId === bId && resumeFrom?.productId) {
+          productsQuery = productsQuery.startAt(resumeFrom.productId)
+        }
+        const productsSnap = await productsQuery.get()
+
+        // Procesar productos en paralelo con concurrencia 4
+        await pool(productsSnap.docs, 4, async (prodDoc) => {
+          if (timeUp()) return
+          await processProduct(prodDoc)
+          stats.lastProcessed = { businessId: bId, productId: prodDoc.id }
+        })
+
+        // Si quedaron productos sin procesar (timeUp), guardar el último visto
+        if (timeUp()) {
+          stats.resumeFrom = {
+            businessId: bId,
+            productId: stats.lastProcessed?.productId || null,
+          }
+          break
+        }
       }
 
       stats.doneAt = stats.resumeFrom ? null : new Date().toISOString()

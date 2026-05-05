@@ -1306,7 +1306,7 @@ function CloudinaryMigrationCard() {
     }
     let resumeFrom = null
     let calls = 0
-    const MAX_CALLS = 20 // safety
+    const MAX_CALLS = 50 // safety; 50 × 8 min = hasta 6h
 
     try {
       const fn = httpsCallable(functions, 'migrateCloudinaryImages')
