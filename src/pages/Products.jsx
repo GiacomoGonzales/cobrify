@@ -247,7 +247,7 @@ export default function Products() {
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
-  const [newVariant, setNewVariant] = useState({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+  const [newVariant, setNewVariant] = useState({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
   const [variantWarehouseId, setVariantWarehouseId] = useState('') // almacén destino para todas las variantes
   const [editingVariantIndex, setEditingVariantIndex] = useState(null)
   const [editingVariant, setEditingVariant] = useState(null)
@@ -493,7 +493,7 @@ export default function Products() {
     setVariants([])
     setVariantWarehouseId('')
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
     // Resetear stocks iniciales por almacén
     setWarehouseInitialStocks({})
     reset({
@@ -568,7 +568,7 @@ export default function Products() {
     setVariantAttributes(product.variantAttributes || [])
     setVariants(product.variants || [])
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
     // Pre-seleccionar almacén si las variantes ya tienen warehouseStocks
     if (productHasVariants && product.variants?.length > 0) {
@@ -684,7 +684,7 @@ export default function Products() {
     // Clonar variantes pero limpiar IDs
     setVariants((product.variants || []).map(({ id, ...rest }) => rest))
     setNewAttributeName('')
-    setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
 
     // Clonar modificadores con IDs nuevos para evitar conflictos
     setModifiers((product.modifiers || []).map(mod => ({
@@ -2529,6 +2529,7 @@ export default function Products() {
 
     setVariants([...variants, {
       sku: newVariant.sku.trim(),
+      barcode: newVariant.barcode?.trim() || null,
       attributes: { ...newVariant.attributes },
       price: parseFloat(newVariant.price),
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
@@ -2540,6 +2541,7 @@ export default function Products() {
     // Reset new variant form
     setNewVariant({
       sku: '',
+      barcode: '',
       attributes: {},
       price: '',
       price2: '',
@@ -2564,6 +2566,7 @@ export default function Products() {
     setEditingVariantIndex(index)
     setEditingVariant({
       sku: v.sku,
+      barcode: v.barcode || '',
       attributes: { ...v.attributes },
       price: v.price?.toString() || '',
       price2: v.price2?.toString() || '',
@@ -2589,7 +2592,9 @@ export default function Products() {
     }
     const updated = [...variants]
     updated[editingVariantIndex] = {
+      ...variants[editingVariantIndex], // preservar campos no editados (warehouseStocks, etc.)
       sku: editingVariant.sku.trim(),
+      barcode: editingVariant.barcode?.trim() || null,
       attributes: { ...editingVariant.attributes },
       price: parseFloat(editingVariant.price),
       price2: editingVariant.price2 ? parseFloat(editingVariant.price2) : null,
@@ -4669,7 +4674,7 @@ export default function Products() {
                       setVariantAttributes([])
                       setVariants([])
                       setNewAttributeName('')
-                      setNewVariant({ sku: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+                      setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
                     }
                   }}
                   className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -5247,6 +5252,18 @@ export default function Products() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Código de barras <span className="text-xs text-gray-400">(opcional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={newVariant.barcode}
+                            onChange={e => handleNewVariantChange('barcode', e.target.value)}
+                            placeholder="EAN/UPC, ej: 7501234567890"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
                             {businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : 'Precio'}
                           </label>
                           <input
@@ -5347,6 +5364,7 @@ export default function Products() {
                           <thead className="bg-gray-100 text-xs uppercase text-gray-600">
                             <tr>
                               <th className="px-2 py-2 text-left">SKU</th>
+                              <th className="px-2 py-2 text-left">Cód. barras</th>
                               {variantAttributes.map(attr => (
                                 <th key={attr} className="px-2 py-2 text-left capitalize">{attr}</th>
                               ))}
@@ -5368,6 +5386,9 @@ export default function Products() {
                                 <tr key={index} className="border-b border-gray-200 bg-blue-50">
                                   <td className="px-2 py-1">
                                     <input type="text" value={editingVariant.sku} onChange={e => setEditingVariant({ ...editingVariant, sku: e.target.value })} className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded" />
+                                  </td>
+                                  <td className="px-2 py-1">
+                                    <input type="text" value={editingVariant.barcode || ''} onChange={e => setEditingVariant({ ...editingVariant, barcode: e.target.value })} placeholder="—" className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded" />
                                   </td>
                                   {variantAttributes.map(attr => (
                                     <td key={attr} className="px-2 py-1">
@@ -5407,6 +5428,7 @@ export default function Products() {
                               ) : (
                                 <tr key={index} className="border-b border-gray-200">
                                   <td className="px-2 py-2 font-mono text-xs">{variant.sku}</td>
+                                  <td className="px-2 py-2 font-mono text-xs text-gray-600">{variant.barcode || '-'}</td>
                                   {variantAttributes.map(attr => (
                                     <td key={attr} className="px-2 py-2">{variant.attributes[attr] || '-'}</td>
                                   ))}

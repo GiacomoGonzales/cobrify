@@ -1865,6 +1865,14 @@ export default function POS() {
       // Concatenar campos buscables (incluir versión sin guiones para compatibilidad con pistola lectora)
       const code = p.code || ''
       const sku = p.sku || ''
+      // SKUs y códigos de barras de las variantes (para que sean buscables también)
+      const variantTokens = (p.hasVariants && Array.isArray(p.variants))
+        ? p.variants.flatMap(v => [
+            v?.sku || '',
+            (v?.sku || '').replace(/-/g, ''),
+            v?.barcode || '',
+          ]).filter(Boolean)
+        : []
       const searchableText = [
         p.name || '',
         code,
@@ -1872,7 +1880,8 @@ export default function POS() {
         sku,
         sku.replace(/-/g, ''),
         p.marca || '',
-        p.laboratoryName || ''
+        p.laboratoryName || '',
+        ...variantTokens,
       ].join(' ').toLowerCase()
 
       // Verificar que TODAS las palabras estén presentes (en cualquier orden)
@@ -1949,6 +1958,8 @@ export default function POS() {
       // También comparar sin guiones para compatibilidad con pistola lectora
       const searchLower = searchTerm.toLowerCase()
       const searchNoHyphens = searchLower.replace(/-/g, '')
+
+      // 1) Match en padre (producto sin variantes o código del padre)
       const exactMatches = products.filter(p => {
         if (p.isActive === false) return false
         const code = p.code?.toLowerCase() || ''
@@ -1956,6 +1967,35 @@ export default function POS() {
         return code === searchLower || sku === searchLower ||
           code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens
       })
+
+      // 2) Si no hubo match en padre, buscar match exacto en SKU/barcode de variantes
+      let variantMatch = null
+      if (exactMatches.length === 0) {
+        for (const p of products) {
+          if (p.isActive === false) continue
+          if (!p.hasVariants || !Array.isArray(p.variants)) continue
+          const v = p.variants.find(v => {
+            if (!v) return false
+            const vSku = (v.sku || '').toLowerCase()
+            const vBarcode = (v.barcode || '').toLowerCase()
+            return vSku === searchLower || vBarcode === searchLower ||
+              vSku.replace(/-/g, '') === searchNoHyphens
+          })
+          if (v) { variantMatch = { product: p, variant: v }; break }
+        }
+      }
+
+      if (variantMatch) {
+        const { product, variant } = variantMatch
+        if (variant.stock !== null && variant.stock <= 0 && !companySettings?.allowNegativeStock) {
+          toast.error(`Variante de ${product.name} sin stock`)
+        } else {
+          addVariantToCart(product, variant)
+          setSearchTerm('')
+          toast.success(`${product.name} agregado al carrito`)
+        }
+        return
+      }
 
       // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
       if (exactMatches.length === 1) {
@@ -2033,19 +2073,47 @@ export default function POS() {
         const scannedCode = barcodes[0].rawValue
         console.log('Código escaneado:', scannedCode)
 
-        // Buscar producto por código de barras o SKU
-        const foundProduct = products.find(
+        // 1) Buscar producto por código de barras / SKU del producto padre
+        let foundProduct = products.find(
           p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
         )
+        let foundVariant = null
+
+        // 2) Si no hubo match a nivel padre, buscar dentro de las variantes
+        //    (cada variante puede tener su propio SKU o código de barras EAN único).
+        if (!foundProduct) {
+          for (const p of products) {
+            if (!p.hasVariants || !Array.isArray(p.variants)) continue
+            const v = p.variants.find(
+              v => v && (v.sku === scannedCode || v.barcode === scannedCode)
+            )
+            if (v) {
+              foundProduct = p
+              foundVariant = v
+              break
+            }
+          }
+        }
 
         if (foundProduct) {
-          // Verificar stock
-          const warehouseStock = getCurrentWarehouseStock(foundProduct)
-          if (foundProduct.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
-            toast.error(`${foundProduct.name} no tiene stock disponible`)
+          if (foundVariant) {
+            // Match en variante: agregar esa variante específica directo al carrito
+            // (sin abrir el modal de selección — el escaneo ya identifica unívocamente).
+            if (foundVariant.stock !== null && foundVariant.stock <= 0 && !companySettings?.allowNegativeStock) {
+              toast.error(`${foundProduct.name} (variante) no tiene stock disponible`)
+            } else {
+              addVariantToCart(foundProduct, foundVariant)
+              toast.success(`${foundProduct.name} agregado al carrito`)
+            }
           } else {
-            addToCart(foundProduct)
-            toast.success(`${foundProduct.name} agregado al carrito`)
+            // Match en padre (producto sin variantes o escaneo del código del padre)
+            const warehouseStock = getCurrentWarehouseStock(foundProduct)
+            if (foundProduct.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
+              toast.error(`${foundProduct.name} no tiene stock disponible`)
+            } else {
+              addToCart(foundProduct)
+              toast.success(`${foundProduct.name} agregado al carrito`)
+            }
           }
         } else {
           toast.error(`No se encontró producto con código: ${scannedCode}`)
