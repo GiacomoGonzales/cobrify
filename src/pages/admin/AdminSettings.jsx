@@ -1283,7 +1283,8 @@ function CloudinaryMigrationCard() {
     setError(null)
     setScanResult(null)
     try {
-      const fn = httpsCallable(functions, 'migrateCloudinaryImages')
+      // timeout 540s = límite máximo del callable. Sin esto el SDK corta a ~70s.
+      const fn = httpsCallable(functions, 'migrateCloudinaryImages', { timeout: 540000 })
       const r = await fn({ dryRun: true })
       setScanResult(r.data)
     } catch (e) {
@@ -1314,7 +1315,8 @@ function CloudinaryMigrationCard() {
     const MAX_CALLS = 50 // safety; 50 × 8 min = hasta 6h
 
     try {
-      const fn = httpsCallable(functions, 'migrateCloudinaryImages')
+      // timeout 540s = límite máximo del callable. Sin esto el SDK corta a ~70s.
+      const fn = httpsCallable(functions, 'migrateCloudinaryImages', { timeout: 540000 })
       do {
         calls++
         const r = await fn({ dryRun: false, resumeFrom })
@@ -1439,7 +1441,7 @@ function CloudinaryCleanupCard() {
     setError(null)
     setScanResult(null)
     try {
-      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets')
+      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets', { timeout: 540000 })
       const r = await fn({ dryRun: true })
       setScanResult(r.data)
     } catch (e) {
@@ -1462,7 +1464,7 @@ function CloudinaryCleanupCard() {
     setError(null)
     setCleanResult(null)
     try {
-      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets')
+      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets', { timeout: 540000 })
       const r = await fn({ dryRun: false })
       setCleanResult(r.data)
     } catch (e) {
