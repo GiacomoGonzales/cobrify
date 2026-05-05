@@ -2,47 +2,91 @@ import { storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { uploadToCloudinary } from '@/utils/cloudinary'
 
+// Detección única de soporte WebP en el navegador
+const supportsWebP = (() => {
+  try {
+    const c = document.createElement('canvas')
+    c.width = 1
+    c.height = 1
+    return c.toDataURL('image/webp').startsWith('data:image/webp')
+  } catch {
+    return false
+  }
+})()
+
 /**
- * Comprime y redimensiona una imagen antes de subirla
- * @param {File} file - El archivo de imagen
- * @param {number} maxWidth - Ancho máximo (default 800px)
- * @param {number} quality - Calidad JPEG (0-1, default 0.8)
- * @returns {Promise<Blob>} - Blob de la imagen comprimida
+ * Comprime y redimensiona una imagen antes de subirla.
+ * Por default exporta a WebP (mejor compresión que JPEG/PNG, soporta alpha).
+ * Fallback a JPEG si el navegador no soporta WebP, o a PNG si la imagen
+ * tiene transparencia y JPEG es la única alternativa.
+ *
+ * No hace upscale: si la imagen original es menor que maxWidth/maxHeight,
+ * conserva el tamaño original.
+ *
+ * @param {File} file
+ * @param {Object} [options]
+ * @param {number} [options.maxWidth=1280]
+ * @param {number} [options.maxHeight=null]
+ * @param {number} [options.quality=0.82]  0–1
+ * @param {boolean} [options.preferWebP=true]
+ * @returns {Promise<File>} archivo comprimido (con nombre y MIME apropiados)
  */
-export const compressImage = (file, maxWidth = 800, quality = 0.8) => {
+export const compressImage = (file, options = {}) => {
+  const {
+    maxWidth = 1280,
+    maxHeight = null,
+    quality = 0.82,
+    preferWebP = true,
+  } = options
+
   return new Promise((resolve, reject) => {
+    // SVG no se maneja consistentemente con canvas → subir original.
+    if (!file || (file.type && file.type.includes('svg'))) {
+      return resolve(file)
+    }
+
     const reader = new FileReader()
     reader.readAsDataURL(file)
     reader.onload = (event) => {
       const img = new window.Image()
       img.src = event.target.result
       img.onload = () => {
+        const ratioW = img.width > maxWidth ? maxWidth / img.width : 1
+        const ratioH = (maxHeight && img.height > maxHeight) ? maxHeight / img.height : 1
+        const ratio = Math.min(ratioW, ratioH, 1) // sin upscale
+        const width = Math.round(img.width * ratio)
+        const height = Math.round(img.height * ratio)
+
         const canvas = document.createElement('canvas')
-        let width = img.width
-        let height = img.height
-
-        // Redimensionar si es más ancha que maxWidth
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width)
-          width = maxWidth
-        }
-
         canvas.width = width
         canvas.height = height
-
         const ctx = canvas.getContext('2d')
         ctx.drawImage(img, 0, 0, width, height)
 
+        const hasAlpha =
+          file.type === 'image/png' ||
+          file.type === 'image/gif' ||
+          file.type === 'image/webp'
+
+        let outMime = 'image/jpeg'
+        if (preferWebP && supportsWebP) outMime = 'image/webp'
+        else if (hasAlpha) outMime = 'image/png'
+
+        const outQuality = outMime === 'image/png' ? undefined : quality
+
         canvas.toBlob(
           (blob) => {
-            if (blob) {
-              resolve(blob)
-            } else {
-              reject(new Error('Error al comprimir imagen'))
+            if (!blob) {
+              return reject(new Error('Error al comprimir imagen'))
             }
+            const baseName = (file.name || 'image').replace(/\.[^.]+$/, '')
+            const ext =
+              outMime === 'image/webp' ? 'webp' :
+              outMime === 'image/png'  ? 'png'  : 'jpg'
+            resolve(new File([blob], `${baseName}.${ext}`, { type: outMime }))
           },
-          'image/jpeg',
-          quality
+          outMime,
+          outQuality
         )
       }
       img.onerror = () => reject(new Error('Error al cargar imagen'))
@@ -50,6 +94,26 @@ export const compressImage = (file, maxWidth = 800, quality = 0.8) => {
     reader.onerror = () => reject(new Error('Error al leer archivo'))
   })
 }
+
+/**
+ * Comprime con fallback: si la compresión falla por cualquier motivo,
+ * devuelve el archivo original para no bloquear al usuario.
+ */
+export const compressWithFallback = async (file, options) => {
+  try {
+    return await compressImage(file, options)
+  } catch (e) {
+    console.warn('⚠️ Compresión falló, subiendo original:', e?.message || e)
+    return file
+  }
+}
+
+// Presets por caso de uso — usados en uploadProductImage y en Settings.jsx
+export const compressForProduct        = (file) => compressWithFallback(file, { maxWidth: 1280, quality: 0.82 })
+export const compressForLogoSquare     = (file) => compressWithFallback(file, { maxWidth: 600,  quality: 0.85 })
+export const compressForLogoLandscape  = (file) => compressWithFallback(file, { maxWidth: 800,  quality: 0.85 })
+export const compressForCoverDesktop   = (file) => compressWithFallback(file, { maxWidth: 1920, maxHeight: 800, quality: 0.85 })
+export const compressForCoverMobile    = (file) => compressWithFallback(file, { maxWidth: 800,  maxHeight: 600, quality: 0.85 })
 
 /**
  * Sube una imagen de producto a Firebase Storage
@@ -76,9 +140,17 @@ export const uploadProductImage = async (businessId, productId, file) => {
       throw new Error('La imagen es muy grande. Máximo 5MB.')
     }
 
-    // Subir a Cloudinary (optimización automática en delivery)
+    // Comprimir cliente-side antes de subir (WebP, máx 1280px, q≈0.82).
+    // Esto reduce drásticamente el storage usado en Cloudinary.
+    const compressed = await compressForProduct(file)
+    if (compressed !== file) {
+      console.log(
+        `🗜️ Imagen comprimida: ${(file.size / 1024).toFixed(1)}KB → ${(compressed.size / 1024).toFixed(1)}KB`
+      )
+    }
+
     console.log('☁️ Subiendo imagen a Cloudinary...')
-    const cloudinaryUrl = await uploadToCloudinary(file)
+    const cloudinaryUrl = await uploadToCloudinary(compressed)
     console.log('✅ Imagen subida exitosamente:', cloudinaryUrl)
 
     return cloudinaryUrl

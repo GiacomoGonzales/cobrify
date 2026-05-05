@@ -24,7 +24,12 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
-import { compressImage } from '@/services/productImageService'
+import {
+  compressForLogoSquare,
+  compressForLogoLandscape,
+  compressForCoverDesktop,
+  compressForCoverMobile,
+} from '@/services/productImageService'
 import { consultarRUC } from '@/services/documentLookupService'
 import {
   scanPrinters,
@@ -5938,7 +5943,7 @@ export default function Settings() {
                                     if (!file) return
                                     setUploadingCatalogLogo(true)
                                     try {
-                                      const url = await uploadToCloudinary(file)
+                                      const url = await uploadToCloudinary(await compressForLogoSquare(file))
                                       setCatalogLogoUrl(url)
                                       toast.success('Logo cuadrado subido')
                                     } catch (err) {
@@ -5996,7 +6001,7 @@ export default function Settings() {
                                     if (!file) return
                                     setUploadingCatalogLogoLandscape(true)
                                     try {
-                                      const url = await uploadToCloudinary(file)
+                                      const url = await uploadToCloudinary(await compressForLogoLandscape(file))
                                       setCatalogLogoLandscape(url)
                                       toast.success('Logo horizontal subido')
                                     } catch (err) {
@@ -6197,7 +6202,7 @@ export default function Settings() {
                                       if (!file) return
                                       setUploadingCover(true)
                                       try {
-                                        const url = await uploadToCloudinary(file)
+                                        const url = await uploadToCloudinary(await compressForCoverDesktop(file))
                                         setCatalogCoverImage(url)
                                         toast.success('Portada desktop subida')
                                       } catch (err) {
@@ -6244,7 +6249,7 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCover(true)
                                   try {
-                                    const url = await uploadToCloudinary(file)
+                                    const url = await uploadToCloudinary(await compressForCoverDesktop(file))
                                     setCatalogCoverImage(url)
                                     toast.success('Portada desktop subida')
                                   } catch (err) {
@@ -6281,7 +6286,7 @@ export default function Settings() {
                                       if (!file) return
                                       setUploadingCoverMobile(true)
                                       try {
-                                        const url = await uploadToCloudinary(file)
+                                        const url = await uploadToCloudinary(await compressForCoverMobile(file))
                                         setCatalogCoverImageMobile(url)
                                         toast.success('Portada móvil subida')
                                       } catch (err) {
@@ -6328,7 +6333,7 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCoverMobile(true)
                                   try {
-                                    const url = await uploadToCloudinary(file)
+                                    const url = await uploadToCloudinary(await compressForCoverMobile(file))
                                     setCatalogCoverImageMobile(url)
                                     toast.success('Portada móvil subida')
                                   } catch (err) {
