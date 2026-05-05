@@ -668,6 +668,18 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           variante1_codigo_barras: '',
           variante1_precio: '',
           variante1_stock: '',
+          variante2_atributo: '',
+          variante2_valor: '',
+          variante2_sku: '',
+          variante2_codigo_barras: '',
+          variante2_precio: '',
+          variante2_stock: '',
+          variante3_atributo: '',
+          variante3_valor: '',
+          variante3_sku: '',
+          variante3_codigo_barras: '',
+          variante3_precio: '',
+          variante3_stock: '',
           variante_atributo: '',
           variante_valor: '',
           variante_sku: '',
@@ -709,6 +721,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
 
@@ -745,6 +759,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
 
@@ -781,6 +797,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
 
@@ -817,6 +835,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
 
@@ -861,6 +881,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion3_cantidad: '',
           presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
 
@@ -897,24 +919,42 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          // 3 variantes en columnas numeradas (cada variante puede tener su propio EAN)
+          // 3 variantes (S/M/L) en columnas numeradas, cada una con SU PROPIO código de barras.
+          // Así es como se cargan productos con múltiples variantes en formato compacto.
           variante1_atributo: 'talla',
           variante1_valor: 'S',
           variante1_sku: 'POLO-BAS-S',
-          variante1_codigo_barras: '7501234567090', // EAN propio de la talla S (opcional)
+          variante1_codigo_barras: '7501234567090',
           variante1_precio: 32.00,
           variante1_stock: 12,
+          variante2_atributo: 'talla',
+          variante2_valor: 'M',
+          variante2_sku: 'POLO-BAS-M',
+          variante2_codigo_barras: '7501234567091',
+          variante2_precio: 32.00,
+          variante2_stock: 18,
+          variante3_atributo: 'talla',
+          variante3_valor: 'L',
+          variante3_sku: 'POLO-BAS-L',
+          variante3_codigo_barras: '7501234567092',
+          variante3_precio: 32.00,
+          variante3_stock: 10,
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
         },
-        // (continúan las otras tallas del Polo Básico, en columnas variante2 y variante3
-        // — se podría haber puesto todo en la fila anterior pero las muestro abajo en el
-        // formato multi-fila para enseñar AMBAS opciones)
 
         // 8-13. PRODUCTO CON DOS EJES DE VARIANTES (talla × color) — formato MULTI-FILA:
         //       Una fila por cada combinación de variantes, todas con el MISMO nombre.
         //       En cada fila, variante_atributo y variante_valor llevan los dos atributos
         //       separados por coma. SKU se autogenera si lo dejas vacío.
-        ...['S,negro', 'M,negro', 'L,negro', 'S,blanco', 'M,blanco', 'L,blanco'].map((combo, idx) => ({
+        // EANs únicos por combinación (uno por fila) — opcional pero recomendado para retail
+        ...[
+          { combo: 'S,negro', ean: '7502000000010' },
+          { combo: 'M,negro', ean: '7502000000011' },
+          { combo: 'L,negro', ean: '7502000000012' },
+          { combo: 'S,blanco', ean: '7502000000020' },
+          { combo: 'M,blanco', ean: '7502000000021' },
+          { combo: 'L,blanco', ean: '7502000000022' },
+        ].map(({ combo, ean }, idx) => ({
           sku: '',                    // sin SKU padre cuando hay variantes
           codigo_barras: '',
           nombre: 'Polo Deportivo Dry-Fit',
@@ -943,11 +983,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
+          variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           // Variante por fila, multi-atributo separado por coma:
           variante_atributo: 'talla,color',
           variante_valor: combo,                 // ej: "S,negro"
           variante_sku: '',                      // se autogenera (POLO-DEPORTIVO-DRY-FIT-S-NEGRO, etc.)
-          variante_codigo_barras: '',            // EAN único de esta combinación (opcional)
+          variante_codigo_barras: ean,           // EAN único de esta combinación (opcional)
           variante_precio: 45.00,
           variante_stock: 8,
         })),
