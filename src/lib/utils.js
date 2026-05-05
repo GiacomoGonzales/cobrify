@@ -27,6 +27,34 @@ export function formatCurrency(amount) {
 }
 
 /**
+ * Formatea el precio "para mostrar" de un producto (o ítem similar).
+ * - Sin variantes: usa product.price.
+ * - Con variantes: si todas valen lo mismo, ese único precio. Si no, un
+ *   rango "S/ X – Y" usando los precios > 0 de las variantes.
+ *
+ * Útil para listados (POS, Inventario, Productos) donde un producto con
+ * variantes no tiene `price` propio (porque va por variante).
+ *
+ * @param {Object} product
+ * @returns {string} - Precio o rango formateado
+ */
+export function formatProductPrice(product) {
+  if (!product) return formatCurrency(0)
+  if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+    const prices = product.variants
+      .map((v) => Number(v?.price))
+      .filter((p) => Number.isFinite(p) && p > 0)
+    if (prices.length === 0) return formatCurrency(0)
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    return min === max
+      ? formatCurrency(min)
+      : `${formatCurrency(min)} – ${formatCurrency(max)}`
+  }
+  return formatCurrency(Number(product.price) || 0)
+}
+
+/**
  * Formatea una fecha en formato local peruano
  * @param {Date|string} date - Fecha a formatear
  * @returns {string} - Fecha formateada

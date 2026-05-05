@@ -44,7 +44,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatProductPrice } from '@/lib/utils'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -5507,7 +5507,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {/* Móvil: precio y stock en línea */}
                       <div className="flex items-center justify-between sm:hidden gap-2">
                         <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                          {formatProductPrice(product)}
                           {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-[10px] font-normal text-gray-400 ml-1">
                               - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
@@ -5524,7 +5524,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {/* Tablet/Desktop: precio arriba, stock abajo */}
                       <div className="hidden sm:block overflow-hidden">
                         <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                          {formatProductPrice(product)}
                         </p>
                         <div className="flex items-center justify-between mt-1">
                           {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}

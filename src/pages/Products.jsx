@@ -16,7 +16,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatProductPrice } from '@/lib/utils'
 import {
   getProducts,
   createProduct,
@@ -3223,7 +3223,7 @@ export default function Products() {
               {paginatedProducts.map((product) => {
                 const realStock = getRealStockValue(product)
                 const categoryPath = product.category ? getCategoryPath(categories, product.category) : ''
-                const price = product.hasVariants ? product.basePrice : product.price
+                const priceDisplay = formatProductPrice(product)
                 const stockDisplay = product.hasVariants
                   ? product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
                   : realStock
@@ -3373,7 +3373,7 @@ export default function Products() {
                         {/* Precio y stock */}
                         <div className="flex items-end justify-between mt-2">
                           <div>
-                            <span className="text-lg font-bold text-gray-900">{formatCurrency(price)}</span>
+                            <span className="text-lg font-bold text-gray-900">{priceDisplay}</span>
                             {product.hasVariants && (
                               <span className="text-xs text-gray-500 ml-1">({product.variants?.length || 0} var.)</span>
                             )}
@@ -3580,10 +3580,12 @@ export default function Products() {
                             </p>
                           </TableCell>
                         )}
-                        <TableCell className="max-w-[100px]">
+                        <TableCell className="max-w-[140px]">
                           {product.hasVariants ? (
                             <div>
-                              <span className="text-sm font-semibold truncate block">{formatCurrency(product.basePrice)}</span>
+                              <span className="text-sm font-semibold truncate block whitespace-nowrap" title={formatProductPrice(product)}>
+                                {formatProductPrice(product)}
+                              </span>
                               <p className="text-xs text-gray-500">{product.variants?.length || 0} var.</p>
                             </div>
                           ) : (
