@@ -1242,8 +1242,11 @@ function MaintenanceSection() {
             </div>
           </div>
 
-          {/* Migración de imágenes Cloudinary → WebP */}
+          {/* Paso 1: Migración a WebP (re-upload + actualizar Firestore, NO borra) */}
           <CloudinaryMigrationCard />
+
+          {/* Paso 2: Cleanup de huérfanos (borra assets ya no referenciados) */}
+          <CloudinaryCleanupCard />
 
           {/* Info */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -1293,8 +1296,10 @@ function CloudinaryMigrationCard() {
 
   async function runMigrate() {
     if (!confirm(
-      'Esto va a re-subir y reemplazar las imágenes PNG/JPG por versiones WebP optimizadas, ' +
-      'borrando los originales de Cloudinary. La operación es irreversible.\n\n¿Continuar?'
+      'Esto va a crear versiones WebP optimizadas y actualizar las URLs en Firestore.\n\n' +
+      'NO borra los originales (eso lo hace el cleanup en un segundo paso). ' +
+      'Por lo tanto NINGUNA imagen se rompe — en el peor caso quedará storage doble temporal.\n\n' +
+      '¿Continuar?'
     )) return
 
     setMigrating(true)
@@ -1339,15 +1344,16 @@ function CloudinaryMigrationCard() {
       <div className="flex items-start gap-3">
         <ImageIcon className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
         <div className="flex-1">
-          <h4 className="font-medium text-gray-900">Migrar imágenes Cloudinary a WebP</h4>
+          <h4 className="font-medium text-gray-900">Paso 1 · Migrar imágenes a WebP</h4>
           <p className="text-sm text-gray-600 mt-1">
-            Recorre todos los productos y catálogos buscando imágenes PNG/JPG en Cloudinary,
-            las re-sube optimizadas (q_auto:eco,f_auto,c_limit,w_1600), borra los originales
-            y actualiza las URLs en Firestore.
+            Recorre todos los productos y catálogos. Para cada PNG/JPG en Cloudinary,
+            crea una versión optimizada (q_auto:eco,f_auto,c_limit,w_1600) y actualiza
+            la URL en Firestore. <strong>NO borra los originales</strong> — eso queda
+            para el Paso 2 (cleanup), así garantizamos que ninguna imagen viva se rompe.
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Cada run dura hasta ~8 min. Si hay muchas imágenes, el botón "Ejecutar migración"
-            se reinvoca automáticamente hasta terminar.
+            Cada run dura ~8 min. Si hay muchas imágenes, el botón se reinvoca automáticamente
+            hasta terminar. Mantené esta pestaña abierta.
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1400,12 +1406,144 @@ function CloudinaryMigrationCard() {
           {migrateResult && (
             <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-sm space-y-1">
               <p className="font-medium text-emerald-900">
-                {migrateResult.doneAt ? '✓ Migración completada' : `Progreso (${migrateResult.runs} run${migrateResult.runs > 1 ? 's' : ''})`}
+                {migrateResult.doneAt ? '✓ Migración completada — corré el Paso 2 para liberar storage' : `Progreso (${migrateResult.runs} run${migrateResult.runs > 1 ? 's' : ''})`}
               </p>
               <p>Migradas: <strong>{migrateResult.migrated}</strong> de {migrateResult.candidates} candidates</p>
-              <p>Storage liberado: <strong>{formatBytes(migrateResult.freedBytes)}</strong></p>
+              <p>Storage por liberar (estimado): <strong>{formatBytes(migrateResult.freedBytes)}</strong></p>
               {migrateResult.errors > 0 && (
                 <p className="text-amber-700">⚠ Errores: {migrateResult.errors} (revisá los logs)</p>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200 text-sm text-red-800">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CloudinaryCleanupCard() {
+  const [scanning, setScanning] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [cleanResult, setCleanResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function runDryRun() {
+    setScanning(true)
+    setError(null)
+    setScanResult(null)
+    try {
+      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets')
+      const r = await fn({ dryRun: true })
+      setScanResult(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  async function runCleanup() {
+    if (!confirm(
+      'Esto va a BORRAR de Cloudinary todos los assets que ya no estén referenciados ' +
+      'desde Firestore. Es irreversible.\n\n' +
+      'Solo apretá esto DESPUÉS de que el Paso 1 (Migrar) haya terminado al 100%.\n\n' +
+      '¿Confirmar?'
+    )) return
+
+    setCleaning(true)
+    setError(null)
+    setCleanResult(null)
+    try {
+      const fn = httpsCallable(functions, 'cleanupOrphanedCloudinaryAssets')
+      const r = await fn({ dryRun: false })
+      setCleanResult(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setCleaning(false)
+    }
+  }
+
+  return (
+    <div className="bg-rose-50 rounded-lg p-5 border border-rose-200">
+      <div className="flex items-start gap-3">
+        <Trash2 className="w-6 h-6 text-rose-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Paso 2 · Limpiar assets huérfanos</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Borra de Cloudinary los assets del folder <code>cobrify/</code> que ya no
+            están referenciados desde Firestore. Es lo que libera el storage real.
+            Solo correr <strong>después</strong> de que el Paso 1 (Migrar) haya terminado al 100%.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Siempre apretá primero "Escanear (dry run)" para ver cuántos assets serían
+            borrados y cuántos GB liberarías, sin tocar nada.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={runDryRun}
+              disabled={scanning || cleaning}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-300 text-rose-700 rounded-lg hover:bg-rose-50 disabled:opacity-50"
+            >
+              {scanning ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Escaneando...</>
+              ) : (
+                <><Info className="w-4 h-4" /> Escanear (dry run)</>
+              )}
+            </button>
+            <button
+              onClick={runCleanup}
+              disabled={scanning || cleaning}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50"
+            >
+              {cleaning ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Limpiando...</>
+              ) : (
+                <><Trash2 className="w-4 h-4" /> Borrar huérfanos</>
+              )}
+            </button>
+          </div>
+
+          {scanResult && (
+            <div className="mt-3 p-3 bg-white rounded-lg border border-rose-200 text-sm space-y-1">
+              <p><strong>URLs vivas en Firestore:</strong> {scanResult.liveUrlsCollected}</p>
+              <p><strong>Assets en Cloudinary:</strong> {scanResult.cloudinaryAssetsScanned}</p>
+              <p><strong>Huérfanos (a borrar):</strong> {scanResult.orphansFound}</p>
+              <p><strong>Storage que se liberaría:</strong> {formatBytes(scanResult.bytesFreed)}</p>
+              {scanResult.sampleOrphans?.length > 0 && (
+                <details className="text-xs text-gray-600 mt-1">
+                  <summary className="cursor-pointer">Ver muestra</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {scanResult.sampleOrphans.map((o, i) => (
+                      <li key={i} className="truncate">
+                        • {o.publicId} ({o.format}, {formatBytes(o.bytes)})
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {cleanResult && (
+            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-sm space-y-1">
+              <p className="font-medium text-emerald-900">
+                {cleanResult.doneAt ? '✓ Cleanup completado' : 'Cleanup en progreso'}
+              </p>
+              <p>Borrados: <strong>{cleanResult.orphansDeleted}</strong> de {cleanResult.orphansFound} huérfanos</p>
+              <p>Storage liberado: <strong>{formatBytes(cleanResult.bytesFreed)}</strong></p>
+              {cleanResult.errors > 0 && (
+                <p className="text-amber-700">⚠ Errores: {cleanResult.errors} (revisá los logs)</p>
               )}
             </div>
           )}

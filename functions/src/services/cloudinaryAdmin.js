@@ -111,6 +111,49 @@ export async function reuploadFromUrl(sourceUrl) {
 }
 
 /**
+ * Lista assets de un folder (paginado). Útil para cleanup.
+ * Devuelve { resources: [{ public_id, format, bytes, ... }], next_cursor }
+ */
+export async function listResources({ prefix = 'cobrify/', maxResults = 500, nextCursor = null } = {}) {
+  const { apiKey, apiSecret } = getAuth()
+  const params = {
+    type: 'upload',
+    prefix,
+    max_results: maxResults,
+  }
+  if (nextCursor) params.next_cursor = nextCursor
+  const response = await axios.get(
+    `${ADMIN_BASE}/resources/image`,
+    {
+      params,
+      auth: { username: apiKey, password: apiSecret },
+      timeout: 30000,
+    }
+  )
+  return response.data
+}
+
+/**
+ * Elimina varios assets por public_id en una sola llamada (max 100 por request).
+ */
+export async function deleteResources(publicIds) {
+  const { apiKey, apiSecret } = getAuth()
+  if (!publicIds.length) return { deleted: {} }
+  const form = new URLSearchParams()
+  for (const id of publicIds) form.append('public_ids[]', id)
+  const response = await axios.delete(
+    `${ADMIN_BASE}/resources/image/upload`,
+    {
+      data: form.toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      auth: { username: apiKey, password: apiSecret },
+      timeout: 30000,
+    }
+  )
+  return response.data
+}
+
+/**
  * Elimina un asset por public_id usando la Admin API.
  * Auth: HTTP Basic con API_KEY:API_SECRET.
  */
@@ -128,10 +171,15 @@ export async function deleteResource(publicId) {
 }
 
 /**
- * Migra una sola URL: re-uploadea optimizada y borra el original.
- * Devuelve { newUrl, oldBytes, newBytes, freed } o lanza error.
+ * Re-uploadea una URL de Cloudinary aplicando la incoming transformation
+ * del preset (q_auto:eco,f_auto,c_limit,w_1600).
  *
- * Si dryRun=true, solo calcula bytes y no toca nada.
+ * NO borra el original — eso lo decide el caller después de confirmar
+ * que la actualización en Firestore fue exitosa, para evitar imágenes
+ * rotas si la escritura falla.
+ *
+ * Devuelve { newUrl, oldPublicId, oldBytes, newBytes, freed }
+ * Si dryRun=true, solo lee metadata y no toca nada.
  */
 export async function migrateOneUrl(oldUrl, { dryRun = false } = {}) {
   const parsed = parseCloudinaryUrl(oldUrl)
@@ -141,6 +189,7 @@ export async function migrateOneUrl(oldUrl, { dryRun = false } = {}) {
     const meta = await getResourceMetadata(parsed.publicId)
     return {
       newUrl: oldUrl,
+      oldPublicId: parsed.publicId,
       oldBytes: meta?.bytes || 0,
       newBytes: 0,
       freed: 0,
@@ -148,27 +197,16 @@ export async function migrateOneUrl(oldUrl, { dryRun = false } = {}) {
     }
   }
 
-  // Capturamos el size del original ANTES de re-uploadear
   const meta = await getResourceMetadata(parsed.publicId)
   const oldBytes = meta?.bytes || 0
 
-  // Re-upload (Cloudinary baja la imagen original internamente y le aplica
-  // la incoming transformation del preset)
   const uploaded = await reuploadFromUrl(oldUrl)
   const newBytes = uploaded.bytes || 0
 
-  // Borrar el asset original (si el nuevo tiene un public_id distinto)
-  if (uploaded.publicId !== parsed.publicId) {
-    try {
-      await deleteResource(parsed.publicId)
-    } catch (err) {
-      // No bloquear si falla el delete (mejor tener doble que perder URL nueva)
-      console.warn('No se pudo borrar el asset original:', parsed.publicId, err.message)
-    }
-  }
-
   return {
     newUrl: uploaded.secureUrl,
+    oldPublicId: parsed.publicId,
+    newPublicId: uploaded.publicId,
     oldBytes,
     newBytes,
     freed: Math.max(0, oldBytes - newBytes),

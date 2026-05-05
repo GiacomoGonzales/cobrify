@@ -20,6 +20,9 @@ import {
   isAlreadyOptimized,
   parseCloudinaryUrl,
   migrateOneUrl,
+  deleteResource,
+  deleteResources,
+  listResources,
 } from './src/services/cloudinaryAdmin.js'
 
 // Initialize Firebase Admin
@@ -8993,24 +8996,37 @@ export const migrateCloudinaryImages = onCall(
     const timeUp = () => Date.now() - startMs > TIME_BUDGET_MS
 
     // Cache de migraciones DENTRO de este run (oldUrl → newUrl).
-    // Evita re-uploadear cuando una misma URL aparece en imageUrl + imageUrls[0]
-    // del mismo o distintos productos.
+    // Si una misma URL aparece en varios docs, solo se re-uploadea UNA vez.
+    //
+    // IMPORTANTE: esta función solo crea las versiones WebP y actualiza
+    // Firestore. NUNCA borra el asset original. La limpieza de assets
+    // huérfanos (asset que ya no está referenciado por ningún doc) la
+    // hace cleanupOrphanedCloudinaryAssets en una pasada separada,
+    // después de que la migración terminó al 100%.
+    //
+    // Esto significa que durante la migración hay storage "doble"
+    // (original + nueva versión optimizada). El storage real se libera
+    // cuando se ejecuta el cleanup.
+    //
+    // El motivo del split: garantiza que NINGUNA imagen se rompe, ni
+    // siquiera en escenarios edge (timeout a la mitad, errores parciales,
+    // refs en docs aún no procesados).
     const urlMap = new Map()
 
-    // Migra una URL única (o devuelve la cacheada). NO escribe Firestore.
-    async function migrateUrl(oldUrl) {
+    async function reuploadOnce(oldUrl) {
       if (urlMap.has(oldUrl)) return urlMap.get(oldUrl)
       try {
         const result = await migrateOneUrl(oldUrl, { dryRun: false })
-        stats.migrated++
-        stats.freedBytes += result.freed || 0
         urlMap.set(oldUrl, result.newUrl)
+        stats.migrated++
+        // Reporte tentativo del freed (asumiendo que el delete del cleanup
+        // tendrá éxito; el cleanup re-confirmará el ahorro real).
+        stats.freedBytes += result.freed || 0
         return result.newUrl
       } catch (err) {
-        // Cualquier error (404 de original ya borrado, network, etc): registrar y skipear.
         stats.errors++
-        console.error(`Migración falló para ${oldUrl}: ${err.message}`)
-        urlMap.set(oldUrl, null) // marca como fallida para no reintentar en este run
+        console.error(`Re-upload falló para ${oldUrl}: ${err.message}`)
+        urlMap.set(oldUrl, null)
         return null
       }
     }
@@ -9027,10 +9043,10 @@ export const migrateCloudinaryImages = onCall(
       }
       if (dryRun) return
 
-      const newUrl = await migrateUrl(currentUrl)
+      const newUrl = await reuploadOnce(currentUrl)
       if (!newUrl) return
 
-      // Actualizar Firestore con la nueva URL
+      // Actualizar Firestore con la nueva URL.
       try {
         if (indexInArray == null) {
           await docRef.update({ [fieldName]: newUrl })
@@ -9163,6 +9179,140 @@ export const migrateCloudinaryImages = onCall(
       return stats
     } catch (err) {
       console.error('migrateCloudinaryImages error:', err)
+      stats.errors++
+      throw new HttpsError('internal', err.message || String(err))
+    }
+  }
+)
+
+/**
+ * Cleanup de assets huérfanos en Cloudinary.
+ *
+ * Se corre DESPUÉS de migrateCloudinaryImages haya terminado al 100%
+ * (stats.doneAt no-null). Recorre los assets en el folder cobrify/ y borra
+ * los que NO estén referenciados por ningún doc de Firestore.
+ *
+ * Esto es lo que libera el storage real, separadamente de la migración,
+ * para garantizar que no se rompe ninguna URL viva.
+ *
+ * Soporta dryRun (recomendado siempre la primera vez).
+ */
+export const cleanupOrphanedCloudinaryAssets = onCall(
+  {
+    region: 'us-central1',
+    cors: true,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: ['CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'],
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists) throw new HttpsError('permission-denied', 'Solo administradores')
+
+    const dryRun = request.data?.dryRun !== false // default true por seguridad
+    const startMs = Date.now()
+    const TIME_BUDGET_MS = 8 * 60 * 1000
+
+    const stats = {
+      dryRun,
+      liveUrlsCollected: 0,
+      cloudinaryAssetsScanned: 0,
+      orphansFound: 0,
+      orphansDeleted: 0,
+      bytesFreed: 0,
+      errors: 0,
+      sampleOrphans: [],
+      doneAt: null,
+    }
+
+    try {
+      // 1. Construir el set de public_ids vivos (referenciados desde Firestore)
+      const livePublicIds = new Set()
+
+      const collectFromUrl = (url) => {
+        if (!url || !isCloudinaryUrl(url)) return
+        const parsed = parseCloudinaryUrl(url)
+        if (parsed?.publicId) {
+          livePublicIds.add(parsed.publicId)
+          stats.liveUrlsCollected++
+        }
+      }
+
+      const businessesSnap = await db.collection('businesses').orderBy('__name__').get()
+      for (const bDoc of businessesSnap.docs) {
+        const bdata = bDoc.data()
+        collectFromUrl(bdata.catalogLogoUrl)
+        collectFromUrl(bdata.catalogLogoLandscape)
+        collectFromUrl(bdata.catalogCoverImage)
+        collectFromUrl(bdata.catalogCoverImageMobile)
+
+        const productsSnap = await bDoc.ref.collection('products').get()
+        for (const pDoc of productsSnap.docs) {
+          const pdata = pDoc.data()
+          collectFromUrl(pdata.imageUrl)
+          if (Array.isArray(pdata.imageUrls)) {
+            pdata.imageUrls.forEach(collectFromUrl)
+          }
+        }
+      }
+
+      console.log(`[cleanup] live public_ids referenciados: ${livePublicIds.size}`)
+
+      // 2. Listar assets de Cloudinary y comparar
+      let nextCursor = null
+      const orphansToDelete = []
+
+      do {
+        if (Date.now() - startMs > TIME_BUDGET_MS) {
+          console.warn('[cleanup] timeout durante listado, retornar parcial')
+          break
+        }
+        const page = await listResources({
+          prefix: 'cobrify/',
+          maxResults: 500,
+          nextCursor,
+        })
+        for (const r of page.resources || []) {
+          stats.cloudinaryAssetsScanned++
+          if (!livePublicIds.has(r.public_id)) {
+            stats.orphansFound++
+            stats.bytesFreed += r.bytes || 0
+            orphansToDelete.push({ publicId: r.public_id, bytes: r.bytes || 0 })
+            if (stats.sampleOrphans.length < 10) {
+              stats.sampleOrphans.push({
+                publicId: r.public_id,
+                format: r.format,
+                bytes: r.bytes,
+              })
+            }
+          }
+        }
+        nextCursor = page.next_cursor
+      } while (nextCursor)
+
+      // 3. Borrar (si no es dryRun) en lotes de 100
+      if (!dryRun && orphansToDelete.length > 0) {
+        for (let i = 0; i < orphansToDelete.length; i += 100) {
+          if (Date.now() - startMs > TIME_BUDGET_MS) {
+            console.warn('[cleanup] timeout durante delete; ', stats.orphansDeleted, 'borrados')
+            break
+          }
+          const batch = orphansToDelete.slice(i, i + 100)
+          try {
+            await deleteResources(batch.map(o => o.publicId))
+            stats.orphansDeleted += batch.length
+          } catch (err) {
+            stats.errors++
+            console.error('[cleanup] error borrando batch:', err.message)
+          }
+        }
+      }
+
+      stats.doneAt = new Date().toISOString()
+      return stats
+    } catch (err) {
+      console.error('cleanupOrphanedCloudinaryAssets error:', err)
       stats.errors++
       throw new HttpsError('internal', err.message || String(err))
     }
