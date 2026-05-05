@@ -15,7 +15,8 @@ import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
-import { db, storage, auth } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, storage, auth, functions } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -216,6 +217,8 @@ export default function Settings() {
   const [rappiAutoAccept, setRappiAutoAccept] = useState(true)
   const [showRappiSecret, setShowRappiSecret] = useState(false)
   const [isSavingRappi, setIsSavingRappi] = useState(false)
+  const [isTestingRappi, setIsTestingRappi] = useState(false)
+  const [rappiTestResult, setRappiTestResult] = useState(null)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -3552,6 +3555,58 @@ export default function Settings() {
                   Los módulos principales (Dashboard, POS, Ventas, Clientes, Productos, Configuración) siempre estarán visibles.
                 </p>
               </div>
+
+              {/* Integraciones */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Integraciones</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Conecta servicios externos a Cobrify.
+                    </p>
+                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={businessSettings?.rappiEnabled === true}
+                        onChange={async (e) => {
+                          if (isDemoMode) {
+                            toast.error('No disponible en modo demo')
+                            return
+                          }
+                          const enabled = e.target.checked
+                          try {
+                            const businessRef = doc(db, 'businesses', getBusinessId())
+                            await setDoc(businessRef, {
+                              rappiEnabled: enabled,
+                              updatedAt: serverTimestamp(),
+                            }, { merge: true })
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                            toast.success(enabled
+                              ? 'Integración con Rappi activada'
+                              : 'Integración con Rappi desactivada')
+                          } catch (error) {
+                            console.error('Error toggle Rappi:', error)
+                            toast.error('No se pudo actualizar')
+                          }
+                        }}
+                        className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900 flex items-center gap-2">
+                          <Bike className="w-4 h-4 text-orange-600" />
+                          Habilitar integración con Rappi
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          Activa la captación de pedidos desde Rappi. Se mostrará el módulo
+                          "Pedidos Rappi" en el menú lateral y un nuevo tab "Rappi" en esta
+                          configuración para cargar tus credenciales.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
           </CardContent>
 
@@ -8987,8 +9042,130 @@ export default function Settings() {
                 </label>
               </div>
 
-              {/* Guardar */}
-              <div className="flex justify-end pt-2">
+              {/* Resultado de la prueba de conexión */}
+              {rappiTestResult && (
+                <div
+                  className={`rounded-lg border p-3 text-sm ${
+                    rappiTestResult.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-red-50 border-red-200 text-red-900'
+                  }`}
+                >
+                  {rappiTestResult.ok ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CheckCircle className="w-4 h-4" />
+                        Conexión exitosa con Rappi {rappiTestResult.env === 'production_pe' ? '(Producción)' : '(Sandbox)'} · Store <strong>{rappiTestResult.storeId}</strong>
+                      </div>
+                      {rappiTestResult.v1 && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">
+                            REST v1 (/restaurants/orders/v1/stores/{rappiTestResult.storeId}/orders)
+                          </div>
+                          {rappiTestResult.v1.ok ? (
+                            <p>✓ {rappiTestResult.v1.count} pedido(s)</p>
+                          ) : (
+                            <p>✗ HTTP {rappiTestResult.v1.status || '?'} · {rappiTestResult.v1.message}</p>
+                          )}
+                        </div>
+                      )}
+                      {rappiTestResult.v2 && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">
+                            Public API v2 (/api/v2/restaurants-integrations-public-api/orders)
+                          </div>
+                          {rappiTestResult.v2.ok ? (
+                            <p>✓ {rappiTestResult.v2.count} pedido(s)</p>
+                          ) : (
+                            <p>✗ HTTP {rappiTestResult.v2.status || '?'} · {rappiTestResult.v2.message}</p>
+                          )}
+                        </div>
+                      )}
+                      {rappiTestResult.sample?.length > 0 && (
+                        <details className="text-xs mt-1">
+                          <summary className="cursor-pointer">Ver muestra del payload</summary>
+                          <pre className="mt-1 text-xs bg-white/50 p-2 rounded overflow-auto max-h-64">
+{JSON.stringify(rappiTestResult.sample, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 font-medium">
+                        <AlertCircle className="w-4 h-4" />
+                        No se pudo conectar
+                      </div>
+                      <p className="text-xs">
+                        Paso fallido: <strong>{rappiTestResult.step}</strong>
+                        {rappiTestResult.status ? ` · HTTP ${rappiTestResult.status}` : ''}
+                      </p>
+                      <p className="text-xs">{rappiTestResult.message}</p>
+                      {rappiTestResult.data && (
+                        <details className="text-xs mt-1">
+                          <summary className="cursor-pointer">Detalles</summary>
+                          <pre className="mt-1 text-xs bg-white/50 p-2 rounded overflow-auto">
+{JSON.stringify(rappiTestResult.data, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Acciones */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setIsTestingRappi(true)
+                    setRappiTestResult(null)
+                    try {
+                      // Guardar primero para que la function lea las credenciales actuales
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          pollingEnabled: rappiPollingEnabled,
+                          autoAccept: rappiAutoAccept,
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+
+                      const testFn = httpsCallable(functions, 'testRappiConnection')
+                      const result = await testFn({ businessId: getBusinessId(), env: 'sandbox' })
+                      setRappiTestResult(result.data)
+                      if (result.data?.ok) {
+                        toast.success('Conexión con Rappi OK')
+                      } else {
+                        toast.error('Conexión fallida: ' + (result.data?.message || 'ver detalles'))
+                      }
+                    } catch (error) {
+                      console.error('Error testing Rappi:', error)
+                      setRappiTestResult({ ok: false, step: 'client', message: error.message })
+                      toast.error('Error: ' + error.message)
+                    } finally {
+                      setIsTestingRappi(false)
+                    }
+                  }}
+                  disabled={isTestingRappi || !rappiClientId || !rappiClientSecret || !rappiStoreId}
+                >
+                  {isTestingRappi ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Probando...
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="w-4 h-4 mr-2" />
+                      Probar conexión
+                    </>
+                  )}
+                </Button>
                 <Button
                   onClick={async () => {
                     setIsSavingRappi(true)

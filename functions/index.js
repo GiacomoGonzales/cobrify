@@ -14,6 +14,7 @@ import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
+import { loginRappi, getStoreOrders, getOrdersV2 } from './src/services/rappiApi.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -8818,4 +8819,109 @@ export const sendBulkPushNotifications = onCall(
   }
 )
 
+/**
+ * Prueba la conexión con Rappi usando las credenciales guardadas en
+ * `businesses/{businessId}.rappiConfig`.
+ *
+ * Devuelve:
+ *   { ok: true, ordersCount, sample } si todo bien
+ *   { ok: false, step, message, status, data } si algo falla
+ *
+ * `step` indica dónde se rompió: 'config' | 'login' | 'orders' | 'unknown'
+ */
+export const testRappiConnection = onCall(
+  { region: 'us-central1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes estar autenticado')
+    }
 
+    const businessId = request.data?.businessId
+    const env = request.data?.env === 'production_pe' ? 'production_pe' : 'sandbox'
+    if (!businessId) {
+      throw new HttpsError('invalid-argument', 'businessId requerido')
+    }
+
+    try {
+      const businessDoc = await db.collection('businesses').doc(businessId).get()
+      if (!businessDoc.exists) {
+        return { ok: false, step: 'config', message: 'Business no existe' }
+      }
+      const businessData = businessDoc.data()
+      // El businessId es el uid del owner. Si el caller es ese uid, es el dueño.
+      // Si no, debe ser un sub-usuario con users/{uid}.ownerId === businessId.
+      const isOwner = request.auth.uid === businessId
+      let isSubuser = false
+      if (!isOwner) {
+        const userDoc = await db.collection('users').doc(request.auth.uid).get()
+        if (userDoc.exists && userDoc.data()?.ownerId === businessId) {
+          isSubuser = true
+        }
+      }
+      if (!isOwner && !isSubuser) {
+        throw new HttpsError('permission-denied', 'Sin acceso a este negocio')
+      }
+
+      const cfg = businessData.rappiConfig
+      if (!cfg?.clientId || !cfg?.clientSecret || !cfg?.storeId) {
+        return {
+          ok: false,
+          step: 'config',
+          message: 'Faltan credenciales en la configuración (Client ID, Secret o Store ID).',
+        }
+      }
+
+      let token
+      try {
+        token = await loginRappi({
+          clientId: cfg.clientId,
+          clientSecret: cfg.clientSecret,
+          env,
+        })
+      } catch (err) {
+        return {
+          ok: false,
+          step: 'login',
+          message: err.message || 'Error de autenticación con Rappi',
+          status: err.response?.status,
+          data: err.response?.data,
+        }
+      }
+
+      // Probar ambas versiones de la API en paralelo
+      const [v1Result, v2Result] = await Promise.all([
+        getStoreOrders({ token, storeId: cfg.storeId, env })
+          .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+          .catch(err => ({
+            ok: false,
+            status: err.response?.status,
+            message: err.message,
+            data: err.response?.data,
+          })),
+        getOrdersV2({ token, env })
+          .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+          .catch(err => ({
+            ok: false,
+            status: err.response?.status,
+            message: err.message,
+            data: err.response?.data,
+          })),
+      ])
+
+      return {
+        ok: true,
+        env,
+        storeId: cfg.storeId,
+        v1: v1Result,
+        v2: v2Result,
+        // Compat: el campo viejo
+        ordersCount: v1Result.ok ? v1Result.count : (v2Result.ok ? v2Result.count : 0),
+        sample: v1Result.ok && v1Result.sample?.length ? v1Result.sample : (v2Result.sample || []),
+      }
+    } catch (err) {
+      if (err instanceof HttpsError) throw err
+      console.error('testRappiConnection error:', err)
+      return { ok: false, step: 'unknown', message: err.message || String(err) }
+    }
+  }
+)
