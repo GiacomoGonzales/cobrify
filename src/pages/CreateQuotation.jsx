@@ -900,10 +900,11 @@ export default function CreateQuotation() {
   }
 
   const validateForm = () => {
-    // Validar que haya datos de cliente
+    // Validar que haya datos de cliente. El documento es opcional —
+    // solo el nombre es requerido para emitir una cotización.
     const customerData = getCustomerData()
-    if (!customerData || !customerData.documentNumber || !customerData.name) {
-      toast.error('Debe seleccionar o ingresar los datos del cliente')
+    if (!customerData || !customerData.name) {
+      toast.error('Debe ingresar al menos el nombre del cliente')
       return false
     }
 
