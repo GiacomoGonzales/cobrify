@@ -1328,23 +1328,70 @@ export default function CreatePurchase() {
             }
           }
 
-          // Sistema de múltiples lotes para farmacia (procesar cada item original)
+          // Sistema de múltiples lotes para farmacia (procesar cada item original).
+          // MERGE: si llega un lote con el mismo batchNumber + warehouse + fecha de
+          // vencimiento que un lote ya existente, SUMAMOS la cantidad al existente
+          // en vez de crear un registro duplicado. Esto evita que aparezcan varios
+          // registros del "mismo lote" cada vez que se reabastece, y de paso
+          // arregla el caso de lotes vacíos (quantity=0) que se rellenaban con
+          // un nuevo registro en vez de reusar el slot.
           const itemsWithBatch = grouped.items.filter(item => item.batchNumber || item.expirationDate)
           if (itemsWithBatch.length > 0) {
-            const currentBatches = product.batches || []
-            const newBatches = itemsWithBatch.map(item => ({
-              id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              batchNumber: item.batchNumber || '',
-              quantity: parseFloat(item.quantity) || 0,
-              expirationDate: item.expirationDate ? Timestamp.fromDate(parseLocalDate(item.expirationDate)) : null,
-              purchaseId: resultId || null,
-              purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
-              costPrice: parseFloat(item.cost) || 0,
-              warehouseId: selectedWarehouse?.id || null,
-              createdAt: Timestamp.fromDate(new Date())
-            }))
+            const updatedBatches = [...(product.batches || [])]
+            const targetWarehouseId = selectedWarehouse?.id || null
+            const normalizeBn = (s) => String(s || '').trim().toLowerCase()
+            const expDateEqual = (a, b) => {
+              if (!a && !b) return true
+              if (!a || !b) return false
+              const da = a.toDate ? a.toDate().getTime() : new Date(a).getTime()
+              const db = b.toDate ? b.toDate().getTime() : new Date(b).getTime()
+              return da === db
+            }
 
-            const updatedBatches = [...currentBatches, ...newBatches]
+            for (const item of itemsWithBatch) {
+              const itemBatchNumber = String(item.batchNumber || '').trim()
+              const itemQty = parseFloat(item.quantity) || 0
+              const itemExpDate = item.expirationDate
+                ? Timestamp.fromDate(parseLocalDate(item.expirationDate))
+                : null
+              const itemCost = parseFloat(item.cost) || 0
+
+              // Solo intentamos merge si hay batchNumber identificable.
+              const existingIdx = itemBatchNumber
+                ? updatedBatches.findIndex(b =>
+                    normalizeBn(b.batchNumber) === normalizeBn(itemBatchNumber) &&
+                    (b.warehouseId || null) === targetWarehouseId &&
+                    expDateEqual(b.expirationDate, itemExpDate)
+                  )
+                : -1
+
+              if (existingIdx >= 0) {
+                const existing = updatedBatches[existingIdx]
+                updatedBatches[existingIdx] = {
+                  ...existing,
+                  quantity: (parseFloat(existing.quantity) || 0) + itemQty,
+                  // Actualizamos costo al último (sirve para futuros reportes
+                  // de costo promedio si se necesita en otra iteración).
+                  costPrice: itemCost || existing.costPrice || 0,
+                  // Referencia a la última compra que tocó este lote
+                  purchaseId: resultId || existing.purchaseId || null,
+                  purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                }
+              } else {
+                updatedBatches.push({
+                  id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  batchNumber: itemBatchNumber,
+                  quantity: itemQty,
+                  expirationDate: itemExpDate,
+                  purchaseId: resultId || null,
+                  purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                  costPrice: itemCost,
+                  warehouseId: targetWarehouseId,
+                  createdAt: Timestamp.fromDate(new Date())
+                })
+              }
+            }
+
             extraUpdates.batches = updatedBatches
             extraUpdates.trackExpiration = true
 

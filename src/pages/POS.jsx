@@ -2822,7 +2822,13 @@ export default function POS() {
                   const variantLabel = Object.values(item.variantAttributes || {}).join(' / ') || item.variantSku
                   stockMsg = `variante ${variantLabel}${selectedWarehouse ? ` en ${selectedWarehouse.name}` : ''}`
                 } else if (item.batchNumber) {
-                  availableStock = productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0
+                  // SUMAR todos los registros que tengan el mismo batchNumber.
+                  // Cubre el caso edge de bases con lotes duplicados (mismo lote
+                  // creado varias veces antes del fix de merge en compras).
+                  const matchingBatches = (productData.batches || []).filter(b =>
+                    (b.lotNumber || b.batchNumber) === item.batchNumber
+                  )
+                  availableStock = matchingBatches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0)
                   stockMsg = `lote ${item.batchNumber}`
                 } else if (item.isNoLot) {
                   const totalWarehouseStock = getCurrentWarehouseStock(productData)
@@ -2902,7 +2908,13 @@ export default function POS() {
                   const variantLabel = Object.values(item.variantAttributes || {}).join(' / ') || item.variantSku
                   stockMsg = `variante ${variantLabel}${selectedWarehouse ? ` en ${selectedWarehouse.name}` : ''}`
                 } else if (item.batchNumber) {
-                  availableStock = productData.batches?.find(b => (b.lotNumber || b.batchNumber) === item.batchNumber)?.quantity || 0
+                  // SUMAR todos los registros que tengan el mismo batchNumber.
+                  // Cubre el caso edge de bases con lotes duplicados (mismo lote
+                  // creado varias veces antes del fix de merge en compras).
+                  const matchingBatches = (productData.batches || []).filter(b =>
+                    (b.lotNumber || b.batchNumber) === item.batchNumber
+                  )
+                  availableStock = matchingBatches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0)
                   stockMsg = `lote ${item.batchNumber}`
                 } else if (item.isNoLot) {
                   const totalWarehouseStock = getCurrentWarehouseStock(productData)
