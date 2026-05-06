@@ -10,6 +10,7 @@ import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getP
 import { createStockMovement } from '@/services/warehouseService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import SUNAT_UNITS from '@/data/sunatUnits'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -40,16 +41,7 @@ const RECIPIENT_DOCUMENT_TYPES = [
   { value: '0', label: 'Sin documento' },
 ]
 
-const UNIT_CODES = [
-  { value: 'NIU', label: 'NIU - Unidad' },
-  { value: 'KGM', label: 'KGM - Kilogramo' },
-  { value: 'LTR', label: 'LTR - Litro' },
-  { value: 'MTR', label: 'MTR - Metro' },
-  { value: 'GLL', label: 'GLL - Galón' },
-  { value: 'BOX', label: 'BOX - Caja' },
-  { value: 'PK', label: 'PK - Paquete' },
-  { value: 'DZN', label: 'DZN - Docena' },
-]
+const UNIT_CODES = SUNAT_UNITS
 
 const RELATED_DOC_TYPES = [
   { value: '01', label: 'Factura' },
