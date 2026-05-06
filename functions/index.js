@@ -8970,6 +8970,16 @@ export const migrateCloudinaryImages = onCall(
     const resumeFrom = request.data?.resumeFrom || null
     const onlyBusinessId = request.data?.businessId || null
 
+    // Diagnóstico: verificar que los secrets de Cloudinary están cargados
+    // (sin loggear el secret completo, solo confirmamos presencia y prefijo)
+    const debugApiKey = process.env.CLOUDINARY_API_KEY || ''
+    const debugApiSecret = process.env.CLOUDINARY_API_SECRET || ''
+    console.log(
+      `[migrate] auth check — apiKey: ${debugApiKey ? debugApiKey.slice(0, 4) + '...(' + debugApiKey.length + ' chars)' : 'MISSING'},`,
+      `apiSecret: ${debugApiSecret ? '***(' + debugApiSecret.length + ' chars)' : 'MISSING'},`,
+      `dryRun: ${dryRun}`
+    )
+
     const startMs = Date.now()
     const TIME_BUDGET_MS = 8 * 60 * 1000 // 8 min, margen vs timeout de 9
 
@@ -9025,7 +9035,12 @@ export const migrateCloudinaryImages = onCall(
         return result.newUrl
       } catch (err) {
         stats.errors++
-        console.error(`Re-upload falló para ${oldUrl}: ${err.message}`)
+        // Log enriquecido para diagnosticar errores de Cloudinary (incluye body de respuesta)
+        console.error(
+          `Re-upload falló para ${oldUrl}: ${err.message}`,
+          err.response?.status ? `[HTTP ${err.response.status}]` : '',
+          err.response?.data ? JSON.stringify(err.response.data) : ''
+        )
         urlMap.set(oldUrl, null)
         return null
       }
