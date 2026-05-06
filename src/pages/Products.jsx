@@ -799,33 +799,44 @@ export default function Products() {
       return
     }
 
-    // Validar código de barras duplicado (solo si se ingresó uno)
+    // Validar código de barras duplicado (solo si se ingresó uno).
+    // Si está editando y NO cambió el código, saltamos la validación: el código
+    // sigue siendo el suyo, no es un cambio. Esto evita que duplicados pre-existentes
+    // (creados antes de la validación, o vía importador masivo) bloqueen al usuario
+    // que solo quiere actualizar precio/stock.
     if (data.code && data.code.trim()) {
       const codeToCheck = data.code.trim().toUpperCase()
-      const duplicateByCode = products.find(p => {
-        if (editingProduct && p.id === editingProduct.id) return false
-        return p.code?.trim().toUpperCase() === codeToCheck
-      })
-
-      if (duplicateByCode) {
-        toast.error(`El código de barras "${data.code}" ya está en uso por el producto "${duplicateByCode.name}"`)
-        setIsSaving(false)
-        return
+      const originalCode = editingProduct?.code?.trim().toUpperCase() || ''
+      const codeChanged = !editingProduct || originalCode !== codeToCheck
+      if (codeChanged) {
+        const duplicateByCode = products.find(p => {
+          if (editingProduct && p.id === editingProduct.id) return false
+          return p.code?.trim().toUpperCase() === codeToCheck
+        })
+        if (duplicateByCode) {
+          toast.error(`El código de barras "${data.code}" ya está en uso por el producto "${duplicateByCode.name}"`)
+          setIsSaving(false)
+          return
+        }
       }
     }
 
-    // Validar SKU duplicado (solo si se ingresó uno)
+    // Validar SKU duplicado (solo si se ingresó uno). Misma lógica que código:
+    // si está editando y NO cambió el SKU, saltamos la validación.
     if (data.sku && data.sku.trim()) {
       const skuToCheck = data.sku.trim().toUpperCase()
-      const duplicateBySku = products.find(p => {
-        if (editingProduct && p.id === editingProduct.id) return false
-        return p.sku?.trim().toUpperCase() === skuToCheck
-      })
-
-      if (duplicateBySku) {
-        toast.error(`El SKU "${data.sku}" ya está en uso por el producto "${duplicateBySku.name}"`)
-        setIsSaving(false)
-        return
+      const originalSku = editingProduct?.sku?.trim().toUpperCase() || ''
+      const skuChanged = !editingProduct || originalSku !== skuToCheck
+      if (skuChanged) {
+        const duplicateBySku = products.find(p => {
+          if (editingProduct && p.id === editingProduct.id) return false
+          return p.sku?.trim().toUpperCase() === skuToCheck
+        })
+        if (duplicateBySku) {
+          toast.error(`El SKU "${data.sku}" ya está en uso por el producto "${duplicateBySku.name}"`)
+          setIsSaving(false)
+          return
+        }
       }
     }
 
