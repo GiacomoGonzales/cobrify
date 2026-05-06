@@ -694,62 +694,104 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [isOpen, getBusinessId, cloneData])
 
-  // Actualizar dirección de origen/destino cuando cambia la sucursal seleccionada
+  // Actualizar dirección de origen/destino cuando cambia el almacén o la sucursal seleccionada.
   // En compras (isPurchase): la dirección de mi empresa va al DESTINO (punto de llegada)
   // En ventas: la dirección de mi empresa va al ORIGEN (punto de partida)
+  //
+  // Prioridad de la dirección:
+  //   1. Almacén seleccionado (si tiene address propio) — útil para empresas con
+  //      una sola sucursal y múltiples almacenes en distintas direcciones.
+  //   2. Sucursal seleccionada.
+  //   3. Negocio principal (configuración de empresa).
+  //
+  // El ubigeo se hereda de la sucursal a la que pertenece el almacén (si tiene
+  // branchId), o de la sucursal seleccionada, o del negocio.
   const isPurchase = referenceInvoice?.isPurchase
   useEffect(() => {
-    const loadBranchOrBusinessAddress = async () => {
+    const loadOriginOrDestinationAddress = async () => {
       const businessId = getBusinessId()
       if (!businessId) return
 
-      // Funciones para setear la dirección según si es compra o venta
       const setAddr = isPurchase ? setDestinationAddress : setOriginAddress
       const setDept = isPurchase ? setDestinationDepartment : setOriginDepartment
       const setProv = isPurchase ? setDestinationProvince : setOriginProvince
       const setDist = isPurchase ? setDestinationDistrict : setOriginDistrict
 
+      const applyUbigeo = (ubigeo) => {
+        if (ubigeo && ubigeo.length === 6) {
+          setDept(ubigeo.substring(0, 2))
+          setProv(ubigeo.substring(2, 4))
+          setDist(ubigeo.substring(4, 6))
+        } else {
+          setDept('')
+          setProv('')
+          setDist('')
+        }
+      }
+
+      // 1. Almacén con address propio
+      const selectedWarehouseData = selectedWarehouseId
+        ? warehouses.find(w => w.id === selectedWarehouseId)
+        : null
+      if (selectedWarehouseData?.address) {
+        setAddr(selectedWarehouseData.address)
+        // Hereda ubigeo de la sucursal a la que pertenece el almacén,
+        // si no hay branchId hereda de la sucursal del modal o del negocio.
+        const wsBranch = selectedWarehouseData.branchId
+          ? branches.find(b => b.id === selectedWarehouseData.branchId)
+          : null
+        if (wsBranch?.ubigeo) {
+          applyUbigeo(wsBranch.ubigeo)
+          return
+        }
+        if (selectedBranchId) {
+          const selectedBranchData = branches.find(b => b.id === selectedBranchId)
+          if (selectedBranchData?.ubigeo) {
+            applyUbigeo(selectedBranchData.ubigeo)
+            return
+          }
+        }
+        // Fallback: ubigeo del negocio
+        try {
+          const companyResult = await getCompanySettings(businessId)
+          if (companyResult.success && companyResult.data?.ubigeo) {
+            applyUbigeo(companyResult.data.ubigeo)
+          } else {
+            applyUbigeo('')
+          }
+        } catch {
+          applyUbigeo('')
+        }
+        return
+      }
+
+      // 2. Sucursal seleccionada
       if (selectedBranchId && branches.length > 0) {
         const selectedBranchData = branches.find(b => b.id === selectedBranchId)
         if (selectedBranchData) {
           setAddr(selectedBranchData.address || '')
-
-          if (selectedBranchData.ubigeo && selectedBranchData.ubigeo.length === 6) {
-            setDept(selectedBranchData.ubigeo.substring(0, 2))
-            setProv(selectedBranchData.ubigeo.substring(2, 4))
-            setDist(selectedBranchData.ubigeo.substring(4, 6))
-          } else {
-            setDept('')
-            setProv('')
-            setDist('')
-          }
+          applyUbigeo(selectedBranchData.ubigeo)
           return
         }
       }
 
-      // Si no hay sucursal seleccionada, usar dirección del negocio principal
-      if (!selectedBranchId) {
-        try {
-          const companyResult = await getCompanySettings(businessId)
-          if (companyResult.success && companyResult.data) {
-            const businessData = companyResult.data
-            setAddr(businessData.address || '')
-            if (businessData.ubigeo && businessData.ubigeo.length === 6) {
-              setDept(businessData.ubigeo.substring(0, 2))
-              setProv(businessData.ubigeo.substring(2, 4))
-              setDist(businessData.ubigeo.substring(4, 6))
-            }
-          }
-        } catch (error) {
-          console.error('Error al cargar dirección del negocio:', error)
+      // 3. Negocio principal
+      try {
+        const companyResult = await getCompanySettings(businessId)
+        if (companyResult.success && companyResult.data) {
+          const businessData = companyResult.data
+          setAddr(businessData.address || '')
+          applyUbigeo(businessData.ubigeo)
         }
+      } catch (error) {
+        console.error('Error al cargar dirección del negocio:', error)
       }
     }
 
     if (isOpen) {
-      loadBranchOrBusinessAddress()
+      loadOriginOrDestinationAddress()
     }
-  }, [selectedBranchId, branches, isOpen, getBusinessId, isPurchase])
+  }, [selectedWarehouseId, warehouses, selectedBranchId, branches, isOpen, getBusinessId, isPurchase])
 
   // Sincronizar ubigeo y dirección del destinatario con el punto correspondiente
   // En ventas: destinatario (cliente) → punto de LLEGADA
