@@ -1,5 +1,6 @@
 import axios from 'axios'
 import crypto from 'crypto'
+import { v2 as cloudinarySdk } from 'cloudinary'
 
 /**
  * Cliente para la Admin/Upload API de Cloudinary, usado por la migración
@@ -83,55 +84,40 @@ export async function getResourceMetadata(publicId) {
   }
 }
 
+// Configura el SDK de Cloudinary una vez (lazy: solo cuando se llama un método que lo necesita).
+let sdkConfigured = false
+function ensureSdkConfigured() {
+  if (sdkConfigured) return
+  const { apiKey, apiSecret } = getAuth()
+  cloudinarySdk.config({
+    cloud_name: CLOUD_NAME,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+  })
+  sdkConfigured = true
+}
+
 /**
  * Sube una imagen a Cloudinary usando una URL como fuente.
  *
- * Usamos SIGNED upload (api_key + signature) porque "fetch from URL" no está
- * permitido con presets unsigned (Cloudinary devuelve 401 si se intenta).
- *
- * El parámetro `transformation` se aplica como incoming transformation:
- * el asset se almacena ya optimizado (WebP, q_auto:eco, max 1600px de ancho),
- * lo que reduce el storage real. Es lo mismo que la incoming del preset
- * unsigned pero pasado explícitamente para que aplique con auth firmada.
+ * Usa el SDK oficial de Cloudinary (que firma la request internamente con
+ * api_key + api_secret). La transformación se aplica como incoming, lo que
+ * reduce el tamaño del asset original al almacenarlo (WebP, q_auto:eco,
+ * max 1600px de ancho).
  */
 export async function reuploadFromUrl(sourceUrl) {
-  const { apiKey, apiSecret } = getAuth()
-  const timestamp = Math.floor(Date.now() / 1000)
-
-  // Params que firmamos. Se ordenan alfabéticamente y se concatenan con `&`
-  // antes de hacer SHA1 + secret.
-  const signedParams = {
+  ensureSdkConfigured()
+  const result = await cloudinarySdk.uploader.upload(sourceUrl, {
     folder: 'cobrify',
-    timestamp: String(timestamp),
-    transformation: 'q_auto:eco,f_auto,c_limit,w_1600',
-  }
-  const stringToSign = Object.keys(signedParams)
-    .sort()
-    .map((k) => `${k}=${signedParams[k]}`)
-    .join('&') + apiSecret
-  const signature = crypto.createHash('sha1').update(stringToSign).digest('hex')
-
-  const form = new URLSearchParams()
-  form.append('file', sourceUrl)
-  form.append('api_key', apiKey)
-  form.append('timestamp', String(timestamp))
-  form.append('signature', signature)
-  form.append('folder', signedParams.folder)
-  form.append('transformation', signedParams.transformation)
-
-  const response = await axios.post(
-    `${ADMIN_BASE}/image/upload`,
-    form.toString(),
-    {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 60000,
-    }
-  )
+    transformation: [{ quality: 'auto:eco', fetch_format: 'auto', crop: 'limit', width: 1600 }],
+    resource_type: 'image',
+  })
   return {
-    secureUrl: response.data.secure_url,
-    publicId: response.data.public_id,
-    bytes: response.data.bytes,
-    format: response.data.format,
+    secureUrl: result.secure_url,
+    publicId: result.public_id,
+    bytes: result.bytes,
+    format: result.format,
   }
 }
 
