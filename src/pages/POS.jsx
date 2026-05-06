@@ -301,6 +301,9 @@ export default function POS() {
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
+  // Ref del botón "Procesar Venta". Cuando el usuario selecciona un método de pago,
+  // movemos el focus aquí para que pueda apretar Enter y procesar sin usar el mouse.
+  const checkoutButtonRef = useRef(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState(() => {
     if (allowedDocumentTypes && allowedDocumentTypes.length > 0) {
@@ -3489,6 +3492,13 @@ export default function POS() {
     }
 
     setPayments(newPayments)
+
+    // UX: mover el foco al botón "Procesar Venta" así el usuario puede apretar
+    // Enter para procesar la venta sin tener que mover el mouse.
+    // setTimeout(0) deja que React termine el re-render antes del focus.
+    setTimeout(() => {
+      checkoutButtonRef.current?.focus()
+    }, 0)
   }
 
   // Actualizar monto de pago
@@ -7648,6 +7658,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
               {/* Checkout Button */}
               <button
+                ref={checkoutButtonRef}
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || isProcessing || saleCompleted || isLoading}
                 className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
