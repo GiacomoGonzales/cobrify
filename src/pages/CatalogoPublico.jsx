@@ -303,7 +303,17 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   useEffect(() => {
     if (isOpen) {
       setQuantity(1)
-      setSelectedVariant(null)
+      // Preseleccionar la primera variante disponible para evitar mostrar
+      // S/ 0.00 al abrir el modal. Prioriza la primera con stock > 0;
+      // si todas están agotadas, igual selecciona la primera.
+      if (product?.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+        const inStock = product.variants.find(v =>
+          v.stock === null || v.stock === undefined || v.stock > 0
+        )
+        setSelectedVariant(inStock || product.variants[0])
+      } else {
+        setSelectedVariant(null)
+      }
       setVariantError(false)
       setSelectedPriceLevel('price1')
       setActiveImageIdx(0)
