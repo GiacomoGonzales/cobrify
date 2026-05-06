@@ -16,7 +16,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
-import { formatCurrency, formatProductPrice } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost } from '@/lib/utils'
 import {
   getProducts,
   createProduct,
@@ -416,7 +416,8 @@ export default function Products() {
         if (currentValue && parseFloat(currentValue) > 0) return
       }
 
-      const newPrice = Math.round(cost * (1 + pctConfig.discount / 100) * 100) / 100
+      const formula = businessSettings?.marginFormula === 'margin' ? 'margin' : 'markup'
+      const newPrice = applyMarginToCost(cost, pctConfig.discount, formula)
       setValue(field, String(newPrice))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps

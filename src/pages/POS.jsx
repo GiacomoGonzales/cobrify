@@ -44,7 +44,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatProductPrice } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost } from '@/lib/utils'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -2466,7 +2466,8 @@ export default function POS() {
     if (base === 'cost') {
       const cost = parseFloat(priceSource.cost) || parseFloat(parentProduct?.cost) || 0
       if (cost <= 0) return priceKey === 'price1' ? manualValue : null
-      return Math.round(cost * (1 + pctConfig.discount / 100) * 100) / 100
+      const formula = businessSettings?.marginFormula === 'margin' ? 'margin' : 'markup'
+      return applyMarginToCost(cost, pctConfig.discount, formula)
     }
     // base === 'public': el % solo aplica a price2/3/4. price1 ES la referencia.
     if (priceKey === 'price1') return manualValue

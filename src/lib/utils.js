@@ -27,6 +27,37 @@ export function formatCurrency(amount) {
 }
 
 /**
+ * Calcula el precio de venta aplicando un margen sobre el costo.
+ *
+ * Soporta dos fórmulas (configurable por negocio en businessSettings.marginFormula):
+ *
+ * - 'markup' (default histórico): Precio = Costo × (1 + %)
+ *   El % se aplica como sobreprecio sobre el costo.
+ *   Ej: costo 10, margen 30% → 13.00. La utilidad (3) es el 30% DEL COSTO.
+ *
+ * - 'margin' (margen real sobre la venta): Precio = Costo ÷ (1 − %)
+ *   El % es la utilidad como porcentaje del precio final.
+ *   Ej: costo 10, margen 30% → 14.29. La utilidad (4.29) es el 30% DEL PRECIO.
+ *
+ * @param {number|string} cost
+ * @param {number|string} marginPct - porcentaje en formato 0–100
+ * @param {string} [formula='markup']
+ * @returns {number} precio redondeado a 2 decimales (devuelve cost si no se puede calcular)
+ */
+export function applyMarginToCost(cost, marginPct, formula = 'markup') {
+  const c = Number(cost) || 0
+  const pct = Number(marginPct) || 0
+  if (c <= 0 || pct <= 0) return c
+  if (formula === 'margin') {
+    // En modo 'margin' el % debe ser < 100 (sino el divisor es 0 o negativo).
+    if (pct >= 100) return c
+    return Math.round((c / (1 - pct / 100)) * 100) / 100
+  }
+  // 'markup' (default)
+  return Math.round(c * (1 + pct / 100) * 100) / 100
+}
+
+/**
  * Formatea el precio "para mostrar" de un producto (o ítem similar).
  * - Sin variantes: usa product.price.
  * - Con variantes: si todas valen lo mismo, ese único precio. Si no, un

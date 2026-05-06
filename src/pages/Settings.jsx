@@ -17,6 +17,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { db, storage, auth, functions } from '@/lib/firebase'
+import { applyMarginToCost } from '@/lib/utils'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -275,6 +276,10 @@ export default function Settings() {
   //   'public' → Precio N = Precio público × (1 - %)  (descuento sobre público, default histórico)
   //   'cost'   → Precio N = Costo × (1 + %)           (margen sobre costo)
   const [priceCalculationBase, setPriceCalculationBase] = useState('public')
+  // Fórmula del margen cuando priceCalculationBase === 'cost':
+  //   'markup' → Precio = Costo × (1 + %)   (% sobre costo, default histórico)
+  //   'margin' → Precio = Costo ÷ (1 − %)   (% como utilidad sobre el precio final)
+  const [marginFormula, setMarginFormula] = useState('markup')
   const [showBulkRecalcModal, setShowBulkRecalcModal] = useState(false)
   const [isBulkRecalculating, setIsBulkRecalculating] = useState(false)
   const [bulkRecalcProgress, setBulkRecalcProgress] = useState({ current: 0, total: 0 })
@@ -536,19 +541,19 @@ export default function Settings() {
 
       setBulkRecalcProgress({ current: 0, total: candidates.length })
       let updated = 0
-      const factor = 1 + pct / 100
-      const round2 = (n) => Math.round(n * 100) / 100
+      // Usa el helper compartido para respetar la fórmula configurada (markup vs margin)
+      const computePrice = (cost) => applyMarginToCost(cost, pct, marginFormula)
 
       for (const p of candidates) {
         const updates = {}
         const parentCost = parseFloat(p.cost) || 0
         if (parentCost > 0) {
-          updates.price = round2(parentCost * factor)
+          updates.price = computePrice(parentCost)
         }
         if (Array.isArray(p.variants) && p.variants.length > 0) {
           updates.variants = p.variants.map(v => {
             const vCost = parseFloat(v.cost) || parentCost || 0
-            return vCost > 0 ? { ...v, price: round2(vCost * factor) } : v
+            return vCost > 0 ? { ...v, price: computePrice(vCost) } : v
           })
         }
         if (Object.keys(updates).length === 0) continue
@@ -1042,6 +1047,7 @@ export default function Settings() {
           })
         }
         setPriceCalculationBase(businessData.priceCalculationBase || 'public')
+        setMarginFormula(businessData.marginFormula === 'margin' ? 'margin' : 'markup')
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
@@ -4462,11 +4468,50 @@ export default function Settings() {
                                   className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
                                 />
                                 <span className="text-xs text-gray-700">
-                                  <strong>Costo</strong> — el % se suma sobre el costo del producto (Precio N = Costo × (1 + %))
+                                  <strong>Costo</strong> — el % se aplica sobre el costo del producto
                                 </span>
                               </label>
                             </div>
                           </div>
+
+                          {/* Selector de fórmula del margen — solo cuando la base es Costo */}
+                          {priceCalculationBase === 'cost' && (
+                            <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                              <p className="text-xs font-medium text-gray-700 mb-2">Fórmula del margen</p>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-amber-300">
+                                  <input
+                                    type="radio"
+                                    name="marginFormula"
+                                    value="markup"
+                                    checked={marginFormula === 'markup'}
+                                    onChange={(e) => setMarginFormula(e.target.value)}
+                                    className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
+                                  />
+                                  <span className="text-xs text-gray-700">
+                                    <strong>Markup</strong> — % sobre el costo<br/>
+                                    <span className="font-mono text-[11px]">Precio = Costo × (1 + %)</span><br/>
+                                    <span className="text-gray-500 text-[11px]">Ej: costo 10, margen 30% → Precio 13.00</span>
+                                  </span>
+                                </label>
+                                <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-amber-300">
+                                  <input
+                                    type="radio"
+                                    name="marginFormula"
+                                    value="margin"
+                                    checked={marginFormula === 'margin'}
+                                    onChange={(e) => setMarginFormula(e.target.value)}
+                                    className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
+                                  />
+                                  <span className="text-xs text-gray-700">
+                                    <strong>Margen sobre venta</strong> — % como utilidad del precio final<br/>
+                                    <span className="font-mono text-[11px]">Precio = Costo ÷ (1 − %)</span><br/>
+                                    <span className="text-gray-500 text-[11px]">Ej: costo 10, margen 30% → Precio 14.29</span>
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="space-y-3">
                             {/* Precio 1 solo aparece cuando la base es Costo: aplicar % al precio público
@@ -4520,7 +4565,7 @@ export default function Settings() {
                             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                               <p className="text-xs text-amber-900 font-medium mb-1">Aplicar margen a productos existentes</p>
                               <p className="text-xs text-amber-800 mb-3">
-                                Recalcula el precio de venta de todos los productos con costo registrado, usando: <strong>Costo × (1 + {pricePercentages.price1.discount}%)</strong>. Esta acción es destructiva: los precios manuales serán sobrescritos.
+                                Recalcula el precio de venta de todos los productos con costo registrado, usando: <strong>{marginFormula === 'margin' ? `Costo ÷ (1 − ${pricePercentages.price1.discount}%)` : `Costo × (1 + ${pricePercentages.price1.discount}%)`}</strong>. Esta acción es destructiva: los precios manuales serán sobrescritos.
                               </p>
                               <Button
                                 type="button"
@@ -4770,6 +4815,7 @@ export default function Settings() {
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,
                       priceCalculationBase: priceCalculationBase,
+                      marginFormula: marginFormula,
                       presentationsEnabled: presentationsEnabled,
                       showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),
@@ -9555,7 +9601,7 @@ export default function Settings() {
             <>
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
                 Se recalculará el <strong>precio de venta</strong> de cada producto con costo registrado usando la fórmula:
-                <p className="mt-2 font-mono text-center bg-white rounded py-1">precio = costo × (1 + {pricePercentages.price1?.discount || 0}%)</p>
+                <p className="mt-2 font-mono text-center bg-white rounded py-1">{marginFormula === 'margin' ? `precio = costo ÷ (1 − ${pricePercentages.price1?.discount || 0}%)` : `precio = costo × (1 + ${pricePercentages.price1?.discount || 0}%)`}</p>
               </div>
               <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
                 <li>Los productos sin costo registrado <strong>se saltan</strong>.</li>
