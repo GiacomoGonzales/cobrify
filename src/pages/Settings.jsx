@@ -345,7 +345,12 @@ export default function Settings() {
       0: { open: false, from: '09:00', to: '14:00' }, // Domingo
     }
   })
-  const [catalogWholesaleMinQty, setCatalogWholesaleMinQty] = useState(1)
+  // Cantidad mínima por precio (price2/3/4) para que aplique en el catálogo.
+  // Modelo nuevo: objeto { price2, price3, price4 }. Compat con campo legacy
+  // catalogWholesaleMinQty (single) que se migra a price2 en el load.
+  const [catalogWholesaleMinQtys, setCatalogWholesaleMinQtys] = useState({
+    price2: 1, price3: 1, price4: 1,
+  })
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
   const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
@@ -1078,7 +1083,23 @@ export default function Settings() {
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
-        setCatalogWholesaleMinQty(businessData.catalogWholesaleMinQty || 1)
+        // Cargar cantidades mínimas por precio. Si solo existe el campo legacy
+        // (catalogWholesaleMinQty), copiarlo a price2 (caso histórico).
+        const perPrice = businessData.catalogWholesaleMinQtys
+        const legacy = businessData.catalogWholesaleMinQty
+        if (perPrice && typeof perPrice === 'object') {
+          setCatalogWholesaleMinQtys({
+            price2: Math.max(1, parseInt(perPrice.price2) || 1),
+            price3: Math.max(1, parseInt(perPrice.price3) || 1),
+            price4: Math.max(1, parseInt(perPrice.price4) || 1),
+          })
+        } else if (legacy) {
+          setCatalogWholesaleMinQtys({
+            price2: Math.max(1, parseInt(legacy) || 1),
+            price3: 1,
+            price4: 1,
+          })
+        }
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
         setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
@@ -6591,24 +6612,40 @@ export default function Settings() {
                         </div>
                       )}
 
-                      {/* Cantidad mínima para precio mayorista */}
+                      {/* Cantidad mínima por precio en catálogo */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Cantidad mínima para precio mayorista en catálogo
+                          Cantidad mínima por precio en catálogo
                         </label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={catalogWholesaleMinQty}
-                          onChange={(e) => setCatalogWholesaleMinQty(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
-                          onBlur={(e) => setCatalogWholesaleMinQty(Math.max(1, parseInt(e.target.value) || 1))}
-                          onFocus={(e) => e.target.select()}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          A partir de cuántas unidades se aplica el precio mayorista al comprar por catálogo. Valor 1 = sin restricción. Solo afecta al catálogo, no al POS.
+                        <p className="text-xs text-gray-500 mb-3">
+                          A partir de cuántas unidades aplica cada nivel de precio al comprar por catálogo.
+                          Valor 1 = sin restricción. Solo afecta al catálogo, no al POS.
                         </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {['price2', 'price3', 'price4'].map((key) => (
+                            <div key={key}>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                {priceLabels[key] || key.charAt(0).toUpperCase() + key.slice(1)}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={catalogWholesaleMinQtys[key]}
+                                onChange={(e) => setCatalogWholesaleMinQtys(prev => ({
+                                  ...prev,
+                                  [key]: e.target.value === '' ? '' : parseInt(e.target.value) || ''
+                                }))}
+                                onBlur={(e) => setCatalogWholesaleMinQtys(prev => ({
+                                  ...prev,
+                                  [key]: Math.max(1, parseInt(e.target.value) || 1)
+                                }))}
+                                onFocus={(e) => e.target.select()}
+                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       {/* Horario de atención */}
@@ -6728,7 +6765,13 @@ export default function Settings() {
                         catalogObservations: catalogObservations.trim(),
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
-                        catalogWholesaleMinQty: catalogWholesaleMinQty || 1,
+                        catalogWholesaleMinQtys: {
+                          price2: Math.max(1, parseInt(catalogWholesaleMinQtys.price2) || 1),
+                          price3: Math.max(1, parseInt(catalogWholesaleMinQtys.price3) || 1),
+                          price4: Math.max(1, parseInt(catalogWholesaleMinQtys.price4) || 1),
+                        },
+                        // Mantener campo legacy con price2 para retrocompat con código que aún no migró
+                        catalogWholesaleMinQty: Math.max(1, parseInt(catalogWholesaleMinQtys.price2) || 1),
                         catalogShowAllPrices,
                         catalogAllowTakeaway,
                         catalogAllowDelivery,

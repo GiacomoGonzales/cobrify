@@ -27,6 +27,32 @@ export function formatCurrency(amount) {
 }
 
 /**
+ * Devuelve la cantidad mínima requerida para que aplique un nivel de precio en
+ * el catálogo público.
+ *
+ * Modelo nuevo (per-price): business.catalogWholesaleMinQtys = { price2, price3, price4 }
+ * Modelo viejo (legacy):    business.catalogWholesaleMinQty (single, aplica a todos no-price1)
+ *
+ * Devuelve 1 si el priceKey es 'price1' o no se encuentra valor (= sin restricción).
+ *
+ * @param {Object} business - documento del negocio (con businessSettings.*)
+ * @param {string} priceKey - 'price1' | 'price2' | 'price3' | 'price4'
+ * @returns {number} cantidad mínima ≥ 1
+ */
+export function getCatalogMinQty(business, priceKey) {
+  if (!priceKey || priceKey === 'price1') return 1
+  const perPrice = business?.catalogWholesaleMinQtys
+  if (perPrice && typeof perPrice === 'object') {
+    const v = parseInt(perPrice[priceKey])
+    if (Number.isFinite(v) && v >= 1) return v
+  }
+  // Compat: si solo hay catalogWholesaleMinQty (legacy), aplica a todos no-price1
+  const legacy = parseInt(business?.catalogWholesaleMinQty)
+  if (Number.isFinite(legacy) && legacy >= 1) return legacy
+  return 1
+}
+
+/**
  * Calcula el precio de venta aplicando un margen sobre el costo.
  *
  * Soporta dos fórmulas (configurable por negocio en businessSettings.marginFormula):
