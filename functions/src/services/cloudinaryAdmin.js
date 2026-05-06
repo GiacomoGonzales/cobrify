@@ -84,15 +84,40 @@ export async function getResourceMetadata(publicId) {
 }
 
 /**
- * Sube una imagen a Cloudinary usando una URL como fuente. El upload preset
- * `cobrify_unsigned` aplica la incoming transformation (q_auto:eco,f_auto,
- * c_limit,w_1600), por lo que el asset resultante queda como WebP/AVIF
- * optimizado.
+ * Sube una imagen a Cloudinary usando una URL como fuente.
+ *
+ * Usamos SIGNED upload (api_key + signature) porque "fetch from URL" no está
+ * permitido con presets unsigned (Cloudinary devuelve 401 si se intenta).
+ *
+ * El parámetro `transformation` se aplica como incoming transformation:
+ * el asset se almacena ya optimizado (WebP, q_auto:eco, max 1600px de ancho),
+ * lo que reduce el storage real. Es lo mismo que la incoming del preset
+ * unsigned pero pasado explícitamente para que aplique con auth firmada.
  */
 export async function reuploadFromUrl(sourceUrl) {
+  const { apiKey, apiSecret } = getAuth()
+  const timestamp = Math.floor(Date.now() / 1000)
+
+  // Params que firmamos. Se ordenan alfabéticamente y se concatenan con `&`
+  // antes de hacer SHA1 + secret.
+  const signedParams = {
+    folder: 'cobrify',
+    timestamp: String(timestamp),
+    transformation: 'q_auto:eco,f_auto,c_limit,w_1600',
+  }
+  const stringToSign = Object.keys(signedParams)
+    .sort()
+    .map((k) => `${k}=${signedParams[k]}`)
+    .join('&') + apiSecret
+  const signature = crypto.createHash('sha1').update(stringToSign).digest('hex')
+
   const form = new URLSearchParams()
   form.append('file', sourceUrl)
-  form.append('upload_preset', UPLOAD_PRESET)
+  form.append('api_key', apiKey)
+  form.append('timestamp', String(timestamp))
+  form.append('signature', signature)
+  form.append('folder', signedParams.folder)
+  form.append('transformation', signedParams.transformation)
 
   const response = await axios.post(
     `${ADMIN_BASE}/image/upload`,
