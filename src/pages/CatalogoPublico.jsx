@@ -420,6 +420,22 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     : getProductPrices(product, business)
   const hasMultiplePrices = availablePrices.length > 1
 
+  // Dada una cantidad, devuelve el priceKey del nivel MÁS BARATO cuyo umbral
+  // de cantidad mínima ya se cumpla. Si ninguno aplica, devuelve 'price1'.
+  // Usado por los botones +/− del modal para auto-ajustar el precio según
+  // la cantidad (sube y baja escalonadamente entre todos los niveles).
+  const computeBestPriceLevelFor = (qty) => {
+    if (!hasMultiplePrices) return 'price1'
+    const candidates = availablePrices
+      .filter(p => {
+        if (p.key === 'price1') return false
+        const min = getCatalogMinQty(business, p.key)
+        return min > 1 && qty >= min
+      })
+      .sort((a, b) => a.value - b.value)
+    return candidates.length > 0 ? candidates[0].key : 'price1'
+  }
+
   // Calcular precio total con modificadores, variante y nivel de precio
   const calculateTotalPrice = () => {
     let total
@@ -983,16 +999,14 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const newQty = quantity - 1
-                  // Si la nueva cantidad cae por debajo del mínimo del precio seleccionado,
-                  // volver a price1.
-                  if (hasMultiplePrices && selectedPriceLevel !== 'price1') {
-                    const minSel = getCatalogMinQty(business, selectedPriceLevel)
-                    if (minSel > 1 && newQty < minSel) {
-                      setSelectedPriceLevel('price1')
-                    }
+                  const newQty = Math.max(1, quantity - 1)
+                  // Auto-ajustar al mejor nivel de precio aplicable a la nueva cantidad.
+                  // Esto cubre tanto downgrade (de Especial → VIP → Delivery → Público)
+                  // como upgrade — siempre elige el más barato aplicable.
+                  if (hasMultiplePrices) {
+                    setSelectedPriceLevel(computeBestPriceLevelFor(newQty))
                   }
-                  setQuantity(Math.max(1, newQty))
+                  setQuantity(newQty)
                 }}
                 className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
               >
@@ -1002,15 +1016,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
               <button
                 onClick={() => {
                   const newQty = quantity + 1
-                  // Auto-upgrade: cuando se está en price1 y la cantidad alcanza el
-                  // umbral de price2/3/4, cambiar al precio MÁS BARATO aplicable.
-                  if (hasMultiplePrices && selectedPriceLevel === 'price1') {
-                    const upgrades = availablePrices
-                      .filter(p => p.key !== 'price1' && newQty >= getCatalogMinQty(business, p.key) && getCatalogMinQty(business, p.key) > 1)
-                      .sort((a, b) => a.value - b.value)
-                    if (upgrades.length > 0) {
-                      setSelectedPriceLevel(upgrades[0].key)
-                    }
+                  // Igual lógica que el botón "−": elegir el nivel más barato aplicable.
+                  // Esto permite escalar Público → Delivery → VIP → Especial al subir.
+                  if (hasMultiplePrices) {
+                    setSelectedPriceLevel(computeBestPriceLevelFor(newQty))
                   }
                   setQuantity(newQty)
                 }}
