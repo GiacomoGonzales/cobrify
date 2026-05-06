@@ -197,20 +197,24 @@ export async function migrateOneUrl(oldUrl, { dryRun = false } = {}) {
   if (!parsed) throw new Error('URL no válida de Cloudinary')
 
   if (dryRun) {
-    const meta = await getResourceMetadata(parsed.publicId)
+    // dryRun no consume API calls de Cloudinary: solo reporta el publicId.
+    // El bytes liberado real se calcula en el cleanup (Paso 2) cuando lista
+    // los assets para borrar.
     return {
       newUrl: oldUrl,
       oldPublicId: parsed.publicId,
-      oldBytes: meta?.bytes || 0,
+      oldBytes: 0,
       newBytes: 0,
       freed: 0,
       dryRun: true,
     }
   }
 
-  const meta = await getResourceMetadata(parsed.publicId)
-  const oldBytes = meta?.bytes || 0
-
+  // Optimización para no agotar el rate limit de Cloudinary (2000 ops/hora):
+  // antes leíamos getResourceMetadata para saber oldBytes, pero eso es 1 op
+  // extra por imagen. Lo eliminamos — el tamaño real liberado se calcula en
+  // el cleanup (Paso 2). Acá solo estimamos como newBytes (sub-estimación,
+  // pero coherente con el modelo "el storage se libera en el cleanup").
   const uploaded = await reuploadFromUrl(oldUrl)
   const newBytes = uploaded.bytes || 0
 
@@ -218,9 +222,9 @@ export async function migrateOneUrl(oldUrl, { dryRun = false } = {}) {
     newUrl: uploaded.secureUrl,
     oldPublicId: parsed.publicId,
     newPublicId: uploaded.publicId,
-    oldBytes,
+    oldBytes: 0,
     newBytes,
-    freed: Math.max(0, oldBytes - newBytes),
+    freed: 0, // se contabiliza realmente en cleanupOrphanedCloudinaryAssets
     dryRun: false,
   }
 }

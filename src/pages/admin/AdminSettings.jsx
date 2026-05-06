@@ -1317,6 +1317,7 @@ function CloudinaryMigrationCard() {
     try {
       // timeout 540s = límite máximo del callable. Sin esto el SDK corta a ~70s.
       const fn = httpsCallable(functions, 'migrateCloudinaryImages', { timeout: 540000 })
+      let rateLimited = false
       do {
         calls++
         const r = await fn({ dryRun: false, resumeFrom })
@@ -1326,11 +1327,21 @@ function CloudinaryMigrationCard() {
         cumulative.migrated  += d.migrated  || 0
         cumulative.errors    += d.errors    || 0
         cumulative.freedBytes+= d.freedBytes|| 0
-        setMigrateResult({ ...cumulative, runs: calls, doneAt: d.doneAt })
+        setMigrateResult({ ...cumulative, runs: calls, doneAt: d.doneAt, rateLimited: d.rateLimited })
         resumeFrom = d.resumeFrom
+        if (d.rateLimited) {
+          rateLimited = true
+          break // detener loop; el usuario debe esperar el reset y reintentar
+        }
       } while (resumeFrom && calls < MAX_CALLS)
 
-      if (resumeFrom) {
+      if (rateLimited) {
+        setError(
+          'Cloudinary rate limit alcanzado (2000 ops/hora en planes free). ' +
+          'La migración se pausó. Esperá hasta el cambio de hora UTC y volvé a apretar "Ejecutar migración" — continuará donde quedó. ' +
+          'Las imágenes ya migradas (' + cumulative.migrated + ') no se vuelven a procesar.'
+        )
+      } else if (resumeFrom) {
         setError('Migración pausada después de ' + MAX_CALLS + ' iteraciones. Volvé a apretar para continuar.')
       }
     } catch (e) {
@@ -1411,7 +1422,7 @@ function CloudinaryMigrationCard() {
                 {migrateResult.doneAt ? '✓ Migración completada — corré el Paso 2 para liberar storage' : `Progreso (${migrateResult.runs} run${migrateResult.runs > 1 ? 's' : ''})`}
               </p>
               <p>Migradas: <strong>{migrateResult.migrated}</strong> de {migrateResult.candidates} candidates</p>
-              <p>Storage por liberar (estimado): <strong>{formatBytes(migrateResult.freedBytes)}</strong></p>
+              <p className="text-xs text-gray-600">El storage real se libera en el Paso 2 (cleanup).</p>
               {migrateResult.errors > 0 && (
                 <p className="text-amber-700">⚠ Errores: {migrateResult.errors} (revisá los logs)</p>
               )}

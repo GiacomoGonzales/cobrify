@@ -9023,24 +9023,39 @@ export const migrateCloudinaryImages = onCall(
     // refs en docs aún no procesados).
     const urlMap = new Map()
 
+    // Si Cloudinary devuelve 420 (rate limit), marcamos el flag y detenemos
+    // todas las migraciones del run. Cloudinary tiene un límite por hora
+    // (típicamente 2000 ops/h en planes free/básicos). El reset llega a
+    // tope de hora UTC. El cliente debe esperar y reintentar.
+    let rateLimitHit = false
+    let rateLimitMessage = null
+
     async function reuploadOnce(oldUrl) {
+      if (rateLimitHit) return null
       if (urlMap.has(oldUrl)) return urlMap.get(oldUrl)
       try {
         const result = await migrateOneUrl(oldUrl, { dryRun: false })
         urlMap.set(oldUrl, result.newUrl)
         stats.migrated++
-        // Reporte tentativo del freed (asumiendo que el delete del cleanup
-        // tendrá éxito; el cleanup re-confirmará el ahorro real).
-        stats.freedBytes += result.freed || 0
         return result.newUrl
       } catch (err) {
+        // Detectar rate limit: HTTP 420 o mensaje específico de Cloudinary.
+        const status = err.http_code || err.response?.status
+        const msg = err.response?.data?.error?.message || err.message || ''
+        if (status === 420 || /rate limit/i.test(msg)) {
+          rateLimitHit = true
+          rateLimitMessage = msg || 'Rate limit excedido en Cloudinary'
+          console.warn(`[migrate] Rate limit alcanzado, deteniendo run: ${msg}`)
+        }
         stats.errors++
-        // Log enriquecido para diagnosticar errores de Cloudinary (incluye body de respuesta)
-        console.error(
-          `Re-upload falló para ${oldUrl}: ${err.message}`,
-          err.response?.status ? `[HTTP ${err.response.status}]` : '',
-          err.response?.data ? JSON.stringify(err.response.data) : ''
-        )
+        // Solo loguear el primer error de rate limit en detalle (sino el log se inunda)
+        if (!rateLimitHit || stats.errors <= 1) {
+          console.error(
+            `Re-upload falló para ${oldUrl}: ${err.message}`,
+            status ? `[HTTP ${status}]` : '',
+            err.response?.data ? JSON.stringify(err.response.data) : ''
+          )
+        }
         urlMap.set(oldUrl, null)
         return null
       }
@@ -9180,14 +9195,21 @@ export const migrateCloudinaryImages = onCall(
           stats.lastProcessed = { businessId: bId, productId: prodDoc.id }
         })
 
-        // Si quedaron productos sin procesar (timeUp), guardar el último visto
-        if (timeUp()) {
+        // Si quedaron productos sin procesar (timeUp o rate limit), guardar el último visto
+        if (timeUp() || rateLimitHit) {
           stats.resumeFrom = {
             businessId: bId,
             productId: stats.lastProcessed?.productId || null,
           }
           break
         }
+      }
+
+      // Si paró por rate limit, exponer el motivo al cliente para que muestre
+      // mensaje claro y espere antes de reintentar.
+      if (rateLimitHit) {
+        stats.rateLimited = true
+        stats.rateLimitMessage = rateLimitMessage
       }
 
       stats.doneAt = stats.resumeFrom ? null : new Date().toISOString()
