@@ -1242,6 +1242,9 @@ function MaintenanceSection() {
             </div>
           </div>
 
+          {/* Paso 0: Migrar imágenes desde Firebase Storage a Cloudinary (todos los negocios) */}
+          <FirebaseToCloudinaryCard />
+
           {/* Paso 1: Migración a WebP (re-upload + actualizar Firestore, NO borra) */}
           <CloudinaryMigrationCard />
 
@@ -1557,6 +1560,139 @@ function CloudinaryCleanupCard() {
               <p>Storage liberado: <strong>{formatBytes(cleanResult.bytesFreed)}</strong></p>
               {cleanResult.errors > 0 && (
                 <p className="text-amber-700">⚠ Errores: {cleanResult.errors} (revisá los logs)</p>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200 text-sm text-red-800">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FirebaseToCloudinaryCard() {
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+  const [showDetails, setShowDetails] = useState(false)
+
+  async function runMigration() {
+    if (!confirm(
+      'Esto va a recorrer TODOS los negocios y migrar las imágenes de productos ' +
+      'que estén en Firebase Storage hacia Cloudinary.\n\n' +
+      'No borra nada — sólo reemplaza las URLs en Firestore. Puede tardar varios minutos ' +
+      'si hay muchas imágenes.\n\n' +
+      'Mantené esta pestaña abierta hasta que termine.\n\n' +
+      '¿Continuar?'
+    )) return
+
+    setRunning(true)
+    setError(null)
+    setResult(null)
+    setProgress(null)
+
+    try {
+      const { migrateAllBusinessImages } = await import('@/utils/cloudinary')
+      const r = await migrateAllBusinessImages((p) => setProgress(p))
+      setResult(r)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setRunning(false)
+      setProgress(null)
+    }
+  }
+
+  return (
+    <div className="bg-indigo-50 rounded-lg p-5 border border-indigo-200">
+      <div className="flex items-start gap-3">
+        <ImageIcon className="w-6 h-6 text-indigo-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Paso 0 · Migrar imágenes desde Firebase Storage a Cloudinary</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Recorre <strong>todos los negocios</strong> y mueve a Cloudinary cualquier imagen
+            de producto que aún viva en Firebase Storage. Reemplaza tanto el campo legacy
+            <code className="mx-1">imageUrl</code>
+            como el moderno
+            <code className="mx-1">imageUrls[]</code>.
+            Las imágenes que ya están en Cloudinary se ignoran.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Corre en el navegador. Mantené esta pestaña abierta hasta que termine.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={runMigration}
+              disabled={running}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {running ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Migrando...</>
+              ) : (
+                <><ImageIcon className="w-4 h-4" /> Ejecutar migración global</>
+              )}
+            </button>
+          </div>
+
+          {progress && (
+            <div className="mt-3 p-3 bg-white rounded-lg border border-indigo-200 text-sm space-y-1">
+              <p>
+                <strong>Negocio {progress.businessIndex} / {progress.totalBusinesses}:</strong>{' '}
+                <span className="text-gray-700">{progress.businessName}</span>
+              </p>
+              {progress.imageTotal > 0 && (
+                <p className="text-xs text-gray-600">
+                  Imagen {progress.imageCurrent} / {progress.imageTotal}
+                  {progress.productName ? ` — ${progress.productName}` : ''}
+                </p>
+              )}
+            </div>
+          )}
+
+          {result && (
+            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-sm space-y-1">
+              <p className="font-medium text-emerald-900">✓ Migración completada</p>
+              <p>Negocios procesados: <strong>{result.businessesProcessed}</strong> de {result.totalBusinesses}</p>
+              <p>Productos migrados: <strong>{result.totalMigrated}</strong></p>
+              {result.totalSkipped > 0 && (
+                <p className="text-amber-700">Omitidos (URL inaccesible): {result.totalSkipped}</p>
+              )}
+              {result.totalErrors > 0 && (
+                <p className="text-amber-700">⚠ Errores en imágenes: {result.totalErrors}</p>
+              )}
+              {result.businessesWithErrors > 0 && (
+                <p className="text-red-700">⚠ Negocios fallidos: {result.businessesWithErrors}</p>
+              )}
+
+              {result.perBusiness?.length > 0 && (
+                <details
+                  className="text-xs text-gray-700 mt-2"
+                  open={showDetails}
+                  onToggle={(e) => setShowDetails(e.currentTarget.open)}
+                >
+                  <summary className="cursor-pointer">Ver detalle por negocio</summary>
+                  <ul className="mt-2 space-y-0.5 max-h-64 overflow-auto">
+                    {result.perBusiness
+                      .filter(b => b.failed || b.migrated > 0 || b.errors > 0 || b.skipped > 0)
+                      .map((b, i) => (
+                        <li key={i} className="truncate">
+                          • <strong>{b.businessName}</strong>{' '}
+                          {b.failed
+                            ? <span className="text-red-700">— falló: {b.errorMessage}</span>
+                            : <span>— migradas: {b.migrated}, omitidas: {b.skipped}, errores: {b.errors}</span>
+                          }
+                        </li>
+                      ))}
+                  </ul>
+                </details>
               )}
             </div>
           )}

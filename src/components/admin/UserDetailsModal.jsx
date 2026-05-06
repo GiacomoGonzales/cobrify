@@ -30,8 +30,6 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [savingLimit, setSavingLimit] = useState(false);
   const [editingLimit, setEditingLimit] = useState(false);
   const [newLimit, setNewLimit] = useState(user.limits?.maxInvoicesPerMonth || 500);
-  const [migratingImages, setMigratingImages] = useState(false);
-  const [migrationProgress, setMigrationProgress] = useState(null);
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
   const [paymentAmount, setPaymentAmount] = useState(PLANS['qpse_1_month']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
@@ -655,41 +653,6 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Migrar imágenes a Cloudinary */}
-          {(type === 'payment' || type === 'edit') && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Migrar Imágenes a Cloudinary</h4>
-              <p className="text-xs text-gray-500 mb-3">Migra las imágenes de productos de Firebase Storage a Cloudinary para que carguen más rápido en el catálogo.</p>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!user.userId) return
-                  if (!confirm('¿Migrar todas las imágenes de este negocio a Cloudinary?')) return
-                  setMigratingImages(true)
-                  setMigrationProgress(null)
-                  try {
-                    const { migrateBusinessImages } = await import('@/utils/cloudinary')
-                    const result = await migrateBusinessImages(user.userId, (progress) => {
-                      setMigrationProgress(progress)
-                    })
-                    toast?.success(`Migración completa: ${result.migrated} migradas, ${result.skipped} omitidas, ${result.errors} errores`)
-                  } catch (err) {
-                    toast?.error('Error en migración: ' + err.message)
-                  } finally {
-                    setMigratingImages(false)
-                    setMigrationProgress(null)
-                  }
-                }}
-                disabled={migratingImages}
-                className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {migratingImages
-                  ? `Migrando ${migrationProgress?.current || 0}/${migrationProgress?.total || '...'}  — ${migrationProgress?.productName || ''}`
-                  : 'Migrar Imágenes'}
-              </button>
             </div>
           )}
 
