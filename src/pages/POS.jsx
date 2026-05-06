@@ -6758,6 +6758,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <ShoppingCart className="w-3.5 h-3.5" />
                   Carrito de Compras
                 </label>
+                {/* Total visible arriba del carrito — para que la cajera pueda
+                    cantar el precio al cliente sin scrollear hasta abajo */}
+                {cart.length > 0 && (
+                  <span className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 border border-primary-200 rounded-md">
+                    <span className="text-[11px] font-medium text-primary-700">Total</span>
+                    <span className="text-sm font-bold text-primary-700">{formatCurrency(amounts.total)}</span>
+                  </span>
+                )}
                 <div className="flex items-center gap-1">
                   {cart.length > 0 && !saleCompleted && (
                     <button
