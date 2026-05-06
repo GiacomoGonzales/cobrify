@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer } from 'lucide-react'
@@ -369,6 +369,58 @@ export default function Products() {
       loadLaboratories()
     }
   }, [user, businessMode])
+
+  // Auto-cálculo de precios por margen sobre costo (Configuración > Ventas).
+  // - Al abrir el modal: hidrata los precios habilitados que estén VACÍOS (no
+  //   sobrescribe valores ya guardados en el producto).
+  // - Cuando el usuario cambia el costo: recalcula SIEMPRE los precios habilitados
+  //   (sí sobrescribe — es el efecto esperado de "margen automático").
+  // Solo aplica cuando priceCalculationBase === 'cost'. En modo 'public' los
+  // precios 2/3/4 son derivados al servir y no requieren hidratación en el modal.
+  const watchedCost = watch('cost')
+  const autoMarginHydratedRef = useRef(false)
+  const autoMarginPrevCostRef = useRef(null)
+  useEffect(() => {
+    if (!isModalOpen) {
+      autoMarginHydratedRef.current = false
+      autoMarginPrevCostRef.current = null
+      return
+    }
+    if (businessSettings?.priceCalculationBase !== 'cost') return
+
+    const isFirstRender = !autoMarginHydratedRef.current
+    const costChanged = watchedCost !== autoMarginPrevCostRef.current
+    autoMarginHydratedRef.current = true
+    autoMarginPrevCostRef.current = watchedCost
+
+    if (!isFirstRender && !costChanged) return
+
+    const cost = parseFloat(watchedCost) || 0
+    if (cost <= 0) return
+
+    const PRICE_FIELDS = [
+      { key: 'price1', field: 'price' },
+      { key: 'price2', field: 'price2' },
+      { key: 'price3', field: 'price3' },
+      { key: 'price4', field: 'price4' },
+    ]
+
+    PRICE_FIELDS.forEach(({ key, field }) => {
+      const pctConfig = businessSettings?.pricePercentages?.[key]
+      if (!pctConfig?.enabled || !(pctConfig.discount > 0)) return
+
+      // En el primer render del modal NO sobrescribimos valores ya guardados
+      // (el producto ya tiene precios manuales que el usuario quiere conservar).
+      if (isFirstRender) {
+        const currentValue = watch(field)
+        if (currentValue && parseFloat(currentValue) > 0) return
+      }
+
+      const newPrice = Math.round(cost * (1 + pctConfig.discount / 100) * 100) / 100
+      setValue(field, String(newPrice))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedCost, isModalOpen, businessSettings])
 
   const loadProducts = async () => {
     if (!user?.uid) return
