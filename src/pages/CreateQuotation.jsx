@@ -160,6 +160,7 @@ export default function CreateQuotation() {
 
   // Buscador de productos
   const [showProductSearch, setShowProductSearch] = useState(null) // índice del item activo
+  const [pricePickerIndex, setPricePickerIndex] = useState(null) // índice del item con dropdown de precio abierto
 
   // ===== Borrador automático en localStorage =====
   // Evita perder trabajo si el usuario cambia de página o cierra el navegador.
@@ -704,6 +705,45 @@ export default function CreateQuotation() {
 
   const calculateItemTotal = item => {
     return (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+  }
+
+  // ---- Helpers para mostrar stock y permitir re-seleccionar precio en línea ----
+  const getProductForItem = (item) => {
+    if (!item?.productId) return null
+    return products.find(p => p.id === item.productId) || null
+  }
+
+  const getStockForItem = (item) => {
+    const product = getProductForItem(item)
+    if (!product) return null
+    if (product.trackStock === false) return null
+    if (item.variantSku && product.variants?.length) {
+      const v = product.variants.find(v => v.sku === item.variantSku)
+      if (v && v.stock != null) return v.stock
+    }
+    return product.stock ?? null
+  }
+
+  const getItemPriceOptions = (item) => {
+    if (!businessSettings?.multiplePricesEnabled) return []
+    const product = getProductForItem(item)
+    if (!product) return []
+    const source = (item.variantSku && product.variants?.length)
+      ? (product.variants.find(v => v.sku === item.variantSku) || product)
+      : product
+    const opts = []
+    if (source.price) opts.push({ key: 'price1', label: businessSettings?.priceLabels?.price1 || 'Precio 1', value: source.price })
+    if (source.price2) opts.push({ key: 'price2', label: businessSettings?.priceLabels?.price2 || 'Precio 2', value: source.price2 })
+    if (source.price3) opts.push({ key: 'price3', label: businessSettings?.priceLabels?.price3 || 'Precio 3', value: source.price3 })
+    if (source.price4) opts.push({ key: 'price4', label: businessSettings?.priceLabels?.price4 || 'Precio 4', value: source.price4 })
+    return opts
+  }
+
+  const setItemPrice = (index, newPrice) => {
+    const newItems = [...quotationItems]
+    newItems[index].unitPrice = newPrice
+    setQuotationItems(newItems)
+    setPricePickerIndex(null)
   }
 
   // Calcular total directo (suma de precio * cantidad)
@@ -1550,6 +1590,16 @@ export default function CreateQuotation() {
                                 </button>
                               )}
                             </div>
+                            {/* Stock informativo (solo vista, no restringe) */}
+                            {item.productId && (() => {
+                              const stock = getStockForItem(item)
+                              if (stock === null || stock === undefined) return null
+                              return (
+                                <p className="text-[11px] text-gray-500 mt-1 ml-1">
+                                  Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock < 5 ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
+                                </p>
+                              )
+                            })()}
                             {/* Dropdown de resultados */}
                             {showProductSearch === index && !item.productId && (
                               <>
@@ -1641,14 +1691,53 @@ export default function CreateQuotation() {
                         </td>
                         {/* Precio Unitario */}
                         <td className="px-2 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitPrice}
-                            onChange={e => updateItem(index, 'unitPrice', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={e => updateItem(index, 'unitPrice', e.target.value)}
+                              className="flex-1 min-w-0 px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                            {(() => {
+                              const opts = getItemPriceOptions(item)
+                              if (opts.length < 2) return null
+                              return (
+                                <div className="relative flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPricePickerIndex(pricePickerIndex === index ? null : index)}
+                                    className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded border border-gray-300"
+                                    title="Cambiar precio"
+                                  >
+                                    <Tag className="w-3.5 h-3.5" />
+                                  </button>
+                                  {pricePickerIndex === index && (
+                                    <>
+                                      <div className="fixed inset-0 z-10" onClick={() => setPricePickerIndex(null)} />
+                                      <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                                        <p className="px-3 py-1 text-[10px] uppercase font-semibold text-gray-400">Cambiar precio</p>
+                                        {opts.map(opt => (
+                                          <button
+                                            key={opt.key}
+                                            type="button"
+                                            onClick={() => setItemPrice(index, opt.value)}
+                                            className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex justify-between items-center ${
+                                              Number(item.unitPrice) === Number(opt.value) ? 'bg-primary-50 text-primary-700 font-medium' : ''
+                                            }`}
+                                          >
+                                            <span>{opt.label}</span>
+                                            <span className="font-medium">{formatCurrency(opt.value)}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </div>
                         </td>
                         {/* Subtotal */}
                         <td className="px-4 py-2 text-right">
@@ -1736,6 +1825,16 @@ export default function CreateQuotation() {
                           </button>
                         )}
                       </div>
+                      {/* Stock informativo (solo vista) */}
+                      {item.productId && (() => {
+                        const stock = getStockForItem(item)
+                        if (stock === null || stock === undefined) return null
+                        return (
+                          <p className="text-[11px] text-gray-500 mt-1 ml-1">
+                            Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock < 5 ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
+                          </p>
+                        )
+                      })()}
                       {/* Dropdown de resultados */}
                       {showProductSearch === index && !item.productId && (
                         <>
@@ -1828,14 +1927,53 @@ export default function CreateQuotation() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">P. Unit.</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unitPrice}
-                          onChange={e => updateItem(index, 'unitPrice', e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unitPrice}
+                            onChange={e => updateItem(index, 'unitPrice', e.target.value)}
+                            className="flex-1 min-w-0 px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          {(() => {
+                            const opts = getItemPriceOptions(item)
+                            if (opts.length < 2) return null
+                            return (
+                              <div className="relative flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPricePickerIndex(pricePickerIndex === index ? null : index)}
+                                  className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded border border-gray-300"
+                                  title="Cambiar precio"
+                                >
+                                  <Tag className="w-3.5 h-3.5" />
+                                </button>
+                                {pricePickerIndex === index && (
+                                  <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setPricePickerIndex(null)} />
+                                    <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                                      <p className="px-3 py-1 text-[10px] uppercase font-semibold text-gray-400">Cambiar precio</p>
+                                      {opts.map(opt => (
+                                        <button
+                                          key={opt.key}
+                                          type="button"
+                                          onClick={() => setItemPrice(index, opt.value)}
+                                          className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex justify-between items-center ${
+                                            Number(item.unitPrice) === Number(opt.value) ? 'bg-primary-50 text-primary-700 font-medium' : ''
+                                          }`}
+                                        >
+                                          <span>{opt.label}</span>
+                                          <span className="font-medium">{formatCurrency(opt.value)}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Subtotal</label>
