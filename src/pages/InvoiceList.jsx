@@ -1530,6 +1530,8 @@ Gracias por tu preferencia.`
         balance: newBalance,
         paymentStatus: newPaymentStatus,
         paymentHistory: updatedPaymentHistory,
+        // Sello de fecha del último pago (para que el cuadre del día actual lo levante)
+        lastPaymentDate: newPaymentRecord.date,
         // Actualizar status principal cuando se completa el pago
         status: newPaymentStatus === 'completed' ? 'paid' : 'pending'
       })

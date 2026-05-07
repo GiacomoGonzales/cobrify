@@ -3204,7 +3204,7 @@ export const printSplitPreBillThermal = async (order, table, business, taxConfig
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  * @param {string} branchName - Nombre de la sucursal (opcional)
  */
-export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null) => {
+export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = []) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -3214,13 +3214,13 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
   // Si es conexión WiFi o interna, usar la función específica con ESC/POS builder
   if (connectionType === 'wifi' || connectionType === 'internal') {
     console.log(`📶 Usando impresión ${connectionType} para cierre de caja...`);
-    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName);
+    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments);
   }
 
   // Si usa el servicio BLE alternativo (iOS), usar printBLECashClosure
   if (useAlternativeBLE) {
     console.log('🔵 iOS: Usando impresión BLE alternativa para cierre de caja...');
-    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName);
+    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments);
   }
 
   // Bluetooth Android - comportamiento original
@@ -3389,6 +3389,28 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       printer = printer.text(format.separator + '\n');
     }
 
+    // ========== PAGOS DE COMPROBANTES ANTERIORES ==========
+    if (deferredPayments && deferredPayments.length > 0) {
+      printer = printer
+        .bold(true)
+        .text('PAGOS DE COMPROB. ANT.\n')
+        .bold(false);
+
+      let deferredTotal = 0;
+      for (const p of deferredPayments) {
+        deferredTotal += p.amount || 0;
+        printer = printer
+          .text(`${p.invoiceNumber} ${convertSpanishText((p.customerName || '').substring(0, 20))}\n`)
+          .text(createLine(`  ${p.method}:`, formatCurrency(p.amount || 0)) + '\n');
+      }
+      printer = printer
+        .text(format.halfSeparator + '\n')
+        .bold(true)
+        .text(createLine('Total cobrado:', formatCurrency(deferredTotal)) + '\n')
+        .bold(false)
+        .text(format.separator + '\n');
+    }
+
     // ========== CÁLCULO ==========
     printer = printer
       .bold(true)
@@ -3462,7 +3484,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
 /**
  * Imprimir cierre de caja vía WiFi
  */
-const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName) => {
+const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = []) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
@@ -3565,6 +3587,20 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       builder.text(format.separator).newLine();
     }
 
+    // Pagos de comprobantes anteriores (cobros diferidos)
+    if (deferredPayments && deferredPayments.length > 0) {
+      builder.bold(true).text('PAGOS DE COMPROB. ANT.').newLine().bold(false);
+      let deferredTotal = 0;
+      for (const p of deferredPayments) {
+        deferredTotal += p.amount || 0;
+        builder.text(`${p.invoiceNumber} ${(p.customerName || '').substring(0, 20)}`).newLine()
+          .text(createLine(`  ${p.method}:`, formatCurrency(p.amount || 0))).newLine();
+      }
+      builder.text(format.halfSeparator).newLine()
+        .bold(true).text(createLine('Total cobrado:', formatCurrency(deferredTotal))).newLine().bold(false)
+        .text(format.separator).newLine();
+    }
+
     // Cálculo
     builder.bold(true).text('CALCULO').newLine().bold(false)
       .text(createLine('Apertura:', formatCurrency(openingAmount))).newLine()
@@ -3623,7 +3659,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
 /**
  * Imprimir cierre de caja vía BLE (iOS)
  */
-const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName) => {
+const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = []) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
@@ -3698,6 +3734,20 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
       ticketText += 'OTROS MOVIMIENTOS\n';
       if (totalIncome > 0) ticketText += createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n';
       if (totalExpense > 0) ticketText += createLine('- Egresos:', formatCurrency(totalExpense)) + '\n';
+      ticketText += format.separator + '\n';
+    }
+
+    // Pagos de comprobantes anteriores
+    if (deferredPayments && deferredPayments.length > 0) {
+      ticketText += 'PAGOS DE COMPROB. ANT.\n';
+      let deferredTotal = 0;
+      for (const p of deferredPayments) {
+        deferredTotal += p.amount || 0;
+        ticketText += `${p.invoiceNumber} ${(p.customerName || '').substring(0, 20)}\n`;
+        ticketText += createLine(`  ${p.method}:`, formatCurrency(p.amount || 0)) + '\n';
+      }
+      ticketText += format.halfSeparator + '\n';
+      ticketText += createLine('Total cobrado:', formatCurrency(deferredTotal)) + '\n';
       ticketText += format.separator + '\n';
     }
 

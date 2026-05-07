@@ -716,6 +716,17 @@ export default function CashRegister() {
       if (businessResult.success) {
         setCompanySettings(businessResult.data)
       }
+      // Cantidad de comprobantes creados en esta sesión (excluye notas previas
+      // que entraron por haber recibido pagos hoy — esas van como deferredPayments).
+      const sessionOnlyInvoicesCount = (() => {
+        const openedAt = toDate(currentSession?.openedAt)
+        if (!openedAt) return todayInvoices.length
+        return todayInvoices.filter(inv => {
+          const c = toDate(inv.createdAt)
+          return !c || c >= openedAt
+        }).length
+      })()
+
       // Guardar datos de la sesión cerrada con hora de cierre
       const closedData = {
         ...currentSession,
@@ -742,7 +753,9 @@ export default function CashRegister() {
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
-        invoiceCount: todayInvoices.length,
+        invoiceCount: sessionOnlyInvoicesCount,
+        deferredPayments: totals.deferredPayments || [],
+        deferredTotal: totals.deferredTotal || 0,
       }
 
       // MODO DEMO: Simular cierre sin guardar en Firebase
@@ -778,7 +791,9 @@ export default function CashRegister() {
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
-        invoiceCount: todayInvoices.length,
+        invoiceCount: sessionOnlyInvoicesCount,
+        deferredPayments: totals.deferredPayments || [],
+        deferredTotal: totals.deferredTotal || 0,
       }, user.uid, user.displayName || user.email || 'Usuario')
       if (result.success) {
         // Guardar datos y mostrar pantalla de éxito
@@ -796,6 +811,19 @@ export default function CashRegister() {
     }
   }
 
+  // Filtra de todayInvoices las notas creadas antes de la apertura
+  // (entran al array por haber recibido un pago hoy — su detalle va en deferredPayments).
+  const getSessionOnlyInvoices = (session) => {
+    const openedAt = session?.openedAt?.toDate
+      ? session.openedAt.toDate()
+      : session?.openedAt ? new Date(session.openedAt) : null
+    if (!openedAt) return todayInvoices
+    return todayInvoices.filter(inv => {
+      const c = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+      return !c || c >= openedAt
+    })
+  }
+
   const handleDownloadExcel = async () => {
     try {
       // Obtener datos del negocio
@@ -805,7 +833,8 @@ export default function CashRegister() {
       // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
       const sessionData = closedSessionData || currentSession
 
-      await generateCashReportExcel(sessionData, movements, todayInvoices, businessData)
+      const sessionInvoices = getSessionOnlyInvoices(sessionData)
+      await generateCashReportExcel(sessionData, movements, sessionInvoices, businessData, totals.deferredPayments || [])
       toast.success('Reporte Excel descargado correctamente')
     } catch (error) {
       console.error('Error al generar Excel:', error)
@@ -835,7 +864,8 @@ export default function CashRegister() {
       const modsResult = await getOrderModificationsAfterPrecuenta(getBusinessId(), sessionOpenedAt, sessionClosedAt)
       const orderModificationsData = modsResult.success ? modsResult.data : []
 
-      await generateCashReportPDF(sessionData, movements, todayInvoices, businessData, closedWithoutReceiptData, orderModificationsData)
+      const sessionInvoices = getSessionOnlyInvoices(sessionData)
+      await generateCashReportPDF(sessionData, movements, sessionInvoices, businessData, closedWithoutReceiptData, orderModificationsData, totals.deferredPayments || [])
       toast.success('Reporte PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -915,7 +945,8 @@ export default function CashRegister() {
         movements,
         companySettings,
         printerConfig.paperWidth || 58,
-        branchName
+        branchName,
+        closedSessionData?.deferredPayments || totals.deferredPayments || []
       )
 
       if (result.success) {
@@ -969,7 +1000,8 @@ export default function CashRegister() {
         historyMovements,
         businessData,
         printerConfig.paperWidth || 58,
-        branchName
+        branchName,
+        selectedHistorySession?.deferredPayments || []
       )
 
       if (result.success) {
@@ -1162,6 +1194,14 @@ export default function CashRegister() {
     }
   }
 
+  // Helper: convierte timestamp/date/string a Date
+  const toDate = (v) => {
+    if (!v) return null
+    if (v.toDate && typeof v.toDate === 'function') return v.toDate()
+    if (v instanceof Date) return v
+    return new Date(v)
+  }
+
   // Cálculos
   const calculateTotals = () => {
     if (!currentSession) return {
@@ -1177,8 +1217,14 @@ export default function CashRegister() {
       income: 0,
       expense: 0,
       expected: 0,
-      difference: 0
+      difference: 0,
+      pendingTotal: 0,
+      pendingCount: 0,
+      deferredPayments: [],
+      deferredTotal: 0,
     }
+
+    const sessionOpenedAt = toDate(currentSession.openedAt)
 
     // Inicializar totales por método de pago
     let salesCash = 0
@@ -1217,6 +1263,24 @@ export default function CashRegister() {
       return true
     })
 
+    // Pagos diferidos: pagos cobrados en esta sesión sobre comprobantes
+    // creados en sesiones anteriores. Se llenan recorriendo paymentHistory.
+    const deferredPayments = []
+
+    // Helper: suma un pago a su método correspondiente
+    const addToMethod = (method, amount) => {
+      switch (method) {
+        case 'Efectivo': salesCash += amount; break
+        case 'Tarjeta': salesCard += amount; break
+        case 'Transferencia': salesTransfer += amount; break
+        case 'Yape': salesYape += amount; break
+        case 'Plin': salesPlin += amount; break
+        case 'Rappi': salesRappi += amount; break
+        case 'PedidosYa': salesPedidosYa += amount; break
+        case 'DiDiFood': salesDiDiFood += amount; break
+      }
+    }
+
     // Recorrer cada factura válida y sumar por método de pago
     validInvoices.forEach(invoice => {
       // Si es venta al crédito pendiente de pago, no sumar nada al control de caja
@@ -1229,37 +1293,30 @@ export default function CashRegister() {
       const hasPaymentHistory = invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0
 
       if (hasPaymentHistory) {
-        // Usar el historial de pagos para sumar por método correcto
-        // Esto aplica a ventas al crédito pagadas y pagos parciales
-        const isPartialPayment = invoice.paymentStatus === 'partial'
+        // Filtrar pagos por fecha: solo los que ocurrieron en esta sesión.
+        // Esto evita re-contar pagos viejos cuando una nota de venta antigua aparece
+        // por haber recibido un pago nuevo (lastPaymentDate) en este turno.
+        const invoiceCreatedAt = toDate(invoice.createdAt)
+        const isOldInvoice = sessionOpenedAt && invoiceCreatedAt && invoiceCreatedAt < sessionOpenedAt
 
         invoice.paymentHistory.forEach(payment => {
           const amount = parseFloat(payment.amount) || 0
-          switch (payment.method) {
-            case 'Efectivo':
-              salesCash += amount
-              break
-            case 'Tarjeta':
-              salesCard += amount
-              break
-            case 'Transferencia':
-              salesTransfer += amount
-              break
-            case 'Yape':
-              salesYape += amount
-              break
-            case 'Plin':
-              salesPlin += amount
-              break
-            case 'Rappi':
-              salesRappi += amount
-              break
-            case 'PedidosYa':
-              salesPedidosYa += amount
-              break
-            case 'DiDiFood':
-              salesDiDiFood += amount
-              break
+          // Fallback al createdAt de la factura para entradas legacy sin date
+          const paymentDate = toDate(payment.date) || invoiceCreatedAt
+          const inSession = !sessionOpenedAt || (paymentDate && paymentDate >= sessionOpenedAt)
+          if (!inSession) return
+          addToMethod(payment.method, amount)
+          if (isOldInvoice) {
+            deferredPayments.push({
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.number || '-',
+              documentType: invoice.documentType,
+              customerName: invoice.customer?.name || invoice.customer?.businessName || invoice.customerName || 'Cliente General',
+              amount,
+              method: payment.method,
+              date: paymentDate,
+              recordedByName: payment.recordedByName,
+            })
           }
         })
       } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
@@ -1408,6 +1465,8 @@ export default function CashRegister() {
       difference = currentSession.closingAmount - expected
     }
 
+    const deferredTotal = deferredPayments.reduce((s, p) => s + (p.amount || 0), 0)
+
     return {
       sales,
       salesCash,
@@ -1423,7 +1482,9 @@ export default function CashRegister() {
       expected,
       difference,
       pendingTotal,
-      pendingCount
+      pendingCount,
+      deferredPayments,
+      deferredTotal,
     }
   }
 
@@ -1880,14 +1941,84 @@ export default function CashRegister() {
             </Card>
           </div>
 
+          {/* Pagos de comprobantes anteriores cobrados en esta sesión */}
+          {totals.deferredPayments && totals.deferredPayments.length > 0 && (
+            <Card className="mt-6 border-amber-200 bg-amber-50/40">
+              <CardContent>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1">
+                  <TrendingUp className="w-5 h-5 text-amber-600" />
+                  Pagos de comprobantes anteriores
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Cobros registrados hoy sobre notas de venta o créditos emitidos en sesiones previas.
+                  Ya están sumados a las ventas del día por método de pago.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-amber-200 text-left text-xs text-gray-600 uppercase">
+                        <th className="pb-2 pr-3">Comprobante</th>
+                        <th className="pb-2 pr-3">Cliente</th>
+                        <th className="pb-2 pr-3">Método</th>
+                        <th className="pb-2 pr-3 text-right">Monto</th>
+                        <th className="pb-2 text-right">Hora</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {totals.deferredPayments
+                        .slice()
+                        .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0))
+                        .map((p, i) => {
+                          const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+                          const timeStr = p.date
+                            ? p.date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+                            : '-'
+                          return (
+                            <tr key={`${p.invoiceId}-${i}`} className="border-b border-amber-100">
+                              <td className="py-2 pr-3">
+                                <div className="font-medium text-primary-600">{p.invoiceNumber}</div>
+                                <div className="text-xs text-gray-500">{docTypeLabels[p.documentType] || p.documentType || '-'}</div>
+                              </td>
+                              <td className="py-2 pr-3 truncate max-w-[180px]">{p.customerName}</td>
+                              <td className="py-2 pr-3 text-gray-700">{p.method}</td>
+                              <td className="py-2 pr-3 text-right font-semibold text-emerald-700">
+                                +{formatCurrency(p.amount)}
+                              </td>
+                              <td className="py-2 text-right text-gray-500">{timeStr}</td>
+                            </tr>
+                          )
+                        })}
+                      <tr className="bg-amber-100/60">
+                        <td colSpan={3} className="py-2 pr-3 font-semibold text-gray-900 text-right">Total cobrado:</td>
+                        <td className="py-2 pr-3 text-right font-bold text-emerald-700">
+                          +{formatCurrency(totals.deferredTotal || 0)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Lista de Comprobantes de la Sesión */}
           <Card className="mt-6">
             <CardContent>
               {(() => {
-                const userOptions = getInvoiceUserOptions(todayInvoices)
+                // Excluir comprobantes creados antes de la apertura de la sesión —
+                // pueden estar en todayInvoices porque recibieron un pago hoy
+                // (lastPaymentDate). Esos cobros ya se muestran en la sección
+                // "Pagos de comprobantes anteriores" para no confundir totales.
+                const sessionOpenedAt = toDate(currentSession?.openedAt)
+                const sessionInvoicesOnly = todayInvoices.filter(inv => {
+                  const c = toDate(inv.createdAt)
+                  return !sessionOpenedAt || !c || c >= sessionOpenedAt
+                })
+                const userOptions = getInvoiceUserOptions(sessionInvoicesOnly)
                 const filteredInvoices = invoiceUserFilter === 'all'
-                  ? todayInvoices
-                  : todayInvoices.filter(inv => (inv.createdBy || 'unknown') === invoiceUserFilter)
+                  ? sessionInvoicesOnly
+                  : sessionInvoicesOnly.filter(inv => (inv.createdBy || 'unknown') === invoiceUserFilter)
                 const showUserFilter = isOwner && userOptions.length > 1
 
                 return (
@@ -1895,7 +2026,7 @@ export default function CashRegister() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                       <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         <FileText className="w-5 h-5" />
-                        Comprobantes de esta sesión ({filteredInvoices.length}{invoiceUserFilter !== 'all' ? ` de ${todayInvoices.length}` : ''})
+                        Comprobantes de esta sesión ({filteredInvoices.length}{invoiceUserFilter !== 'all' ? ` de ${sessionInvoicesOnly.length}` : ''})
                       </h3>
                       {showUserFilter && (
                         <div className="flex items-center gap-2">
@@ -1916,7 +2047,7 @@ export default function CashRegister() {
                     {filteredInvoices.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         <p className="text-sm">
-                          {todayInvoices.length === 0
+                          {sessionInvoicesOnly.length === 0
                             ? 'No hay comprobantes en esta sesión'
                             : 'Ningún comprobante coincide con el filtro'}
                         </p>
@@ -3307,6 +3438,7 @@ export default function CashRegister() {
             sessionData={printSessionData}
             movements={printMovements}
             invoices={printSessionData === closedSessionData ? todayInvoices : []}
+            deferredPayments={printSessionData?.deferredPayments || (printSessionData === closedSessionData ? (totals.deferredPayments || []) : [])}
             companySettings={companySettings}
             paperWidth={printerConfig?.paperWidth || 80}
             branchName={selectedBranch?.name || null}

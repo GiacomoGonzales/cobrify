@@ -202,17 +202,31 @@ export const getInvoicesByBranch = async (userId, branchId = null, sinceDate = n
   try {
     const invoicesRef = collection(db, 'businesses', userId, 'invoices')
 
-    // Si hay fecha, usar query con filtro de Firestore para reducir documentos leídos
-    let querySnapshot
+    // Si hay fecha, hacer DOS queries:
+    //   1. Facturas creadas dentro de la sesión.
+    //   2. Facturas anteriores con un pago registrado dentro de la sesión
+    //      (campo `lastPaymentDate`, sellado por handleRegisterPayment).
+    // Luego se mergean por id. Esto asegura que pagos parciales cobrados en una
+    // sesión posterior aparezcan en el cuadre de ese día.
+    let docs = []
     if (sinceDate) {
-      const q = query(invoicesRef, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc'))
-      querySnapshot = await getDocs(q)
+      const q1 = query(invoicesRef, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc'))
+      const q2 = query(invoicesRef, where('lastPaymentDate', '>=', sinceDate), orderBy('lastPaymentDate', 'desc'))
+      const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)])
+      const seen = new Set()
+      for (const d of [...s1.docs, ...s2.docs]) {
+        if (!seen.has(d.id)) {
+          seen.add(d.id)
+          docs.push(d)
+        }
+      }
     } else {
-      querySnapshot = await getDocs(invoicesRef)
+      const querySnapshot = await getDocs(invoicesRef)
+      docs = querySnapshot.docs
     }
 
     // Filtrar por branchId en el cliente
-    const invoices = querySnapshot.docs
+    const invoices = docs
       .map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -225,14 +239,12 @@ export const getInvoicesByBranch = async (userId, branchId = null, sinceDate = n
         }
       })
 
-    // Ordenar por fecha de creación (más reciente primero) - solo si no venía ordenado de Firestore
-    if (!sinceDate) {
-      invoices.sort((a, b) => {
-        if (!a.createdAt) return 1
-        if (!b.createdAt) return -1
-        return b.createdAt.seconds - a.createdAt.seconds
-      })
-    }
+    // Ordenar por fecha de creación (más reciente primero)
+    invoices.sort((a, b) => {
+      const aSec = a.createdAt?.seconds ?? 0
+      const bSec = b.createdAt?.seconds ?? 0
+      return bSec - aSec
+    })
 
     return { success: true, data: invoices }
   } catch (error) {
@@ -1880,7 +1892,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount, deferredPayments, deferredTotal } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     const updateData = {
@@ -1911,6 +1923,9 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       expectedAmount: expectedAmount || 0,
       difference: difference || 0,
       invoiceCount: invoiceCount || 0,
+      // Pagos cobrados en esta sesión sobre comprobantes emitidos en sesiones previas
+      deferredPayments: deferredPayments || [],
+      deferredTotal: deferredTotal || 0,
     }
 
     // Guardar datos del usuario que cierra la caja

@@ -9,6 +9,7 @@ const CashClosureTicket = forwardRef(({
   sessionData,
   movements = [],
   invoices = [],
+  deferredPayments = [],
   companySettings,
   paperWidth = 80,
   branchName = null,
@@ -483,6 +484,33 @@ const CashClosureTicket = forwardRef(({
               <span>{formatCurrency(totalExpense)}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Pagos de comprobantes anteriores (cobros diferidos) */}
+      {deferredPayments && deferredPayments.length > 0 && (
+        <div className="ticket-section">
+          <div className="section-title">Pagos de Comprobantes Anteriores</div>
+          {deferredPayments.map((p, i) => (
+            <div key={i} className="info-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <span style={{ fontWeight: 600 }}>
+                {p.invoiceNumber} — {p.method}
+              </span>
+              <span style={{ fontSize: is58mm ? '6.5pt' : '7.5pt', color: '#333' }}>
+                {p.customerName}
+              </span>
+              <span style={{ alignSelf: 'flex-end', fontWeight: 600 }}>
+                {formatCurrency(p.amount)}
+              </span>
+            </div>
+          ))}
+          <div className="separator" />
+          <div className="total-row" style={{ fontWeight: 700 }}>
+            <span>Total cobrado anteriores:</span>
+            <span>
+              {formatCurrency(deferredPayments.reduce((s, p) => s + (p.amount || 0), 0))}
+            </span>
+          </div>
         </div>
       )}
 

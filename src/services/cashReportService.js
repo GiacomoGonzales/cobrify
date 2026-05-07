@@ -106,7 +106,7 @@ const formatPaymentMethods = (invoice) => {
 /**
  * Generar reporte de cierre de caja en Excel
  */
-export const generateCashReportExcel = async (sessionData, movements, invoices, businessData) => {
+export const generateCashReportExcel = async (sessionData, movements, invoices, businessData, deferredPayments = []) => {
   const workbook = XLSX.utils.book_new();
 
   // Convertir fechas
@@ -195,6 +195,35 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     XLSX.utils.book_append_sheet(workbook, invoicesSheet, 'Comprobantes');
   }
 
+  // Hoja: Pagos de comprobantes anteriores (cobros diferidos)
+  if (deferredPayments.length > 0) {
+    const deferredData = [
+      ['PAGOS DE COMPROBANTES ANTERIORES'],
+      ['(Cobros recibidos hoy sobre comprobantes emitidos en sesiones previas)'],
+      [''],
+      ['Comprobante', 'Cliente', 'Método', 'Monto', 'Hora']
+    ];
+    let deferredTotal = 0;
+    deferredPayments.forEach(p => {
+      deferredTotal += p.amount || 0;
+      const time = p.date instanceof Date
+        ? format(p.date, 'dd/MM/yyyy HH:mm', { locale: es })
+        : '-';
+      deferredData.push([
+        p.invoiceNumber || '-',
+        p.customerName || 'Cliente General',
+        p.method || '-',
+        p.amount || 0,
+        time,
+      ]);
+    });
+    deferredData.push([], ['', '', 'TOTAL', deferredTotal, '']);
+
+    const deferredSheet = XLSX.utils.aoa_to_sheet(deferredData);
+    deferredSheet['!cols'] = [{ width: 20 }, { width: 30 }, { width: 15 }, { width: 12 }, { width: 18 }];
+    XLSX.utils.book_append_sheet(workbook, deferredSheet, 'Pagos Anteriores');
+  }
+
   // Hoja 3: Movimientos Adicionales
   if (movements.length > 0) {
     const movementsData = [
@@ -252,7 +281,7 @@ const hexToRgb = (hex) => {
 /**
  * Generar reporte de cierre de caja en PDF (estilo profesional compacto)
  */
-export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = [], orderModifications = []) => {
+export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = [], orderModifications = [], deferredPayments = []) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
@@ -488,6 +517,59 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
   doc.setFontSize(10);
   doc.text(fmt(difference), RX - 2, y + 6, { align: 'right' });
   y += 13;
+
+  // ===== PAGOS DE COMPROBANTES ANTERIORES (cobros diferidos) =====
+  if (deferredPayments.length > 0) {
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    section(`PAGOS DE COMPROBANTES ANTERIORES (${deferredPayments.length})`);
+
+    // Subtítulo explicativo
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(6);
+    doc.setTextColor(...MED);
+    doc.text('Cobros recibidos hoy sobre comprobantes emitidos en sesiones previas. Ya están sumados a las ventas por método de pago.', ML, y);
+    y += 5;
+
+    // Header de tabla
+    doc.setFillColor(...LIGHT);
+    doc.rect(ML, y, CW, 5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...MED);
+    doc.text('COMPROBANTE', ML + 2, y + 3.3);
+    doc.text('CLIENTE', ML + 40, y + 3.3);
+    doc.text('MÉTODO', ML + 100, y + 3.3);
+    doc.text('MONTO', RX - 20, y + 3.3, { align: 'right' });
+    doc.text('HORA', RX - 2, y + 3.3, { align: 'right' });
+    y += 5;
+
+    let deferredTotal = 0;
+    deferredPayments.forEach((p, i) => {
+      if (y > PH - 15) { doc.addPage(); y = 10; }
+      deferredTotal += p.amount || 0;
+      if (i % 2 === 0) { doc.setFillColor(255, 251, 235); doc.rect(ML, y, CW, 5, 'F'); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...DARK);
+      doc.text((p.invoiceNumber || '-').substring(0, 18), ML + 2, y + 3.3);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5);
+      doc.text((p.customerName || 'Cliente General').substring(0, 32), ML + 40, y + 3.3);
+      doc.text((p.method || '-').substring(0, 14), ML + 100, y + 3.3);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(5, 120, 80);
+      doc.text(`+${fmt(p.amount || 0)}`, RX - 20, y + 3.3, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...MED);
+      const time = p.date instanceof Date
+        ? p.date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+        : '-';
+      doc.text(time, RX - 2, y + 3.3, { align: 'right' });
+      y += 5;
+    });
+    // Total
+    doc.setFillColor(...ACCENT);
+    doc.rect(ML, y, CW, 5.5, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255);
+    doc.text('TOTAL COBRADO ANTERIORES', ML + 2, y + 3.8);
+    doc.text(fmt(deferredTotal), RX - 2, y + 3.8, { align: 'right' });
+    y += 8;
+  }
 
   // ===== MOVIMIENTOS ADICIONALES =====
   if (movements.length > 0) {
