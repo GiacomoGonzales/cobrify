@@ -605,12 +605,23 @@ export default function CashRegister() {
         const branchId = session.branchId || selectedBranch?.id || null
         const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
         if (invoicesResult.success) {
-          // Cota superior: solo facturas emitidas antes del cierre de la sesión.
-          // Sin esto, sesiones antiguas mostraban comprobantes de sesiones posteriores.
+          // Pertenecen a la sesión:
+          //   1. Comprobantes creados dentro de la ventana (open..close), O
+          //   2. Comprobantes anteriores que recibieron al menos un pago en la ventana.
+          // El query trae ambos casos (createdAt + lastPaymentDate). Acá filtramos
+          // los falsos positivos (lastPaymentDate fuera del cierre de esta sesión,
+          // por ejemplo un pago hecho en una sesión posterior).
+          const isInWindow = (d) => d && d >= sessionOpenedAt && d <= sessionClosedAt
           const inSession = (invoicesResult.data || []).filter(inv => {
-            const ts = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
-            if (!ts) return true
-            return ts <= sessionClosedAt
+            const created = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+            if (isInWindow(created)) return true
+            if (Array.isArray(inv.paymentHistory)) {
+              return inv.paymentHistory.some(p => {
+                const pd = p.date?.toDate?.() || (p.date ? new Date(p.date) : null)
+                return isInWindow(pd)
+              })
+            }
+            return false
           })
           setHistoryInvoices(inSession)
         }
@@ -824,6 +835,49 @@ export default function CashRegister() {
     })
   }
 
+  // Para el historial: calcula deferredPayments y filtra invoices de la sesión.
+  // Prioriza deferredPayments guardados en la sesión cerrada; si no existen
+  // (sesiones cerradas antes del fix), los reconstruye desde paymentHistory.
+  const getHistoryDerived = (session, invoices) => {
+    const openedAt = session?.openedAt?.toDate ? session.openedAt.toDate() : (session?.openedAt ? new Date(session.openedAt) : null)
+    const closedAt = session?.closedAt?.toDate ? session.closedAt.toDate() : (session?.closedAt ? new Date(session.closedAt) : new Date())
+    const isInWindow = (d) => d && openedAt && d >= openedAt && d <= closedAt
+
+    let deferred = []
+    if (Array.isArray(session?.deferredPayments) && session.deferredPayments.length > 0) {
+      deferred = session.deferredPayments.map(p => ({
+        ...p,
+        date: p.date?.toDate?.() || (p.date ? new Date(p.date) : null),
+      }))
+    } else {
+      for (const inv of invoices || []) {
+        const created = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+        if (!openedAt || (created && created >= openedAt)) continue
+        if (!Array.isArray(inv.paymentHistory)) continue
+        for (const pay of inv.paymentHistory) {
+          const pd = pay.date?.toDate?.() || (pay.date ? new Date(pay.date) : null)
+          if (!isInWindow(pd)) continue
+          deferred.push({
+            invoiceId: inv.id,
+            invoiceNumber: inv.number || '-',
+            documentType: inv.documentType,
+            customerName: inv.customer?.name || inv.customer?.businessName || inv.customerName || 'Cliente General',
+            amount: parseFloat(pay.amount) || 0,
+            method: pay.method,
+            date: pd,
+          })
+        }
+      }
+    }
+
+    const sessionInvoices = (invoices || []).filter(inv => {
+      const c = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+      return !openedAt || !c || c >= openedAt
+    })
+
+    return { deferred, sessionInvoices }
+  }
+
   const handleDownloadExcel = async () => {
     try {
       // Obtener datos del negocio
@@ -904,8 +958,11 @@ export default function CashRegister() {
           setCompanySettings(businessResult.data)
         }
       }
-      // Configurar datos para impresión del historial
-      setPrintSessionData(selectedHistorySession)
+      // Configurar datos para impresión del historial.
+      // Si la sesión es vieja y no tiene deferredPayments persistidos, los
+      // reconstruimos al vuelo desde historyInvoices para que aparezcan en el ticket.
+      const { deferred } = getHistoryDerived(selectedHistorySession, historyInvoices)
+      setPrintSessionData({ ...selectedHistorySession, deferredPayments: deferred })
       setPrintMovements(historyMovements)
       // Esperar a que se actualice el estado y luego imprimir
       setTimeout(() => {
@@ -994,14 +1051,15 @@ export default function CashRegister() {
       // Obtener nombre de sucursal si aplica
       const branchName = selectedBranch ? branches.find(b => b.id === selectedBranch)?.name : null
 
-      // Imprimir
+      // Imprimir (incluye deferredPayments — guardados o reconstruidos)
+      const { deferred } = getHistoryDerived(selectedHistorySession, historyInvoices)
       const result = await printCashClosureTicket(
         selectedHistorySession,
         historyMovements,
         businessData,
         printerConfig.paperWidth || 58,
         branchName,
-        selectedHistorySession?.deferredPayments || []
+        deferred
       )
 
       if (result.success) {
@@ -2704,12 +2762,85 @@ export default function CashRegister() {
               </div>
             )}
 
+            {/* Pagos de comprobantes anteriores (cobros diferidos) */}
+            {(() => {
+              const { deferred } = getHistoryDerived(selectedHistorySession, historyInvoices)
+              if (deferred.length === 0) return null
+
+              const total = deferred.reduce((s, p) => s + (p.amount || 0), 0)
+              const docTypeLabels = { factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta', nota_credito: 'N. Crédito', nota_debito: 'N. Débito' }
+
+              return (
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="font-semibold text-gray-900 flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-amber-600" />
+                    Pagos de Comprobantes Anteriores ({deferred.length})
+                  </h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Cobros recibidos en esta sesión sobre comprobantes emitidos en sesiones previas.
+                  </p>
+                  <div className="overflow-x-auto bg-amber-50/40 rounded-lg border border-amber-200 p-2">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-amber-200 text-left text-xs text-gray-600 uppercase">
+                          <th className="pb-2 pr-2">Comprobante</th>
+                          <th className="pb-2 pr-2">Cliente</th>
+                          <th className="pb-2 pr-2">Método</th>
+                          <th className="pb-2 pr-2 text-right">Monto</th>
+                          <th className="pb-2 text-right">Hora</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deferred
+                          .slice()
+                          .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0))
+                          .map((p, i) => {
+                            const timeStr = p.date
+                              ? p.date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+                              : '-'
+                            return (
+                              <tr key={`${p.invoiceId}-${i}`} className="border-b border-amber-100">
+                                <td className="py-1.5 pr-2 text-xs">
+                                  <div className="font-medium text-primary-600">{p.invoiceNumber}</div>
+                                  <div className="text-[10px] text-gray-500">{docTypeLabels[p.documentType] || p.documentType || '-'}</div>
+                                </td>
+                                <td className="py-1.5 pr-2 text-xs truncate max-w-[140px]">{p.customerName}</td>
+                                <td className="py-1.5 pr-2 text-xs text-gray-700">{p.method}</td>
+                                <td className="py-1.5 pr-2 text-right text-xs font-semibold text-emerald-700">
+                                  +{formatCurrency(p.amount)}
+                                </td>
+                                <td className="py-1.5 text-right text-xs text-gray-500">{timeStr}</td>
+                              </tr>
+                            )
+                          })}
+                        <tr className="bg-amber-100/60">
+                          <td colSpan={3} className="py-1.5 pr-2 text-xs font-semibold text-gray-900 text-right">Total cobrado:</td>
+                          <td className="py-1.5 pr-2 text-right text-xs font-bold text-emerald-700">
+                            +{formatCurrency(total)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Comprobantes de la Sesión */}
             {historyInvoices.length > 0 && (() => {
-              const userOptions = getInvoiceUserOptions(historyInvoices)
+              const sessionOpenedAtForList = getDateFromTimestamp(selectedHistorySession.openedAt)
+              // Mostrar solo los comprobantes creados en la sesión. Las notas previas
+              // se ven arriba en "Pagos de Comprobantes Anteriores".
+              const sessionInvoicesOnly = historyInvoices.filter(inv => {
+                const c = getDateFromTimestamp(inv.createdAt)
+                return !sessionOpenedAtForList || !c || c >= sessionOpenedAtForList
+              })
+              if (sessionInvoicesOnly.length === 0) return null
+              const userOptions = getInvoiceUserOptions(sessionInvoicesOnly)
               const filteredHistoryInvoices = historyInvoiceUserFilter === 'all'
-                ? historyInvoices
-                : historyInvoices.filter(inv => (inv.createdBy || 'unknown') === historyInvoiceUserFilter)
+                ? sessionInvoicesOnly
+                : sessionInvoicesOnly.filter(inv => (inv.createdBy || 'unknown') === historyInvoiceUserFilter)
               const showUserFilter = isOwner && userOptions.length > 1
 
               return (
@@ -2717,7 +2848,7 @@ export default function CashRegister() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                     <h4 className="font-semibold text-gray-900 flex items-center gap-2">
                       <FileText className="w-4 h-4" />
-                      Comprobantes de la Sesión ({filteredHistoryInvoices.length}{historyInvoiceUserFilter !== 'all' ? ` de ${historyInvoices.length}` : ''})
+                      Comprobantes de la Sesión ({filteredHistoryInvoices.length}{historyInvoiceUserFilter !== 'all' ? ` de ${sessionInvoicesOnly.length}` : ''})
                     </h4>
                     {showUserFilter && (
                       <div className="flex items-center gap-2">
@@ -2814,7 +2945,8 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportPDF(selectedHistorySession, historyMovements, historyInvoices, businessData, historyClosedWithoutReceipt, historyOrderModifications)
+                    const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, sessionInvoices, businessData, historyClosedWithoutReceipt, historyOrderModifications, deferred)
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')
@@ -2832,7 +2964,8 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    await generateCashReportExcel(selectedHistorySession, historyMovements, historyInvoices, businessData)
+                    const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
+                    await generateCashReportExcel(selectedHistorySession, historyMovements, sessionInvoices, businessData, deferred)
                     toast.success('Excel descargado')
                   } catch (error) {
                     toast.error('Error al generar Excel')
