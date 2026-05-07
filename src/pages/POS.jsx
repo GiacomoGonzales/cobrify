@@ -3118,12 +3118,15 @@ export default function POS() {
     setCart([])
     setSelectedCustomer(null)
     userChangedDocTypeRef.current = false
-    // Forzar al cajero a re-seleccionar el tipo de comprobante en cada nueva venta.
-    // Antes se reseteaba al default del negocio, lo que generaba un desfase entre
-    // la opción visible del <select> y el state interno (cuando el default no
-    // estaba en allowedDocumentTypes), y se podía emitir un tipo distinto al que
-    // se veía en pantalla.
-    setDocumentType('')
+    // Resetear al default del negocio, pero respetando los tipos permitidos del
+    // usuario logueado. Si el default no está en allowedDocumentTypes (típico en
+    // sub-usuarios con permisos restringidos), caer al primero permitido — así
+    // el state nunca queda en un valor sin <option> en el <select>.
+    const def = companySettings?.defaultDocumentType || 'boleta'
+    const safeDoc = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
+      ? allowedDocumentTypes[0]
+      : def
+    setDocumentType(safeDoc)
     setOrderType('takeaway')
     setCustomerData({
       documentType: ID_TYPES.DNI,
@@ -5777,11 +5780,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         setPaymentInstallments([])
                       }
                     }}
-                    className={`flex-1 px-3 py-2 text-sm font-medium border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white ${
-                      documentType ? 'border-gray-300' : 'border-amber-400 ring-1 ring-amber-200'
-                    }`}
+                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                   >
-                    <option value="" disabled>Seleccionar documento...</option>
                     {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
