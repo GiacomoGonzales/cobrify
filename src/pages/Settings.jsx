@@ -2243,7 +2243,7 @@ export default function Settings() {
   // Cargar conteos cuando se abre la pestaña de limpieza
   useEffect(() => {
     const loadCounts = async () => {
-      if (!hasFeature || !hasFeature('bulkDelete')) return
+      if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
       const businessId = getBusinessId()
       const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
         countDocuments(businessId, 'products'),
@@ -2286,7 +2286,7 @@ export default function Settings() {
   }
 
   const loadBulkDeleteCounts = async () => {
-    if (!hasFeature || !hasFeature('bulkDelete')) return
+    if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
     const businessId = getBusinessId()
     const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
       countDocuments(businessId, 'products'),
@@ -2382,8 +2382,8 @@ export default function Settings() {
     { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
     // Tab de Rappi: solo visible cuando businessSettings.rappiEnabled === true (modo restaurante)
     ...(businessSettings?.rappiEnabled === true ? [{ id: 'rappi', label: 'Rappi', icon: Bike }] : []),
-    // Solo mostrar si tiene el feature bulkDelete
-    ...(hasFeature && hasFeature('bulkDelete') ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
+    // Solo mostrar si tiene el feature bulkDelete (o en desarrollo)
+    ...((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
   ]
 
   // Modo "Mi Catálogo Online standalone": si llegamos a Configuración con
