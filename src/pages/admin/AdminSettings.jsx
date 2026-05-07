@@ -1577,10 +1577,60 @@ function CloudinaryCleanupCard() {
 
 function FirebaseToCloudinaryCard() {
   const [running, setRunning] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
   const [progress, setProgress] = useState(null)
+  const [analyzeProgress, setAnalyzeProgress] = useState(null)
   const [result, setResult] = useState(null)
+  const [analysis, setAnalysis] = useState(null)
   const [error, setError] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [showAnalysisDetails, setShowAnalysisDetails] = useState(true)
+
+  // Estado de migración por negocio: { [businessId]: { status, progress, result, error } }
+  const [bizState, setBizState] = useState({})
+  const [migratingBizId, setMigratingBizId] = useState(null)
+
+  function updateBiz(businessId, patch) {
+    setBizState(prev => ({ ...prev, [businessId]: { ...prev[businessId], ...patch } }))
+  }
+
+  async function runAnalysis() {
+    setAnalyzing(true)
+    setError(null)
+    setAnalysis(null)
+    setAnalyzeProgress(null)
+    setBizState({})
+
+    try {
+      const { analyzeAllBusinessImages } = await import('@/utils/cloudinary')
+      const r = await analyzeAllBusinessImages((p) => setAnalyzeProgress(p))
+      setAnalysis(r)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      setAnalyzing(false)
+      setAnalyzeProgress(null)
+    }
+  }
+
+  async function migrateOne(businessId, businessName) {
+    setMigratingBizId(businessId)
+    updateBiz(businessId, { status: 'migrating', progress: null, result: null, error: null })
+
+    try {
+      const { migrateBusinessImages } = await import('@/utils/cloudinary')
+      const r = await migrateBusinessImages(businessId, (p) => {
+        updateBiz(businessId, { progress: p })
+      })
+      updateBiz(businessId, { status: 'done', progress: null, result: r })
+    } catch (e) {
+      console.error(`Error migrando ${businessName}:`, e)
+      updateBiz(businessId, { status: 'error', progress: null, error: e.message || String(e) })
+    } finally {
+      setMigratingBizId(null)
+    }
+  }
 
   async function runMigration() {
     if (!confirm(
@@ -1630,8 +1680,19 @@ function FirebaseToCloudinaryCard() {
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
+              onClick={runAnalysis}
+              disabled={analyzing || running}
+              className="flex items-center gap-2 px-4 py-2 border border-indigo-600 text-indigo-700 bg-white rounded-lg hover:bg-indigo-50 disabled:opacity-50"
+            >
+              {analyzing ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Analizando...</>
+              ) : (
+                <><Info className="w-4 h-4" /> Analizar (read-only)</>
+              )}
+            </button>
+            <button
               onClick={runMigration}
-              disabled={running}
+              disabled={running || analyzing}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
             >
               {running ? (
@@ -1641,6 +1702,118 @@ function FirebaseToCloudinaryCard() {
               )}
             </button>
           </div>
+
+          {analyzeProgress && (
+            <div className="mt-3 p-3 bg-white rounded-lg border border-indigo-200 text-sm">
+              <p>
+                <strong>Analizando {analyzeProgress.businessIndex} / {analyzeProgress.totalBusinesses}:</strong>{' '}
+                <span className="text-gray-700">{analyzeProgress.businessName}</span>
+              </p>
+            </div>
+          )}
+
+          {analysis && !analyzing && (
+            <div className="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-sm space-y-1">
+              <p className="font-medium text-indigo-900">Resultado del análisis</p>
+              <p>Negocios analizados: <strong>{analysis.totalBusinesses}</strong></p>
+              <p>Productos totales: <strong>{analysis.totalProducts}</strong></p>
+              <p>
+                Productos con imágenes a migrar:{' '}
+                <strong className={analysis.productsToMigrate > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+                  {analysis.productsToMigrate}
+                </strong>
+              </p>
+              <p>
+                Imágenes a migrar:{' '}
+                <strong className={analysis.imagesToMigrate > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+                  {analysis.imagesToMigrate}
+                </strong>
+              </p>
+              {analysis.imagesToMigrate === 0 && (
+                <p className="text-emerald-700">✓ No hay nada que migrar.</p>
+              )}
+
+              {Object.keys(analysis.bySource).length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-gray-600 font-medium">Por origen:</p>
+                  <ul className="text-xs text-gray-700 ml-2">
+                    {Object.entries(analysis.bySource)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([host, count]) => (
+                        <li key={host}>• {host}: {count}</li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+
+              {analysis.perBusiness?.some(b => b.imagesToMigrate > 0 || b.failed) && (
+                <details
+                  className="text-xs text-gray-700 mt-2"
+                  open={showAnalysisDetails}
+                  onToggle={(e) => setShowAnalysisDetails(e.currentTarget.open)}
+                >
+                  <summary className="cursor-pointer">Ver detalle por negocio</summary>
+                  <ul className="mt-2 space-y-1 max-h-96 overflow-auto pr-2">
+                    {analysis.perBusiness
+                      .filter(b => b.imagesToMigrate > 0 || b.failed)
+                      .sort((a, b) => b.imagesToMigrate - a.imagesToMigrate)
+                      .map((b) => {
+                        const st = bizState[b.businessId] || {}
+                        const isMigrating = st.status === 'migrating'
+                        const isDone = st.status === 'done'
+                        const isError = st.status === 'error'
+                        const anyOtherMigrating = migratingBizId && migratingBizId !== b.businessId
+
+                        return (
+                          <li
+                            key={b.businessId}
+                            className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{b.businessName}</div>
+                              {b.failed ? (
+                                <div className="text-red-700 text-xs">falló analizar: {b.errorMessage}</div>
+                              ) : (
+                                <div className="text-xs text-gray-600">
+                                  {b.imagesToMigrate} imágenes en {b.productsToMigrate} productos (de {b.totalProducts})
+                                </div>
+                              )}
+
+                              {isMigrating && st.progress && (
+                                <div className="text-xs text-indigo-700 mt-1">
+                                  Migrando {st.progress.current} / {st.progress.total}
+                                  {st.progress.productName ? ` — ${st.progress.productName}` : ''}
+                                </div>
+                              )}
+                              {isDone && st.result && (
+                                <div className="text-xs text-emerald-700 mt-1">
+                                  ✓ migradas: {st.result.migrated}
+                                  {st.result.skipped > 0 && `, omitidas: ${st.result.skipped}`}
+                                  {st.result.errors > 0 && `, errores: ${st.result.errors}`}
+                                </div>
+                              )}
+                              {isError && (
+                                <div className="text-xs text-red-700 mt-1">⚠ {st.error}</div>
+                              )}
+                            </div>
+
+                            {!b.failed && (
+                              <button
+                                onClick={() => migrateOne(b.businessId, b.businessName)}
+                                disabled={isMigrating || anyOtherMigrating || running || analyzing || isDone}
+                                className="flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded border border-indigo-600 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isMigrating ? 'Migrando…' : isDone ? 'Hecho' : isError ? 'Reintentar' : 'Migrar'}
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
 
           {progress && (
             <div className="mt-3 p-3 bg-white rounded-lg border border-indigo-200 text-sm space-y-1">

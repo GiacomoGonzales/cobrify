@@ -160,6 +160,115 @@ export async function migrateBusinessImages(businessId, onProgress) {
 }
 
 /**
+ * Analyze (read-only) which products across ALL businesses still have non-Cloudinary
+ * images. Does NOT download, upload or modify anything — just counts what's in Firestore.
+ *
+ * @param {function} onProgress - callback({ businessIndex, totalBusinesses, businessName })
+ * @returns {Promise<{
+ *   totalBusinesses: number,
+ *   totalProducts: number,
+ *   productsToMigrate: number,
+ *   imagesToMigrate: number,
+ *   bySource: Record<string, number>,
+ *   perBusiness: Array<{
+ *     businessId, businessName,
+ *     totalProducts, productsToMigrate, imagesToMigrate,
+ *     failed?: boolean, errorMessage?: string
+ *   }>
+ * }>}
+ */
+export async function analyzeAllBusinessImages(onProgress) {
+  const { collection, getDocs } = await import('firebase/firestore')
+  const { db } = await import('@/lib/firebase')
+
+  const usersSnapshot = await getDocs(collection(db, 'users'))
+  const businessOwners = usersSnapshot.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(u => !u.ownerId)
+
+  const totalBusinesses = businessOwners.length
+  let totalProducts = 0
+  let productsToMigrate = 0
+  let imagesToMigrate = 0
+  const bySource = {}
+  const perBusiness = []
+
+  function hostOf(url) {
+    try { return new URL(url).hostname } catch { return 'desconocido' }
+  }
+
+  for (let bi = 0; bi < businessOwners.length; bi++) {
+    const owner = businessOwners[bi]
+    const businessId = owner.id
+    const businessName = owner.businessName || owner.razonSocial || owner.email || businessId
+
+    onProgress?.({ businessIndex: bi + 1, totalBusinesses, businessName })
+
+    try {
+      const productsRef = collection(db, 'businesses', businessId, 'products')
+      const snapshot = await getDocs(productsRef)
+      const products = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+
+      let bizProductsToMigrate = 0
+      let bizImagesToMigrate = 0
+
+      for (const p of products) {
+        let productHasMigratable = false
+        if (needsMigration(p.imageUrl)) {
+          productHasMigratable = true
+          bizImagesToMigrate++
+          const h = hostOf(p.imageUrl)
+          bySource[h] = (bySource[h] || 0) + 1
+        }
+        if (Array.isArray(p.imageUrls)) {
+          for (const u of p.imageUrls) {
+            if (needsMigration(u)) {
+              productHasMigratable = true
+              bizImagesToMigrate++
+              const h = hostOf(u)
+              bySource[h] = (bySource[h] || 0) + 1
+            }
+          }
+        }
+        if (productHasMigratable) bizProductsToMigrate++
+      }
+
+      totalProducts += products.length
+      productsToMigrate += bizProductsToMigrate
+      imagesToMigrate += bizImagesToMigrate
+
+      perBusiness.push({
+        businessId,
+        businessName,
+        totalProducts: products.length,
+        productsToMigrate: bizProductsToMigrate,
+        imagesToMigrate: bizImagesToMigrate,
+      })
+    } catch (err) {
+      console.error(`Error analizando negocio ${businessName} (${businessId}):`, err)
+      perBusiness.push({
+        businessId,
+        businessName,
+        totalProducts: 0,
+        productsToMigrate: 0,
+        imagesToMigrate: 0,
+        failed: true,
+        errorMessage: err.message,
+      })
+    }
+  }
+
+  return {
+    totalBusinesses,
+    totalProducts,
+    productsToMigrate,
+    imagesToMigrate,
+    bySource,
+    perBusiness,
+  }
+}
+
+/**
  * Migrate Firebase Storage images to Cloudinary across ALL businesses.
  * Iterates over every top-level user (excluding sub-users) and runs
  * `migrateBusinessImages` for each.
