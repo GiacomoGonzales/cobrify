@@ -3118,7 +3118,12 @@ export default function POS() {
     setCart([])
     setSelectedCustomer(null)
     userChangedDocTypeRef.current = false
-    setDocumentType(companySettings?.defaultDocumentType || 'boleta')
+    // Forzar al cajero a re-seleccionar el tipo de comprobante en cada nueva venta.
+    // Antes se reseteaba al default del negocio, lo que generaba un desfase entre
+    // la opción visible del <select> y el state interno (cuando el default no
+    // estaba en allowedDocumentTypes), y se podía emitir un tipo distinto al que
+    // se veía en pantalla.
+    setDocumentType('')
     setOrderType('takeaway')
     setCustomerData({
       documentType: ID_TYPES.DNI,
@@ -3572,6 +3577,10 @@ export default function POS() {
     }
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
+      return
+    }
+    if (!documentType) {
+      toast.error('Selecciona el tipo de comprobante antes de emitir')
       return
     }
 
@@ -5768,8 +5777,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         setPaymentInstallments([])
                       }
                     }}
-                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className={`flex-1 px-3 py-2 text-sm font-medium border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white ${
+                      documentType ? 'border-gray-300' : 'border-amber-400 ring-1 ring-amber-200'
+                    }`}
                   >
+                    <option value="" disabled>Seleccionar documento...</option>
                     {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
