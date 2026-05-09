@@ -44,6 +44,7 @@ import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -118,6 +119,7 @@ const getRealStockValue = (item) => {
 
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
   const appNavigate = useAppNavigate()
@@ -1883,22 +1885,24 @@ export default function Inventory() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs sm:text-sm text-gray-600">Valor Venta</p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(totalValue)}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Costo: {formatCurrency(totalCostValue)}
-                </p>
+        {!hidePrivateData && (
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-600">Valor Venta</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
+                    {formatCurrency(totalValue)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Costo: {formatCurrency(totalCostValue)}
+                  </p>
+                </div>
+                <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
               </div>
-              <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-4 sm:p-6">
@@ -3519,18 +3523,22 @@ export default function Inventory() {
               <p className="text-gray-600 mb-1">Unidades Totales</p>
               <p className="text-2xl font-bold text-gray-900">{totalUnits}</p>
             </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-1">Valor Venta Inventario</p>
-              <p className="text-xl font-bold text-primary-600">
-                {formatCurrency(totalValue)}
-              </p>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-1">Valor Costo Inventario</p>
-              <p className="text-xl font-bold text-green-700">
-                {formatCurrency(totalCostValue)}
-              </p>
-            </div>
+            {!hidePrivateData && (
+              <>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600 mb-1">Valor Venta Inventario</p>
+                  <p className="text-xl font-bold text-primary-600">
+                    {formatCurrency(totalValue)}
+                  </p>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600 mb-1">Valor Costo Inventario</p>
+                  <p className="text-xl font-bold text-green-700">
+                    {formatCurrency(totalCostValue)}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -205,6 +206,7 @@ const getExpirationStatus = (expirationDate) => {
 
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -3215,7 +3217,7 @@ export default function Products() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 ${hidePrivateData ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -3230,20 +3232,22 @@ export default function Products() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Valor Inventario</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalValue)}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
+        {!hidePrivateData && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Valor Inventario</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalValue)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-lg">
+                  <DollarSign className="w-6 h-6 text-green-600" />
+                </div>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-6">

@@ -5479,12 +5479,12 @@ export default function Settings() {
                     />
                     <div className="flex-1">
                       <div className="font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar datos del dashboard a usuarios secundarios
+                        Ocultar totales y datos sensibles a usuarios secundarios
                       </div>
                       <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
                         {hideDashboardDataFromSecondary
-                          ? '✓ Habilitado: Los usuarios secundarios verán el dashboard con todos los valores en cero. Solo el propietario y administradores podrán ver las estadísticas reales de ventas, ingresos y otros datos sensibles.'
-                          : '✗ Deshabilitado: Todos los usuarios pueden ver las estadísticas completas del dashboard incluyendo ventas totales, ingresos, productos más vendidos y gráficas.'}
+                          ? '✓ Habilitado: Los usuarios secundarios no verán los datos del dashboard, ni los totales sumados en Ventas (montos, comprobantes pagados/pendientes, total de ventas) ni los valores de venta y costo del Inventario y Productos. Solo el propietario y administradores tendrán acceso a la información financiera agregada.'
+                          : '✗ Deshabilitado: Todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario, etc.'}
                       </p>
                       <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
                         <div className="flex items-start gap-2">

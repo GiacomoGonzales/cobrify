@@ -42,6 +42,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -71,6 +72,7 @@ import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -2154,7 +2156,7 @@ Gracias por tu preferencia.`
       </div>
 
       {/* Stats - Ocultar para usuarios secundarios si está configurado */}
-      {!((user?.ownerId || user?.isBusinessOwner !== true) && businessSettings?.hideDashboardDataFromSecondary) && (
+      {!hidePrivateData && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4 sm:p-6">
@@ -2399,7 +2401,7 @@ Gracias por tu preferencia.`
       </Card>
 
       {/* Totals Summary */}
-      {filteredInvoices.length > 0 && (() => {
+      {filteredInvoices.length > 0 && !hidePrivateData && (() => {
         const tableSales = filteredInvoices.filter(isValidSale)
         return (
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-4 text-sm">
