@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -28,6 +29,7 @@ import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -525,7 +527,7 @@ export default function Customers() {
               >
                 <option value="name">Ordenar por Nombre</option>
                 <option value="orders">Ordenar por Pedidos</option>
-                <option value="spent">Ordenar por Total Gastado</option>
+                {!hidePrivateData && <option value="spent">Ordenar por Total Gastado</option>}
                 {businessSettings?.posCustomFields?.showSubscriptionFields && (
                   <option value="expiry">Ordenar por Vencimiento</option>
                 )}
@@ -576,7 +578,7 @@ export default function Customers() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${hidePrivateData ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-6`}>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -609,48 +611,52 @@ export default function Customers() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
-                <p className="text-xl font-bold text-gray-900 mt-2">
-                  {showAmounts ? formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)) : hiddenAmount}
-                </p>
+        {!hidePrivateData && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
+                  <p className="text-xl font-bold text-gray-900 mt-2">
+                    {showAmounts ? formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)) : hiddenAmount}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
+                  className="p-3 bg-green-100 rounded-lg flex-shrink-0 hover:bg-green-200 transition-colors"
+                  title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+                >
+                  {showAmounts ? <Eye className="w-6 h-6 text-green-600" /> : <EyeOff className="w-6 h-6 text-green-600" />}
+                </button>
               </div>
-              <button
-                onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
-                className="p-3 bg-green-100 rounded-lg flex-shrink-0 hover:bg-green-200 transition-colors"
-                title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
-              >
-                {showAmounts ? <Eye className="w-6 h-6 text-green-600" /> : <EyeOff className="w-6 h-6 text-green-600" />}
-              </button>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-600">Promedio por Cliente</p>
-                <p className="text-xl font-bold text-gray-900 mt-2">
-                  {showAmounts ? formatCurrency(
-                    customers.length > 0
-                      ? customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0) / customers.length
-                      : 0
-                  ) : hiddenAmount}
-                </p>
+            </CardContent>
+          </Card>
+        )}
+        {!hidePrivateData && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-600">Promedio por Cliente</p>
+                  <p className="text-xl font-bold text-gray-900 mt-2">
+                    {showAmounts ? formatCurrency(
+                      customers.length > 0
+                        ? customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0) / customers.length
+                        : 0
+                    ) : hiddenAmount}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
+                  className="p-3 bg-purple-100 rounded-lg flex-shrink-0 hover:bg-purple-200 transition-colors"
+                  title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+                >
+                  {showAmounts ? <Eye className="w-6 h-6 text-purple-600" /> : <EyeOff className="w-6 h-6 text-purple-600" />}
+                </button>
               </div>
-              <button
-                onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
-                className="p-3 bg-purple-100 rounded-lg flex-shrink-0 hover:bg-purple-200 transition-colors"
-                title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
-              >
-                {showAmounts ? <Eye className="w-6 h-6 text-purple-600" /> : <EyeOff className="w-6 h-6 text-purple-600" />}
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Resumen de suscripciones */}
@@ -812,7 +818,9 @@ export default function Customers() {
                       <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
                         {showAmounts ? (customer.ordersCount || 0) : '•'}
                       </span>
-                      <span className="text-xs font-semibold text-gray-900">{showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}</span>
+                      {!hidePrivateData && (
+                        <span className="text-xs font-semibold text-gray-900">{showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -842,7 +850,7 @@ export default function Customers() {
                           { key: 'address', label: 'Dirección' },
                           { key: 'birthday', label: 'Cumpleaños' },
                           { key: 'orders', label: 'Pedidos' },
-                          { key: 'spent', label: 'Total Gastado' },
+                          ...(!hidePrivateData ? [{ key: 'spent', label: 'Total Gastado' }] : []),
                         ].map(col => (
                           <label key={col.key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
                             <input
@@ -890,7 +898,7 @@ export default function Customers() {
                   )}
                   {visibleColumns.birthday && <TableHead className="text-xs py-2">Cumple</TableHead>}
                   {visibleColumns.orders && <TableHead className="text-xs py-2 text-center">Ped.</TableHead>}
-                  {visibleColumns.spent && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
+                  {visibleColumns.spent && !hidePrivateData && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
                   <TableHead className="text-xs py-2 text-right w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -1012,7 +1020,7 @@ export default function Customers() {
                         </span>
                       </TableCell>
                     )}
-                    {visibleColumns.spent && (
+                    {visibleColumns.spent && !hidePrivateData && (
                       <TableCell className="py-1.5 text-right">
                         <span className="text-xs font-semibold text-gray-900">
                           {showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}
