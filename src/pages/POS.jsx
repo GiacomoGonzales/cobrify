@@ -5628,7 +5628,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         </div>
 
         {/* Cart Panel */}
-        <div className={`${expandedCart ? 'lg:col-span-2' : 'lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-contain custom-scrollbar'}`}>
+        <div className={`${expandedCart ? 'lg:col-span-2' : 'lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:overscroll-contain custom-scrollbar'}`}>
           <Card className="flex flex-col h-full">
             <div className={expandedCart ? 'lg:grid lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-gray-100' : ''}>
             <CardContent className="p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
