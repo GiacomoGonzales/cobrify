@@ -5268,9 +5268,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 lg:h-[calc(100vh-6rem)]">
         {/* Products Panel */}
-        <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}>
+        <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 custom-scrollbar`}>
           {/* Header */}
           <div className={`flex flex-col ${expandedCart ? 'gap-2' : 'sm:flex-row sm:items-center sm:justify-between'} gap-4`}>
             <div>
@@ -5628,7 +5628,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         </div>
 
         {/* Cart Panel */}
-        <div className={`${expandedCart ? 'lg:col-span-2' : 'lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:overscroll-contain custom-scrollbar'}`}>
+        <div className={`${expandedCart ? 'lg:col-span-2' : ''} lg:overflow-y-auto lg:overscroll-contain custom-scrollbar`}>
           <Card className="flex flex-col h-full">
             <div className={expandedCart ? 'lg:grid lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-gray-100' : ''}>
             <CardContent className="p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
