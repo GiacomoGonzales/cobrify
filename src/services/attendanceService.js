@@ -13,6 +13,68 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getScheduleForDate } from './scheduleService'
+import { fetchApprovedTimeOffForDate } from './timeOffService'
+
+/**
+ * Cruza los datos de asistencia con el horario asignado y vacaciones aprobadas
+ * para detectar tardanzas / ausencias justificadas. Devuelve un patch a aplicar
+ * al record antes de persistir. Si falla cualquier consulta, devuelve {} (no
+ * bloquea la marcación; F6 es informativo, no crítico).
+ *
+ * @param {string} businessId
+ * @param {string} userId
+ * @param {Date} timestamp        fecha/hora de la marcación
+ * @param {'in'|'out'} type
+ * @param {number} [graceMinutes] tolerancia antes de etiquetar tardanza (default 15)
+ */
+const buildScheduleEnrichment = async (businessId, userId, timestamp, type, graceMinutes = 15) => {
+  try {
+    if (type !== 'in') return {}
+    const ts = timestamp instanceof Date ? timestamp : new Date(timestamp)
+
+    // 1) Vacación/permiso aprobado para hoy: si existe, marca como justificado
+    //    (en una marcación 'in', justificado significa que la tardanza no aplica
+    //    aunque se llegue tarde; igual queda como 'in' normal).
+    const offReq = await fetchApprovedTimeOffForDate(businessId, userId, ts)
+    if (offReq) {
+      return {
+        scheduledStart: null,
+        scheduledEnd: null,
+        lateMinutes: 0,
+        isLate: false,
+        justified: true,
+        justifiedReason: offReq.type,        // 'vacation' | 'sick' | etc.
+        justifiedRequestId: offReq.id || null,
+      }
+    }
+
+    // 2) Turno asignado para hoy
+    const sched = await getScheduleForDate(businessId, userId, ts)
+    const cell = sched?.data?.cell
+    if (!cell || cell.rest || !cell.start) {
+      // No hay turno asignado o es descanso → no hay nada que comparar.
+      return {}
+    }
+
+    const [sh, sm] = String(cell.start).split(':').map(Number)
+    const expected = new Date(ts.getFullYear(), ts.getMonth(), ts.getDate(), sh || 0, sm || 0, 0, 0)
+    const diffMin = Math.round((ts.getTime() - expected.getTime()) / 60000)
+    const lateMinutes = Math.max(0, diffMin)
+    const isLate = lateMinutes > graceMinutes
+
+    return {
+      scheduledStart: cell.start,
+      scheduledEnd: cell.end || null,
+      lateMinutes,
+      isLate,
+      justified: false,
+    }
+  } catch (e) {
+    console.warn('No se pudo enriquecer marcación con horario:', e)
+    return {}
+  }
+}
 
 /**
  * Servicio de Control de Asistencia del Personal.
@@ -118,7 +180,31 @@ export const updateBranchGeofence = async (businessId, branchId, { lat, lng, rad
     })
     return { success: true }
   } catch (error) {
-    console.error('Error actualizando geofence:', error)
+    console.error('Error updateBranchGeofence:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualiza el período de tolerancia (en minutos) antes de etiquetar tardanza.
+ * Si es null/undefined, se elimina el campo y vuelve al default (15).
+ */
+export const updateBranchGracePeriod = async (businessId, branchId, minutes) => {
+  try {
+    const targetRef = getAttendanceTargetRef(businessId, branchId)
+    const snap = await getDoc(targetRef)
+    if (!snap.exists()) return { success: false, error: 'Destino no encontrado' }
+    const current = snap.data().attendance || {}
+    await updateDoc(targetRef, {
+      attendance: {
+        ...current,
+        gracePeriodMinutes: minutes == null ? null : Number(minutes),
+      },
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error updateBranchGracePeriod:', error)
     return { success: false, error: error.message }
   }
 }
@@ -229,6 +315,17 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
       }
     }
 
+    // Enriquecer con datos de horario asignado para detectar tardanza.
+    // Usamos `now` (calculado arriba) en vez de serverTimestamp porque
+    // necesitamos el valor cliente para la comparación.
+    const enrichment = await buildScheduleEnrichment(
+      businessId,
+      user.uid,
+      now,
+      type,
+      att.gracePeriodMinutes ?? 15
+    )
+
     const record = {
       userId: user.uid,
       userName: user.displayName || user.email || '',
@@ -242,10 +339,11 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
       approvalStatus: gpsValid ? 'approved' : 'pending',
       createdBy: user.uid,
       autoClosed: false,
+      ...enrichment,
       createdAt: serverTimestamp(),
     }
     const docRef = await addDoc(getAttendanceColRef(businessId), record)
-    return { success: true, id: docRef.id, type, gpsValid }
+    return { success: true, id: docRef.id, type, gpsValid, ...enrichment }
   } catch (error) {
     console.error('Error registrando asistencia:', error)
     return { success: false, error: error.message }
@@ -257,6 +355,9 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
  */
 export const createManualAttendance = async (businessId, { userId, userName, userEmail, branchId, branchName, type, timestamp, notes, createdBy }) => {
   try {
+    const ts = timestamp ? new Date(timestamp) : new Date()
+    const enrichment = await buildScheduleEnrichment(businessId, userId, ts, type, 15)
+
     const record = {
       userId,
       userName: userName || '',
@@ -271,6 +372,7 @@ export const createManualAttendance = async (businessId, { userId, userName, use
       createdBy: createdBy || null,
       autoClosed: false,
       notes: notes || '',
+      ...enrichment,
       createdAt: serverTimestamp(),
     }
     const docRef = await addDoc(getAttendanceColRef(businessId), record)

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase } from 'lucide-react'
+import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -53,6 +54,22 @@ export default function Users() {
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
   const [waiters, setWaiters] = useState([])
   const [defaultWaiterId, setDefaultWaiterId] = useState('')
+
+  // Datos de personal (Capa 1 del módulo Personal). Todos opcionales.
+  const [showPersonnelSection, setShowPersonnelSection] = useState(false)
+  const [personnelData, setPersonnelData] = useState({
+    jobTitle: '',
+    department: '',
+    employmentType: '',
+    hireDate: '',
+    weeklyHours: '',
+    vacationDaysPerYear: '',
+    hrStatus: 'active',
+    phone: '',
+    documentId: '',
+    address: '',
+    notes: '',
+  })
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
@@ -218,6 +235,20 @@ export default function Users() {
     }
   }
 
+  const emptyPersonnel = {
+    jobTitle: '',
+    department: '',
+    employmentType: '',
+    hireDate: '',
+    weeklyHours: '',
+    vacationDaysPerYear: '',
+    hrStatus: 'active',
+    phone: '',
+    documentId: '',
+    address: '',
+    notes: '',
+  }
+
   const openCreateModal = () => {
     setIsEditMode(false)
     setSelectedUser(null)
@@ -232,6 +263,8 @@ export default function Users() {
     setIndependentCashRegister(false)
     setHideStockInPOS(false)
     setHideDiscountInPOS(false)
+    setPersonnelData(emptyPersonnel)
+    setShowPersonnelSection(false)
     reset({
       email: '',
       password: '',
@@ -254,6 +287,25 @@ export default function Users() {
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
     setHideDiscountInPOS(userToEdit.hideDiscountInPOS || false)
+    // Datos de RR.HH. (vienen del sub-objeto personnel en el sub-usuario)
+    const p = userToEdit.personnel || {}
+    setPersonnelData({
+      jobTitle: p.jobTitle || '',
+      department: p.department || '',
+      employmentType: p.employmentType || '',
+      hireDate: p.hireDate
+        ? (p.hireDate.toDate?.() || new Date(p.hireDate)).toISOString().slice(0, 10)
+        : '',
+      weeklyHours: p.weeklyHours ?? '',
+      vacationDaysPerYear: p.vacationDaysPerYear ?? '',
+      hrStatus: p.hrStatus || 'active',
+      phone: p.phone || '',
+      documentId: p.documentId || '',
+      address: p.address || '',
+      notes: p.notes || '',
+    })
+    // Si el usuario ya tiene datos de personal, abrir la sección por defecto
+    setShowPersonnelSection(!!(p.jobTitle || p.department || p.phone || p.documentId))
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -327,6 +379,30 @@ export default function Users() {
       // Obtener datos del agente seleccionado
       const selectedAgent = agents.find(a => a.id === selectedAgentId)
 
+      // Construir el sub-objeto personnel (Capa 1). Solo se incluye si el
+      // usuario llenó algún campo, así no se persiste un objeto vacío.
+      const buildPersonnel = () => {
+        const hasData = Object.entries(personnelData).some(([k, v]) => {
+          if (k === 'hrStatus') return v !== 'active' // 'active' es el default
+          return v !== '' && v !== null && v !== undefined
+        })
+        if (!hasData) return null
+        return {
+          jobTitle: personnelData.jobTitle || null,
+          department: personnelData.department || null,
+          employmentType: personnelData.employmentType || null,
+          hireDate: personnelData.hireDate ? new Date(personnelData.hireDate) : null,
+          weeklyHours: personnelData.weeklyHours !== '' ? Number(personnelData.weeklyHours) : null,
+          vacationDaysPerYear: personnelData.vacationDaysPerYear !== '' ? Number(personnelData.vacationDaysPerYear) : null,
+          hrStatus: personnelData.hrStatus || 'active',
+          phone: personnelData.phone || null,
+          documentId: personnelData.documentId || null,
+          address: personnelData.address || null,
+          notes: personnelData.notes || null,
+        }
+      }
+      const personnelPayload = buildPersonnel()
+
       if (isEditMode) {
         // Actualizar usuario existente
         const selectedSellerObj = posSellers.find(s => s.id === assignedSellerId)
@@ -344,6 +420,7 @@ export default function Users() {
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
+          personnel: personnelPayload,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -383,6 +460,7 @@ export default function Users() {
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
+          personnel: personnelPayload,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -1174,6 +1252,182 @@ export default function Users() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Datos de personal (Capa 1 del módulo Personal). Sección colapsable. */}
+          <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPersonnelSection((v) => !v)}
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <Briefcase className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-medium text-gray-900">Datos de personal (opcional)</h3>
+                  <p className="text-xs text-gray-500">
+                    Cargo, área, fecha de ingreso, vacaciones por año, etc.
+                  </p>
+                </div>
+              </div>
+              {showPersonnelSection ? (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+
+            {showPersonnelSection && (
+              <div className="p-4 space-y-4 bg-white">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cargo
+                    </label>
+                    <Input
+                      type="text"
+                      value={personnelData.jobTitle}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, jobTitle: e.target.value }))}
+                      placeholder="Ej: Cajero, Supervisor, Almacenero"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Área / Departamento
+                    </label>
+                    <Input
+                      type="text"
+                      value={personnelData.department}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, department: e.target.value }))}
+                      placeholder="Ej: Ventas, Cocina, Logística"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tipo de jornada
+                    </label>
+                    <select
+                      value={personnelData.employmentType}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, employmentType: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">Sin especificar</option>
+                      {EMPLOYMENT_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Estado RR.HH.
+                    </label>
+                    <select
+                      value={personnelData.hrStatus}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, hrStatus: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      {HR_STATUSES.map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Fecha de ingreso
+                    </label>
+                    <Input
+                      type="date"
+                      value={personnelData.hireDate}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, hireDate: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Horas semanales
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="80"
+                      value={personnelData.weeklyHours}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, weeklyHours: e.target.value }))}
+                      placeholder="40"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Días de vacaciones / año
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="60"
+                      value={personnelData.vacationDaysPerYear}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, vacationDaysPerYear: e.target.value }))}
+                      placeholder="15"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Teléfono
+                    </label>
+                    <Input
+                      type="tel"
+                      value={personnelData.phone}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, phone: e.target.value }))}
+                      placeholder="+51 999 999 999"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      DNI / Documento
+                    </label>
+                    <Input
+                      type="text"
+                      value={personnelData.documentId}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, documentId: e.target.value }))}
+                      placeholder="Número de identificación"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dirección
+                  </label>
+                  <Input
+                    type="text"
+                    value={personnelData.address}
+                    onChange={(e) => setPersonnelData((p) => ({ ...p, address: e.target.value }))}
+                    placeholder="Dirección de residencia"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notas internas
+                  </label>
+                  <textarea
+                    value={personnelData.notes}
+                    onChange={(e) => setPersonnelData((p) => ({ ...p, notes: e.target.value }))}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                    placeholder="Información adicional, observaciones, etc."
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Botones */}

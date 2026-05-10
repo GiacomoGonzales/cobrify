@@ -3232,7 +3232,7 @@ export default function Settings() {
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
                         { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
                         { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
@@ -3287,7 +3287,7 @@ export default function Settings() {
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
 
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
@@ -3340,7 +3340,7 @@ export default function Settings() {
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
@@ -3390,7 +3390,7 @@ export default function Settings() {
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
 
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones' },
                       ].map((item) => (
@@ -3446,7 +3446,7 @@ export default function Settings() {
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
@@ -3497,7 +3497,7 @@ export default function Settings() {
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
 
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
@@ -3550,7 +3550,7 @@ export default function Settings() {
                         { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
                         { id: 'vet-agenda', label: 'Agenda de Citas', description: 'Calendario de citas programadas' },
                         { id: 'vet-alerts', label: 'Recordatorios', description: 'Alertas de vacunas y servicios pendientes' },
-                        { id: 'attendance', label: 'Control de Asistencia', description: 'Registro de entradas y salidas del personal' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
 
                         { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (

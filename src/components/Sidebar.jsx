@@ -356,8 +356,17 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Control de Asistencia',
+              label: 'Personal',
               menuId: 'attendance',
+            }]
+          : []),
+        // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
             }]
           : []),
         {
@@ -670,8 +679,17 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Control de Asistencia',
+              label: 'Personal',
               menuId: 'attendance',
+            }]
+          : []),
+        // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
             }]
           : []),
       ],
@@ -942,8 +960,17 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Control de Asistencia',
+              label: 'Personal',
               menuId: 'attendance',
+            }]
+          : []),
+        // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
             }]
           : []),
       ],
@@ -1068,8 +1095,17 @@ function Sidebar() {
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: 'Control de Asistencia',
+          label: 'Personal',
           menuId: 'attendance',
+        }]
+      : []),
+    // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+    ...((!isBusinessOwner && !isAdmin)
+      ? [{
+          path: '/mi-horario',
+          icon: Calendar,
+          label: 'Mi Horario',
+          menuId: 'my-schedule',
         }]
       : []),
 
@@ -1237,8 +1273,17 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Control de Asistencia',
+              label: 'Personal',
               menuId: 'attendance',
+            }]
+          : []),
+        // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
             }]
           : []),
       ],
@@ -1419,8 +1464,17 @@ function Sidebar() {
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: 'Control de Asistencia',
+          label: 'Personal',
           menuId: 'attendance',
+        }]
+      : []),
+    // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+    ...((!isBusinessOwner && !isAdmin)
+      ? [{
+          path: '/mi-horario',
+          icon: Calendar,
+          label: 'Mi Horario',
+          menuId: 'my-schedule',
         }]
       : []),
 
@@ -1652,8 +1706,17 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Control de Asistencia',
+              label: 'Personal',
               menuId: 'attendance',
+            }]
+          : []),
+        // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
             }]
           : []),
       ],

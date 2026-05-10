@@ -36,7 +36,7 @@ export const COMMON_PAGES = [
   // Sistema
   { id: 'settings', name: 'Configuración', path: '/configuracion', category: 'sistema' },
   { id: 'users', name: 'Gestión de Usuarios', path: '/usuarios', category: 'sistema' },
-  { id: 'attendance', name: 'Control de Asistencia', path: '/asistencia', category: 'sistema' },
+  { id: 'attendance', name: 'Personal', path: '/asistencia', category: 'sistema' },
   // Otros
   { id: 'accounting', name: 'Contabilidad', path: '/contabilidad', category: 'finanzas' },
   { id: 'complaints', name: 'Libro de Reclamos', path: '/reclamos', category: 'otros' },
@@ -283,6 +283,10 @@ export const createManagedUser = async (ownerId, userData) => {
       defaultWaiterId: userData.defaultWaiterId || null, // Mozo por defecto (modo restaurante) al ocupar mesa
       defaultWaiterName: userData.defaultWaiterName || null,
       independentCashRegister: userData.independentCashRegister || false, // Si true, abre su propia caja; si false, comparte la caja del owner
+      // Datos de RR.HH. (Capa 1 del módulo Personal). Todos opcionales — los
+      // sub-usuarios viejos siguen funcionando porque el sub-objeto puede no
+      // existir y la UI lo lee con `?.`.
+      personnel: userData.personnel || null,
       ownerId, // ID del usuario que lo creó (dueño del negocio)
       isActive: true,
       createdAt: serverTimestamp(),

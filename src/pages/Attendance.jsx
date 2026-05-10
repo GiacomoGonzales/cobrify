@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import {
   UserCheck, Clock, MapPin, Scan, Loader2, QrCode, RefreshCw,
   CheckCircle2, AlertTriangle, Calendar, Filter, Download, Plus, X,
-  ShieldCheck, XCircle,
+  ShieldCheck, XCircle, Briefcase, Phone, Mail, MapPinned, CreditCard, Search,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -26,7 +26,16 @@ import {
   setAttendanceApproval,
   setAttendanceEnabled,
   updateBranchGeofence,
+  updateBranchGracePeriod,
 } from '@/services/attendanceService'
+import {
+  getEmployees,
+  getHrStatusInfo,
+  getEmploymentTypeLabel,
+  HR_STATUSES,
+} from '@/services/personnelService'
+import SchedulePlanner from '@/components/personnel/SchedulePlanner'
+import VacationManager from '@/components/personnel/VacationManager'
 
 const formatDateTime = (ts) => {
   if (!ts) return '-'
@@ -142,6 +151,13 @@ export default function Attendance() {
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pastedQr, setPastedQr] = useState('')
 
+  // Tab "Personal" (Capa 1 del módulo Personal)
+  const [employees, setEmployees] = useState([])
+  const [employeesLoaded, setEmployeesLoaded] = useState(false)
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeFilterDept, setEmployeeFilterDept] = useState('')
+  const [employeeFilterStatus, setEmployeeFilterStatus] = useState('')
+
   const isNative = useMemo(() => Capacitor.isNativePlatform(), [])
   const businessId = getBusinessId?.()
   const scanningRef = useRef(false)
@@ -150,6 +166,15 @@ export default function Attendance() {
     loadInitial()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Cargar empleados cuando se entra a "Personal", "Horarios" o "Vacaciones"
+  useEffect(() => {
+    const needsEmployees = ['personnel', 'schedules', 'vacations'].includes(activeTab)
+    if (needsEmployees && !employeesLoaded && canManage) {
+      loadEmployees()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, employeesLoaded, canManage])
 
   const loadInitial = async () => {
     if (!businessId) return
@@ -189,6 +214,21 @@ export default function Attendance() {
       console.error(e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Carga la lista de empleados (sub-usuarios con datos de personal).
+  // Se hace lazy: solo cuando el owner abre la tab "Personal".
+  const loadEmployees = async () => {
+    if (!businessId) return
+    try {
+      const res = await getEmployees(businessId)
+      if (res.success) {
+        setEmployees(res.data)
+        setEmployeesLoaded(true)
+      }
+    } catch (e) {
+      console.error('Error cargando empleados:', e)
     }
   }
 
@@ -472,6 +512,16 @@ export default function Attendance() {
     }
   }
 
+  const handleSaveGracePeriod = async (branchId, minutes) => {
+    const res = await updateBranchGracePeriod(businessId, branchId, minutes)
+    if (res.success) {
+      toast.success('Tolerancia de tardanza actualizada')
+      await reloadBranches()
+    } else {
+      toast.error(res.error || 'Error')
+    }
+  }
+
   const handleUseCurrentPosForBranch = async (branchId) => {
     toast.info?.('Obteniendo ubicación actual...')
     const pos = await getCurrentPosition()
@@ -615,6 +665,9 @@ export default function Attendance() {
                 {canManage && (
                   <>
                     <TabsTrigger value="records" activeTab={at} setActiveTab={setAt}>Marcaciones</TabsTrigger>
+                    <TabsTrigger value="personnel" activeTab={at} setActiveTab={setAt}>Personal</TabsTrigger>
+                    <TabsTrigger value="schedules" activeTab={at} setActiveTab={setAt}>Horarios</TabsTrigger>
+                    <TabsTrigger value="vacations" activeTab={at} setActiveTab={setAt}>Vacaciones</TabsTrigger>
                     <TabsTrigger value="config" activeTab={at} setActiveTab={setAt}>Configuración</TabsTrigger>
                   </>
                 )}
@@ -730,6 +783,7 @@ export default function Attendance() {
                                 <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Empleado</th>
                                 <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Sucursal</th>
                                 <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Tipo</th>
+                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Turno</th>
                                 <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Estado</th>
                                 <th className="text-right px-3 py-2 font-medium text-gray-600 text-xs uppercase"></th>
                               </tr>
@@ -748,7 +802,26 @@ export default function Attendance() {
                                       {r.type === 'in' ? 'Entrada' : 'Salida'}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-2">{statusBadge(r)}</td>
+                                  <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
+                                    {r.scheduledStart
+                                      ? <span>{r.scheduledStart}{r.scheduledEnd ? `–${r.scheduledEnd}` : ''}</span>
+                                      : <span className="text-gray-300">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex flex-col gap-1 items-start">
+                                      {statusBadge(r)}
+                                      {r.justified && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium uppercase">
+                                          Justificada
+                                        </span>
+                                      )}
+                                      {r.isLate && !r.justified && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium uppercase">
+                                          Tardanza · {r.lateMinutes}m
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="px-3 py-2 text-right">
                                     {r.approvalStatus === 'pending' && (
                                       <div className="flex gap-1 justify-end">
@@ -772,6 +845,219 @@ export default function Attendance() {
                 </TabsContent>
               )}
 
+              {/* ========== TAB: PERSONAL (owner) — Capa 1 del módulo Personal ========== */}
+              {canManage && (
+                <TabsContent value="personnel" activeTab={at} className="mt-4">
+                  {(() => {
+                    // Filtros en cliente
+                    const term = (employeeSearch || '').toLowerCase()
+                    const filtered = employees.filter((e) => {
+                      if (employeeFilterDept && e.department !== employeeFilterDept) return false
+                      if (employeeFilterStatus && e.hrStatus !== employeeFilterStatus) return false
+                      if (term) {
+                        const hay = [e.displayName, e.email, e.jobTitle, e.department].join(' ').toLowerCase()
+                        if (!hay.includes(term)) return false
+                      }
+                      return true
+                    })
+                    const departments = Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).sort()
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Header */}
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                              <Briefcase className="w-5 h-5 text-primary-600" />
+                              Directorio de personal
+                              <span className="text-sm font-normal text-gray-500">({filtered.length})</span>
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Empleados con su cargo, área y datos de RR.HH. Editá desde "Gestión de Usuarios".
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                value={employeeSearch}
+                                onChange={(e) => setEmployeeSearch(e.target.value)}
+                                placeholder="Buscar por nombre, cargo..."
+                                className="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-56"
+                              />
+                            </div>
+                            <select
+                              value={employeeFilterDept}
+                              onChange={(e) => setEmployeeFilterDept(e.target.value)}
+                              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                            >
+                              <option value="">Todas las áreas</option>
+                              {departments.map((d) => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={employeeFilterStatus}
+                              onChange={(e) => setEmployeeFilterStatus(e.target.value)}
+                              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                            >
+                              <option value="">Todos los estados</option>
+                              {HR_STATUSES.map((s) => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Empty state */}
+                        {!employeesLoaded && (
+                          <div className="flex items-center justify-center py-16 text-gray-500">
+                            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                            Cargando empleados...
+                          </div>
+                        )}
+                        {employeesLoaded && employees.length === 0 && (
+                          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center">
+                            <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                            <h4 className="text-base font-medium text-gray-900 mb-1">
+                              Aún no hay empleados registrados
+                            </h4>
+                            <p className="text-sm text-gray-500 mb-4">
+                              Los empleados se agregan desde "Gestión de Usuarios" creando un sub-usuario con sus datos.
+                            </p>
+                          </div>
+                        )}
+                        {employeesLoaded && employees.length > 0 && filtered.length === 0 && (
+                          <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-sm text-gray-500">
+                            No hay empleados que coincidan con los filtros aplicados.
+                          </div>
+                        )}
+
+                        {/* Cards grid */}
+                        {filtered.length > 0 && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {filtered.map((emp) => {
+                              const status = getHrStatusInfo(emp.hrStatus)
+                              const initials = (emp.displayName || emp.email || '?')
+                                .split(/\s+/)
+                                .map((p) => p[0])
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .join('')
+                                .toUpperCase()
+                              const statusBg = {
+                                green: 'bg-green-100 text-green-700',
+                                amber: 'bg-amber-100 text-amber-700',
+                                blue: 'bg-blue-100 text-blue-700',
+                                gray: 'bg-gray-100 text-gray-600',
+                              }[status.color] || 'bg-gray-100 text-gray-600'
+
+                              return (
+                                <div
+                                  key={emp.id}
+                                  className={`bg-white border rounded-xl p-5 hover:shadow-md transition-shadow ${
+                                    emp.isActive === false ? 'border-gray-200 opacity-70' : 'border-gray-200'
+                                  }`}
+                                >
+                                  {/* Avatar + nombre + cargo */}
+                                  <div className="flex items-start gap-3 mb-4">
+                                    <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-700 font-bold flex items-center justify-center flex-shrink-0">
+                                      {emp.photoUrl ? (
+                                        <img src={emp.photoUrl} alt={emp.displayName} className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        initials || '?'
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-semibold text-gray-900 truncate">{emp.displayName || 'Sin nombre'}</p>
+                                      <p className="text-xs text-primary-600 uppercase tracking-wide font-medium truncate">
+                                        {emp.jobTitle || 'Sin cargo'}
+                                      </p>
+                                      {emp.employmentType && (
+                                        <p className="text-[11px] text-gray-500 mt-0.5">
+                                          {getEmploymentTypeLabel(emp.employmentType)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Contacto */}
+                                  <div className="space-y-1.5 text-sm text-gray-700">
+                                    {emp.email && (
+                                      <div className="flex items-center gap-2 truncate">
+                                        <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                        <span className="truncate text-xs">{emp.email}</span>
+                                      </div>
+                                    )}
+                                    {emp.phone && (
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                        <span className="text-xs">{emp.phone}</span>
+                                      </div>
+                                    )}
+                                    {emp.department && (
+                                      <div className="flex items-center gap-2 truncate">
+                                        <MapPinned className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                        <span className="truncate text-xs">{emp.department}</span>
+                                      </div>
+                                    )}
+                                    {emp.documentId && (
+                                      <div className="flex items-center gap-2">
+                                        <CreditCard className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                        <span className="text-xs">{emp.documentId}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Footer: estado + horas/vacaciones */}
+                                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                                    <span className={`text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full ${statusBg}`}>
+                                      {status.label}
+                                    </span>
+                                    <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                                      {emp.weeklyHours != null && (
+                                        <span title="Horas semanales">{emp.weeklyHours}h/sem</span>
+                                      )}
+                                      {emp.vacationDaysPerYear != null && (
+                                        <span title="Vacaciones por año">{emp.vacationDaysPerYear}d/año</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </TabsContent>
+              )}
+
+              {/* ========== TAB: HORARIOS (owner) — Capa 2 del módulo Personal ========== */}
+              {canManage && (
+                <TabsContent value="schedules" activeTab={at} className="mt-4">
+                  <SchedulePlanner
+                    businessId={businessId}
+                    employees={employees}
+                    currentUserUid={user?.uid}
+                  />
+                </TabsContent>
+              )}
+
+              {/* ========== TAB: VACACIONES (owner) — Capa 3 del módulo Personal ========== */}
+              {canManage && (
+                <TabsContent value="vacations" activeTab={at} className="mt-4">
+                  <VacationManager
+                    businessId={businessId}
+                    employees={employees}
+                    currentUser={user}
+                  />
+                </TabsContent>
+              )}
+
               {/* ========== TAB: CONFIGURACIÓN (owner) ========== */}
               {canManage && (
                 <TabsContent value="config" activeTab={at} className="mt-4">
@@ -790,6 +1076,7 @@ export default function Attendance() {
                         onRegenerate={() => handleRegenerateToken(branch.id)}
                         onSaveGeofence={(geo) => handleSaveGeofence(branch.id, geo)}
                         onUseCurrentPos={() => handleUseCurrentPosForBranch(branch.id)}
+                        onSaveGracePeriod={(minutes) => handleSaveGracePeriod(branch.id, minutes)}
                       />
                     ))}
                   </div>
@@ -870,19 +1157,21 @@ export default function Attendance() {
 }
 
 // Tarjeta de configuración por sucursal
-function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, onUseCurrentPos }) {
+function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, onUseCurrentPos, onSaveGracePeriod }) {
   const att = branch.attendance || {}
   const enabled = att.enabled !== false && !!att.token
   const [radius, setRadius] = useState(att.gpsRadius ?? '')
   const [lat, setLat] = useState(att.gpsLat ?? '')
   const [lng, setLng] = useState(att.gpsLng ?? '')
+  const [gracePeriod, setGracePeriod] = useState(att.gracePeriodMinutes ?? '')
   const qrValue = enabled && att.token ? buildQrPayload({ branchId: branch.id, token: att.token }) : ''
 
   useEffect(() => {
     setRadius(att.gpsRadius ?? '')
     setLat(att.gpsLat ?? '')
     setLng(att.gpsLng ?? '')
-  }, [att.gpsRadius, att.gpsLat, att.gpsLng])
+    setGracePeriod(att.gracePeriodMinutes ?? '')
+  }, [att.gpsRadius, att.gpsLat, att.gpsLng, att.gracePeriodMinutes])
 
   const saveGeo = () => {
     const latN = lat === '' ? null : Number(lat)
@@ -988,6 +1277,37 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
               )}
             </div>
             <p className="text-xs text-gray-500 mt-2">Sin zona configurada, todas las marcaciones se aprueban automáticamente. Con zona, las que estén fuera quedan pendientes de aprobación.</p>
+          </div>
+
+          {/* Tolerancia de tardanza (F6) */}
+          <div>
+            <p className="text-xs font-medium text-gray-600 uppercase mb-2 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" /> Tolerancia de tardanza
+            </p>
+            <div className="flex items-end gap-2">
+              <div className="flex-1 max-w-[180px]">
+                <Input
+                  type="number"
+                  min="0"
+                  max="120"
+                  label="Minutos"
+                  value={gracePeriod}
+                  onChange={(e) => setGracePeriod(e.target.value)}
+                  placeholder="15"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => onSaveGracePeriod(gracePeriod === '' ? null : Number(gracePeriod))}
+              >
+                Guardar
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Marcaciones de entrada con un retraso mayor a este valor se etiquetan como "Tardanza".
+              Si el día está cubierto por una vacación o permiso aprobado, se etiqueta como "Justificada".
+              Default: 15 minutos.
+            </p>
           </div>
         </div>
       ) : (

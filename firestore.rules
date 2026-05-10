@@ -636,6 +636,30 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Shift Templates (Plantillas de turno - módulo Personal Capa 2)
+      // Plantillas reusables para asignar horarios. Solo owner/admin las gestiona;
+      // sub-usuarios las leen para ver el detalle de su turno asignado.
+      match /shiftTemplates/{templateId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Schedules (Horarios semanales - módulo Personal Capa 2)
+      // Path: businesses/{userId}/schedules/{userId_YYYY_WW}
+      // El owner los crea/edita; los sub-usuarios leen los suyos para el portal.
+      match /schedules/{scheduleId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Time-Off Requests (Solicitudes de vacaciones/permisos - Capa 3)
+      // El owner aprueba/rechaza; los sub-usuarios podrán crear las suyas en
+      // la Capa 4 (portal del empleado).
+      match /timeOffRequests/{requestId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos

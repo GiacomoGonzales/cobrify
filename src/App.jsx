@@ -71,6 +71,7 @@ import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
 import Sellers from './pages/Sellers'
 import Attendance from './pages/Attendance'
+import MySchedule from './pages/MySchedule'
 import Orders from './pages/Orders'
 import OnlineOrders from './pages/OnlineOrders'
 import RappiOrders from './pages/RappiOrders'
@@ -397,6 +398,7 @@ function App() {
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="asistencia" element={<Attendance />} />
+              <Route path="mi-horario" element={<MySchedule />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
