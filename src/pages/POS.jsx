@@ -2216,6 +2216,12 @@ export default function POS() {
         const autoPrice = resolvePrice(product, priceKey) || product.price
         return addToCart({ ...product, price: autoPrice }, autoPrice, null, selectedBatch)
       }
+      // Auto-precio por cantidad habilitado: bypass del modal.
+      // Empieza con price1 (qty=1 todavía no califica para mayorista) y se
+      // ajusta automáticamente cuando el cajero suba la cantidad en el carrito.
+      if (product.useAutoPriceByQty === true) {
+        return addToCart({ ...product, price: product.price }, product.price, null, selectedBatch)
+      }
       setProductForPriceSelection(product)
       setPendingBatchForPrice(selectedBatch)
       setShowPriceModal(true)
@@ -2783,6 +2789,53 @@ export default function POS() {
     setShowCustomProductModal(false)
   }
 
+  /**
+   * Calcula el mejor precio según la cantidad cuando el producto tiene
+   * `useAutoPriceByQty` habilitado. Devuelve null si no aplica (mantiene el
+   * precio actual). Se usa al cambiar la cantidad de un item en el carrito.
+   *
+   * Prioridad de mínimos:
+   *   1) Configuración a nivel PRODUCTO (product.priceMinQtys[key]).
+   *   2) Fallback global del catálogo del negocio
+   *      (companySettings.catalogWholesaleMinQtys[key] o catalogWholesaleMinQty).
+   *
+   * Si el cliente del POS tiene `priceLevel` asignado, no se modifica nada
+   * (esa selección tiene prioridad).
+   */
+  const computeAutoPriceForQty = (productId, qty) => {
+    if (selectedCustomer?.priceLevel) return null
+    const product = products.find(p => p.id === productId)
+    if (!product || product.useAutoPriceByQty !== true) return null
+
+    const productMins = product.priceMinQtys || {}
+    const globalMins = companySettings?.catalogWholesaleMinQtys || {}
+    const legacyGlobal = parseInt(companySettings?.catalogWholesaleMinQty)
+
+    const getMin = (key) => {
+      const p = parseInt(productMins[key])
+      if (Number.isFinite(p) && p >= 1) return p
+      const g = parseInt(globalMins[key])
+      if (Number.isFinite(g) && g >= 1) return g
+      if (Number.isFinite(legacyGlobal) && legacyGlobal >= 1) return legacyGlobal
+      return null
+    }
+
+    const basePrice = parseFloat(product.price) || 0
+    const candidates = ['price2', 'price3', 'price4']
+      .map(key => {
+        const v = parseFloat(product[key])
+        if (!Number.isFinite(v) || v <= 0) return null
+        const min = getMin(key)
+        if (min == null || min < 1) return null
+        if (qty < min) return null
+        return { value: v }
+      })
+      .filter(Boolean)
+    if (candidates.length === 0) return basePrice
+    candidates.sort((a, b) => a.value - b.value)
+    return candidates[0].value
+  }
+
   const updateQuantity = (itemId, change) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -2859,7 +2912,14 @@ export default function POS() {
               }
             }
 
-            return { ...item, quantity: newQuantity }
+            // Auto-precio según cantidad (solo si el producto lo tiene habilitado).
+            // Cubre tanto upgrade (Público → Mayorista al subir qty) como
+            // downgrade (Mayorista → Público al bajar qty). No toca productos
+            // que no tienen useAutoPriceByQty ni si el cliente tiene priceLevel.
+            const autoPrice = computeAutoPriceForQty(item.id, newQuantity)
+            return autoPrice != null
+              ? { ...item, quantity: newQuantity, price: autoPrice }
+              : { ...item, quantity: newQuantity }
           }
           return item
         })
@@ -2944,7 +3004,14 @@ export default function POS() {
                 }
               }
             }
-            return { ...item, quantity: rawValue === '' || rawValue === '0' || rawValue === '0.' ? rawValue : quantity }
+            // Auto-precio según cantidad (igual que en updateQuantity).
+            // Solo aplica con valores numéricos válidos, no con strings parciales.
+            const numericQty = typeof quantity === 'number' && !isNaN(quantity) ? quantity : null
+            const autoPrice = numericQty != null ? computeAutoPriceForQty(item.id, numericQty) : null
+            const finalQty = rawValue === '' || rawValue === '0' || rawValue === '0.' ? rawValue : quantity
+            return autoPrice != null
+              ? { ...item, quantity: finalQty, price: autoPrice }
+              : { ...item, quantity: finalQty }
           }
           return item
         })

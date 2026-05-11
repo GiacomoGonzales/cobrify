@@ -39,8 +39,17 @@ export function formatCurrency(amount) {
  * @param {string} priceKey - 'price1' | 'price2' | 'price3' | 'price4'
  * @returns {number} cantidad mínima ≥ 1
  */
-export function getCatalogMinQty(business, priceKey) {
+export function getCatalogMinQty(business, priceKey, product = null) {
   if (!priceKey || priceKey === 'price1') return 1
+
+  // Prioridad 1: configuración a nivel PRODUCTO (opt-in con useAutoPriceByQty)
+  // Si el producto tiene su propio mínimo configurado, gana sobre el global.
+  if (product?.useAutoPriceByQty === true && product?.priceMinQtys) {
+    const productMin = parseInt(product.priceMinQtys[priceKey])
+    if (Number.isFinite(productMin) && productMin >= 1) return productMin
+  }
+
+  // Prioridad 2: configuración GLOBAL del catálogo (negocio).
   const perPrice = business?.catalogWholesaleMinQtys
   if (perPrice && typeof perPrice === 'object') {
     const v = parseInt(perPrice[priceKey])

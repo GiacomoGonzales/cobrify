@@ -429,7 +429,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     const candidates = availablePrices
       .filter(p => {
         if (p.key === 'price1') return false
-        const min = getCatalogMinQty(business, p.key)
+        const min = getCatalogMinQty(business, p.key, product)
         return min > 1 && qty >= min
       })
       .sort((a, b) => a.value - b.value)
@@ -661,7 +661,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                     return (
                       <div className="flex flex-col gap-0.5">
                         {availablePrices.map(p => {
-                          const min = getCatalogMinQty(business, p.key)
+                          const min = getCatalogMinQty(business, p.key, product)
                           return (
                             <div key={p.key} className="flex items-baseline gap-2">
                               <span className="text-xl font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
@@ -705,7 +705,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       key={priceItem.key}
                       onClick={() => {
                         setSelectedPriceLevel(priceItem.key)
-                        const min = getCatalogMinQty(business, priceItem.key)
+                        const min = getCatalogMinQty(business, priceItem.key, product)
                         if (priceItem.key !== 'price1' && min > 1 && quantity < min) {
                           setQuantity(min)
                         }
@@ -728,8 +728,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         </div>
                         <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                           {priceItem.label}
-                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key) > 1 && (
-                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key)} un.)</span>
+                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
+                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
                           )}
                         </span>
                       </div>
@@ -740,10 +740,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   )
                 })}
               </div>
-              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel) > 1 && (
+              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel, product) > 1 && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel)} unidades
+                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel, product)} unidades
                 </p>
               )}
             </div>
@@ -828,7 +828,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       key={priceItem.key}
                       onClick={() => {
                         setSelectedPriceLevel(priceItem.key)
-                        const min = getCatalogMinQty(business, priceItem.key)
+                        const min = getCatalogMinQty(business, priceItem.key, product)
                         if (priceItem.key !== 'price1' && min > 1 && quantity < min) {
                           setQuantity(min)
                         }
@@ -851,8 +851,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         </div>
                         <span className="font-medium" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#374151' }}>
                           {priceItem.label}
-                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key) > 1 && (
-                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key)} un.)</span>
+                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
+                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
                           )}
                         </span>
                       </div>
@@ -863,10 +863,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   )
                 })}
               </div>
-              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel) > 1 && (
+              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel, product) > 1 && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel)} unidades
+                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel, product)} unidades
                 </p>
               )}
             </div>
@@ -2447,7 +2447,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         .map(key => {
           const v = parseFloat(product[key])
           if (!Number.isFinite(v) || v <= 0) return null
-          const min = getCatalogMinQty(business, key)
+          const min = getCatalogMinQty(business, key, product)
           if (min <= 1) return null // requiere umbral configurado
           if (qty < min) return null
           return { key, value: v, label: business.priceLabels?.[key] || key }
@@ -2524,7 +2524,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             .map(key => {
               const v = parseFloat(item[key])
               if (!Number.isFinite(v) || v <= 0) return null
-              const min = getCatalogMinQty(business, key)
+              // item ya tiene useAutoPriceByQty y priceMinQtys porque se creó con ...product
+              const min = getCatalogMinQty(business, key, item)
               if (min <= 1 || quantity < min) return null
               return { key, value: v, label: business.priceLabels?.[key] || key }
             })

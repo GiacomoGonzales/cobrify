@@ -200,6 +200,11 @@ const ProductFormModal = ({
   const [trackSerials, setTrackSerials] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
   const [catalogComparePrice, setCatalogComparePrice] = useState('')
+  // Auto-precio según cantidad (para POS y catálogo) — opt-in por producto.
+  // Si está OFF: en POS aparece el modal de elegir precio como hoy.
+  // Si está ON: se agrega directo y el precio se ajusta solo según la cantidad.
+  const [useAutoPriceByQty, setUseAutoPriceByQty] = useState(false)
+  const [priceMinQtys, setPriceMinQtys] = useState({ price2: '', price3: '', price4: '' })
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
   const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (isIgvExempt ? 'exempt' : 'standard')
   const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : '10')
@@ -272,6 +277,12 @@ const ProductFormModal = ({
       setTrackSerials(initialData.trackSerials || false)
       setCatalogVisible(initialData.catalogVisible || false)
       setCatalogComparePrice(initialData.catalogComparePrice?.toString() || '')
+      setUseAutoPriceByQty(initialData.useAutoPriceByQty === true)
+      setPriceMinQtys({
+        price2: initialData.priceMinQtys?.price2?.toString() || '',
+        price3: initialData.priceMinQtys?.price3?.toString() || '',
+        price4: initialData.priceMinQtys?.price4?.toString() || '',
+      })
       setTaxAffectation(initialData.taxAffectation || '10')
       setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
       setPresentations(initialData.presentations || [])
@@ -299,6 +310,8 @@ const ProductFormModal = ({
       setAllowDecimalQuantity(false)
       setTrackExpiration(false)
       setCatalogVisible(false)
+      setUseAutoPriceByQty(false)
+      setPriceMinQtys({ price2: '', price3: '', price4: '' })
       setTaxAffectation(isIgvExempt ? '20' : '10')
       setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
       setWarehouseInitialStocks({})
@@ -394,6 +407,17 @@ const ProductFormModal = ({
   // Form submission
   const handleFormSubmit = async (formData) => {
     // Build the complete product data
+    // Auto-precio por cantidad: solo persistir si el toggle está activo.
+    // Si está OFF, dejamos useAutoPriceByQty:false y priceMinQtys:null para
+    // que la UI/POS sigan con el comportamiento clásico (modal de selección).
+    const cleanMinQtys = useAutoPriceByQty
+      ? Object.fromEntries(
+          ['price2', 'price3', 'price4']
+            .map((k) => [k, parseInt(priceMinQtys[k])])
+            .filter(([, v]) => Number.isFinite(v) && v >= 1)
+        )
+      : null
+
     const productData = {
       ...formData,
       noStock,
@@ -402,6 +426,8 @@ const ProductFormModal = ({
       trackSerials,
       catalogVisible,
       catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null,
+      useAutoPriceByQty,
+      priceMinQtys: cleanMinQtys && Object.keys(cleanMinQtys).length > 0 ? cleanMinQtys : null,
       taxAffectation,
       ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }),
       presentations: showPresentations ? presentations : [],
@@ -652,30 +678,86 @@ const ProductFormModal = ({
               {/* Precios adicionales - solo si está habilitado */}
               {showMultiplePrices && businessSettings?.multiplePricesEnabled && (
                 <>
-                  <Input
-                    label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price2?.message}
-                    {...register('price2')}
-                  />
-                  <Input
-                    label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price3?.message}
-                    {...register('price3')}
-                  />
-                  <Input
-                    label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price4?.message}
-                    {...register('price4')}
-                  />
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price2?.message}
+                      {...register('price2')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price2}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price2: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price3?.message}
+                      {...register('price3')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price3}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price3: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price4?.message}
+                      {...register('price4')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price4}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price4: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+
+                  {/* Toggle: auto-precio según cantidad. Ocupa las 2 columnas. */}
+                  <div className="col-span-2 mt-2 border-t border-gray-100 pt-3">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useAutoPriceByQty}
+                        onChange={(e) => setUseAutoPriceByQty(e.target.checked)}
+                        className="mt-0.5 rounded text-primary-600"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          Aplicar precio automático según cantidad
+                        </span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          En el POS y catálogo, el precio cambia solo cuando el cliente alcanza la cantidad mínima. Si está apagado, el cajero elige el precio manualmente al agregar.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </>
               )}
 

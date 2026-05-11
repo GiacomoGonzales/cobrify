@@ -229,6 +229,11 @@ export default function Products() {
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [trackSerials, setTrackSerials] = useState(false) // Control de N° de serie
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
+  // Auto-precio según cantidad (opt-in por producto). Si está ON, el POS no
+  // muestra el modal de elegir precio y el precio se ajusta solo al cambiar
+  // la cantidad en el carrito, usando los mínimos configurados por producto.
+  const [useAutoPriceByQty, setUseAutoPriceByQty] = useState(false)
+  const [priceMinQtys, setPriceMinQtys] = useState({ price2: '', price3: '', price4: '' })
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [catalogComparePrice, setCatalogComparePrice] = useState('') // Precio tachado en catálogo
   const [isFeatured, setIsFeatured] = useState(false) // Producto destacado en catálogo
@@ -543,6 +548,8 @@ export default function Products() {
     setCatalogVisible(false)
     setCatalogHidePrice(false)
     setCatalogComparePrice('')
+    setUseAutoPriceByQty(false)
+    setPriceMinQtys({ price2: '', price3: '', price4: '' })
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -677,6 +684,14 @@ export default function Products() {
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
 
+    // Load auto-precio por cantidad (opt-in por producto)
+    setUseAutoPriceByQty(product.useAutoPriceByQty === true)
+    setPriceMinQtys({
+      price2: product.priceMinQtys?.price2?.toString() || '',
+      price3: product.priceMinQtys?.price3?.toString() || '',
+      price4: product.priceMinQtys?.price4?.toString() || '',
+    })
+
     // Load product images (multi)
     setProductImages(productToImageItems(product))
 
@@ -781,6 +796,14 @@ export default function Products() {
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
+
+    // Auto-precio por cantidad (copia configuración del producto duplicado)
+    setUseAutoPriceByQty(product.useAutoPriceByQty === true)
+    setPriceMinQtys({
+      price2: product.priceMinQtys?.price2?.toString() || '',
+      price3: product.priceMinQtys?.price3?.toString() || '',
+      price4: product.priceMinQtys?.price4?.toString() || '',
+    })
 
     // No copiar las imágenes (el usuario puede agregarlas manualmente)
     setProductImages([])
@@ -931,6 +954,18 @@ export default function Products() {
         catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
         catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null, // Precio tachado en catálogo
         isFeatured: catalogVisible && isFeatured, // Producto destacado en catálogo
+        // Auto-precio según cantidad: opt-in por producto. Si está OFF, el POS
+        // muestra el modal de elegir precio como siempre. Si está ON, se ajusta
+        // solo según la cantidad usando los mínimos configurados.
+        useAutoPriceByQty: useAutoPriceByQty,
+        priceMinQtys: useAutoPriceByQty ? (() => {
+          const clean = Object.fromEntries(
+            ['price2', 'price3', 'price4']
+              .map((k) => [k, parseInt(priceMinQtys[k])])
+              .filter(([, v]) => Number.isFinite(v) && v >= 1)
+          )
+          return Object.keys(clean).length > 0 ? clean : null
+        })() : null,
         // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
         ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
         // Product location (works in all modes when enabled)
@@ -4493,30 +4528,87 @@ export default function Products() {
               {/* Precios adicionales - solo si está habilitado en Settings y NO tiene variantes */}
               {businessSettings?.multiplePricesEnabled && !hasVariants && (
                 <>
-                  <Input
-                    label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price2?.message}
-                    {...register('price2')}
-                  />
-                  <Input
-                    label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price3?.message}
-                    {...register('price3')}
-                  />
-                  <Input
-                    label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.price4?.message}
-                    {...register('price4')}
-                  />
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price2?.message}
+                      {...register('price2')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price2}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price2: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price3?.message}
+                      {...register('price3')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price3}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price3: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Input
+                      label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                      type="number"
+                      step="any"
+                      placeholder="0.00 (opcional)"
+                      error={errors.price4?.message}
+                      {...register('price4')}
+                    />
+                    {useAutoPriceByQty && (
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Mínimo unidades"
+                        value={priceMinQtys.price4}
+                        onChange={(e) => setPriceMinQtys((p) => ({ ...p, price4: e.target.value }))}
+                        className="mt-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+
+                  {/* Toggle: precio automático según cantidad. Opt-in por producto. */}
+                  <div className="col-span-2 mt-2 border-t border-gray-100 pt-3">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useAutoPriceByQty}
+                        onChange={(e) => setUseAutoPriceByQty(e.target.checked)}
+                        className="mt-0.5 rounded text-primary-600"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          Aplicar precio automático según cantidad
+                        </span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          En el POS y catálogo, el precio cambia solo cuando el cliente alcanza la cantidad mínima.
+                          Si está apagado, el cajero elige el precio manualmente al agregar.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </>
               )}
               {businessSettings?.multiplePricesEnabled && hasVariants && (
