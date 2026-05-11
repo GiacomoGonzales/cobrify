@@ -2112,6 +2112,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [business, setBusiness] = useState(null)
+  // Negocio con suscripción suspendida: mostramos pantalla "fuera de servicio"
+  // en lugar del catálogo, para no dejar al cliente final ver productos / hacer
+  // pedidos cuando el dueño tiene el servicio cortado.
+  const [businessSuspended, setBusinessSuspended] = useState(false)
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -2177,6 +2181,28 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           const businessDoc = businessesSnap.docs[0]
           businessData = { id: businessDoc.id, ...businessDoc.data() }
           setBusiness(businessData)
+        }
+
+        // Verificar estado de la suscripción del dueño del negocio. Si está
+        // suspendida o bloqueada, mostrar la pantalla "fuera de servicio"
+        // en lugar del catálogo. No es modo demo (esos no tienen subscription).
+        if (!isDemo && businessData?.id) {
+          try {
+            const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
+            const subRef = docRef(db, 'subscriptions', businessData.id)
+            const subSnap = await getDocFn(subRef)
+            if (subSnap.exists()) {
+              const sub = subSnap.data()
+              if (sub.accessBlocked === true || sub.status === 'suspended') {
+                setBusinessSuspended(true)
+                setLoading(false)
+                return
+              }
+            }
+          } catch (e) {
+            // Si falla la lectura de la suscripción no bloqueamos el catálogo.
+            console.warn('No se pudo verificar suscripción:', e)
+          }
         }
 
         // Cargar productos visibles en catálogo/menú
@@ -2589,6 +2615,67 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Total items en carrito
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+
+  // Pantalla "Temporalmente fuera de servicio" — se muestra cuando la
+  // suscripción del negocio está suspendida/bloqueada. El cliente final
+  // ve un mensaje neutro y profesional, sin productos ni opción de pedir.
+  if (businessSuspended) {
+    const displayName = business?.businessName || business?.name || ''
+    const logo = business?.catalogLogoUrl || business?.logoUrl || null
+    return (
+      <div className={`min-h-screen flex items-center justify-center p-4 ${thBg}`}>
+        <div className="max-w-md w-full">
+          <div className={`rounded-2xl shadow-lg ${thCard} p-8 text-center`}>
+            {logo ? (
+              <img
+                src={logo}
+                alt={displayName}
+                className="w-20 h-20 mx-auto mb-4 object-contain rounded-lg"
+              />
+            ) : (
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center">
+                <Clock className="w-10 h-10 text-amber-600" />
+              </div>
+            )}
+
+            {displayName && (
+              <h1 className={`text-xl font-bold mb-1 ${thText}`}>{displayName}</h1>
+            )}
+
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-sm font-medium mb-4 border border-amber-200">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Temporalmente fuera de servicio
+            </div>
+
+            <h2 className={`text-lg font-semibold mb-2 ${thText}`}>
+              {isRestaurantMenu ? 'Menú no disponible' : 'Catálogo no disponible'}
+            </h2>
+            <p className={`text-sm ${thTextFaint}`}>
+              {isRestaurantMenu
+                ? 'En este momento no estamos tomando pedidos. Por favor intentá más tarde o contactanos directamente.'
+                : 'En este momento no estamos atendiendo pedidos. Por favor intentá más tarde o contactanos directamente.'}
+            </p>
+
+            {business?.phone && (
+              <div className="mt-5 pt-5 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-1">Contacto</p>
+                <a
+                  href={`tel:${business.phone}`}
+                  className="text-sm font-medium text-primary-600 hover:underline"
+                >
+                  {business.phone}
+                </a>
+              </div>
+            )}
+          </div>
+
+          <p className="text-center text-[11px] text-gray-400 mt-4">
+            Powered by Cobrify
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   // Loading state
   if (loading) {
