@@ -78,6 +78,7 @@ export default function Purchases() {
   const [viewingPurchase, setViewingPurchase] = useState(null)
   const [deletingPurchase, setDeletingPurchase] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [syncingStock, setSyncingStock] = useState(false)
 
   // Estado para marcar como pagado
   const [markingAsPaid, setMarkingAsPaid] = useState(null)
@@ -634,6 +635,114 @@ export default function Purchases() {
         fullNumber: purchase.invoiceNumber,
       } : null,
     })
+  }
+
+  // Sincronizar movimientos de stock faltantes de una compra.
+  // Idempotente: si el producto ya tiene movimiento para esta compra, lo saltea.
+  // Útil cuando al registrar la compra alguna transacción de stock falló
+  // silenciosamente (red lenta, contención, timeout) y el producto quedó
+  // sin actualizar.
+  const handleSyncStockMovements = async (purchase) => {
+    if (!purchase?.items || purchase.items.length === 0) {
+      toast.warning('Esta compra no tiene productos')
+      return
+    }
+
+    const businessId = getBusinessId()
+    setSyncingStock(true)
+    try {
+      const { getStockMovements } = await import('@/services/warehouseService')
+
+      // Movimientos existentes para esta compra
+      const movRes = await getStockMovements(businessId)
+      const existing = (movRes.success ? movRes.data : []).filter(
+        m => m.referenceId === purchase.id && m.referenceType === 'purchase'
+      )
+
+      // Productos para validar trackStock
+      const prodRes = await getProducts(businessId)
+      const products = prodRes.success ? prodRes.data : []
+
+      const warehouseId = purchase.warehouseId || ''
+      let synced = 0
+      let alreadyOk = 0
+      let skipped = 0
+
+      // Solo items tipo "product" (ingredientes tienen flujo separado).
+      // Para variantes, el key incluye variantSku.
+      const productItems = purchase.items.filter(it => it.itemType !== 'ingredient')
+
+      for (const item of productItems) {
+        const productId = item.productId
+        if (!productId) { skipped++; continue }
+
+        const product = products.find(p => p.id === productId)
+        if (!product) { skipped++; continue }
+        if (product.trackStock === false) { skipped++; continue }
+
+        const variantSku = item.variantSku || null
+
+        // ¿Ya hay movimiento para este producto/variante en esta compra?
+        const already = existing.find(m =>
+          m.productId === productId &&
+          (m.variantSku || null) === variantSku
+        )
+        if (already) { alreadyOk++; continue }
+
+        const qty = parseFloat(item.quantity) || 0
+        if (qty <= 0) { skipped++; continue }
+
+        // Aplicar stock (transacción atómica)
+        try {
+          await updateProductStockTransaction(
+            businessId,
+            productId,
+            warehouseId,
+            qty,
+            {},
+            variantSku
+          )
+
+          await createStockMovement(businessId, {
+            productId,
+            productName: item.productName || '',
+            warehouseId,
+            type: 'entry',
+            quantity: qty,
+            reason: 'Compra (sincronizado)',
+            referenceType: 'purchase',
+            referenceId: purchase.id,
+            referenceNumber: purchase.invoiceNumber || '',
+            userId: user?.uid,
+            ...(variantSku && { variantSku }),
+            notes: `Stock sincronizado retroactivamente - Proveedor: ${purchase.supplier?.businessName || 'N/A'} - ${purchase.invoiceNumber || 'S/N'}`,
+          })
+          synced++
+        } catch (e) {
+          console.error('Error sincronizando producto', productId, e)
+        }
+      }
+
+      const messages = []
+      if (synced > 0) messages.push(`${synced} producto(s) actualizados`)
+      if (alreadyOk > 0) messages.push(`${alreadyOk} ya estaban OK`)
+      if (skipped > 0) messages.push(`${skipped} omitidos`)
+
+      if (synced > 0) {
+        toast.success(messages.join(' · '))
+        // Recargar compras para reflejar estado
+        loadPurchases()
+      } else if (alreadyOk > 0) {
+        toast.info('Todos los productos ya tenían su movimiento de stock registrado')
+      } else {
+        toast.info('Nada que sincronizar')
+      }
+    } catch (error) {
+      console.error('Error al sincronizar movimientos de stock:', error)
+      toast.error('Error al sincronizar movimientos de stock')
+    } finally {
+      setSyncingStock(false)
+    }
   }
 
   // Abrir modal de registro de pago con monto sugerido
@@ -1570,7 +1679,30 @@ export default function Purchases() {
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-3">
+              {/* Sincronizar stock faltante (sutil, al estilo del botón en Ventas).
+                  Idempotente: si los movimientos ya existen, no hace nada.
+                  Útil cuando alguna transacción de stock falló silenciosamente
+                  al registrar la compra. */}
+              <button
+                type="button"
+                onClick={() => handleSyncStockMovements(viewingPurchase)}
+                disabled={syncingStock}
+                className="text-xs text-gray-400 hover:text-primary-600 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                title="Crea los movimientos de stock que falten para esta compra (no duplica los existentes)"
+              >
+                {syncingStock ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Sincronizando…
+                  </>
+                ) : (
+                  <>
+                    <Package className="w-3 h-3" />
+                    Sincronizar stock faltante
+                  </>
+                )}
+              </button>
               <Button variant="outline" onClick={() => setViewingPurchase(null)}>
                 Cerrar
               </Button>
