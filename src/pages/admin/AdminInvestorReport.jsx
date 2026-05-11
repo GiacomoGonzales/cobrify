@@ -192,13 +192,48 @@ export default function AdminInvestorReport() {
             />
           </div>
 
+          {/* Tasas de retención (destacado para inversores) */}
+          {report.retention && (
+            <Section icon={<TrendingUp className="w-5 h-5" />} title="Retención y lealtad">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <RetentionCard
+                  label="Tasa de retención (actual)"
+                  caption="% de clientes con suscripción vigente / total que pasó su primer vencimiento"
+                  rate={report.retention.currentRate}
+                  numerator={report.retention.renewed}
+                  denominator={report.retention.candidates}
+                  numeratorLabel="Activos"
+                  denominatorLabel="Candidatos"
+                  color="indigo"
+                />
+                <RetentionCard
+                  label="Tasa de renovación histórica"
+                  caption="% de oportunidades de renovación efectivamente renovadas (lealtad acumulada)"
+                  rate={report.retention.lifetimeRate}
+                  numerator={report.retention.totalRenewals}
+                  denominator={report.retention.totalOpportunities}
+                  numeratorLabel="Renovaciones"
+                  denominatorLabel="Oportunidades"
+                  color="emerald"
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Stat label="Con pagos" value={fmtNumber(report.retention.totalWithPayments)} color="indigo" />
+                <Stat label="Vencieron sin renovar" value={fmtNumber(report.retention.churned)} color="red" />
+                <Stat label="En 1er periodo" value={fmtNumber(report.retention.inFirstPeriod)} color="blue" />
+                <Stat label="Ingresos históricos" value={fmtCurrency(report.retention.totalRevenue)} color="emerald" />
+              </div>
+            </Section>
+          )}
+
           {/* Negocios */}
           <Section icon={<Building2 className="w-5 h-5" />} title="Negocios">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <Stat label="Total" value={fmtNumber(report.businesses.total)} color="indigo" />
               <Stat label="Activos" value={fmtNumber(report.businesses.active)} color="emerald" />
               <Stat label="Trial" value={fmtNumber(report.businesses.trial)} color="amber" />
               <Stat label="Suspendidos" value={fmtNumber(report.businesses.suspended)} color="red" />
+              <Stat label="Archivados" value={fmtNumber(report.businesses.archived || 0)} caption="excluidos de tasas" color="gray" />
               <Stat label="Nuevos 30d" value={`+${fmtNumber(report.businesses.newLast30)}`} color="emerald" />
               <Stat label="Nuevos 90d" value={`+${fmtNumber(report.businesses.newLast90)}`} color="emerald" />
             </div>
@@ -450,6 +485,37 @@ function Section({ icon, title, children, right }) {
         {right}
       </div>
       {children}
+    </div>
+  )
+}
+
+function RetentionCard({ label, caption, rate, numerator, denominator, numeratorLabel, denominatorLabel, color }) {
+  const colors = {
+    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  }
+  const c = colors[color] || colors.indigo
+  const rateColor = rate === null ? 'text-gray-400'
+    : rate > 70 ? 'text-emerald-600'
+    : rate >= 40 ? 'text-amber-600'
+    : 'text-red-600'
+
+  return (
+    <div className={`rounded-xl p-5 border-2 ${c.bg} ${c.border}`}>
+      <p className={`text-xs uppercase font-semibold ${c.text}`}>{label}</p>
+      <div className="flex items-baseline gap-3 mt-1">
+        <span className={`text-4xl font-bold tabular-nums ${rateColor}`}>
+          {rate !== null ? `${rate}%` : '—'}
+        </span>
+        <span className="text-sm text-gray-500">
+          {fmtNumber(numerator)} / {fmtNumber(denominator)}
+        </span>
+      </div>
+      <p className="text-[11px] text-gray-600 mt-2 leading-snug">{caption}</p>
+      <div className="flex gap-4 mt-3 text-xs text-gray-500">
+        <span><strong className="text-gray-700">{fmtNumber(numerator)}</strong> {numeratorLabel.toLowerCase()}</span>
+        <span><strong className="text-gray-700">{fmtNumber(denominator)}</strong> {denominatorLabel.toLowerCase()}</span>
+      </div>
     </div>
   )
 }

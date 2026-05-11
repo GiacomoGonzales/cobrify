@@ -8102,6 +8102,7 @@ export const calculateInvestorReport = onCall(
         suspended: 0,
         trial: 0,
         free: 0,
+        archived: 0,    // suspendidos marcados como "no contar" desde admin
         newLast30: 0,
         newLast90: 0,
       }
@@ -8117,9 +8118,31 @@ export const calculateInvestorReport = onCall(
       }
       const businessIds = []
 
+      // Tasa de retención (foto del estado actual) — análoga a AdminUsers
+      const retention = {
+        totalWithPayments: 0,    // todos los que pagaron al menos 1 vez
+        active: 0,                // con suscripción vigente
+        churned: 0,               // venció y no renovó
+        inFirstPeriod: 0,         // exactamente 1 pago y vigente
+        totalRevenue: 0,          // suma histórica de pagos
+        // Tasa histórica por oportunidades
+        totalOpportunities: 0,
+        totalRenewals: 0,
+      }
+      const nowDate = new Date()
+
       mainSubs.forEach((d) => {
         const s = d.data()
         businesses.total++
+
+        // Archivados: el admin los marcó como "no contar" desde /admin/expirations.
+        // Se cuentan aparte y no entran en suspended/MRR/tasa de renovación.
+        if (s.archived === true) {
+          businesses.archived++
+          businessIds.push(d.id)
+          return
+        }
+
         const isBlocked = s.accessBlocked === true || s.status === 'suspended'
         const isFree = s.plan === 'free'
         const isTrial = s.plan === 'trial' || s.status === 'trialing'
@@ -8164,9 +8187,42 @@ export const calculateInvestorReport = onCall(
           subs.mrr += perMonth
         }
 
+        // Métricas de retención: misma lógica que AdminUsers
+        // (también excluye archivados — ya se hizo return arriba si archived)
+        const payments = Array.isArray(s.paymentHistory) ? s.paymentHistory : []
+        if (payments.length > 0) {
+          retention.totalWithPayments++
+          for (const p of payments) {
+            retention.totalRevenue += parseFloat(p.amount) || 0
+          }
+          const pEnd = s.currentPeriodEnd?.toDate?.() || (s.currentPeriodEnd ? new Date(s.currentPeriodEnd) : null)
+          const isVigente = pEnd && pEnd > nowDate
+          if (isVigente) {
+            retention.active++
+            if (payments.length === 1) retention.inFirstPeriod++
+          } else {
+            retention.churned++
+          }
+          // Tasa histórica por oportunidades
+          const renewalsFromUser = Math.max(0, payments.length - 1)
+          const opportunitiesFromUser = renewalsFromUser + (isVigente ? 0 : 1)
+          retention.totalRenewals += renewalsFromUser
+          retention.totalOpportunities += opportunitiesFromUser
+        }
+
         businessIds.push(d.id)
       })
       subs.arr = subs.mrr * 12
+
+      // Calcular tasas finales
+      const candidates = retention.totalWithPayments - retention.inFirstPeriod
+      const renewed = retention.active - retention.inFirstPeriod
+      retention.currentRate = candidates > 0 ? Math.round((renewed / candidates) * 100) : null
+      retention.lifetimeRate = retention.totalOpportunities > 0
+        ? Math.round((retention.totalRenewals / retention.totalOpportunities) * 100)
+        : null
+      retention.candidates = candidates
+      retention.renewed = renewed
 
       // ---- 2) Datos del negocio (businesses doc) — flags de configuración ----
       const businessFlags = {
@@ -8291,6 +8347,7 @@ export const calculateInvestorReport = onCall(
       const report = {
         businesses,
         subscriptions: subs,
+        retention,
         businessFlags,
         invoicing,
         engagement,
