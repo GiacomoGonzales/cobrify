@@ -446,6 +446,8 @@ export default function AdminUsers() {
           catalogEnabled: business.catalogEnabled === true,
           catalogSlug: business.catalogSlug || null,
           customDomain: business.customDomain || null,
+          // Archivado desde /admin/expirations (excluido de estadísticas)
+          archived: data.archived === true,
         })
       })
 
@@ -642,6 +644,8 @@ export default function AdminUsers() {
   }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
 
   // Estadísticas rápidas (usa fecha real de periodo para "activos")
+  // Los archivados se excluyen de todos los buckets — son un cluster aparte
+  // que no debe afectar tasas ni distribución.
   const stats = useMemo(() => {
     const now = new Date()
     const isReallyActive = (u) => {
@@ -649,14 +653,16 @@ export default function AdminUsers() {
         (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
       return pEnd && pEnd > now && u.status !== 'suspended'
     }
+    const nonArchived = users.filter(u => !u.archived)
     return {
-      total: users.length,
-      active: users.filter(u => isReallyActive(u)).length,
-      trial: users.filter(u => u.status === 'trial').length,
-      suspended: users.filter(u => u.status === 'suspended').length,
-      expired: users.filter(u => !isReallyActive(u) && u.status !== 'suspended' && u.status !== 'trial').length,
-      cobrify: users.filter(u => !u.createdByReseller).length,
-      reseller: users.filter(u => u.createdByReseller).length
+      total: nonArchived.length,
+      active: nonArchived.filter(u => isReallyActive(u)).length,
+      trial: nonArchived.filter(u => u.status === 'trial').length,
+      suspended: nonArchived.filter(u => u.status === 'suspended').length,
+      expired: nonArchived.filter(u => !isReallyActive(u) && u.status !== 'suspended' && u.status !== 'trial').length,
+      cobrify: nonArchived.filter(u => !u.createdByReseller).length,
+      reseller: nonArchived.filter(u => u.createdByReseller).length,
+      archived: users.filter(u => u.archived).length,
     }
   }, [users])
 
@@ -673,7 +679,17 @@ export default function AdminUsers() {
     let inFirstPeriod = 0      // aún en su primer periodo (solo 1 pago y vigente)
     let totalRevenue = 0       // ingresos históricos totales
 
+    // Tasa de renovación histórica: cada vencimiento es una oportunidad.
+    // Cuántas se renovaron del total. Refleja lealtad acumulada (mide a un
+    // cliente que pagó 12 meses distinto que a uno que pagó 1 y se fue).
+    let totalOpportunities = 0
+    let totalRenewals = 0
+
     for (const u of users) {
+      // Excluir archivados: el admin los marcó como "no contar". No deben
+      // arrastrar la tasa de retención hacia abajo ni inflar revenue histórico.
+      if (u.archived) continue
+
       const payments = (u.paymentHistory || [])
       if (payments.length === 0) continue
 
@@ -687,13 +703,22 @@ export default function AdminUsers() {
       // Determinar si su periodo actual está vigente
       const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
         (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
+      const isVigente = pEnd && pEnd > now
 
-      if (pEnd && pEnd > now) {
+      if (isVigente) {
         active++
         if (payments.length === 1) inFirstPeriod++
       } else {
         churned++
       }
+
+      // Para tasa histórica:
+      //   renewals = pagos posteriores al primero = payments.length - 1
+      //   opportunities = renewals + (1 si ya venció el último → tuvo oportunidad y no la tomó)
+      const renewalsFromUser = Math.max(0, payments.length - 1)
+      const opportunitiesFromUser = renewalsFromUser + (isVigente ? 0 : 1)
+      totalRenewals += renewalsFromUser
+      totalOpportunities += opportunitiesFromUser
     }
 
     // Candidatos = todos los que pagaron menos los que están en su primer periodo
@@ -701,7 +726,16 @@ export default function AdminUsers() {
     const renewed = active - inFirstPeriod
     const rate = candidates > 0 ? Math.round((renewed / candidates) * 100) : null
 
-    return { totalWithPayments, active, churned, inFirstPeriod, candidates, renewed, rate, totalRevenue }
+    // Tasa histórica (lifetime)
+    const lifetimeRate = totalOpportunities > 0
+      ? Math.round((totalRenewals / totalOpportunities) * 100)
+      : null
+
+    return {
+      totalWithPayments, active, churned, inFirstPeriod,
+      candidates, renewed, rate, totalRevenue,
+      totalOpportunities, totalRenewals, lifetimeRate,
+    }
   }, [users])
 
   function handleSort(field) {
@@ -1788,8 +1822,9 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* Tasa de Retención */}
+      {/* Tasa de Retención + Tasa Histórica */}
       {renewalStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <button
             onClick={() => setShowRenewalDetails(!showRenewalDetails)}
@@ -1809,6 +1844,7 @@ export default function AdminUsers() {
                   }`}>
                     {renewalStats.rate !== null ? `${renewalStats.rate}%` : '—'}
                   </span>
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold">Estado actual</span>
                 </div>
               </div>
               <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
@@ -1875,6 +1911,44 @@ export default function AdminUsers() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Tasa de Renovación Histórica (por oportunidad) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="w-full p-3 sm:p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+              <div className="p-2 rounded-lg bg-emerald-50">
+                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500">Tasa Histórica</p>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className={`text-xl sm:text-2xl font-bold ${
+                    renewalStats.lifetimeRate === null ? 'text-gray-400' :
+                    renewalStats.lifetimeRate > 70 ? 'text-emerald-600' :
+                    renewalStats.lifetimeRate >= 40 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {renewalStats.lifetimeRate !== null ? `${renewalStats.lifetimeRate}%` : '—'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold">Acumulada</span>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Renovaciones</p>
+                  <p className="font-semibold text-emerald-600">{renewalStats.totalRenewals}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Oportunidades</p>
+                  <p className="font-semibold text-gray-700">{renewalStats.totalOpportunities}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-gray-200 p-3 text-xs text-gray-500">
+            Cada vencimiento cuenta como una oportunidad. Mide lealtad acumulada — un cliente que renovó 11 veces y se fue al 12 vale más que uno que se fue al primer mes.
+          </div>
+        </div>
         </div>
       )}
 
@@ -2389,14 +2463,21 @@ export default function AdminUsers() {
                     </td>
                     {/* Estado */}
                     <td className="px-2 py-2">
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
-                        user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                        user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
-                        'bg-yellow-50 text-yellow-700 border border-yellow-100'
-                      }`}>
-                        {STATUS_LABELS[user.status]}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
+                          user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                          user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
+                          'bg-yellow-50 text-yellow-700 border border-yellow-100'
+                        }`}>
+                          {STATUS_LABELS[user.status]}
+                        </span>
+                        {user.archived && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200" title="Excluido de estadísticas">
+                            📦 Archivado
+                          </span>
+                        )}
+                      </div>
                     </td>
                     {/* Uso */}
                     <td className="px-3 py-2">
