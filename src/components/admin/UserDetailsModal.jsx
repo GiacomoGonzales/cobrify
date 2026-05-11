@@ -266,7 +266,26 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 {type === 'edit' && 'Editar Suscripción'}
                 {type === 'config' && 'Configuración de Emisión'}
               </h2>
-              <p className="text-gray-600">{user.businessName || user.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-gray-600">{user.businessName || user.email}</p>
+                {/* Acceso directo al catálogo virtual */}
+                {user.catalogEnabled && (user.customDomain || user.catalogSlug) && (() => {
+                  const url = user.customDomain
+                    ? `https://${user.customDomain}`
+                    : `${window.location.origin}/catalogo/${user.catalogSlug}`
+                  return (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-medium rounded transition-colors"
+                      title={`Abrir catálogo: ${url}`}
+                    >
+                      🌐 Ver catálogo
+                    </a>
+                  )
+                })()}
+              </div>
             </div>
             <button
               onClick={onClose}

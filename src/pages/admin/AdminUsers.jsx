@@ -53,7 +53,8 @@ import {
   TrendingUp,
   TrendingDown,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Globe
 } from 'lucide-react'
 import {
   getBranches,
@@ -440,7 +441,11 @@ export default function AdminUsers() {
           resellerId: data.resellerId || null,
           resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
           // Vendedor (agente de venta) asignado
-          vendedorId: data.vendedorId || null
+          vendedorId: data.vendedorId || null,
+          // Catálogo virtual — para mostrar acceso directo desde el admin
+          catalogEnabled: business.catalogEnabled === true,
+          catalogSlug: business.catalogSlug || null,
+          customDomain: business.customDomain || null,
         })
       })
 
@@ -2329,6 +2334,24 @@ export default function AdminUsers() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
                             <p className="font-medium text-gray-900 text-[12px] truncate max-w-[140px]">{user.businessName}</p>
+                            {/* Acceso directo al catálogo virtual (solo si está habilitado y configurado) */}
+                            {user.catalogEnabled && (user.customDomain || user.catalogSlug) && (() => {
+                              const url = user.customDomain
+                                ? `https://${user.customDomain}`
+                                : `${window.location.origin}/catalogo/${user.catalogSlug}`
+                              return (
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center justify-center w-4 h-4 rounded text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors flex-shrink-0"
+                                  title={`Abrir catálogo: ${url}`}
+                                >
+                                  <Globe className="w-3 h-3" />
+                                </a>
+                              )
+                            })()}
                           </div>
                           <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{user.email}</p>
                           {user.ruc && <p className="text-[9px] text-gray-400">RUC: {user.ruc}</p>}
