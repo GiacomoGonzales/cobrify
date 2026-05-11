@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS, suspendUser, registerPayment } from '@/services/subscriptionService'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Clock,
   AlertTriangle,
@@ -14,7 +15,9 @@ import {
   Users,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react'
 
 const WHATSAPP_NUMBER = '51900434988'
@@ -34,6 +37,7 @@ function formatDate(date) {
 }
 
 export default function AdminExpirations() {
+  const { user } = useAuth()
   const [subscriptions, setSubscriptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -88,6 +92,9 @@ export default function AdminExpirations() {
   }
 
   function categorize(sub) {
+    // Archivados: usuarios suspendidos que el admin marcó como "no contar".
+    // Quedan fuera de las demás categorías y tienen su propia pestaña.
+    if (sub.archived === true) return 'archived'
     const days = getDaysUntilExpiry(sub.currentPeriodEnd)
     if (days === null) return 'unknown'
     if (sub.accessBlocked || sub.status === 'suspended') return 'overdue'
@@ -101,6 +108,9 @@ export default function AdminExpirations() {
   function getFilteredSubs() {
     let filtered = subscriptions.filter(sub => {
       const cat = categorize(sub)
+      if (activeTab === 'archived') return cat === 'archived'
+      // Las otras tabs nunca muestran archivados
+      if (cat === 'archived') return false
       if (activeTab === 'today') return cat === 'today'
       if (activeTab === 'week') return cat === 'week' || cat === 'today'
       if (activeTab === 'month') return cat === 'month' || cat === 'week' || cat === 'today'
@@ -140,6 +150,45 @@ export default function AdminExpirations() {
     }
   }
 
+  async function handleArchive(sub) {
+    if (!confirm(
+      `¿Archivar a ${sub.businessName || sub.email}?\n\n` +
+      'Quedará fuera de los reportes de vencimientos y de las estadísticas de ' +
+      'renovación. Útil cuando ya no espera retomar el servicio.'
+    )) return
+    setActionLoading(sub.id)
+    try {
+      await updateDoc(doc(db, 'subscriptions', sub.id), {
+        archived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: user?.uid || null,
+      })
+      await loadSubscriptions()
+    } catch (error) {
+      console.error('Error archivando:', error)
+      alert('Error al archivar')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleUnarchive(sub) {
+    setActionLoading(sub.id)
+    try {
+      await updateDoc(doc(db, 'subscriptions', sub.id), {
+        archived: false,
+        archivedAt: null,
+        archivedBy: null,
+      })
+      await loadSubscriptions()
+    } catch (error) {
+      console.error('Error desarchivando:', error)
+      alert('Error al desarchivar')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   async function handleQuickRenew(userId, plan) {
     const planConfig = PLANS[plan]
     if (!planConfig) {
@@ -171,6 +220,7 @@ export default function AdminExpirations() {
     week: subscriptions.filter(s => ['today', 'week'].includes(categorize(s))).length,
     month: subscriptions.filter(s => ['today', 'week', 'month'].includes(categorize(s))).length,
     overdue: subscriptions.filter(s => categorize(s) === 'overdue').length,
+    archived: subscriptions.filter(s => categorize(s) === 'archived').length,
   }
 
   const tabs = [
@@ -178,6 +228,7 @@ export default function AdminExpirations() {
     { id: 'week', label: 'Esta semana', count: counts.week, icon: Clock, color: 'text-amber-600 bg-amber-100' },
     { id: 'month', label: 'Este mes', count: counts.month, icon: CalendarDays, color: 'text-blue-600 bg-blue-100' },
     { id: 'overdue', label: 'Vencidos', count: counts.overdue, icon: XCircle, color: 'text-gray-600 bg-gray-100' },
+    { id: 'archived', label: 'Archivados', count: counts.archived, icon: Archive, color: 'text-slate-600 bg-slate-100' },
   ]
 
   const filteredSubs = getFilteredSubs()
@@ -211,7 +262,7 @@ export default function AdminExpirations() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -310,6 +361,23 @@ export default function AdminExpirations() {
                         <div className="flex items-center justify-end gap-1">
                           {actionLoading === sub.id ? (
                             <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                          ) : sub.archived ? (
+                            <>
+                              <button
+                                onClick={() => handleUnarchive(sub)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                title="Desarchivar"
+                              >
+                                <ArchiveRestore className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleQuickRenew(sub.id, sub.plan || 'qpse_1_month')}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                title="Renovar (mismo plan)"
+                              >
+                                <CreditCard className="w-4 h-4" />
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -335,6 +403,16 @@ export default function AdminExpirations() {
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
+                              {/* Archivar: solo disponible para suspendidos/vencidos */}
+                              {(isSuspended || isOverdue) && (
+                                <button
+                                  onClick={() => handleArchive(sub)}
+                                  className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                                  title="Archivar (no contar en estadísticas)"
+                                >
+                                  <Archive className="w-4 h-4" />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
