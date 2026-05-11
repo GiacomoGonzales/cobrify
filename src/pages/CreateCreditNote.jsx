@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search } from 'lucide-react'
@@ -43,6 +43,11 @@ export default function CreateCreditNote() {
   const invoiceIdParam = searchParams.get('invoiceId')
 
   const [isLoading, setIsLoading] = useState(true)
+  // Guard síncrono contra doble click. `isSaving` solo deshabilita el botón
+  // visualmente, pero hay un race window donde clicks consecutivos rápidos
+  // disparan handleSubmit en paralelo y crean N notas de crédito duplicadas.
+  // Este ref se actualiza sincrónicamente y bloquea desde el primer click.
+  const submitGuardRef = useRef(false)
   const [isSaving, setIsSaving] = useState(false)
   const [invoices, setInvoices] = useState([])
   const [selectedInvoice, setSelectedInvoice] = useState(null)
@@ -296,6 +301,12 @@ export default function CreateCreditNote() {
   const handleExternalSubmit = async (e) => {
     e.preventDefault()
 
+    // Guard contra doble click (síncrono)
+    if (submitGuardRef.current) {
+      console.warn('Submit bloqueado: ya hay una emisión en curso')
+      return
+    }
+
     if (!user?.uid) return
 
     // Validaciones
@@ -337,6 +348,7 @@ export default function CreateCreditNote() {
       return
     }
 
+    submitGuardRef.current = true
     setIsSaving(true)
 
     try {
@@ -442,11 +454,18 @@ export default function CreateCreditNote() {
       setMessage({ type: 'error', text: error.message || 'Error al crear la nota de crédito' })
     } finally {
       setIsSaving(false)
+      submitGuardRef.current = false
     }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // Guard contra doble click (síncrono — actúa antes de cualquier setState)
+    if (submitGuardRef.current) {
+      console.warn('Submit bloqueado: ya hay una emisión en curso')
+      return
+    }
 
     // Si es modo externo, usar el handler de externo
     if (mode === CREDIT_NOTE_MODES.EXTERNAL) {
@@ -481,6 +500,7 @@ export default function CreateCreditNote() {
       return
     }
 
+    submitGuardRef.current = true
     setIsSaving(true)
 
     try {
@@ -691,6 +711,7 @@ export default function CreateCreditNote() {
       setMessage({ type: 'error', text: error.message || 'Error al crear la nota de crédito' })
     } finally {
       setIsSaving(false)
+      submitGuardRef.current = false
     }
   }
 
