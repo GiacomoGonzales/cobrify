@@ -38,6 +38,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminPayments from './pages/admin/AdminPayments'
 import AdminAnalytics from './pages/admin/AdminAnalytics'
+import AdminInvestorReport from './pages/admin/AdminInvestorReport'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminResellers from './pages/admin/AdminResellers'
 import AdminExpirations from './pages/admin/AdminExpirations'
@@ -481,6 +482,7 @@ function App() {
               <Route path="expirations" element={<AdminExpirations />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="investor-report" element={<AdminInvestorReport />} />
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

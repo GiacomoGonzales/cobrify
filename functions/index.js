@@ -8004,6 +8004,322 @@ export const calculateGlobalBillingStats = onCall(
 
 
 /**
+ * Cloud Function: Reporte completo para presentación a inversores.
+ *
+ * Calcula y cachea en `adminStats/investorReport` un set amplio de métricas:
+ * negocios, suscripciones (MRR/ARR/distribución), volumen transaccional,
+ * engagement (productos/clientes/empleados), y top empresas.
+ *
+ * Diseñada para correrse on-demand desde el panel admin (botón). El cálculo
+ * es pesado (recorre TODAS las suscripciones, businesses, e invoices) por eso
+ * se cachea agresivamente — la UI sólo lee el cache hasta que se invoca de nuevo.
+ */
+export const calculateInvestorReport = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists) {
+      throw new HttpsError('permission-denied', 'Solo administradores')
+    }
+
+    try {
+      console.log('📊 [InvestorReport] Iniciando cálculo...')
+      const startTime = Date.now()
+      const now = new Date()
+      const day30 = new Date(now.getTime() - 30 * 86400000)
+      const day90 = new Date(now.getTime() - 90 * 86400000)
+
+      // ---- 0) Catálogo de planes (estándar + custom) ----
+      // El front guarda PLANS hardcodeado en subscriptionService.js. Lo replicamos
+      // acá con sólo months + pricePerMonth (los únicos campos que necesitamos
+      // para MRR/clasificación). Es duplicación, pero precios cambian poco.
+      const STANDARD_PLANS = {
+        trial: { months: 1, pricePerMonth: 0 },
+        free: { months: 1, pricePerMonth: 0 },
+        qpse_basico_1_month: { months: 1, pricePerMonth: 19.90 },
+        qpse_1_month: { months: 1, pricePerMonth: 19.90 },
+        qpse_1_month_2025: { months: 1, pricePerMonth: 29.90 },
+        qpse_1_month_2_branches: { months: 1, pricePerMonth: 39.80 },
+        qpse_1_month_3_branches: { months: 1, pricePerMonth: 29.90 },
+        qpse_1_month_1000: { months: 1, pricePerMonth: 29.90 },
+        addon_500_comprobantes: { months: 1, pricePerMonth: 10.00 },
+        qpse_6_months: { months: 6, pricePerMonth: 16.65 },
+        qpse_12_months: { months: 12, pricePerMonth: 12.49 },
+        sunat_direct_1_month: { months: 1, pricePerMonth: 19.90 },
+        sunat_direct_6_months: { months: 6, pricePerMonth: 16.65 },
+        sunat_direct_12_months: { months: 12, pricePerMonth: 12.49 },
+        qpse_1_month_2024: { months: 1, pricePerMonth: 29.90 },
+        qpse_6_months_2024: { months: 6, pricePerMonth: 16.65 },
+        qpse_12_months_2024: { months: 12, pricePerMonth: 12.49 },
+        sunat_direct_1_month_2024: { months: 1, pricePerMonth: 29.90 },
+        sunat_direct_6_months_2024: { months: 6, pricePerMonth: 16.65 },
+        sunat_direct_12_months_2024: { months: 12, pricePerMonth: 12.49 },
+        enterprise: { months: 1, pricePerMonth: 99 },
+      }
+
+      // Cargar planes custom desde Firestore (los que el admin creó)
+      let customPlans = {}
+      try {
+        const customDoc = await db.collection('settings').doc('customPlans').get()
+        if (customDoc.exists) customPlans = customDoc.data().plans || {}
+      } catch (e) { /* sin customs */ }
+
+      const ALL_PLANS = { ...STANDARD_PLANS }
+      Object.entries(customPlans).forEach(([key, plan]) => {
+        const months = plan.months || 1
+        const pricePerMonth = plan.pricePerMonth != null
+          ? Number(plan.pricePerMonth)
+          : (plan.totalPrice ? Number(plan.totalPrice) / months : 0)
+        ALL_PLANS[key] = { months, pricePerMonth }
+      })
+
+      // Helper: inferir info del plan desde el nombre si no está en el catálogo
+      const inferPlanInfo = (planKey) => {
+        if (!planKey) return null
+        if (ALL_PLANS[planKey]) return ALL_PLANS[planKey]
+        // Fallback: detectar months desde el nombre
+        if (/12[_-]?months?/i.test(planKey)) return { months: 12, pricePerMonth: 0 }
+        if (/6[_-]?months?/i.test(planKey)) return { months: 6, pricePerMonth: 0 }
+        if (/1[_-]?month/i.test(planKey)) return { months: 1, pricePerMonth: 0 }
+        if (/annual|anual|year/i.test(planKey)) return { months: 12, pricePerMonth: 0 }
+        return null
+      }
+
+      // ---- 1) Suscripciones (la fuente de verdad sobre planes/billing) ----
+      const subsSnap = await db.collection('subscriptions').get()
+      const mainSubs = subsSnap.docs.filter((d) => !d.data().ownerId)
+
+      const businesses = {
+        total: 0,
+        active: 0,
+        suspended: 0,
+        trial: 0,
+        free: 0,
+        newLast30: 0,
+        newLast90: 0,
+      }
+      const subs = {
+        monthly: 0,         // months === 1
+        semester: 0,        // months === 6
+        annual: 0,          // months === 12
+        otherPeriod: 0,     // months !== 1/6/12 o sin info
+        byPlan: {},
+        byBillingPeriod: {},
+        mrr: 0,
+        arr: 0,
+      }
+      const businessIds = []
+
+      mainSubs.forEach((d) => {
+        const s = d.data()
+        businesses.total++
+        const isBlocked = s.accessBlocked === true || s.status === 'suspended'
+        const isFree = s.plan === 'free'
+        const isTrial = s.plan === 'trial' || s.status === 'trialing'
+
+        if (isBlocked) businesses.suspended++
+        else if (isFree) businesses.free++
+        else if (isTrial) businesses.trial++
+        else businesses.active++
+
+        // Crecimiento
+        const created = s.createdAt?.toDate?.() || (s.createdAt ? new Date(s.createdAt) : null)
+        if (created) {
+          if (created >= day30) businesses.newLast30++
+          if (created >= day90) businesses.newLast90++
+        }
+
+        // Por plan
+        const plan = s.plan || 'unknown'
+        subs.byPlan[plan] = (subs.byPlan[plan] || 0) + 1
+
+        // Período + MRR: inferir del catálogo o del nombre del plan
+        if (!isFree && !isTrial && !isBlocked) {
+          const info = inferPlanInfo(plan)
+          const months = info?.months || 1
+          let periodKey
+          if (months === 1) { periodKey = 'monthly'; subs.monthly++ }
+          else if (months === 6) { periodKey = 'semester'; subs.semester++ }
+          else if (months === 12) { periodKey = 'annual'; subs.annual++ }
+          else { periodKey = 'other'; subs.otherPeriod++ }
+          subs.byBillingPeriod[periodKey] = (subs.byBillingPeriod[periodKey] || 0) + 1
+
+          // MRR: si la sub tiene pricePerMonth/totalPrice persistido, lo prefiero
+          // (representa lo que el usuario realmente paga). Fallback al catálogo.
+          let perMonth = parseFloat(s.pricePerMonth)
+          if (!perMonth || isNaN(perMonth)) {
+            const total = parseFloat(s.totalPrice)
+            if (total && months) perMonth = total / months
+          }
+          if (!perMonth || isNaN(perMonth)) {
+            perMonth = info?.pricePerMonth || 0
+          }
+          subs.mrr += perMonth
+        }
+
+        businessIds.push(d.id)
+      })
+      subs.arr = subs.mrr * 12
+
+      // ---- 2) Datos del negocio (businesses doc) — flags de configuración ----
+      const businessFlags = {
+        withCatalog: 0,
+        withComplaintsBook: 0,
+        withDispatchGuides: 0,
+        withAttendance: 0,
+        withMultipleBranches: 0,
+        withProductImages: 0,
+        byMode: {},
+      }
+      let totalBranchesAcrossBusinesses = 0
+      const businessNamesById = {}
+      const businessModeById = {}
+
+      const BATCH_SIZE = 30
+      for (let i = 0; i < businessIds.length; i += BATCH_SIZE) {
+        const batch = businessIds.slice(i, i + BATCH_SIZE)
+        await Promise.all(batch.map(async (bid) => {
+          try {
+            const bizDoc = await db.collection('businesses').doc(bid).get()
+            if (!bizDoc.exists) return
+            const b = bizDoc.data()
+            businessNamesById[bid] = b.businessName || b.name || b.email || bid
+
+            const mode = b.businessMode || 'retail'
+            businessModeById[bid] = mode
+            businessFlags.byMode[mode] = (businessFlags.byMode[mode] || 0) + 1
+            if (b.catalogEnabled === true) businessFlags.withCatalog++
+            if (b.complaintsBookEnabled === true) businessFlags.withComplaintsBook++
+            if (b.dispatchGuidesEnabled === true) businessFlags.withDispatchGuides++
+            if (b.enableProductImages === true) businessFlags.withProductImages++
+            if (b.attendance?.enabled === true) businessFlags.withAttendance++
+
+            // Sucursales: contar si hay docs en branches/
+            try {
+              const branchesSnap = await db.collection('businesses').doc(bid).collection('branches').get()
+              const c = branchesSnap.size
+              if (c > 1) businessFlags.withMultipleBranches++
+              totalBranchesAcrossBusinesses += c
+            } catch (e) { /* sin branches */ }
+          } catch (e) { /* ignore */ }
+        }))
+      }
+
+      // ---- 3) Volumen transaccional + engagement (invoices, products, customers, sub-users) ----
+      const invoicing = {
+        totalAmount: 0,
+        totalDocuments: 0,
+        byDocType: { factura: 0, boleta: 0, nota_venta: 0, nota_credito: 0, nota_debito: 0, other: 0 },
+      }
+      const engagement = {
+        totalProducts: 0,
+        totalCustomers: 0,
+        totalEmployees: 0,
+        totalCategories: 0,
+      }
+      const topBusinessesByRevenue = []
+
+      for (let i = 0; i < businessIds.length; i += BATCH_SIZE) {
+        const batch = businessIds.slice(i, i + BATCH_SIZE)
+        await Promise.all(batch.map(async (bid) => {
+          try {
+            const [invSnap, prodSnap, custSnap] = await Promise.all([
+              db.collection('businesses').doc(bid).collection('invoices').get(),
+              db.collection('businesses').doc(bid).collection('products').get(),
+              db.collection('businesses').doc(bid).collection('customers').get(),
+            ])
+
+            let bizTotal = 0
+            let bizDocs = 0
+            invSnap.forEach((iDoc) => {
+              const inv = iDoc.data()
+              if (inv.status === 'cancelled' || inv.status === 'voided' || inv.status === 'anulado') return
+              if (inv.documentType === 'nota_credito') return // no es venta
+              bizDocs++
+              const amount = parseFloat(inv.total) || parseFloat(inv.totals?.total) || 0
+              bizTotal += amount
+              const dt = inv.documentType || 'other'
+              if (invoicing.byDocType[dt] !== undefined) {
+                invoicing.byDocType[dt]++
+              } else {
+                invoicing.byDocType.other++
+              }
+            })
+            invoicing.totalAmount += bizTotal
+            invoicing.totalDocuments += bizDocs
+            engagement.totalProducts += prodSnap.size
+            engagement.totalCustomers += custSnap.size
+
+            if (bizTotal > 0) {
+              topBusinessesByRevenue.push({
+                businessId: bid,
+                businessName: businessNamesById[bid] || bid,
+                businessMode: businessModeById[bid] || 'retail',
+                totalAmount: bizTotal,
+                documentCount: bizDocs,
+              })
+            }
+          } catch (e) { /* ignore */ }
+        }))
+      }
+
+      // Sub-usuarios (empleados de los negocios) — query global a `users`
+      try {
+        const allUsersSnap = await db.collection('users').get()
+        engagement.totalEmployees = allUsersSnap.docs.filter((d) => !!d.data().ownerId).length
+      } catch (e) { /* ignore */ }
+
+      // Top 10
+      topBusinessesByRevenue.sort((a, b) => b.totalAmount - a.totalAmount)
+      const top10 = topBusinessesByRevenue.slice(0, 10)
+
+      // Promedios (con guardas para no dividir por 0)
+      const avgRevenuePerBusiness = businesses.total > 0 ? invoicing.totalAmount / businesses.total : 0
+      const avgDocsPerBusiness = businesses.total > 0 ? invoicing.totalDocuments / businesses.total : 0
+      const avgProductsPerBusiness = businesses.total > 0 ? engagement.totalProducts / businesses.total : 0
+      const avgEmployeesPerBusiness = businesses.total > 0 ? engagement.totalEmployees / businesses.total : 0
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(2)
+
+      const report = {
+        businesses,
+        subscriptions: subs,
+        businessFlags,
+        invoicing,
+        engagement,
+        averages: {
+          revenuePerBusiness: avgRevenuePerBusiness,
+          docsPerBusiness: avgDocsPerBusiness,
+          productsPerBusiness: avgProductsPerBusiness,
+          employeesPerBusiness: avgEmployeesPerBusiness,
+        },
+        topBusinessesByRevenue: top10,
+        totalBranchesAcrossBusinesses,
+        calculatedAt: FieldValue.serverTimestamp(),
+        calculationTimeSeconds: parseFloat(elapsed),
+        businessesProcessed: businessIds.length,
+      }
+
+      await db.collection('adminStats').doc('investorReport').set(report)
+      console.log(`✅ [InvestorReport] Listo en ${elapsed}s — ${businesses.total} negocios · S/ ${invoicing.totalAmount.toFixed(2)} facturado`)
+
+      return { success: true, stats: { ...report, calculatedAt: null } }
+    } catch (error) {
+      console.error('❌ [InvestorReport] Error:', error)
+      throw new HttpsError('internal', error.message)
+    }
+  }
+)
+
+
+/**
  * Cloud Function Callable: Renovación segura de cliente por reseller
  * Valida pertenencia, calcula precio con tier, verifica saldo, y ejecuta atómicamente
  */

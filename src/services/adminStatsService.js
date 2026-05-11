@@ -614,3 +614,47 @@ export async function recalculateGlobalBillingStats() {
     }
   }
 }
+
+/**
+ * Lee el reporte completo para inversores desde el caché.
+ * NO ejecuta el cálculo — solo lee lo que está guardado.
+ *
+ * Si nunca se calculó devuelve `needsCalculation: true` para que la UI
+ * muestre el botón sin métricas.
+ */
+export async function getInvestorReport() {
+  try {
+    const cacheRef = doc(db, 'adminStats', 'investorReport')
+    const snap = await getDoc(cacheRef)
+    if (!snap.exists()) {
+      return { needsCalculation: true }
+    }
+    const data = snap.data()
+    return {
+      ...data,
+      calculatedAt: data.calculatedAt?.toDate?.() || null,
+      fromCache: true,
+    }
+  } catch (error) {
+    console.error('Error leyendo reporte de inversores:', error)
+    throw error
+  }
+}
+
+/**
+ * Fuerza el recálculo del reporte. Llama a la Cloud Function.
+ * Pesado — solo cuando el usuario apriete el botón.
+ */
+export async function recalculateInvestorReport() {
+  try {
+    // Timeout cliente extendido a 9 min (igual que el server-side de la function).
+    // El default del SDK es 70 s y se cae con 'deadline-exceeded' en cuentas con
+    // muchos negocios.
+    const fn = httpsCallable(functions, 'calculateInvestorReport', { timeout: 540000 })
+    const result = await fn()
+    return result.data
+  } catch (error) {
+    console.error('Error recalculando reporte de inversores:', error)
+    return { success: false, error: error.message || 'Error desconocido' }
+  }
+}

@@ -16,7 +16,8 @@ import {
   Search,
   Building2,
   CalendarClock,
-  Bell
+  Bell,
+  Sparkles
 } from 'lucide-react'
 
 const navItems = [
@@ -61,6 +62,13 @@ const navItems = [
     label: 'Analytics',
     description: 'Reportes y gráficos',
     color: 'from-pink-500 to-rose-600'
+  },
+  {
+    path: '/app/admin/investor-report',
+    icon: Sparkles,
+    label: 'Reporte Inversores',
+    description: 'Métricas consolidadas (bajo demanda)',
+    color: 'from-indigo-500 to-purple-600'
   },
   {
     path: '/app/admin/notifications',
