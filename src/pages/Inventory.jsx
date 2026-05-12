@@ -1529,16 +1529,20 @@ export default function Inventory() {
       const branchStock = getStockForBranch(item)
 
       // Multi-select: array vacío = todos los estados
+      // Stock mínimo por producto (default 3 si no está configurado).
+      const itemMinStock = Number.isFinite(Number(item?.minStock)) && Number(item?.minStock) >= 0
+        ? Number(item.minStock)
+        : 3
       let matchesStatus = true
       if (filterStatuses.length > 0) {
         const itemStatuses = []
-        if (branchStock !== null && branchStock > 0 && branchStock < 4) {
+        if (branchStock !== null && branchStock > 0 && branchStock <= itemMinStock) {
           itemStatuses.push('low')
         }
         if (branchStock === 0) {
           itemStatuses.push('out')
         }
-        if (branchStock === null || branchStock >= 4) {
+        if (branchStock === null || branchStock > itemMinStock) {
           itemStatuses.push('normal')
         }
         matchesStatus = filterStatuses.some(status => itemStatuses.includes(status))
@@ -1669,7 +1673,10 @@ export default function Inventory() {
     const itemsWithStock = filteredProducts.filter(i => getStockForBranch(i) !== null)
     const lowStockItems = itemsWithStock.filter(i => {
       const branchStock = getStockForBranch(i)
-      return branchStock !== null && branchStock > 0 && branchStock < 4
+      const itemMinStock = Number.isFinite(Number(i?.minStock)) && Number(i?.minStock) >= 0
+        ? Number(i.minStock)
+        : 3
+      return branchStock !== null && branchStock > 0 && branchStock <= itemMinStock
     })
     const outOfStockItems = itemsWithStock.filter(i => getStockForBranch(i) === 0)
     const totalValue = itemsWithStock.reduce((sum, i) => {
@@ -2865,7 +2872,7 @@ export default function Inventory() {
                                       className={`font-bold text-sm ${
                                         realStock === 0
                                           ? 'text-red-600'
-                                          : realStock < 4
+                                          : realStock <= (item?.minStock ?? 3)
                                           ? 'text-yellow-600'
                                           : 'text-green-600'
                                       }`}

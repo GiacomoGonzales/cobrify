@@ -207,6 +207,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         row.fecha_vencimiento || row.Fecha_Vencimiento || row.FECHA_VENCIMIENTO ||
         row.fechaVencimiento || row.expiration_date || row.expirationDate
       ) : null
+      // Número de lote: opcional. Si viene junto con stock + fecha_vencimiento,
+      // se crea automáticamente un entry en batches[] para que el control FEFO
+      // y la página BatchControl detecten el lote inicial.
+      const batchNumberRaw = row.numero_lote || row.Numero_Lote || row.NUMERO_LOTE
+        || row.lote || row.Lote || row.LOTE
+        || row.numeroLote || row.batchNumber || row.batch_number || row.BATCH_NUMBER
+      const batchNumber = batchNumberRaw !== undefined && batchNumberRaw !== '' && batchNumberRaw !== null
+        ? String(batchNumberRaw).trim()
+        : null
       const catalogVisible = parseBool(
         row.mostrar_en_catalogo || row.Mostrar_En_Catalogo || row.MOSTRAR_EN_CATALOGO ||
         row.mostrarEnCatalogo || row.catalogVisible || row.showInCatalog || row.show_in_catalog,
@@ -261,8 +270,27 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         trackStock: trackStock,
         // Campos de inventario avanzado
         allowDecimalQuantity,
-        trackExpiration,
+        // Si viene número de lote, activar trackExpiration automáticamente
+        // para que el sistema FEFO detecte el lote en BatchControl y POS.
+        trackExpiration: trackExpiration || (!!batchNumber && !!expirationDate),
         expirationDate,
+        batchNumber: batchNumber || null,
+        // Si vienen lote + vencimiento + stock, generar el primer entry de
+        // batches[] para que aparezca como lote inicial.
+        // NOTA: warehouseId queda en null porque al validar todavía no sabemos
+        // a qué almacén final se asignará (la selección puede cambiar antes de
+        // confirmar el import). Products.jsx → handleImportProducts inyecta
+        // targetWarehouse.id en cada batch antes de createProduct para que el
+        // lote NO quede como "lote sin almacén asignado" en Almacenes.
+        ...((batchNumber && expirationDate && stockValue > 0) && {
+          batches: [{
+            id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            batchNumber,
+            expirationDate,
+            quantity: stockValue,
+            warehouseId: null,
+          }]
+        }),
         trackSerials,
         // Catálogo público
         catalogVisible,
@@ -496,7 +524,62 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       }
     }
 
-    return { validProducts: finalProducts, errors }
+    // Agrupación por LOTES: cuando el usuario carga el mismo producto (mismo
+    // SKU o mismo nombre) en varias filas con distintos números de lote, se
+    // fusionan en un solo producto con todos los batches[] juntos y stock
+    // sumado. El producto raíz adopta el lote más próximo a vencer (FEFO).
+    //
+    // Reglas:
+    // - Solo aplica a productos no-variantes (los productos con variantes
+    //   tienen su propio mecanismo de agrupación arriba).
+    // - Key preferida: SKU (si todas las filas lo traen). Fallback: nombre
+    //   normalizado.
+    // - Solo se agrupa si las filas tienen batches[] o batchNumber configurado.
+    //   Productos sin lote pasan derecho como filas independientes.
+    const groupedByBatch = new Map()
+    const afterBatchMerge = []
+    for (const p of finalProducts) {
+      // No tocar productos con variantes o sin lote configurado
+      if (p.hasVariants || (!p.batches?.length && !p.batchNumber)) {
+        afterBatchMerge.push(p)
+        continue
+      }
+      const skuKey = (p.sku || '').trim().toLowerCase()
+      const nameKey = (p.name || '').trim().toLowerCase()
+      const key = skuKey || nameKey
+      if (!key) {
+        afterBatchMerge.push(p)
+        continue
+      }
+      if (groupedByBatch.has(key)) {
+        const existing = groupedByBatch.get(key)
+        // Merge batches[]
+        const incomingBatches = p.batches || []
+        existing.batches = [...(existing.batches || []), ...incomingBatches]
+        // Sumar stock (cuidando nulls)
+        const prevStock = parseInt(existing.stock) || 0
+        const addStock = parseInt(p.stock) || 0
+        existing.stock = prevStock + addStock
+        existing.trackExpiration = true
+      } else {
+        groupedByBatch.set(key, p)
+        afterBatchMerge.push(p)
+      }
+    }
+    // Calcular FEFO: en cada producto agrupado por lotes, el batchNumber y
+    // expirationDate raíz se toman del lote más próximo a vencer.
+    for (const p of afterBatchMerge) {
+      if (!p.batches || p.batches.length === 0) continue
+      const sorted = [...p.batches].sort((a, b) => {
+        const dA = a.expirationDate ? new Date(a.expirationDate).getTime() : Infinity
+        const dB = b.expirationDate ? new Date(b.expirationDate).getTime() : Infinity
+        return dA - dB
+      })
+      p.batchNumber = sorted[0].batchNumber || p.batchNumber
+      p.expirationDate = sorted[0].expirationDate || p.expirationDate
+    }
+
+    return { validProducts: afterBatchMerge, errors }
   }
 
   const handleImport = async () => {
@@ -576,6 +659,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           stock: 500,
           stock_minimo: 50,
           trackStock: 'SI',
+          control_vencimiento: 'SI',
+          fecha_vencimiento: '2027-06-30',
+          numero_lote: 'L2026-A001',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
@@ -614,6 +700,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           stock: 200,
           stock_minimo: 20,
           trackStock: 'SI',
+          control_vencimiento: 'SI',
+          fecha_vencimiento: '2027-03-15',
+          numero_lote: 'AM-2026-15',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
@@ -652,11 +741,102 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           stock: 100,
           stock_minimo: 10,
           trackStock: 'SI',
+          control_vencimiento: 'SI',
+          fecha_vencimiento: '2026-12-20',
+          numero_lote: 'CLN-25-08',
           mostrar_en_catalogo: 'NO',
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
           subcategoria: '',
           afectacion_igv: 'EXONERADO',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
+        },
+        // ──────────────────────────────────────────────────────────────────
+        // Ejemplo: PRODUCTO CON MÚLTIPLES LOTES
+        // Misma SKU repetida en filas consecutivas, cada una con su lote.
+        // El sistema fusiona los lotes en batches[] y suma los stocks (50+30=80).
+        // El lote más próximo a vencer queda como FEFO automáticamente.
+        // ──────────────────────────────────────────────────────────────────
+        {
+          sku: 'MED-004',
+          codigo_barras: '7501111222333',
+          nombre: 'Ibuprofeno 400mg Tableta',
+          descripcion: 'Antiinflamatorio — Lote 1',
+          nombre_generico: 'Ibuprofeno',
+          concentracion: '400mg',
+          presentacion: 'Tableta',
+          laboratorio: 'Pfizer',
+          marca: 'Advil',
+          principio_activo: 'Ibuprofeno',
+          accion_terapeutica: 'Antiinflamatorio',
+          condicion_venta: 'otc',
+          registro_sanitario: 'RS-22222',
+          ubicacion: 'Estante A-3',
+          costo: 0.40,
+          precio: 0.90,
+          precio2: 0.75,
+          precio3: 0.65,
+          precio4: '',
+          stock: 50,
+          stock_minimo: 30,
+          trackStock: 'SI',
+          control_vencimiento: 'SI',
+          fecha_vencimiento: '2027-02-15',
+          numero_lote: 'IBU-LOT-A',
+          mostrar_en_catalogo: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Analgésicos',
+          subcategoria: 'Tabletas',
+          afectacion_igv: 'GRAVADO',
+          presentacion1_nombre: '',
+          presentacion1_cantidad: '',
+          presentacion1_precio: '',
+          presentacion2_nombre: '',
+          presentacion2_cantidad: '',
+          presentacion2_precio: '',
+          presentacion3_nombre: '',
+          presentacion3_cantidad: '',
+          presentacion3_precio: '',
+        },
+        {
+          sku: 'MED-004',
+          codigo_barras: '',
+          nombre: 'Ibuprofeno 400mg Tableta',
+          descripcion: 'Mismo producto — Lote 2 (otra fecha de vencimiento)',
+          nombre_generico: '',
+          concentracion: '',
+          presentacion: '',
+          laboratorio: '',
+          marca: '',
+          principio_activo: '',
+          accion_terapeutica: '',
+          condicion_venta: '',
+          registro_sanitario: '',
+          ubicacion: '',
+          costo: '',
+          precio: '',
+          precio2: '',
+          precio3: '',
+          precio4: '',
+          stock: 30,
+          stock_minimo: '',
+          trackStock: 'SI',
+          control_vencimiento: 'SI',
+          fecha_vencimiento: '2027-08-30',
+          numero_lote: 'IBU-LOT-B',
+          mostrar_en_catalogo: '',
+          unidad: '',
+          categoria: '',
+          subcategoria: '',
+          afectacion_igv: '',
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
@@ -841,6 +1021,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           permitir_decimales: 'NO',
           control_vencimiento: 'SI',          // CLAVE: activa control de vencimiento
           fecha_vencimiento: '2026-08-30',    // formato YYYY-MM-DD
+          numero_lote: 'L-2026-08',           // opcional, crea entry en batches[] si está
+
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1218,6 +1400,14 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           </button>
           <p className="text-xs text-gray-500 mt-1">
             Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Control de lotes y vencimientos (opcional, útil para farmacia): control_vencimiento (SI/NO), fecha_vencimiento (YYYY-MM-DD), numero_lote.
+            Si llenás los tres con stock &gt; 0, se crea automáticamente el lote inicial del producto.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Múltiples lotes del mismo producto:</strong> repetí el SKU (o el nombre) en varias filas, cada una con su propio numero_lote, fecha_vencimiento y stock.
+            El sistema fusiona los lotes en el mismo producto, suma los stocks y aplica FEFO al lote más próximo a vencer.
           </p>
           <details className="mt-2 text-xs text-gray-600">
             <summary className="cursor-pointer text-primary-600 hover:text-primary-700 select-none">

@@ -1827,6 +1827,36 @@ export default function Products() {
               }
             }
 
+            // Mergear lotes (batches) si el Excel trae lotes nuevos. Dedupe por
+            // número de lote + fecha de vencimiento. Sumamos cantidad si coincide.
+            // CRÍTICO: cada batch nuevo debe llevar warehouseId, o se reporta
+            // como "lote sin almacén asignado" al diagnosticar stock.
+            if (Array.isArray(product.batches) && product.batches.length > 0 && targetWarehouse) {
+              const existingBatches = Array.isArray(existingProduct.batches) ? existingProduct.batches : []
+              const batchKey = (b) => `${(b.batchNumber || '').toString().trim().toLowerCase()}|${b.expirationDate ? new Date(b.expirationDate).getTime() : ''}|${b.warehouseId || targetWarehouse.id}`
+              const merged = [...existingBatches]
+              const indexByKey = new Map(merged.map((b, idx) => [batchKey(b), idx]))
+              for (const incoming of product.batches) {
+                const normalized = { ...incoming, warehouseId: incoming.warehouseId || targetWarehouse.id }
+                const k = batchKey(normalized)
+                if (indexByKey.has(k)) {
+                  const idx = indexByKey.get(k)
+                  merged[idx] = {
+                    ...merged[idx],
+                    quantity: (parseInt(merged[idx].quantity) || 0) + (parseInt(normalized.quantity) || 0),
+                  }
+                } else {
+                  merged.push(normalized)
+                  indexByKey.set(k, merged.length - 1)
+                }
+              }
+              updates.batches = merged
+              // Si trae lotes, asegurar trackExpiration activo
+              if (product.trackExpiration || merged.some(b => !!b.expirationDate)) {
+                updates.trackExpiration = true
+              }
+            }
+
             // Solo actualizar si hay cambios
             if (Object.keys(updates).length > 0) {
               const updateResult = await updateProduct(getBusinessId(), existingProduct.id, updates)
@@ -1900,6 +1930,17 @@ export default function Products() {
                   minStock: 0
                 }]
                 product.stock = stockValue
+
+                // CRÍTICO: los lotes (batches) DEBEN llevar warehouseId, o el
+                // sistema de stock-por-almacén los detecta como "lote sin
+                // almacén asignado" y obliga al usuario a reparar manualmente
+                // desde Almacenes → Diagnosticar stock.
+                if (Array.isArray(product.batches) && product.batches.length > 0) {
+                  product.batches = product.batches.map(b => ({
+                    ...b,
+                    warehouseId: b.warehouseId || targetWarehouse.id,
+                  }))
+                }
 
                 // CRÍTICO: cada variante necesita su propio warehouseStocks o no aparece
                 // en la vista por almacén del inventario.
@@ -2887,7 +2928,7 @@ export default function Products() {
 
     const lowStockCount = products.filter(product => {
       const realStock = getRealStockValue(product)
-      return realStock !== null && realStock < 4
+      return realStock !== null && realStock <= (product?.minStock ?? 3)
     }).length
 
     const expiringProductsCount = products.filter(product => {
@@ -3810,7 +3851,7 @@ export default function Products() {
                                 return realStock !== null ? (
                                   <span
                                     className={`font-medium text-sm ${
-                                      realStock >= 4
+                                      realStock > (product?.minStock ?? 3)
                                         ? 'text-green-600'
                                         : realStock > 0
                                         ? 'text-yellow-600'
@@ -4172,7 +4213,7 @@ export default function Products() {
                                                   </div>
                                                   <span
                                                     className={`font-semibold text-sm ${
-                                                      stock >= 4
+                                                      stock > (product?.minStock ?? 3)
                                                         ? 'text-green-600'
                                                         : stock > 0
                                                         ? 'text-yellow-600'
