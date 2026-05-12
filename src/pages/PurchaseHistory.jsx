@@ -9,6 +9,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases as getIngredientPurchases, getIngredients } from '@/services/ingredientService'
 import { getPurchases as getProductPurchases } from '@/services/firestoreService'
 
@@ -206,7 +207,8 @@ export default function PurchaseHistory() {
   // Stats
   const stats = useMemo(() => ({
     total: filteredPurchases.length,
-    totalAmount: filteredPurchases.reduce((sum, p) => sum + (p.total || 0), 0),
+    // Suma en PEN base: usa el TC congelado de cada compra.
+    totalAmount: filteredPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0),
     suppliers: new Set(filteredPurchases.map(p => p.supplier).filter(Boolean)).size,
     products: filteredPurchases.filter(p => p.type === 'product').length,
     ingredients: filteredPurchases.filter(p => p.type === 'ingredient').length,
@@ -434,12 +436,15 @@ export default function PurchaseHistory() {
                     </TableCell>
                     <TableCell className="text-right">
                       <span className="text-sm">
-                        {formatCurrency(purchase.unitPrice)}
+                        {formatCurrency(purchase.unitPrice, purchase.currency)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(purchase.total)}
+                      <span className="font-semibold text-green-600 flex items-center justify-end gap-1.5">
+                        {formatCurrency(purchase.total, purchase.currency)}
+                        {normalizeCurrency(purchase.currency) === 'USD' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">

@@ -235,7 +235,11 @@ export const convertToPurchase = async (businessId, orderId) => {
       return { success: false, error: 'La orden de compra ya fue convertida' }
     }
 
-    // Retornar los datos necesarios para crear la compra
+    // Retornar los datos necesarios para crear la compra. Si la OC fue
+    // emitida en USD, propagamos la moneda y el TC al formulario de compra
+    // (CreatePurchase lo cargará y mostrará el TC, pero podrá editarlo
+    // antes de guardar la compra real, porque al recibirla el TC del día
+    // puede haber cambiado).
     return {
       success: true,
       data: {
@@ -244,6 +248,8 @@ export const convertToPurchase = async (businessId, orderId) => {
         subtotal: order.subtotal,
         igv: order.igv,
         total: order.total,
+        currency: order.currency || 'PEN',
+        exchangeRate: order.exchangeRate || 1,
         notes: order.notes,
         purchaseOrderId: orderId,
         purchaseOrderNumber: order.number,

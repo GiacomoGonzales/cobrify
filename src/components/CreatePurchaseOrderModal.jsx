@@ -5,11 +5,14 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getSuppliers, getProducts, createSupplier } from '@/services/firestoreService'
 import { createPurchaseOrder, getNextPurchaseOrderNumber, updatePurchaseOrder } from '@/services/purchaseOrderService'
 import { formatCurrency } from '@/lib/utils'
 import { consultarRUC } from '@/services/documentLookupService'
+import { isMultiCurrencyEnabled, getDefaultCurrency, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 
 // Unidades de medida comunes
 const UNITS = [
@@ -70,8 +73,31 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
   // Datos de la orden
   const [deliveryDate, setDeliveryDate] = useState('')
   const [paymentCondition, setPaymentCondition] = useState('contado')
-  const [currency, setCurrency] = useState('PEN')
+  const { businessSettings } = useAppContext()
+  const multiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
+  const [currency, setCurrency] = useState(multiCurrencyOn ? getDefaultCurrency(businessSettings) : BASE_CURRENCY)
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRateSource, setExchangeRateSource] = useState(null)
   const [notes, setNotes] = useState('')
+
+  // Auto-fetch TC del día al cambiar a USD (solo si no fue editado a mano).
+  useEffect(() => {
+    if (currency === 'USD' && exchangeRate <= 1 && !editingOrder) {
+      const fetchRate = async () => {
+        try {
+          const r = await getRateForDate(new Date())
+          if (r && Number.isFinite(r.sell) && r.sell > 0) {
+            setExchangeRate(Number(r.sell.toFixed(4)))
+            setExchangeRateSource(r.source)
+          }
+        } catch {
+          // silent — usuario verá TC=1 y debe ingresar a mano
+        }
+      }
+      fetchRate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency])
 
   // Items
   const [items, setItems] = useState([
@@ -102,7 +128,9 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         }
         setDeliveryDate(editingOrder.deliveryDate || '')
         setPaymentCondition(editingOrder.paymentCondition || 'contado')
-        setCurrency(editingOrder.currency || 'PEN')
+        setCurrency(normalizeCurrency(editingOrder.currency))
+        setExchangeRate(Number(editingOrder.exchangeRate) > 0 ? Number(editingOrder.exchangeRate) : 1)
+        setExchangeRateSource(editingOrder.exchangeRate ? 'manual' : null)
         setNotes(editingOrder.notes || '')
         setPricesIncludeIgv(editingOrder.pricesIncludeIgv !== false)
         if (editingOrder.items && editingOrder.items.length > 0) {
@@ -447,7 +475,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           subtotal: subtotal,
           igv: igv,
           total: total,
-          currency: currency,
+          currency: normalizeCurrency(currency),
+          exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
           pricesIncludeIgv: pricesIncludeIgv,
           deliveryDate: deliveryDate,
           paymentCondition: paymentCondition,
@@ -473,7 +502,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           subtotal: subtotal,
           igv: igv,
           total: total,
-          currency: currency,
+          currency: normalizeCurrency(currency),
+          exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
           pricesIncludeIgv: pricesIncludeIgv,
           deliveryDate: deliveryDate,
           paymentCondition: paymentCondition,
@@ -750,15 +780,46 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
                   ))}
                 </Select>
 
-                <Select
-                  label="Moneda"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  <option value="PEN">Soles (S/)</option>
-                  <option value="USD">Dólares ($)</option>
-                </Select>
+                {multiCurrencyOn ? (
+                  <Select
+                    label="Moneda"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                  >
+                    <option value="PEN">Soles (S/)</option>
+                    <option value="USD">Dólares ($)</option>
+                  </Select>
+                ) : (
+                  <div className="hidden" />
+                )}
               </div>
+
+              {/* Tipo de cambio cuando la OC es en USD */}
+              {multiCurrencyOn && currency === 'USD' && (
+                <div className="flex items-end gap-2 mt-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tipo de cambio (PEN por USD)
+                      {exchangeRateSource === 'sbs' && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>}
+                      {exchangeRateSource === 'manual' && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={exchangeRate}
+                      onChange={(e) => {
+                        setExchangeRate(parseFloat(e.target.value) || 0)
+                        setExchangeRateSource('manual')
+                      }}
+                      className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    Referencial: al recibir la mercadería puedes ajustar el TC final.
+                  </p>
+                </div>
+              )}
 
               {/* Checkbox IGV */}
               <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">

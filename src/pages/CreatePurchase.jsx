@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -10,6 +10,15 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Alert from '@/components/ui/Alert'
 import { formatCurrency } from '@/lib/utils'
+import {
+  isMultiCurrencyEnabled,
+  getDefaultCurrency,
+  convertToBase,
+  SUPPORTED_CURRENCIES,
+  BASE_CURRENCY,
+  normalizeCurrency,
+} from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import ProductFormModal, { getRootCategories, getSubcategories } from '@/components/product/ProductFormModal'
 import {
   getSuppliers,
@@ -114,6 +123,21 @@ export default function CreatePurchase() {
   const [invoiceDate, setInvoiceDate] = useState(getLocalDateString())
   const [notes, setNotes] = useState('')
 
+  // Multi-divisa (USD) — solo se renderiza UI si el negocio activó la flag
+  // en Configuración. Valores default: PEN, TC=1, sin TC fetch.
+  const multiCurrencyOn = useMemo(
+    () => isMultiCurrencyEnabled(businessSettings),
+    [businessSettings]
+  )
+  const initialCurrency = useMemo(
+    () => (multiCurrencyOn ? getDefaultCurrency(businessSettings) : BASE_CURRENCY),
+    [multiCurrencyOn, businessSettings]
+  )
+  const [currency, setCurrency] = useState(initialCurrency)
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs' | 'cache' | 'manual' | null
+  const [loadingRate, setLoadingRate] = useState(false)
+
   // Tipo de pago
   const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
   const [dueDate, setDueDate] = useState('') // Fecha de vencimiento (opcional)
@@ -159,6 +183,54 @@ export default function CreatePurchase() {
   useEffect(() => {
     loadData()
   }, [user, purchaseId])
+
+  // Trae el TC de hoy (o de la fecha de factura si está en pasado). Se llama
+  // automáticamente al cambiar a USD si el TC actual no fue editado a mano.
+  const fetchExchangeRate = async (forceForToday = false) => {
+    if (loadingRate) return
+    setLoadingRate(true)
+    try {
+      const refDate = forceForToday ? new Date() : (invoiceDate || new Date())
+      const result = await getRateForDate(refDate)
+      if (result && Number.isFinite(result.sell) && result.sell > 0) {
+        setExchangeRate(Number(result.sell.toFixed(4)))
+        setExchangeRateSource(result.source)
+        if (result.source === 'sbs') {
+          toast.success(`Tipo de cambio del día: S/ ${result.sell.toFixed(4)} (SBS)`)
+        }
+      } else {
+        setExchangeRateSource(null)
+        toast.error('No se pudo obtener el TC SBS. Ingresa el valor manualmente.')
+      }
+    } catch (err) {
+      console.error('Error obteniendo TC:', err)
+      toast.error('No se pudo obtener el TC. Ingresa el valor manualmente.')
+    } finally {
+      setLoadingRate(false)
+    }
+  }
+
+  // Al cambiar a USD, si todavía no hay TC válido (=1), traemos uno.
+  // En modo edición no auto-fetch (respetamos el TC congelado).
+  useEffect(() => {
+    if (isEditMode) return
+    if (currency === 'USD' && exchangeRate <= 1) {
+      fetchExchangeRate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency])
+
+  // SUNAT: las BOLETAS de venta no admiten USD. Forzamos PEN si el usuario
+  // selecciona boleta con USD activo. Toast informativo (una sola vez).
+  useEffect(() => {
+    if (invoiceDocType === 'boleta' && currency === 'USD') {
+      setCurrency('PEN')
+      setExchangeRate(1)
+      setExchangeRateSource(null)
+      toast.info('Las boletas siempre se emiten en Soles (SUNAT).')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceDocType])
 
   // Pre-llenar datos si viene de una orden de compra
   useEffect(() => {
@@ -230,6 +302,21 @@ export default function CreatePurchase() {
         setNotes(`Desde OC ${fromPurchaseOrder.number}: ${fromPurchaseOrder.notes}`)
       } else if (fromPurchaseOrder.number) {
         setNotes(`Desde Orden de Compra: ${fromPurchaseOrder.number}`)
+      }
+
+      // Pre-llenar moneda y TC de la OC (si vino). El usuario puede
+      // editar el TC antes de guardar la compra real (al recibir mercadería
+      // el TC del día puede ser otro).
+      if (multiCurrencyOn && fromPurchaseOrder.currency) {
+        const orderCcy = normalizeCurrency(fromPurchaseOrder.currency)
+        setCurrency(orderCcy)
+        if (orderCcy === 'USD') {
+          const r = Number(fromPurchaseOrder.exchangeRate)
+          if (Number.isFinite(r) && r > 0) {
+            setExchangeRate(r)
+            setExchangeRateSource('manual')
+          }
+        }
       }
 
       toast.info(`Datos pre-llenados desde OC ${fromPurchaseOrder.number}`)
@@ -321,6 +408,14 @@ export default function CreatePurchase() {
             setInvoiceDate(getLocalDateString(invoiceDateObj))
           }
           setNotes(purchase.notes || '')
+
+          // Moneda y TC CONGELADO de la compra original. Si la compra es
+          // antigua y no tiene currency, queda como PEN/1 (compatible).
+          const purchaseCurrency = normalizeCurrency(purchase.currency)
+          setCurrency(purchaseCurrency)
+          const rate = Number(purchase.exchangeRate)
+          setExchangeRate(Number.isFinite(rate) && rate > 0 ? rate : 1)
+          setExchangeRateSource(purchase.exchangeRate ? 'manual' : null)
 
           // Cargar tipo de pago
           setPaymentType(purchase.paymentType || 'contado')
@@ -711,10 +806,20 @@ export default function CreatePurchase() {
       total += itemTotal
     })
 
+    // Equivalentes en moneda base (PEN). Si la compra es PEN, son iguales.
+    // Si es USD, se convierten con el TC congelado al momento de guardar
+    // (usado en reportes globales y para el costo del producto).
+    const subtotalInBase = convertToBase(subtotal, currency, exchangeRate)
+    const igvInBase = convertToBase(igv, currency, exchangeRate)
+    const totalInBase = convertToBase(total, currency, exchangeRate)
+
     return {
       subtotal,
       igv,
-      total
+      total,
+      subtotalInBase,
+      igvInBase,
+      totalInBase,
     }
   }
 
@@ -1043,6 +1148,14 @@ export default function CreatePurchase() {
         subtotal: amounts.subtotal,
         igv: amounts.igv,
         total: amounts.total,
+        // Moneda y TC CONGELADO. Si currency='PEN', exchangeRate=1 y los
+        // *InBase son iguales a los nativos. NUNCA se recalculan a posteriori
+        // (los reportes históricos deben quedar fijos aunque suba el dólar).
+        currency: normalizeCurrency(currency),
+        exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+        subtotalInBase: amounts.subtotalInBase,
+        igvInBase: amounts.igvInBase,
+        totalInBase: amounts.totalInBase,
         notes: notes.trim(),
         // Tipo de pago y estado
         paymentType: paymentType, // 'contado' o 'credito'
@@ -1246,8 +1359,14 @@ export default function CreatePurchase() {
         }
         const qty = parseFloat(item.quantity) || 0
         const cost = parseFloat(item.cost) || 0
+        // CRÍTICO multi-divisa: el costo del PRODUCTO se almacena siempre en
+        // moneda base (PEN). Si la compra fue en USD, convertimos cada item
+        // ANTES de acumular para que el promedio ponderado y los costos en
+        // los batches queden en PEN. Reportes de margen, valuación de
+        // inventario y precios de venta operan en PEN.
+        const costInBase = convertToBase(cost, currency, exchangeRate)
         groupedProducts[groupKey].totalQuantity += qty
-        groupedProducts[groupKey].totalCost += qty * cost
+        groupedProducts[groupKey].totalCost += qty * costInBase
         groupedProducts[groupKey].items.push(item)
       })
 
@@ -1354,7 +1473,9 @@ export default function CreatePurchase() {
               const itemExpDate = item.expirationDate
                 ? Timestamp.fromDate(parseLocalDate(item.expirationDate))
                 : null
-              const itemCost = parseFloat(item.cost) || 0
+              // costPrice del lote también en PEN base (ver razón en groupedProducts).
+              const itemCostNative = parseFloat(item.cost) || 0
+              const itemCost = convertToBase(itemCostNative, currency, exchangeRate)
 
               // Solo intentamos merge si hay batchNumber identificable.
               const existingIdx = itemBatchNumber
@@ -1508,8 +1629,12 @@ export default function CreatePurchase() {
         }
         const qty = parseFloat(item.quantity) || 0
         const cost = parseFloat(item.cost) || 0
+        // Mismo principio que productos: el costo del INGREDIENTE se almacena
+        // siempre en PEN base. Si la compra es USD, convertimos antes de
+        // acumular para el promedio.
+        const costInBase = convertToBase(cost, currency, exchangeRate)
         groupedIngredients[ingredientId].totalQuantity += qty
-        groupedIngredients[ingredientId].totalCost += qty * cost
+        groupedIngredients[ingredientId].totalCost += qty * costInBase
       })
 
       if (!isEditMode) {
@@ -1910,6 +2035,96 @@ export default function CreatePurchase() {
                 </p>
               </div>
             )}
+
+            {/* === Multi-divisa: selector de moneda + TC ============== */}
+            {/* Solo se muestra si el negocio activó el toggle en Configuración. */}
+            {/* Las boletas se bloquean por norma SUNAT (siempre PEN). */}
+            {multiCurrencyOn && (
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <label className="text-sm font-medium text-gray-700">
+                    Moneda de la compra
+                  </label>
+                  {invoiceDocType === 'boleta' && (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
+                      Boleta → solo PEN
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {SUPPORTED_CURRENCIES.map((ccy) => {
+                    const disabled = invoiceDocType === 'boleta' && ccy === 'USD'
+                    const active = currency === ccy
+                    return (
+                      <button
+                        key={ccy}
+                        type="button"
+                        disabled={disabled || isEditMode}
+                        onClick={() => setCurrency(ccy)}
+                        className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                          active
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        } ${disabled || isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={isEditMode ? 'No se puede cambiar la moneda en edición' : undefined}
+                      >
+                        {ccy === 'PEN' ? 'S/  Soles' : '$  Dólares'}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {currency === 'USD' && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-700">
+                        Tipo de cambio (PEN por USD)
+                      </label>
+                      {exchangeRateSource === 'sbs' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                      )}
+                      {exchangeRateSource === 'cache' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
+                      )}
+                      {exchangeRateSource === 'manual' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        value={exchangeRate}
+                        onChange={(e) => {
+                          setExchangeRate(parseFloat(e.target.value) || 0)
+                          setExchangeRateSource('manual')
+                        }}
+                        disabled={isEditMode}
+                        className="flex-1 h-9 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fetchExchangeRate(true)}
+                        disabled={loadingRate || isEditMode}
+                        className="h-9 px-3 text-xs font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                        title="Obtener TC del día desde SBS"
+                      >
+                        {loadingRate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        SBS
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      El TC se congela al guardar la compra. Los reportes en PEN
+                      se calcularán con este TC y no cambiarán aunque el dólar
+                      fluctúe. El costo del producto se almacena en Soles.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Tipo de Pago */}
@@ -2218,7 +2433,7 @@ export default function CreatePurchase() {
                     {/* Subtotal */}
                     <td className="px-4 py-2 text-right">
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency(calculateItemSubtotal(item))}
+                        {formatCurrency(calculateItemSubtotal(item), currency)}
                       </span>
                     </td>
                     {/* Eliminar */}
@@ -2625,7 +2840,7 @@ export default function CreatePurchase() {
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Subtotal:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency(calculateItemSubtotal(item))}
+                    {formatCurrency(calculateItemSubtotal(item), currency)}
                   </span>
                 </div>
               </div>
@@ -2687,20 +2902,32 @@ export default function CreatePurchase() {
             />
 
             <div className="border-t pt-4 space-y-3">
-              <div className="flex justify-between items-center text-gray-600">
-                <span className="text-sm">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(calculateAmounts().subtotal)}</span>
-              </div>
-              <div className="flex justify-between items-center text-gray-600">
-                <span className="text-sm">IGV (18%):</span>
-                <span className="font-medium">{formatCurrency(calculateAmounts().igv)}</span>
-              </div>
-              <div className="border-t pt-3 flex justify-between items-center">
-                <span className="text-lg font-semibold text-gray-700">Total:</span>
-                <span className="text-3xl font-bold text-primary-600">
-                  {formatCurrency(calculateAmounts().total)}
-                </span>
-              </div>
+              {(() => {
+                const a = calculateAmounts()
+                return (
+                  <>
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span className="text-sm">Subtotal:</span>
+                      <span className="font-medium">{formatCurrency(a.subtotal, currency)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span className="text-sm">IGV (18%):</span>
+                      <span className="font-medium">{formatCurrency(a.igv, currency)}</span>
+                    </div>
+                    <div className="border-t pt-3 flex justify-between items-center">
+                      <span className="text-lg font-semibold text-gray-700">Total:</span>
+                      <span className="text-3xl font-bold text-primary-600">
+                        {formatCurrency(a.total, currency)}
+                      </span>
+                    </div>
+                    {currency === 'USD' && exchangeRate > 0 && (
+                      <div className="text-right text-xs text-gray-500 -mt-1">
+                        ≈ {formatCurrency(a.totalInBase, 'PEN')} (TC {exchangeRate})
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
             <div className="flex justify-end gap-3">

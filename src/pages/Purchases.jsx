@@ -35,6 +35,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
@@ -540,7 +541,7 @@ export default function Purchases() {
     const remaining = Math.round(((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)) * 100) / 100
     const roundedAmount = Math.round(amount * 100) / 100
     if (roundedAmount > remaining + 0.001) {
-      toast.error(`El monto no puede exceder el saldo pendiente (${formatCurrency(remaining)})`)
+      toast.error(`El monto no puede exceder el saldo pendiente (${formatCurrency(remaining, registeringPayment?.currency)})`)
       return
     }
 
@@ -582,7 +583,7 @@ export default function Purchases() {
       if (result.success) {
         toast.success(isPaidInFull
           ? 'Pago registrado. ¡Compra cancelada completamente!'
-          : `Abono de ${formatCurrency(amount)} registrado exitosamente`
+          : `Abono de ${formatCurrency(amount, registeringPayment?.currency)} registrado exitosamente`
         )
         // Limpiar y cerrar modal
         setRegisteringPayment(null)
@@ -943,18 +944,26 @@ export default function Purchases() {
     return purchases.filter(filterByDate).filter(filterByBranch)
   }, [purchases, dateFilter, customStartDate, customEndDate, filterBranch, getWarehouseIdsForBranch])
 
-  // Estadísticas
+  // Estadísticas — montos convertidos a PEN base usando el TC congelado en
+  // cada compra. Si una compra es USD con TC 3.78 y total $100, suma S/ 378.
+  // Si es PEN nativa, getDocumentTotalInBase devuelve el total tal cual.
   const stats = useMemo(() => {
     const filtered = dateFilteredPurchases
     const pendingPurchases = filtered.filter(p => p.paymentType === 'credito' && p.paymentStatus === 'pending')
     const pendingAmount = pendingPurchases.reduce((sum, p) => {
-      const remaining = (p.total || 0) - (p.paidAmount || 0)
-      return sum + remaining
+      const remainingNative = (p.total || 0) - (p.paidAmount || 0)
+      // Convertir el remanente a PEN base usando el TC del documento.
+      const remainingInBase = getDocumentTotalInBase({
+        total: remainingNative,
+        currency: p.currency,
+        exchangeRate: p.exchangeRate,
+      })
+      return sum + remainingInBase
     }, 0)
 
     return {
       total: filtered.length,
-      totalAmount: filtered.reduce((sum, p) => sum + (p.total || 0), 0),
+      totalAmount: filtered.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0),
       totalAll: purchases.length,
       pendingCount: pendingPurchases.length,
       pendingAmount: pendingAmount,
@@ -1278,8 +1287,11 @@ export default function Purchases() {
 
                   {/* Fila 3: Monto + Estado */}
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm font-bold text-gray-900">
-                      {formatCurrency(purchase.total)}
+                    <span className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                      {formatCurrency(purchase.total, purchase.currency)}
+                      {normalizeCurrency(purchase.currency) === 'USD' && (
+                        <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                      )}
                     </span>
                     <div>
                       {purchase.paymentType === 'credito' ? (
@@ -1382,7 +1394,12 @@ export default function Purchases() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {formatCurrency(purchase.total)}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>{formatCurrency(purchase.total, purchase.currency)}</span>
+                          {normalizeCurrency(purchase.currency) === 'USD' && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         {purchase.paymentType === 'credito' ? (
@@ -1414,7 +1431,7 @@ export default function Purchases() {
                                     {Math.round(((purchase.paidAmount || 0) / purchase.total) * 100)}%
                                   </Badge>
                                   <span className="text-xs text-gray-500 mt-0.5">
-                                    {formatCurrency(purchase.paidAmount || 0)} / {formatCurrency(purchase.total)}
+                                    {formatCurrency(purchase.paidAmount || 0, purchase.currency)} / {formatCurrency(purchase.total, purchase.currency)}
                                   </span>
                                 </>
                               )}
@@ -1636,10 +1653,10 @@ export default function Purchases() {
                         </TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.unitPrice)}
+                          {formatCurrency(item.unitPrice, viewingPurchase?.currency)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(item.quantity * item.unitPrice)}
+                          {formatCurrency(item.quantity * item.unitPrice, viewingPurchase?.currency)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1654,20 +1671,30 @@ export default function Purchases() {
                 <>
                   <div className="flex justify-between items-center text-gray-600">
                     <span className="text-sm">Subtotal:</span>
-                    <span className="font-medium">{formatCurrency(viewingPurchase.subtotal)}</span>
+                    <span className="font-medium">{formatCurrency(viewingPurchase.subtotal, viewingPurchase.currency)}</span>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span className="text-sm">IGV (18%):</span>
-                    <span className="font-medium">{formatCurrency(viewingPurchase.igv)}</span>
+                    <span className="font-medium">{formatCurrency(viewingPurchase.igv, viewingPurchase.currency)}</span>
                   </div>
                 </>
               )}
               <div className="border-t pt-3 flex justify-between items-center">
-                <span className="text-lg font-semibold text-gray-700">Total:</span>
+                <span className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                  Total:
+                  {normalizeCurrency(viewingPurchase.currency) === 'USD' && (
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD · TC {viewingPurchase.exchangeRate || 1}</span>
+                  )}
+                </span>
                 <span className="text-2xl font-bold text-primary-600">
-                  {formatCurrency(viewingPurchase.total)}
+                  {formatCurrency(viewingPurchase.total, viewingPurchase.currency)}
                 </span>
               </div>
+              {normalizeCurrency(viewingPurchase.currency) === 'USD' && (
+                <div className="text-right text-xs text-gray-500 -mt-1">
+                  ≈ {formatCurrency(getDocumentTotalInBase(viewingPurchase), 'PEN')} al TC congelado
+                </div>
+              )}
             </div>
 
             {viewingPurchase.notes && (
@@ -1777,7 +1804,7 @@ export default function Purchases() {
                 ha sido pagada?
               </p>
               <p className="text-lg font-bold text-gray-900 mt-2">
-                Monto: {formatCurrency(markingAsPaid?.total || 0)}
+                Monto: {formatCurrency(markingAsPaid?.total || 0, markingAsPaid?.currency)}
               </p>
             </div>
           </div>
@@ -1826,16 +1853,16 @@ export default function Purchases() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total de la Compra</p>
-                  <p className="font-bold text-lg">{formatCurrency(viewingInstallments.total)}</p>
+                  <p className="font-bold text-lg">{formatCurrency(viewingInstallments.total, viewingInstallments.currency)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Pagado</p>
-                  <p className="font-medium text-green-600">{formatCurrency(viewingInstallments.paidAmount || 0)}</p>
+                  <p className="font-medium text-green-600">{formatCurrency(viewingInstallments.paidAmount || 0, viewingInstallments.currency)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Pendiente</p>
                   <p className="font-medium text-red-600">
-                    {formatCurrency((viewingInstallments.total || 0) - (viewingInstallments.paidAmount || 0))}
+                    {formatCurrency((viewingInstallments.total || 0) - (viewingInstallments.paidAmount || 0), viewingInstallments.currency)}
                   </p>
                 </div>
               </div>
@@ -1878,7 +1905,7 @@ export default function Purchases() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-bold">{formatCurrency(inst.amount)}</span>
+                      <span className="font-bold">{formatCurrency(inst.amount, viewingInstallments?.currency)}</span>
                       {inst.status === 'pending' && (
                         <Button
                           size="sm"
@@ -1931,16 +1958,16 @@ export default function Purchases() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total de la compra:</span>
-                <span className="text-sm font-bold">{formatCurrency(registeringPayment.total)}</span>
+                <span className="text-sm font-bold">{formatCurrency(registeringPayment.total, registeringPayment.currency)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Ya pagado:</span>
-                <span className="text-sm font-medium text-green-600">{formatCurrency(registeringPayment.paidAmount || 0)}</span>
+                <span className="text-sm font-medium text-green-600">{formatCurrency(registeringPayment.paidAmount || 0, registeringPayment.currency)}</span>
               </div>
               <div className="flex justify-between border-t pt-2">
                 <span className="text-sm text-gray-700 font-medium">Saldo pendiente:</span>
                 <span className="text-lg font-bold text-red-600">
-                  {formatCurrency((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0))}
+                  {formatCurrency((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0), registeringPayment.currency)}
                 </span>
               </div>
             </div>
@@ -2043,16 +2070,16 @@ export default function Purchases() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total de la Compra</p>
-                  <p className="font-bold text-lg">{formatCurrency(viewingPayments.total)}</p>
+                  <p className="font-bold text-lg">{formatCurrency(viewingPayments.total, viewingPayments.currency)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total Pagado</p>
-                  <p className="font-medium text-green-600">{formatCurrency(viewingPayments.paidAmount || 0)}</p>
+                  <p className="font-medium text-green-600">{formatCurrency(viewingPayments.paidAmount || 0, viewingPayments.currency)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Saldo Pendiente</p>
                   <p className="font-medium text-red-600">
-                    {formatCurrency((viewingPayments.total || 0) - (viewingPayments.paidAmount || 0))}
+                    {formatCurrency((viewingPayments.total || 0) - (viewingPayments.paidAmount || 0), viewingPayments.currency)}
                   </p>
                 </div>
               </div>
@@ -2116,7 +2143,7 @@ export default function Purchases() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-green-600">+{formatCurrency(payment.amount)}</span>
+                            <span className="font-bold text-green-600">+{formatCurrency(payment.amount, viewingPayments?.currency)}</span>
                             <button
                               onClick={() => {
                                 const pd = paymentDate instanceof Date ? paymentDate : new Date(paymentDate)

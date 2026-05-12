@@ -4,6 +4,7 @@ import { ref, getBlob, getDownloadURL } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { getCurrencySymbol, getCurrencyLongName, normalizeCurrency } from '@/utils/currency'
 
 // Sistema de caché compartido
 const LOGO_CACHE_KEY = 'cobrify_logo_cache'
@@ -190,6 +191,11 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [120, 120, 120]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+
+  // Moneda del documento — 'S/' (PEN) o '$' (USD). Cae en PEN si no viene.
+  const orderCurrency = normalizeCurrency(order?.currency)
+  const currencySymbol = getCurrencySymbol(orderCurrency)
+  const currencyLongName = getCurrencyLongName(orderCurrency).toUpperCase()
 
   const MARGIN_LEFT = 20
   const MARGIN_RIGHT = 20
@@ -471,7 +477,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text('MONEDA:', colRightX, rightY)
   doc.setFont('helvetica', 'normal')
-  doc.text('SOLES', colRightX + 55, rightY)
+  doc.text(currencyLongName, colRightX + 55, rightY)
   rightY += dataLineHeight
 
   if (order.paymentCondition) {
@@ -673,7 +679,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   currentY = dataRowY + 8
 
   // ========== SON (MONTO EN LETRAS) ==========
-  const montoEnLetras = numeroALetras(order.total || 0) + ' SOLES'
+  const montoEnLetras = numeroALetras(order.total || 0) + ' ' + currencyLongName
   const sonSectionHeight = 22
 
   doc.setDrawColor(...BLACK)
@@ -708,7 +714,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...BLACK)
   doc.text('SUBTOTAL', totalsX + 5, currentY + 10)
-  doc.text('S/ ' + (order.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
+  doc.text(currencySymbol + ' ' + (order.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
   currentY += totalsRowHeight
 
   // IGV
@@ -716,7 +722,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'F')
   doc.line(totalsX, currentY + totalsRowHeight, totalsX + totalsWidth, currentY + totalsRowHeight)
   doc.text('IGV (18%)', totalsX + 5, currentY + 10)
-  doc.text('S/ ' + (order.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
+  doc.text(currencySymbol + ' ' + (order.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
   currentY += totalsRowHeight
 
   // Total
@@ -726,7 +732,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text('TOTAL', totalsX + 5, currentY + 14)
   doc.setFontSize(11)
-  doc.text('S/ ' + (order.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 14, { align: 'right' })
+  doc.text(currencySymbol + ' ' + (order.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 14, { align: 'right' })
 
   currentY += totalsRowHeight + 20
 
