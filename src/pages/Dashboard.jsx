@@ -258,13 +258,17 @@ export default function Dashboard() {
   // Facturas pendientes
   const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
 
-  // Productos con stock bajo (< 4)
+  // Productos con stock bajo. Usa el umbral configurado por producto
+  // (minStock); si no existe, cae al default global (DEFAULT_MIN_STOCK=3).
   const lowStockProducts = products.filter(p => {
+    const threshold = Number.isFinite(Number(p.minStock)) && Number(p.minStock) >= 0
+      ? Number(p.minStock)
+      : 3
     if (p.hasVariants && p.variants?.length > 0) {
       const totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-      return totalStock < 4
+      return totalStock <= threshold
     }
-    return p.stock !== null && p.stock < 4
+    return p.stock !== null && p.stock <= threshold
   })
 
   // Datos de ventas de los últimos 7 días con comparativa de semana anterior

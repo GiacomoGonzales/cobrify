@@ -248,6 +248,22 @@ export const productSchema = z.object({
     ])
     .nullable()
     .optional(),
+  // Stock mínimo por producto para alerta de bajo stock. Si está vacío,
+  // los lugares que lo consumen caen al default global.
+  minStock: z
+    .union([
+      z.number().int().nonnegative('El stock mínimo no puede ser negativo'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
   noStock: z.boolean().optional(),
   marca: z.string().optional(),
   // NUEVO: Stock por almacén para productos simples

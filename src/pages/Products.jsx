@@ -726,6 +726,7 @@ export default function Products() {
       hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
+      minStock: product.minStock != null ? product.minStock.toString() : '',
     })
     setIsModalOpen(true)
   }
@@ -838,6 +839,7 @@ export default function Products() {
       hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
+      minStock: product.minStock != null ? product.minStock.toString() : '',
     })
 
     setIsModalOpen(true)
@@ -948,6 +950,10 @@ export default function Products() {
         trackSerials: trackSerials,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
+        // Stock mínimo por producto para alerta de bajo stock. Si está vacío
+        // se guarda null y los lugares que consumen el dato usan el default
+        // (3) preservando el comportamiento anterior a esta feature.
+        minStock: data.minStock && data.minStock !== '' ? Math.max(0, parseInt(data.minStock)) : null,
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
@@ -3493,7 +3499,7 @@ export default function Products() {
                             {stockDisplay !== null ? (
                               <span
                                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                  stockDisplay >= 4
+                                  stockDisplay > (product?.minStock ?? 3)
                                     ? 'bg-green-100 text-green-700'
                                     : stockDisplay > 0
                                     ? 'bg-yellow-100 text-yellow-700'
@@ -3794,7 +3800,7 @@ export default function Products() {
                                 const variantStock = product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
                                 return (
                                   <span className={`font-medium text-sm ${
-                                    variantStock >= 4 ? 'text-green-600' : variantStock > 0 ? 'text-yellow-600' : 'text-red-600'
+                                    variantStock > (product?.minStock ?? 3) ? 'text-green-600' : variantStock > 0 ? 'text-yellow-600' : 'text-red-600'
                                   }`}>
                                     {variantStock}
                                   </span>
@@ -3985,7 +3991,7 @@ export default function Products() {
                                           <span className="text-xs font-mono text-purple-600">{v.sku}</span>
                                           <span className="text-xs text-gray-500 truncate">{v.label}</span>
                                         </div>
-                                        <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock >= 4 ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
+                                        <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock > (product?.minStock ?? 3) ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
                                       </div>
                                     ))}
                                   </div>
@@ -4108,7 +4114,7 @@ export default function Products() {
                                                 </div>
                                                 <span
                                                   className={`font-semibold text-sm ${
-                                                    stock >= 4
+                                                    stock > (product?.minStock ?? 3)
                                                       ? 'text-green-600'
                                                       : stock > 0
                                                       ? 'text-yellow-600'
@@ -5069,6 +5075,17 @@ export default function Products() {
                   />
                 )}
 
+                {/* Stock mínimo (alerta por producto) */}
+                <Input
+                  label="Stock mínimo (alerta)"
+                  type="number"
+                  min="0"
+                  placeholder="3"
+                  error={errors.minStock?.message}
+                  {...register('minStock')}
+                  helperText="Cuando el stock baje de este valor, aparece en amarillo y se notifica. Vacío = usa el default (3)."
+                />
+
               </div>
           </div>
           )}
@@ -5842,7 +5859,7 @@ export default function Products() {
                       const realStock = getRealStockValue(viewingProduct) || 0
                       return (
                         <p className={`text-2xl font-bold mt-1 ${
-                          realStock >= 4 ? 'text-green-600' :
+                          realStock > (viewingProduct?.minStock ?? 3) ? 'text-green-600' :
                           realStock > 0 ? 'text-yellow-600' :
                           'text-red-600'
                         }`}>
@@ -5866,7 +5883,7 @@ export default function Products() {
                                 {warehouse?.isDefault && <Badge variant="default" className="ml-2 text-xs">Principal</Badge>}
                               </span>
                               <span className={`font-semibold text-sm ${
-                                ws.stock >= 4 ? 'text-green-600' :
+                                ws.stock > (product?.minStock ?? 3) ? 'text-green-600' :
                                 ws.stock > 0 ? 'text-yellow-600' :
                                 'text-red-600'
                               }`}>

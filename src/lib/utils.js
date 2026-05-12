@@ -39,6 +39,41 @@ export function formatCurrency(amount) {
  * @param {string} priceKey - 'price1' | 'price2' | 'price3' | 'price4'
  * @returns {number} cantidad mínima ≥ 1
  */
+/**
+ * Default usado cuando el producto no tiene `minStock` configurado.
+ * Preserva el comportamiento histórico (1-3 unidades en amarillo, 0 rojo).
+ */
+export const DEFAULT_MIN_STOCK = 3
+
+/**
+ * Devuelve el estado de stock de un producto/variante respecto a su umbral
+ * de stock mínimo. El umbral puede venir del producto (campo `minStock`) o
+ * del default global.
+ *
+ * @param {number} stock     stock actual disponible
+ * @param {number} [minStock] umbral configurado por el dueño (opcional)
+ * @returns {'out' | 'low' | 'ok'}
+ */
+export function getStockStatus(stock, minStock) {
+  const s = Number(stock)
+  if (!Number.isFinite(s) || s <= 0) return 'out'
+  const threshold = Number.isFinite(Number(minStock)) && Number(minStock) >= 0
+    ? Number(minStock)
+    : DEFAULT_MIN_STOCK
+  return s <= threshold ? 'low' : 'ok'
+}
+
+/**
+ * Devuelve las clases tailwind de color de texto según el estado de stock.
+ * Útil para evitar repetir la cadena ternaria en cada lugar.
+ */
+export function getStockColorClass(stock, minStock) {
+  const status = getStockStatus(stock, minStock)
+  return status === 'out' ? 'text-red-600'
+    : status === 'low' ? 'text-yellow-600'
+    : 'text-green-600'
+}
+
 export function getCatalogMinQty(business, priceKey, product = null) {
   if (!priceKey || priceKey === 'price1') return 1
 

@@ -1794,7 +1794,11 @@ export default function Inventory() {
     if (realStock === 0) {
       return { status: 'Agotado', variant: 'danger', icon: AlertTriangle }
     }
-    if (realStock < 4) {
+    // Stock mínimo por producto (default 3 si no está configurado).
+    const minStock = Number.isFinite(Number(product?.minStock)) && Number(product?.minStock) >= 0
+      ? Number(product.minStock)
+      : 3
+    if (realStock <= minStock) {
       return { status: 'Stock Bajo', variant: 'warning', icon: TrendingDown }
     }
     return { status: 'Normal', variant: 'success', icon: TrendingUp }
@@ -2377,7 +2381,7 @@ export default function Inventory() {
                             {realStock === null ? (
                               <span className="text-xs text-gray-500">S/C</span>
                             ) : (
-                              <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock < 4 ? 'text-yellow-600' : 'text-green-600'}`}>
+                              <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock <= (item?.minStock ?? 3) ? 'text-yellow-600' : 'text-green-600'}`}>
                                 {item.isIngredient ? realStock.toFixed(2) : realStock} {item.unit || 'uds'}
                               </span>
                             )}
@@ -2431,7 +2435,7 @@ export default function Inventory() {
                                         <span className="text-xs text-gray-700">{wh.name}</span>
                                         {wh.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                       </div>
-                                      <span className={`font-semibold text-xs ${total >= 4 ? 'text-green-600' : total > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{total}</span>
+                                      <span className={`font-semibold text-xs ${total > (item?.minStock ?? 3) ? 'text-green-600' : total > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{total}</span>
                                     </div>
                                     {variants.length > 0 && (
                                       <div className="mt-1 ml-4 space-y-0.5">
@@ -2531,7 +2535,7 @@ export default function Inventory() {
                                                   <span className="text-xs text-gray-700">{warehouse.name}</span>
                                                   {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                 </div>
-                                                <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                <span className={`font-semibold text-xs ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                   {stock}
                                                 </span>
                                               </div>
@@ -2591,7 +2595,7 @@ export default function Inventory() {
                                                     <span className="text-xs text-gray-700">{warehouse.name}</span>
                                                     {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                   </div>
-                                                  <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                  <span className={`font-semibold text-xs ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                     {stock}
                                                   </span>
                                                 </div>
@@ -2707,7 +2711,7 @@ export default function Inventory() {
                                     <span className="text-sm text-gray-700">{warehouse.name}</span>
                                     {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                   </div>
-                                  <span className={`font-semibold text-sm ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  <span className={`font-semibold text-sm ${ws.stock > (item?.minStock ?? 3) ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                     {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
                                   </span>
                                 </div>
@@ -2977,7 +2981,7 @@ export default function Inventory() {
                                                 <span className="text-xs font-mono text-purple-600">{v.sku}</span>
                                                 <span className="text-xs text-gray-500 truncate">{v.label}</span>
                                               </div>
-                                              <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock >= 4 ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
+                                              <span className={`font-semibold text-xs shrink-0 ml-2 ${v.stock > (item?.minStock ?? 3) ? 'text-green-600' : v.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{v.stock}</span>
                                             </div>
                                           ))}
                                         </div>
@@ -3081,7 +3085,7 @@ export default function Inventory() {
                                                     <span className="text-sm text-gray-700">{warehouse.name}</span>
                                                     {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                   </div>
-                                                  <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                  <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                     {stock}
                                                   </span>
                                                 </div>
@@ -3171,7 +3175,7 @@ export default function Inventory() {
                                                       <span className="text-sm text-gray-700">{warehouse.name}</span>
                                                       {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                                     </div>
-                                                    <span className={`font-semibold text-sm ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                    <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                       {stock}
                                                     </span>
                                                   </div>
@@ -3325,7 +3329,7 @@ export default function Inventory() {
                                           <span className="text-sm text-gray-700">{warehouse.name}</span>
                                           {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                         </div>
-                                        <span className={`font-semibold text-sm ${ws.stock >= 4 ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                        <span className={`font-semibold text-sm ${ws.stock > (item?.minStock ?? 3) ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                           {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
                                         </span>
                                       </div>

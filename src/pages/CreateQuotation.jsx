@@ -1594,9 +1594,10 @@ export default function CreateQuotation() {
                             {item.productId && (() => {
                               const stock = getStockForItem(item)
                               if (stock === null || stock === undefined) return null
+                              const minStock = getProductForItem(item)?.minStock ?? 3
                               return (
                                 <p className="text-[11px] text-gray-500 mt-1 ml-1">
-                                  Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock < 5 ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
+                                  Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock <= minStock ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
                                 </p>
                               )
                             })()}
@@ -1829,9 +1830,10 @@ export default function CreateQuotation() {
                       {item.productId && (() => {
                         const stock = getStockForItem(item)
                         if (stock === null || stock === undefined) return null
+                        const minStock = getProductForItem(item)?.minStock ?? 3
                         return (
                           <p className="text-[11px] text-gray-500 mt-1 ml-1">
-                            Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock < 5 ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
+                            Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock <= minStock ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
                           </p>
                         )
                       })()}

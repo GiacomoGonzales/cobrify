@@ -5304,7 +5304,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     }
 
     const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
-    const color = warehouseStock >= 4 ? 'text-green-600' : 'text-yellow-600'
+    const minStock = Number.isFinite(Number(product?.minStock)) && Number(product?.minStock) >= 0
+      ? Number(product.minStock)
+      : 3
+    const color = warehouseStock > minStock ? 'text-green-600' : 'text-yellow-600'
 
     return (
       <span className={`text-[10px] sm:text-xs ${color} whitespace-nowrap`}>
@@ -5662,7 +5665,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {product.hasVariants && (
                             <>
                               {!hideStockInPOS && (
-                                <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) >= 4 ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) > (product?.minStock ?? 3) ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                   Stock: {getCurrentWarehouseStock(product)}
                                 </span>
                               )}

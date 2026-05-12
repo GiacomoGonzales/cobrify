@@ -63,8 +63,15 @@ export const onProductStockChange = onDocumentUpdated(
         })
         console.log(`🔔 Bell notification created for out_of_stock: ${productId}`)
       }
-      // Stock bajo (stock <= 5 y antes era > 5)
-      else if (after.stock <= 5 && after.stock > 0 && before.stock > 5) {
+      // Stock bajo: usa el minStock configurado por producto (default 3).
+      // Notifica cuando el stock cruzó el umbral hacia abajo: estaba por
+      // encima y ahora está en o debajo del umbral.
+      else if ((() => {
+        const threshold = Number.isFinite(Number(after.minStock)) && Number(after.minStock) >= 0
+          ? Number(after.minStock)
+          : 3
+        return after.stock <= threshold && after.stock > 0 && before.stock > threshold
+      })()) {
         // Verificar preferencias
         if (prefs.low_stock === false) {
           console.log('🔕 low_stock notification disabled by user preferences')
