@@ -11,19 +11,41 @@ export function cn(...inputs) {
 }
 
 /**
- * Formatea un número como moneda peruana (PEN).
+ * Formatea un número como moneda.
+ *
+ * Por compatibilidad con las 686+ llamadas existentes en el repo, el
+ * segundo parámetro `currency` es opcional y default a 'PEN'. Esto deja
+ * intacto el comportamiento histórico.
+ *
+ * Para fases multi-divisa, pasar explícitamente la moneda del documento:
+ *   formatCurrency(100, 'USD') → "US$100.00"
+ *
  * Si el valor no es un número finito (undefined, null, NaN, string vacío)
  * se formatea como 0 para evitar mostrar "S/ NaN" en la UI.
+ *
  * @param {number} amount - Monto a formatear
+ * @param {string} [currency='PEN'] - Código ISO de la moneda ('PEN' | 'USD')
  * @returns {string} - Monto formateado
  */
-export function formatCurrency(amount) {
+export function formatCurrency(amount, currency = 'PEN') {
   const n = Number(amount)
   const safe = Number.isFinite(n) ? n : 0
-  return new Intl.NumberFormat('es-PE', {
-    style: 'currency',
-    currency: 'PEN',
-  }).format(safe)
+  const code = currency || 'PEN'
+  // Para USD usamos locale en-US para que muestre "$1,234.56" en vez del
+  // formato "US$ 1.234,56" que produciría es-PE con currency USD.
+  const locale = code === 'USD' ? 'en-US' : 'es-PE'
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+    }).format(safe)
+  } catch {
+    // Si la moneda no es válida, fallback a PEN sin romper.
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: 'PEN',
+    }).format(safe)
+  }
 }
 
 /**
@@ -139,20 +161,24 @@ export function applyMarginToCost(cost, marginPct, formula = 'markup') {
  * @param {Object} product
  * @returns {string} - Precio o rango formateado
  */
-export function formatProductPrice(product) {
-  if (!product) return formatCurrency(0)
+export function formatProductPrice(product, currency) {
+  // Backward-compat: si no se pasa `currency`, se intenta tomar del producto
+  // (`product.currency`) y, en último caso, default 'PEN'. Las llamadas
+  // antiguas formatProductPrice(product) siguen funcionando idénticamente.
+  const ccy = currency || product?.currency || 'PEN'
+  if (!product) return formatCurrency(0, ccy)
   if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
     const prices = product.variants
       .map((v) => Number(v?.price))
       .filter((p) => Number.isFinite(p) && p > 0)
-    if (prices.length === 0) return formatCurrency(0)
+    if (prices.length === 0) return formatCurrency(0, ccy)
     const min = Math.min(...prices)
     const max = Math.max(...prices)
     return min === max
-      ? formatCurrency(min)
-      : `${formatCurrency(min)} – ${formatCurrency(max)}`
+      ? formatCurrency(min, ccy)
+      : `${formatCurrency(min, ccy)} – ${formatCurrency(max, ccy)}`
   }
-  return formatCurrency(Number(product.price) || 0)
+  return formatCurrency(Number(product.price) || 0, ccy)
 }
 
 /**

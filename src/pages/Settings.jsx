@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2, ChevronDown } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2, ChevronDown, DollarSign } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -280,6 +280,13 @@ export default function Settings() {
   //   'markup' → Precio = Costo × (1 + %)   (% sobre costo, default histórico)
   //   'margin' → Precio = Costo ÷ (1 − %)   (% como utilidad sobre el precio final)
   const [marginFormula, setMarginFormula] = useState('markup')
+
+  // Multi-divisa (USD) — opt-in por negocio. Off por default: 99% solo
+  // trabaja con PEN. Cuando se activa, las fases siguientes habilitan
+  // selectores de moneda en compras, facturas y cotizaciones.
+  const [multiCurrencyEnabled, setMultiCurrencyEnabled] = useState(false)
+  const [defaultCurrency, setDefaultCurrency] = useState('PEN')
+
   const [showBulkRecalcModal, setShowBulkRecalcModal] = useState(false)
   const [isBulkRecalculating, setIsBulkRecalculating] = useState(false)
   const [bulkRecalcProgress, setBulkRecalcProgress] = useState({ current: 0, total: 0 })
@@ -1053,6 +1060,10 @@ export default function Settings() {
         }
         setPriceCalculationBase(businessData.priceCalculationBase || 'public')
         setMarginFormula(businessData.marginFormula === 'margin' ? 'margin' : 'markup')
+
+        // Multi-divisa (USD) — opt-in
+        setMultiCurrencyEnabled(businessData.multiCurrencyEnabled === true)
+        setDefaultCurrency(businessData.defaultCurrency === 'USD' ? 'USD' : 'PEN')
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
@@ -4801,6 +4812,101 @@ export default function Settings() {
                   </label>
                 </div>
               </div>
+
+              {/* === MULTI-DIVISA (USD) — opt-in ============================ */}
+              {/* Off por default. La mayoría de negocios solo opera en PEN.   */}
+              {/* Al activarse expone selector de moneda en compras/facturas   */}
+              {/* (se irá habilitando por fases en próximas versiones).        */}
+              <div className="space-y-3 mt-6 pt-6 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-base font-semibold text-gray-900">
+                    Moneda extranjera (USD)
+                  </h3>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                    Beta
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed -mt-1">
+                  Permite registrar <strong>compras y facturas en Dólares (USD)</strong> además
+                  de Soles. Los reportes se siguen mostrando en Soles, convirtiendo
+                  cada documento con su tipo de cambio congelado. Solo actívalo si
+                  tu negocio opera con proveedores o clientes en USD.
+                </p>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={multiCurrencyEnabled}
+                      onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900">
+                        Activar soporte multi-divisa
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {multiCurrencyEnabled
+                          ? '✓ Activado: podrás elegir PEN o USD en compras y facturas (los selectores aparecerán cuando se publiquen las próximas fases del módulo).'
+                          : '✗ Desactivado: todo el sistema opera 100% en Soles (PEN), como hasta ahora.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                        <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        <span className="text-xs text-blue-700 font-medium">
+                          Las boletas (B001) siempre serán en Soles — SUNAT no admite USD.
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+
+                  {multiCurrencyEnabled && (
+                    <div className="mt-4 pl-7 space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                          Moneda por defecto al emitir documentos
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDefaultCurrency('PEN')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              defaultCurrency === 'PEN'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            S/ &nbsp;Soles (PEN)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDefaultCurrency('USD')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              defaultCurrency === 'USD'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            $ &nbsp;Dólares (USD)
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                          Esta es la moneda preseleccionada al abrir el formulario.
+                          El usuario podrá cambiarla por documento.
+                        </p>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900 leading-relaxed">
+                        <strong>¿Cómo funciona?</strong> Cuando emitas una factura o
+                        compra en USD, el sistema obtiene el tipo de cambio del día
+                        (SBS) y lo congela en el documento. Reportes y agregaciones
+                        siempre se calculan en Soles usando ese TC congelado, así
+                        que tus reportes históricos nunca cambian aunque suba el dólar.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </CardContent>
 
@@ -4837,6 +4943,9 @@ export default function Settings() {
                       pricePercentages: pricePercentages,
                       priceCalculationBase: priceCalculationBase,
                       marginFormula: marginFormula,
+                      // Multi-divisa (USD) — Fase 0: solo flag + moneda por default.
+                      multiCurrencyEnabled: multiCurrencyEnabled,
+                      defaultCurrency: defaultCurrency,
                       presentationsEnabled: presentationsEnabled,
                       showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),

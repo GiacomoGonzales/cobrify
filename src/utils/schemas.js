@@ -348,7 +348,27 @@ export const invoiceSchema = z.object({
     }),
   notes: z.string().optional(),
   paymentMethod: z.string().default('EFECTIVO'),
+  // Moneda de operación del documento. PEN por default. USD solo si el
+  // negocio activó multi-divisa (Configuración → Ventas). SUNAT NO admite
+  // boletas (documentType '03') en USD; eso se valida fuera del schema.
   currency: z.string().default('PEN'),
+  // Tipo de cambio CONGELADO al momento de emitir. Si currency === 'PEN'
+  // se guarda 1. Si currency === 'USD', se guarda el TC SBS o el que el
+  // usuario haya fijado manualmente. NUNCA se recalcula a posteriori.
+  exchangeRate: z
+    .number()
+    .positive('Tipo de cambio debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return 1
+          const num = parseFloat(val)
+          return Number.isFinite(num) && num > 0 ? num : 1
+        })
+    )
+    .optional()
+    .default(1),
 })
 
 // Schema para Configuración de Empresa
