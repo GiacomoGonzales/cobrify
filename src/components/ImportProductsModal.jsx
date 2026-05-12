@@ -232,6 +232,17 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         ? (allowDecimalQuantity ? parseFloat(stockRaw) : parseInt(stockRaw))
         : null
 
+      // Stock mínimo (alerta personalizada por producto). Si no viene o es
+      // inválido, se guarda null y los lugares que lo consumen caen al default.
+      const minStockRaw = row.stock_minimo || row.Stock_Minimo || row.STOCK_MINIMO
+        || row.minStock || row.MinStock || row.MINSTOCK
+        || row.stockMinimo || row.StockMinimo || row.min_stock || row.MIN_STOCK
+      let minStockValue = null
+      if (minStockRaw !== undefined && minStockRaw !== '' && minStockRaw !== null) {
+        const parsed = parseInt(minStockRaw)
+        if (Number.isFinite(parsed) && parsed >= 0) minStockValue = parsed
+      }
+
       const product = {
         sku: sku,
         code: code,
@@ -243,6 +254,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
         stock: stockValue,
+        minStock: minStockValue,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
         subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
@@ -562,6 +574,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: 1.10,
           precio4: 0.95,
           stock: 500,
+          stock_minimo: 50,
           trackStock: 'SI',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
@@ -599,6 +612,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: 0.85,
           precio4: 0.70,
           stock: 200,
+          stock_minimo: 20,
           trackStock: 'SI',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
@@ -636,6 +650,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: '',
           precio4: '',
           stock: 100,
+          stock_minimo: 10,
           trackStock: 'SI',
           mostrar_en_catalogo: 'NO',
           unidad: 'UNIDAD',
@@ -679,6 +694,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: 55.00,           // precio distribuidor
           precio4: '',
           stock: 25,
+          stock_minimo: 5,
           trackStock: 'SI',
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
@@ -781,6 +797,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: '',
           precio4: '',
           stock: 50.5,                // 50 litros y medio
+          stock_minimo: 10,
           trackStock: 'SI',
           permitir_decimales: 'SI',   // CLAVE: permite cantidades fraccionarias
           control_vencimiento: 'NO',
@@ -819,6 +836,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: '',
           precio4: '',
           stock: 30,
+          stock_minimo: 5,
           trackStock: 'SI',
           permitir_decimales: 'NO',
           control_vencimiento: 'SI',          // CLAVE: activa control de vencimiento
@@ -857,6 +875,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: '',
           precio4: '',
           stock: 5,
+          stock_minimo: 2,
           trackStock: 'SI',
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
@@ -896,6 +915,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio3: '',
           precio4: '',
           stock: 240,                          // 240 botellas individuales
+          stock_minimo: 24,
           trackStock: 'SI',
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
@@ -1060,6 +1080,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 8 },  // precio3
         { wch: 8 },  // precio4
         { wch: 8 },  // stock
+        { wch: 12 }, // stock_minimo
         { wch: 10 }, // trackStock
         { wch: 10 }, // unidad
         { wch: 15 }, // categoria
@@ -1080,6 +1101,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 10 }, // precio3
         { wch: 10 }, // precio4
         { wch: 10 }, // stock
+        { wch: 12 }, // stock_minimo
         { wch: 12 }, // trackStock
         { wch: 12 }, // unidad
         { wch: 20 }, // categoria
@@ -1195,7 +1217,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
+            Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
           </p>
           <details className="mt-2 text-xs text-gray-600">
             <summary className="cursor-pointer text-primary-600 hover:text-primary-700 select-none">
