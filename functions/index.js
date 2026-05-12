@@ -2839,6 +2839,126 @@ export const syncUsageCounters = onRequest(
  * Cloud Function HTTP: Obtener UID de usuario por email
  * Solo para admins - usado al crear resellers
  */
+/**
+ * Cloud Function — Tipo de cambio SUNAT/SBS (USD/PEN).
+ *
+ * Proxy server-side para evitar CORS desde el navegador. Cachea el resultado
+ * por día en Firestore (`exchangeRates/{YYYY-MM-DD}`) para reducir llamadas
+ * a la API externa.
+ *
+ * Endpoint primario: apis.net.pe v1 (gratis, sin token).
+ * Si falla, devuelve el último valor cacheado si existe.
+ *
+ * GET /getExchangeRate?date=YYYY-MM-DD  (date opcional, default hoy)
+ *
+ * Respuesta:
+ *   { success: true, buy: 3.74, sell: 3.76, date: "2026-05-12", source: "sbs"|"cache" }
+ *   { success: false, error: string }
+ */
+export const getExchangeRate = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 15,
+    memory: '256MiB',
+    invoker: 'public',
+    cors: true,
+  },
+  async (req, res) => {
+    // CORS para GET
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Max-Age', '3600')
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+    if (req.method !== 'GET') {
+      res.status(405).json({ success: false, error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Validar/parsear fecha
+      const today = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const isoToday = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+      const dateParam = (req.query?.date || isoToday).toString().slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        res.status(400).json({ success: false, error: 'Formato de fecha inválido (YYYY-MM-DD)' })
+        return
+      }
+
+      // 1) Cache global en Firestore
+      const cacheRef = db.collection('exchangeRates').doc(dateParam)
+      const cacheSnap = await cacheRef.get()
+      if (cacheSnap.exists) {
+        const cached = cacheSnap.data()
+        if (Number.isFinite(cached?.sell) && cached.sell > 0) {
+          res.status(200).json({
+            success: true,
+            buy: cached.buy || cached.sell,
+            sell: cached.sell,
+            date: dateParam,
+            source: 'cache',
+          })
+          return
+        }
+      }
+
+      // 2) Fetch a apis.net.pe v1 (sin token)
+      const url = `https://api.apis.net.pe/v1/tipo-cambio-sunat?date=${dateParam}`
+      let buy = null
+      let sell = null
+      try {
+        const r = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        })
+        if (r.ok) {
+          const json = await r.json()
+          buy = parseFloat(json.compra ?? json.precioCompra)
+          sell = parseFloat(json.venta ?? json.precioVenta)
+        }
+      } catch (err) {
+        console.warn('[getExchangeRate] apis.net.pe v1 falló:', err?.message || err)
+      }
+
+      if (!Number.isFinite(sell) || sell <= 0) {
+        res.status(502).json({
+          success: false,
+          error: 'No se pudo obtener el TC de la SBS. Ingresa el valor manualmente.',
+        })
+        return
+      }
+
+      // 3) Guardar en cache
+      const rateData = {
+        buy: Number.isFinite(buy) && buy > 0 ? buy : sell,
+        sell,
+        source: 'sbs',
+        date: dateParam,
+        fetchedAt: FieldValue.serverTimestamp(),
+      }
+      try { await cacheRef.set(rateData, { merge: true }) } catch (e) {
+        console.warn('[getExchangeRate] no se pudo guardar cache:', e?.message)
+      }
+
+      res.status(200).json({
+        success: true,
+        buy: rateData.buy,
+        sell,
+        date: dateParam,
+        source: 'sbs',
+      })
+    } catch (error) {
+      console.error('[getExchangeRate] Error:', error)
+      res.status(500).json({ success: false, error: error.message })
+    }
+  }
+)
+
 export const getUserByEmail = onRequest(
   {
     region: 'us-central1',

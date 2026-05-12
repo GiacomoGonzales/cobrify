@@ -20,7 +20,12 @@
 
 const LS_CACHE_PREFIX = 'cobrify_xchg_sbs_'
 const LS_MANUAL_PREFIX = 'cobrify_xchg_manual_'
-const SBS_ENDPOINT = 'https://api.apis.net.pe/v2/sunat/tipo-cambio'
+// La API SBS pública (apis.net.pe) NO admite llamadas directas desde el
+// navegador por CORS, así que pegamos a nuestra Cloud Function que actúa
+// de proxy y además cachea el TC en Firestore por día (compartido entre
+// negocios para reducir requests externos).
+const FUNCTIONS_BASE_URL = import.meta.env.VITE_FUNCTIONS_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net'
+const SBS_ENDPOINT = `${FUNCTIONS_BASE_URL}/getExchangeRate`
 
 // ---------- helpers de fecha ----------
 
@@ -79,22 +84,27 @@ export async function getRateForDate(date) {
     return { ...cached, date: day, source: 'cache' }
   }
 
-  // 3) Fetch SBS
+  // 3) Fetch a Cloud Function proxy (que pega a SBS y cachea en Firestore).
   try {
     const url = `${SBS_ENDPOINT}?date=${day}`
     const res = await fetch(url, { method: 'GET' })
-    if (!res.ok) throw new Error(`SBS HTTP ${res.status}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = await res.json()
-    // Respuesta esperada (v2): { precioCompra, precioVenta, moneda, fecha }
-    const buy = parseFloat(json.precioCompra ?? json.compra)
-    const sell = parseFloat(json.precioVenta ?? json.venta)
-    if (!Number.isFinite(sell) || sell <= 0) throw new Error('Respuesta SBS sin precio venta')
-    const rate = { buy, sell, date: day, source: 'sbs' }
-    writeLS(LS_CACHE_PREFIX + day, { buy, sell })
+    if (!json.success) throw new Error(json.error || 'Sin precio')
+    const buy = parseFloat(json.buy)
+    const sell = parseFloat(json.sell)
+    if (!Number.isFinite(sell) || sell <= 0) throw new Error('Respuesta sin precio venta')
+    const rate = {
+      buy: Number.isFinite(buy) && buy > 0 ? buy : sell,
+      sell,
+      date: day,
+      source: json.source || 'sbs',
+    }
+    writeLS(LS_CACHE_PREFIX + day, { buy: rate.buy, sell })
     return rate
   } catch (err) {
     if (typeof console !== 'undefined' && console?.warn) {
-      console.warn('[exchangeRateService] SBS no disponible:', err?.message || err)
+      console.warn('[exchangeRateService] TC no disponible:', err?.message || err)
     }
     return null
   }
