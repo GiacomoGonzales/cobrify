@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, Loader2, Save,
-  Copy, Send, Edit2, Trash2, X, Tag, Coffee,
+  Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
+import { generateSchedulePDF } from '@/utils/schedulePdfGenerator'
 import {
   listShiftTemplates,
   createShiftTemplate,
@@ -30,7 +31,7 @@ const formatDayShort = (d) =>
 const formatRange = (mon, sun) =>
   `${mon.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} – ${sun.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`.replace(/\./g, '')
 
-export default function SchedulePlanner({ businessId, employees, currentUserUid }) {
+export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {} }) {
   const toast = useToast()
 
   // Semana ISO seleccionada (default: hoy)
@@ -45,6 +46,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [printing, setPrinting] = useState(false)
 
   // UI
   const [showTemplateManager, setShowTemplateManager] = useState(false)
@@ -201,6 +203,30 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid 
     }
   }
 
+  const handlePrintPdf = async () => {
+    if (employees.length === 0) {
+      toast.error('No hay empleados para imprimir')
+      return
+    }
+    setPrinting(true)
+    try {
+      await generateSchedulePDF({
+        employees,
+        schedules,
+        weekDates,
+        isoYear,
+        isoWeek,
+        businessInfo,
+      })
+      toast.success('PDF generado')
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al generar PDF')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   const handlePublish = async () => {
     if (dirtyUsers.size > 0) {
       if (!confirm('Hay cambios sin guardar. Se guardarán antes de publicar. ¿Continuar?')) return
@@ -319,6 +345,15 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid 
           >
             <Copy className="w-3.5 h-3.5" />
             Copiar semana anterior
+          </button>
+          <button
+            onClick={handlePrintPdf}
+            disabled={printing || employees.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title="Descargar horario semanal en PDF horizontal"
+          >
+            {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+            Imprimir PDF
           </button>
           <button
             onClick={handlePublish}

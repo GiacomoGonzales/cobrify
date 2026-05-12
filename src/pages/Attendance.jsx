@@ -1043,6 +1043,7 @@ export default function Attendance() {
                     businessId={businessId}
                     employees={employees}
                     currentUserUid={user?.uid}
+                    businessInfo={{ businessName: branches?.[0]?.name || '' }}
                   />
                 </TabsContent>
               )}
