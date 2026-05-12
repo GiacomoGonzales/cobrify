@@ -22,6 +22,7 @@ import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getDocumentTotalInBase } from '@/utils/currency'
 import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -237,14 +238,15 @@ export default function Dashboard() {
     return true
   })
 
-  // Calcular ventas del día
+  // Calcular ventas del día — multi-divisa: cada factura se convierte a
+  // PEN base con el TC congelado en ella. Para facturas PEN es no-op.
   const todaysSales = validInvoicesForSales
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
       return invDate >= getStartOfTodayPeru()
     })
-    .reduce((sum, inv) => sum + (inv.total || 0), 0)
+    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
   // Calcular ventas del mes
   const monthSales = validInvoicesForSales
@@ -253,7 +255,7 @@ export default function Dashboard() {
       if (!invDate) return false
       return invDate >= getStartOfMonthPeru()
     })
-    .reduce((sum, inv) => sum + (inv.total || 0), 0)
+    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
   // Facturas pendientes
   const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
@@ -289,7 +291,7 @@ export default function Dashboard() {
         if (!invDate) return false
         return invDate >= dayStart && invDate <= dayEnd
       })
-      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
     const prevDaySales = validInvoicesForSales
       .filter(inv => {
@@ -297,7 +299,7 @@ export default function Dashboard() {
         if (!invDate) return false
         return invDate >= prevDayStart && invDate <= prevDayEnd
       })
-      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
     salesData.push({
       name: dayNames[dayStart.getDay()],
@@ -315,7 +317,7 @@ export default function Dashboard() {
       const yesterdayEnd = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1)
       return invDate >= yesterday && invDate <= yesterdayEnd
     })
-    .reduce((sum, inv) => sum + (inv.total || 0), 0)
+    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
   const todayChange = yesterdaySales > 0
     ? ((todaysSales - yesterdaySales) / yesterdaySales * 100).toFixed(1)

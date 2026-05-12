@@ -53,6 +53,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -2100,7 +2101,7 @@ Gracias por tu preferencia.`
     total: salesInvoices.length,
     paid: salesInvoices.filter(i => i.status === 'paid').length,
     pending: salesInvoices.filter(i => i.status === 'pending').length,
-    totalAmount: salesInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
+    totalAmount: salesInvoices.reduce((sum, i) => sum + getDocumentTotalInBase(i), 0),
     totalAll: invoices.filter(i => i.archived !== true).filter(isValidSale).length,
   }
 
@@ -2410,7 +2411,7 @@ Gracias por tu preferencia.`
             </span>
             <span className="text-gray-300">|</span>
             <span className="text-gray-600">
-              Total: <span className="font-semibold text-gray-900">{formatCurrency(tableSales.reduce((sum, inv) => sum + (inv.total || 0), 0))}</span>
+              Total: <span className="font-semibold text-gray-900">{formatCurrency(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0))}</span>
             </span>
             {dateFilter !== 'all' && (
               <>

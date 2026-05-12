@@ -33,6 +33,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
@@ -487,18 +488,21 @@ export default function Reports() {
         if (invoice.convertedTo) return false
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
-      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
   }, [invoices, dateRange, customStartDate, customEndDate])
 
   // Calcular estadísticas generales
+  // Multi-divisa: las agregaciones siempre se calculan en PEN base usando
+  // el TC congelado de cada documento. Si la factura es PEN, getDocumentTotalInBase
+  // devuelve el total tal cual; si es USD, lo multiplica por su TC.
   const stats = useMemo(() => {
-    const totalRevenue = filteredInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
+    const totalRevenue = filteredInvoices.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
     const paidRevenue = filteredInvoices
       .filter(inv => inv.status === 'paid')
-      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
     const pendingRevenue = filteredInvoices
       .filter(inv => inv.status === 'pending')
-      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
 
     const totalInvoices = filteredInvoices.length
     const facturas = filteredInvoices.filter(inv => inv.documentType === 'factura').length
@@ -716,8 +720,9 @@ export default function Reports() {
       }
 
       customerStats[key].ordersCount += 1
-      // Redondear a 2 decimales para evitar errores de punto flotante
-      customerStats[key].totalSpent = Number((customerStats[key].totalSpent + (invoice.total || 0)).toFixed(2))
+      // Redondear a 2 decimales para evitar errores de punto flotante.
+      // Multi-divisa: sumar en PEN base con TC congelado de cada factura.
+      customerStats[key].totalSpent = Number((customerStats[key].totalSpent + getDocumentTotalInBase(invoice)).toFixed(2))
     })
 
     return Object.values(customerStats)
@@ -755,7 +760,7 @@ export default function Reports() {
       }
 
       zoneStats[zone].ordersCount += 1
-      zoneStats[zone].totalRevenue = Number((zoneStats[zone].totalRevenue + (invoice.total || 0)).toFixed(2))
+      zoneStats[zone].totalRevenue = Number((zoneStats[zone].totalRevenue + getDocumentTotalInBase(invoice)).toFixed(2))
       const custId = invoice.customer?.documentNumber || invoice.customerDocumentNumber || invoice.customer?.name
       if (custId) zoneStats[zone].customers.add(custId)
     })
@@ -789,7 +794,7 @@ export default function Reports() {
       }
 
       sellers[sellerId].salesCount += 1
-      sellers[sellerId].totalRevenue += invoice.total || 0
+      sellers[sellerId].totalRevenue += getDocumentTotalInBase(invoice)
 
       if (invoice.documentType === 'factura') sellers[sellerId].facturas += 1
       else if (invoice.documentType === 'boleta') sellers[sellerId].boletas += 1
@@ -807,11 +812,14 @@ export default function Reports() {
     const methods = {}
 
     filteredInvoices.forEach(invoice => {
+      // Multi-divisa: cada `payment.amount` está en la moneda de la factura
+      // padre. Convertimos a PEN con el TC congelado para agregaciones.
+      const toBase = (amt) => convertToBase(amt || 0, invoice.currency, invoice.exchangeRate)
       // Priorizar paymentHistory (ventas al crédito o parciales pagadas)
       if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
         invoice.paymentHistory.forEach(payment => {
           const method = payment.method || 'Efectivo'
-          const amount = payment.amount || 0
+          const amount = toBase(payment.amount)
 
           if (!methods[method]) {
             methods[method] = {
@@ -828,7 +836,7 @@ export default function Reports() {
         // Ventas normales con array payments
         invoice.payments.forEach(payment => {
           const method = payment.method || 'Efectivo'
-          const amount = payment.amount || 0
+          const amount = toBase(payment.amount)
 
           if (!methods[method]) {
             methods[method] = {
@@ -844,7 +852,7 @@ export default function Reports() {
       } else {
         // Compatibilidad con facturas antiguas que solo tienen paymentMethod
         const method = invoice.paymentMethod || 'Efectivo'
-        const amount = invoice.total || 0
+        const amount = getDocumentTotalInBase(invoice)
 
         if (!methods[method]) {
           methods[method] = {
@@ -1003,7 +1011,7 @@ export default function Reports() {
       }
 
       if (periodsData[key]) {
-        periodsData[key].revenue = Number((periodsData[key].revenue + (invoice.total || 0)).toFixed(2))
+        periodsData[key].revenue = Number((periodsData[key].revenue + getDocumentTotalInBase(invoice)).toFixed(2))
         periodsData[key].count += 1
       }
     })
@@ -1024,7 +1032,7 @@ export default function Reports() {
       if (!date) return
       const hour = date.getHours()
       hours[hour].ventas += 1
-      hours[hour].total += (inv.total || 0)
+      hours[hour].total += getDocumentTotalInBase(inv)
     })
     return Object.values(hours).filter(h => h.ventas > 0)
   }, [filteredInvoices])
@@ -1196,9 +1204,9 @@ export default function Reports() {
     })
   }, [purchases, dateRange, customStartDate, customEndDate])
 
-  // Estadísticas de compras (costo de ventas)
+  // Estadísticas de compras (costo de ventas) — en PEN base.
   const purchaseStats = useMemo(() => {
-    const totalPurchases = filteredPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
+    const totalPurchases = filteredPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0)
     const purchaseCount = filteredPurchases.length
     return {
       total: totalPurchases,

@@ -5,6 +5,7 @@ import { getInvoices, getRecentInvoices, getPurchases, getLoans, getAllCashMovem
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
+import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import {
   TrendingUp,
   TrendingDown,
@@ -423,14 +424,16 @@ export default function CashFlow() {
     })
 
     const salesIncome = paidInvoices.reduce((sum, inv) => {
-      // Si tiene paymentHistory, sumar solo los pagos realizados
+      // Multi-divisa: los pagos en paymentHistory están en la moneda nativa
+      // de la factura, así que convertimos cada uno a PEN usando el TC
+      // congelado en la factura. Para facturas PEN devuelve el monto tal cual.
       if (inv.paymentHistory && inv.paymentHistory.length > 0) {
         const paid = inv.paymentHistory.reduce((s, p) => s + (p.amount || 0), 0)
-        return sum + paid
+        return sum + convertToBase(paid, inv.currency, inv.exchangeRate)
       }
       // Si status es 'paid' y no tiene paymentHistory, es una venta al contado
       if (inv.status === 'paid') {
-        return sum + (inv.total || 0)
+        return sum + getDocumentTotalInBase(inv)
       }
       return sum
     }, 0)
@@ -477,7 +480,8 @@ export default function CashFlow() {
       const inRange = isInDateRange(purchaseDate, dateRange.startDate, dateRange.endDate)
       return inRange && p.paymentType === 'contado' && p.paymentStatus === 'paid' && filterByBranch(p, 'purchase')
     })
-    const cashPurchasesTotal = paidCashPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
+    // Multi-divisa: convertir cada compra USD a PEN base con el TC congelado.
+    const cashPurchasesTotal = paidCashPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0)
 
     // B) Pagos parciales (abonos) de compras a crédito realizados en el período.
     //    Incluye dos mecanismos paralelos que existen en Purchases.jsx:
@@ -487,6 +491,11 @@ export default function CashFlow() {
     //         reflejado el egreso en Flujo de Caja.
     const purchasePayments = []
     purchases.filter(p => p.paymentType === 'credito' && filterByBranch(p, 'purchase')).forEach(purchase => {
+      // Multi-divisa: cada pago/cuota lleva la moneda + TC de la compra
+      // padre para poder convertir a PEN en agregaciones.
+      const parentCurrency = purchase.currency
+      const parentRate = purchase.exchangeRate
+
       // Revisar el array de pagos parciales
       const paymentsArr = Array.isArray(purchase.payments) ? purchase.payments : []
       paymentsArr.forEach(payment => {
@@ -496,7 +505,9 @@ export default function CashFlow() {
             ...payment,
             purchaseId: purchase.id,
             supplierName: purchase.supplier?.businessName || 'Proveedor',
-            invoiceNumber: purchase.invoiceNumber
+            invoiceNumber: purchase.invoiceNumber,
+            _parentCurrency: parentCurrency,
+            _parentExchangeRate: parentRate,
           })
         }
       })
@@ -519,10 +530,16 @@ export default function CashFlow() {
           supplierName: purchase.supplier?.businessName || 'Proveedor',
           invoiceNumber: purchase.invoiceNumber,
           fromInstallment: true,
+          _parentCurrency: parentCurrency,
+          _parentExchangeRate: parentRate,
         })
       })
     })
-    const purchasePaymentsTotal = purchasePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+    // Suma de abonos: cada pago se convierte a PEN base con el TC de la compra padre.
+    const purchasePaymentsTotal = purchasePayments.reduce(
+      (sum, p) => sum + convertToBase(p.amount || 0, p._parentCurrency, p._parentExchangeRate),
+      0
+    )
 
     // C) Compras a crédito pagadas completamente en el período (sin usar pagos parciales - legacy)
     // Solo para compras antiguas que se marcaron como pagadas sin usar el array de payments
@@ -539,7 +556,7 @@ export default function CashFlow() {
       if (!paidDate) return false
       return isInDateRange(paidDate, dateRange.startDate, dateRange.endDate)
     })
-    const creditPurchasesLegacyTotal = paidCreditPurchasesLegacy.reduce((sum, p) => sum + (p.total || 0), 0)
+    const creditPurchasesLegacyTotal = paidCreditPurchasesLegacy.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0)
 
     // Total compras pagadas
     const paidPurchases = [...paidCashPurchases, ...paidCreditPurchasesLegacy]
@@ -613,7 +630,9 @@ export default function CashFlow() {
     })
     const accountsReceivable = pendingInvoices.reduce((sum, inv) => {
       const paid = (inv.paymentHistory || []).reduce((s, p) => s + (p.amount || 0), 0)
-      return sum + ((inv.total || 0) - paid)
+      const remainingNative = (inv.total || 0) - paid
+      // Convertir el saldo pendiente a PEN base con el TC congelado.
+      return sum + convertToBase(remainingNative, inv.currency, inv.exchangeRate)
     }, 0)
 
     // Cuentas por pagar (compras a crédito pendientes, filtradas por sucursal)
@@ -622,7 +641,8 @@ export default function CashFlow() {
     )
     const purchasesPayable = pendingPurchases.reduce((sum, p) => {
       const paid = p.paidAmount || 0
-      return sum + ((p.total || 0) - paid)
+      const remainingNative = (p.total || 0) - paid
+      return sum + convertToBase(remainingNative, p.currency, p.exchangeRate)
     }, 0)
 
     // Cuotas de préstamos pendientes (filtradas por sucursal)

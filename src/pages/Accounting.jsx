@@ -17,6 +17,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
+import { formatCurrency } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 
@@ -884,7 +885,7 @@ export default function Accounting() {
                           : 'Boleta'}
                       </span>
                     </div>
-                    <span className="font-semibold text-sm">S/ {(inv.total || 0).toFixed(2)}</span>
+                    <span className="font-semibold text-sm">{formatCurrency(inv.total || 0, inv.currency)}</span>
                   </div>
                   <p className="text-sm text-gray-700 truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</p>
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
@@ -974,7 +975,7 @@ export default function Accounting() {
                       <td className="py-3 px-4 max-w-[200px] truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</td>
                       <td className="py-3 px-4">{inv.customer?.documentNumber || '-'}</td>
                       <td className="py-3 px-4">{formatDate(getInvoiceDate(inv))}</td>
-                      <td className="py-3 px-4 text-right font-medium">S/ {(inv.total || 0).toFixed(2)}</td>
+                      <td className="py-3 px-4 text-right font-medium">{formatCurrency(inv.total || 0, inv.currency)}</td>
                       <td className="py-3 px-4 text-center"><StatusBadge inv={inv} /></td>
                       <td className="py-3 px-4 text-center">
                         {hasXml(inv) ? (
