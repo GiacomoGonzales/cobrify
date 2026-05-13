@@ -10,6 +10,7 @@ import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
 import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
+import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 // Modos de creación de nota de crédito
@@ -392,11 +393,16 @@ export default function CreateCreditNote() {
           productId: null,
         })),
 
-        // Totales
+        // Totales — NC externa siempre en PEN (es un comprobante manual
+        // de un documento histórico, normalmente físico, en soles).
         subtotal,
         igv,
         total,
         currency: 'PEN',
+        exchangeRate: 1,
+        subtotalInBase: subtotal,
+        igvInBase: igv,
+        totalInBase: total,
 
         // Configuración de impuestos
         taxConfig: {
@@ -537,7 +543,14 @@ export default function CreateCreditNote() {
         subtotal,
         igv,
         total,
-        currency: selectedInvoice.currency || 'PEN',
+        // Multi-divisa: SUNAT manda que la NC herede moneda y TC del
+        // documento original. El usuario NO puede cambiarlos.
+        currency: normalizeCurrency(selectedInvoice.currency),
+        exchangeRate: Number(selectedInvoice.exchangeRate) > 0 ? Number(selectedInvoice.exchangeRate) : 1,
+        // Equivalentes en PEN base para reportes globales (mismo TC que la factura).
+        subtotalInBase: convertToBase(subtotal, selectedInvoice.currency, selectedInvoice.exchangeRate),
+        igvInBase: convertToBase(igv, selectedInvoice.currency, selectedInvoice.exchangeRate),
+        totalInBase: convertToBase(total, selectedInvoice.currency, selectedInvoice.exchangeRate),
 
         // Configuración de impuestos (heredada del documento original)
         taxConfig: {
@@ -814,7 +827,7 @@ export default function CreateCreditNote() {
                     <option value="">Seleccionar documento...</option>
                     {invoices.map(inv => (
                       <option key={inv.id} value={inv.id}>
-                        {inv.number} - {inv.customer?.name} - {formatCurrency(inv.total)}
+                        {inv.number} - {inv.customer?.name} - {formatCurrency(inv.total, inv.currency)}
                       </option>
                     ))}
                   </Select>
@@ -834,12 +847,22 @@ export default function CreateCreditNote() {
                       </div>
                       <div>
                         <span className="text-gray-600">Total:</span>
-                        <span className="ml-2 font-medium">{formatCurrency(selectedInvoice.total)}</span>
+                        <span className="ml-2 font-medium">{formatCurrency(selectedInvoice.total, selectedInvoice.currency)}</span>
                       </div>
                       <div>
                         <span className="text-gray-600">Estado SUNAT:</span>
                         <span className="ml-2 font-medium text-green-600">Aceptado</span>
                       </div>
+                      {normalizeCurrency(selectedInvoice.currency) === 'USD' && (
+                        <div className="col-span-2 mt-1 pt-1 border-t border-blue-200">
+                          <span className="text-[11px] text-blue-700 font-medium">
+                            Moneda: USD · TC congelado: {selectedInvoice.exchangeRate || 1}
+                          </span>
+                          <span className="block text-[10px] text-gray-500 italic">
+                            La nota de crédito heredará esta moneda y TC (SUNAT lo exige).
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -910,11 +933,11 @@ export default function CreateCreditNote() {
                           <div>
                             <p className="font-medium">{item.name}</p>
                             <p className="text-sm text-gray-600">
-                              Precio unitario: {formatCurrency(item.unitPrice)}
+                              Precio unitario: {formatCurrency(item.unitPrice, selectedInvoice?.currency)}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">{formatCurrency(item.subtotal)}</p>
+                            <p className="font-semibold">{formatCurrency(item.subtotal, selectedInvoice?.currency)}</p>
                           </div>
                         </div>
 
@@ -954,16 +977,21 @@ export default function CreateCreditNote() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">IGV (18%):</span>
-                  <span className="font-medium">{formatCurrency(totals.igv)}</span>
+                  <span className="font-medium">{formatCurrency(totals.igv, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold border-t pt-2">
                   <span>Total:</span>
-                  <span className="text-primary-600">{formatCurrency(totals.total)}</span>
+                  <span className="text-primary-600">{formatCurrency(totals.total, selectedInvoice?.currency)}</span>
                 </div>
+                {normalizeCurrency(selectedInvoice?.currency) === 'USD' && (
+                  <div className="text-right text-xs text-gray-500 pt-1">
+                    ≈ {formatCurrency(convertToBase(totals.total, 'USD', selectedInvoice?.exchangeRate), 'PEN')} (TC {selectedInvoice?.exchangeRate || 1})
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -10,6 +10,7 @@ import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
 import { getInvoices, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
+import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { getAuth } from 'firebase/auth'
 
 // URL de la Cloud Function
@@ -198,7 +199,13 @@ export default function CreateDebitNote() {
         subtotal,
         igv,
         total,
-        currency: selectedInvoice.currency || 'PEN',
+        // Multi-divisa: la ND hereda moneda y TC de la factura original
+        // (regla SUNAT). El usuario no puede cambiarlos.
+        currency: normalizeCurrency(selectedInvoice.currency),
+        exchangeRate: Number(selectedInvoice.exchangeRate) > 0 ? Number(selectedInvoice.exchangeRate) : 1,
+        subtotalInBase: convertToBase(subtotal, selectedInvoice.currency, selectedInvoice.exchangeRate),
+        igvInBase: convertToBase(igv, selectedInvoice.currency, selectedInvoice.exchangeRate),
+        totalInBase: convertToBase(total, selectedInvoice.currency, selectedInvoice.exchangeRate),
 
         // Estado
         status: 'pending',
@@ -355,7 +362,7 @@ export default function CreateDebitNote() {
                 <option value="">Seleccionar documento...</option>
                 {invoices.map(inv => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.number} - {inv.customer?.name} - {formatCurrency(inv.total)}
+                    {inv.number} - {inv.customer?.name} - {formatCurrency(inv.total, inv.currency)}
                   </option>
                 ))}
               </Select>
@@ -375,12 +382,22 @@ export default function CreateDebitNote() {
                   </div>
                   <div>
                     <span className="text-gray-600">Total Original:</span>
-                    <span className="ml-2 font-medium">{formatCurrency(selectedInvoice.total)}</span>
+                    <span className="ml-2 font-medium">{formatCurrency(selectedInvoice.total, selectedInvoice.currency)}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Estado SUNAT:</span>
                     <span className="ml-2 font-medium text-green-600">Aceptado</span>
                   </div>
+                  {normalizeCurrency(selectedInvoice.currency) === 'USD' && (
+                    <div className="col-span-2 mt-1 pt-1 border-t border-blue-200">
+                      <span className="text-[11px] text-blue-700 font-medium">
+                        Moneda: USD · TC congelado: {selectedInvoice.exchangeRate || 1}
+                      </span>
+                      <span className="block text-[10px] text-gray-500 italic">
+                        La nota de débito heredará esta moneda y TC (SUNAT lo exige).
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -464,8 +481,8 @@ export default function CreateDebitNote() {
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm text-yellow-800">
                   <strong>Nota:</strong> La Nota de Débito aumentará el monto total adeudado.
-                  El nuevo total será: {formatCurrency(selectedInvoice.total)} + {formatCurrency(totals.total)} =
-                  <strong className="ml-1">{formatCurrency(selectedInvoice.total + totals.total)}</strong>
+                  El nuevo total será: {formatCurrency(selectedInvoice.total, selectedInvoice.currency)} + {formatCurrency(totals.total, selectedInvoice.currency)} =
+                  <strong className="ml-1">{formatCurrency(selectedInvoice.total + totals.total, selectedInvoice.currency)}</strong>
                 </p>
               </div>
             </CardContent>
@@ -482,16 +499,21 @@ export default function CreateDebitNote() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">IGV (18%):</span>
-                  <span className="font-medium">{formatCurrency(totals.igv)}</span>
+                  <span className="font-medium">{formatCurrency(totals.igv, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold border-t pt-2">
                   <span>Total a Aumentar:</span>
-                  <span className="text-primary-600">{formatCurrency(totals.total)}</span>
+                  <span className="text-primary-600">{formatCurrency(totals.total, selectedInvoice?.currency)}</span>
                 </div>
+                {normalizeCurrency(selectedInvoice?.currency) === 'USD' && (
+                  <div className="text-right text-xs text-gray-500 pt-1">
+                    ≈ {formatCurrency(convertToBase(totals.total, 'USD', selectedInvoice?.exchangeRate), 'PEN')} (TC {selectedInvoice?.exchangeRate || 1})
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
