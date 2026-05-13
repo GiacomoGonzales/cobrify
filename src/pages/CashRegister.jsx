@@ -9,6 +9,7 @@ import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
 import {
   getCashRegisterSession,
   openCashRegister,
@@ -120,11 +121,26 @@ export default function CashRegister() {
     pedidosYa: '',
     diDiFood: '',
   })
+  // Multi-divisa: paralelo en USD. Solo se usan/muestran cuando el negocio
+  // activó la flag multiCurrencyEnabled en Configuración → Ventas.
+  const cashMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
+  const [openingAmountUSD, setOpeningAmountUSD] = useState('')
+  const [closingCountsUSD, setClosingCountsUSD] = useState({
+    cash: '',
+    card: '',
+    transfer: '',
+    yape: '',
+    plin: '',
+    rappi: '',
+    pedidosYa: '',
+    diDiFood: '',
+  })
   const [movementData, setMovementData] = useState({
     type: 'income',
     amount: '',
     description: '',
     category: '',
+    currency: 'PEN', // Multi-divisa: solo aplica si cashMultiCurrencyOn
   })
 
   // Estados para editar/eliminar movimientos
@@ -671,6 +687,9 @@ export default function CashRegister() {
         const demoSession = {
           id: `demo-session-${Date.now()}`,
           openingAmount: parseFloat(openingAmount),
+          ...(cashMultiCurrencyOn && parseFloat(openingAmountUSD) > 0 && {
+            openingAmountUSD: parseFloat(openingAmountUSD),
+          }),
           openedAt: new Date(),
           openedBy: user.displayName,
           status: 'open'
@@ -680,6 +699,7 @@ export default function CashRegister() {
         toast.success('Caja abierta correctamente (DEMO - No se guardó)', { duration: 5000 })
         setShowOpenModal(false)
         setOpeningAmount('')
+        setOpeningAmountUSD('')
         return
       }
 
@@ -691,11 +711,15 @@ export default function CashRegister() {
       const isIndependentSubUser = isSubUser && independentCashRegister
       const openUserUid = isIndependentSubUser ? user.uid : null
       const openUserName = user.displayName || user.email || 'Usuario'
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName)
+      // Multi-divisa: si la flag está activa y el cajero declaró un saldo
+      // inicial en USD > 0, lo enviamos al servicio. Si no, parámetro 0.
+      const openUSD = cashMultiCurrencyOn ? (parseFloat(openingAmountUSD) || 0) : 0
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName, openUSD)
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
         setOpeningAmount('')
+        setOpeningAmountUSD('')
         loadData()
         refreshOpenSessions()
       } else {
@@ -720,6 +744,16 @@ export default function CashRegister() {
     const pedidosYa = parseFloat(closingCounts.pedidosYa) || 0
     const diDiFood = parseFloat(closingCounts.diDiFood) || 0
 
+    // Multi-divisa: arqueo USD (solo si hay actividad USD detectada)
+    const cashUSD = parseFloat(closingCountsUSD.cash) || 0
+    const cardUSD = parseFloat(closingCountsUSD.card) || 0
+    const transferUSD = parseFloat(closingCountsUSD.transfer) || 0
+    const yapeUSD = parseFloat(closingCountsUSD.yape) || 0
+    const plinUSD = parseFloat(closingCountsUSD.plin) || 0
+    const rappiUSD = parseFloat(closingCountsUSD.rappi) || 0
+    const pedidosYaUSD = parseFloat(closingCountsUSD.pedidosYa) || 0
+    const diDiFoodUSD = parseFloat(closingCountsUSD.diDiFood) || 0
+
     setIsClosing(true)
     try {
       // Cargar datos del negocio para la impresión del ticket
@@ -738,9 +772,36 @@ export default function CashRegister() {
         }).length
       })()
 
+      // Multi-divisa: armar bloque USD si la sesión tuvo actividad USD.
+      const usdBlock = totals.usd ? {
+        openingAmount: currentSession.openingAmountUSD || 0,
+        cash: cashUSD,
+        card: cardUSD,
+        transfer: transferUSD,
+        yape: yapeUSD,
+        plin: plinUSD,
+        rappi: rappiUSD,
+        pedidosYa: pedidosYaUSD,
+        diDiFood: diDiFoodUSD,
+        totalSales: totals.usd.sales,
+        salesCash: totals.usd.salesCash,
+        salesCard: totals.usd.salesCard,
+        salesTransfer: totals.usd.salesTransfer,
+        salesYape: totals.usd.salesYape,
+        salesPlin: totals.usd.salesPlin,
+        salesRappi: totals.usd.salesRappi,
+        salesPedidosYa: totals.usd.salesPedidosYa,
+        salesDiDiFood: totals.usd.salesDiDiFood,
+        totalIncome: totals.usd.income,
+        totalExpense: totals.usd.expense,
+        expectedAmount: totals.usd.expected,
+        difference: cashUSD - (totals.usd.expected || 0),
+      } : null
+
       // Guardar datos de la sesión cerrada con hora de cierre
       const closedData = {
         ...currentSession,
+        ...(usdBlock && { usd: usdBlock }),
         closingCash: cash,
         closingCard: card,
         closingTransfer: transfer,
@@ -805,6 +866,8 @@ export default function CashRegister() {
         invoiceCount: sessionOnlyInvoicesCount,
         deferredPayments: totals.deferredPayments || [],
         deferredTotal: totals.deferredTotal || 0,
+        // Multi-divisa: bloque USD si hubo actividad
+        ...(usdBlock && { usd: usdBlock }),
       }, user.uid, user.displayName || user.email || 'Usuario')
       if (result.success) {
         // Guardar datos y mostrar pantalla de éxito
@@ -1143,6 +1206,8 @@ export default function CashRegister() {
         amount: parseFloat(movementData.amount),
         description: movementData.description,
         category: movementData.category,
+        // Multi-divisa: pasa la moneda solo si la flag está activa
+        currency: cashMultiCurrencyOn ? (movementData.currency || 'PEN') : 'PEN',
       })
 
       if (result.success) {
@@ -1153,6 +1218,7 @@ export default function CashRegister() {
           amount: '',
           description: '',
           category: '',
+          currency: 'PEN',
         })
         loadData()
       } else {
@@ -1280,11 +1346,12 @@ export default function CashRegister() {
       pendingCount: 0,
       deferredPayments: [],
       deferredTotal: 0,
+      usd: null,
     }
 
     const sessionOpenedAt = toDate(currentSession.openedAt)
 
-    // Inicializar totales por método de pago
+    // Inicializar totales por método de pago (PEN — campos legacy)
     let salesCash = 0
     let salesCard = 0
     let salesTransfer = 0
@@ -1293,6 +1360,21 @@ export default function CashRegister() {
     let salesRappi = 0
     let salesPedidosYa = 0
     let salesDiDiFood = 0
+
+    // Multi-divisa: acumuladores paralelos en USD.
+    let salesCashUSD = 0
+    let salesCardUSD = 0
+    let salesTransferUSD = 0
+    let salesYapeUSD = 0
+    let salesPlinUSD = 0
+    let salesRappiUSD = 0
+    let salesPedidosYaUSD = 0
+    let salesDiDiFoodUSD = 0
+    let pendingTotalUSD = 0
+    let pendingCountUSD = 0
+
+    // Devuelve la moneda de un invoice (default PEN para legacy).
+    const invoiceCurrency = (inv) => normalizeCurrency(inv?.currency)
 
     // Filtrar facturas:
     // - Excluir notas de crédito (son devoluciones/anulaciones)
@@ -1325,8 +1407,22 @@ export default function CashRegister() {
     // creados en sesiones anteriores. Se llenan recorriendo paymentHistory.
     const deferredPayments = []
 
-    // Helper: suma un pago a su método correspondiente
-    const addToMethod = (method, amount) => {
+    // Helper: suma un pago a su método correspondiente. Distribuye a los
+    // acumuladores PEN o USD según la moneda del invoice padre.
+    const addToMethod = (method, amount, currencyCode = 'PEN') => {
+      if (currencyCode === 'USD') {
+        switch (method) {
+          case 'Efectivo': salesCashUSD += amount; break
+          case 'Tarjeta': salesCardUSD += amount; break
+          case 'Transferencia': salesTransferUSD += amount; break
+          case 'Yape': salesYapeUSD += amount; break
+          case 'Plin': salesPlinUSD += amount; break
+          case 'Rappi': salesRappiUSD += amount; break
+          case 'PedidosYa': salesPedidosYaUSD += amount; break
+          case 'DiDiFood': salesDiDiFoodUSD += amount; break
+        }
+        return
+      }
       switch (method) {
         case 'Efectivo': salesCash += amount; break
         case 'Tarjeta': salesCard += amount; break
@@ -1339,12 +1435,15 @@ export default function CashRegister() {
       }
     }
 
-    // Recorrer cada factura válida y sumar por método de pago
+    // Recorrer cada factura válida y sumar por método de pago.
+    // Multi-divisa: cada pago se enruta al bucket PEN o USD según la moneda
+    // del invoice padre. invoiceCurrency() devuelve 'PEN' para legacy.
     validInvoices.forEach(invoice => {
       // Si es venta al crédito pendiente de pago, no sumar nada al control de caja
       if (invoice.paymentStatus === 'pending') {
         return // No contar ventas al crédito sin pagar
       }
+      const invCcy = invoiceCurrency(invoice)
 
       // Verificar si tiene historial de pagos (ventas al crédito o parciales que fueron pagadas)
       // Si tiene paymentHistory, usar eso para obtener los métodos de pago reales
@@ -1363,7 +1462,7 @@ export default function CashRegister() {
           const paymentDate = toDate(payment.date) || invoiceCreatedAt
           const inSession = !sessionOpenedAt || (paymentDate && paymentDate >= sessionOpenedAt)
           if (!inSession) return
-          addToMethod(payment.method, amount)
+          addToMethod(payment.method, amount, invCcy)
           if (isOldInvoice) {
             deferredPayments.push({
               invoiceId: invoice.id,
@@ -1374,6 +1473,7 @@ export default function CashRegister() {
               method: payment.method,
               date: paymentDate,
               recordedByName: payment.recordedByName,
+              currency: invCcy,
             })
           }
         })
@@ -1383,63 +1483,12 @@ export default function CashRegister() {
 
         // Si hay un solo método de pago, usar el TOTAL DE LA FACTURA
         if (invoice.payments.length === 1) {
-          const method = invoice.payments[0].method
-          switch (method) {
-            case 'Efectivo':
-              salesCash += invoiceTotal
-              break
-            case 'Tarjeta':
-              salesCard += invoiceTotal
-              break
-            case 'Transferencia':
-              salesTransfer += invoiceTotal
-              break
-            case 'Yape':
-              salesYape += invoiceTotal
-              break
-            case 'Plin':
-              salesPlin += invoiceTotal
-              break
-            case 'Rappi':
-              salesRappi += invoiceTotal
-              break
-            case 'PedidosYa':
-              salesPedidosYa += invoiceTotal
-              break
-            case 'DiDiFood':
-              salesDiDiFood += invoiceTotal
-              break
-          }
+          addToMethod(invoice.payments[0].method, invoiceTotal, invCcy)
         } else {
           // Múltiples métodos de pago: usar los montos reales de cada pago
           invoice.payments.forEach(payment => {
             const amount = parseFloat(payment.amount) || 0
-            switch (payment.method) {
-              case 'Efectivo':
-                salesCash += amount
-                break
-              case 'Tarjeta':
-                salesCard += amount
-                break
-              case 'Transferencia':
-                salesTransfer += amount
-                break
-              case 'Yape':
-                salesYape += amount
-                break
-              case 'Plin':
-                salesPlin += amount
-                break
-              case 'Rappi':
-                salesRappi += amount
-                break
-              case 'PedidosYa':
-                salesPedidosYa += amount
-                break
-              case 'DiDiFood':
-                salesDiDiFood += amount
-                break
-            }
+            addToMethod(payment.method, amount, invCcy)
           })
         }
       } else {
@@ -1447,40 +1496,12 @@ export default function CashRegister() {
         // Para pagos parciales, solo sumar amountPaid
         const isPartialPayment = invoice.paymentStatus === 'partial'
         const total = isPartialPayment ? (parseFloat(invoice.amountPaid) || 0) : (invoice.total || 0)
-
-        switch (invoice.paymentMethod) {
-          case 'Efectivo':
-            salesCash += total
-            break
-          case 'Tarjeta':
-            salesCard += total
-            break
-          case 'Transferencia':
-            salesTransfer += total
-            break
-          case 'Yape':
-            salesYape += total
-            break
-          case 'Plin':
-            salesPlin += total
-            break
-          case 'Rappi':
-            salesRappi += total
-            break
-          case 'PedidosYa':
-            salesPedidosYa += total
-            break
-          case 'DiDiFood':
-            salesDiDiFood += total
-            break
-        }
+        addToMethod(invoice.paymentMethod, total, invCcy)
       }
     })
 
-    // Total de ventas (todos los métodos)
-    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa + salesDiDiFood
-
-    // Calcular ventas pendientes de cobro (crédito y pagos parciales)
+    // Calcular ventas pendientes de cobro (crédito y pagos parciales).
+    // Multi-divisa: PEN y USD por separado.
     let pendingTotal = 0
     let pendingCount = 0
     todayInvoices.forEach(invoice => {
@@ -1492,38 +1513,87 @@ export default function CashRegister() {
       if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
           invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') return
 
-      // Ventas al crédito (pendientes de cobro total)
+      const invCcy = invoiceCurrency(invoice)
+      let pendingAmount = 0
       if (invoice.paymentStatus === 'pending') {
-        pendingTotal += parseFloat(invoice.total) || 0
-        pendingCount++
+        pendingAmount = parseFloat(invoice.total) || 0
+      } else if (invoice.paymentStatus === 'partial') {
+        pendingAmount = parseFloat(invoice.balance) || 0
+      } else {
+        return
       }
-      // Pagos parciales (saldo pendiente)
-      else if (invoice.paymentStatus === 'partial') {
-        pendingTotal += parseFloat(invoice.balance) || 0
+      if (invCcy === 'USD') {
+        pendingTotalUSD += pendingAmount
+        pendingCountUSD++
+      } else {
+        pendingTotal += pendingAmount
         pendingCount++
       }
     })
 
-    // Ingresos adicionales (movimientos tipo income)
-    const income = movements
-      .filter(m => m.type === 'income')
-      .reduce((sum, m) => sum + (m.amount || 0), 0)
+    // Ingresos / Egresos manuales. Multi-divisa: separar por movement.currency
+    // (default PEN cuando no viene). Movimientos legacy todos PEN.
+    let income = 0, expense = 0, incomeUSD = 0, expenseUSD = 0
+    movements.forEach(m => {
+      const amt = Number(m.amount) || 0
+      const isUSD = m.currency === 'USD'
+      if (m.type === 'income') {
+        if (isUSD) incomeUSD += amt
+        else income += amt
+      } else if (m.type === 'expense') {
+        if (isUSD) expenseUSD += amt
+        else expense += amt
+      }
+    })
 
-    // Egresos (movimientos tipo expense)
-    const expense = movements
-      .filter(m => m.type === 'expense')
-      .reduce((sum, m) => sum + (m.amount || 0), 0)
+    // Total de ventas (todos los métodos) — PEN y USD por separado
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa + salesDiDiFood
+    const salesUSD = salesCashUSD + salesCardUSD + salesTransferUSD + salesYapeUSD + salesPlinUSD + salesRappiUSD + salesPedidosYaUSD + salesDiDiFoodUSD
 
     // Dinero esperado en caja (SOLO efectivo + ingresos - egresos)
-    const expected = currentSession.openingAmount + salesCash + income - expense
+    const expected = (currentSession.openingAmount || 0) + salesCash + income - expense
+    const expectedUSD = (currentSession.openingAmountUSD || 0) + salesCashUSD + incomeUSD - expenseUSD
 
     // Diferencia (si hay cierre)
     let difference = 0
     if (currentSession.closingAmount !== undefined) {
       difference = currentSession.closingAmount - expected
     }
+    let differenceUSD = 0
+    if (currentSession.usd?.closingAmount !== undefined) {
+      differenceUSD = (currentSession.usd.closingCash || 0) - expectedUSD
+    }
 
-    const deferredTotal = deferredPayments.reduce((s, p) => s + (p.amount || 0), 0)
+    const deferredTotal = deferredPayments
+      .filter(p => p.currency !== 'USD')
+      .reduce((s, p) => s + (p.amount || 0), 0)
+    const deferredTotalUSD = deferredPayments
+      .filter(p => p.currency === 'USD')
+      .reduce((s, p) => s + (p.amount || 0), 0)
+
+    // Bloque USD: solo se incluye si hay actividad USD para evitar ruido.
+    const hasUsdActivity = salesUSD > 0 || incomeUSD > 0 || expenseUSD > 0
+      || (currentSession.openingAmountUSD || 0) > 0 || pendingCountUSD > 0
+      || deferredTotalUSD > 0
+    const usdBlock = hasUsdActivity ? {
+      sales: salesUSD,
+      salesCash: salesCashUSD,
+      salesCard: salesCardUSD,
+      salesTransfer: salesTransferUSD,
+      salesYape: salesYapeUSD,
+      salesPlin: salesPlinUSD,
+      salesRappi: salesRappiUSD,
+      salesPedidosYa: salesPedidosYaUSD,
+      salesDiDiFood: salesDiDiFoodUSD,
+      income: incomeUSD,
+      expense: expenseUSD,
+      expected: expectedUSD,
+      difference: differenceUSD,
+      pendingTotal: pendingTotalUSD,
+      pendingCount: pendingCountUSD,
+      deferredTotal: deferredTotalUSD,
+      openingAmount: currentSession.openingAmountUSD || 0,
+    } : null
 
     return {
       sales,
@@ -1543,6 +1613,7 @@ export default function CashRegister() {
       pendingCount,
       deferredPayments,
       deferredTotal,
+      usd: usdBlock,
     }
   }
 
@@ -3021,6 +3092,7 @@ export default function CashRegister() {
         onClose={() => {
           setShowOpenModal(false)
           setOpeningAmount('')
+          setOpeningAmountUSD('')
         }}
         title="Abrir Caja"
       >
@@ -3029,7 +3101,7 @@ export default function CashRegister() {
             Ingresa el monto inicial en efectivo con el que comienza el día
           </p>
           <Input
-            label="Monto Inicial"
+            label={cashMultiCurrencyOn ? 'Monto Inicial en Soles (S/)' : 'Monto Inicial'}
             type="number"
             step="0.01"
             placeholder="0.00"
@@ -3037,12 +3109,28 @@ export default function CashRegister() {
             onChange={(e) => setOpeningAmount(e.target.value)}
             required
           />
+          {cashMultiCurrencyOn && (
+            <div>
+              <Input
+                label="Monto Inicial en Dólares ($) — opcional"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={openingAmountUSD}
+                onChange={(e) => setOpeningAmountUSD(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Solo si tienes efectivo en dólares en la caja al abrir. Déjalo vacío si no.
+              </p>
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-4">
             <Button
               variant="outline"
               onClick={() => {
                 setShowOpenModal(false)
                 setOpeningAmount('')
+                setOpeningAmountUSD('')
               }}
             >
               Cancelar
@@ -3070,7 +3158,8 @@ export default function CashRegister() {
         onClose={() => {
           if (!closedSuccessfully) {
             setShowCloseModal(false)
-            setClosingCounts({ cash: '', card: '', transfer: '' })
+            setClosingCounts({ cash: '', card: '', transfer: '', yape: '', plin: '', rappi: '', pedidosYa: '', diDiFood: '' })
+            setClosingCountsUSD({ cash: '', card: '', transfer: '', yape: '', plin: '', rappi: '', pedidosYa: '', diDiFood: '' })
           }
         }}
         title={closedSuccessfully ? "Caja Cerrada Exitosamente" : "Cerrar Caja"}
@@ -3267,6 +3356,83 @@ export default function CashRegister() {
             </div>
           )}
 
+          {/* ========== ARQUEO EN DÓLARES (opt-in) ========== */}
+          {/* Solo se muestra cuando hay actividad USD en la sesión.    */}
+          {cashMultiCurrencyOn && totals.usd && (
+            <div className="border-t-2 border-emerald-200 pt-4 mt-4 space-y-3">
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded p-3">
+                <DollarSign className="w-4 h-4 text-emerald-700" />
+                <p className="text-sm font-semibold text-emerald-900">Arqueo en Dólares (USD)</p>
+              </div>
+
+              {/* Resumen ventas USD */}
+              <div className="bg-emerald-50/40 p-3 rounded space-y-1.5 text-sm">
+                {totals.usd.salesCash > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">• Efectivo:</span><span className="font-semibold text-green-700">{formatCurrency(totals.usd.salesCash, 'USD')}</span></div>
+                )}
+                {totals.usd.salesCard > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">• Tarjeta:</span><span className="font-semibold">{formatCurrency(totals.usd.salesCard, 'USD')}</span></div>
+                )}
+                {totals.usd.salesTransfer > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">• Transferencia:</span><span className="font-semibold">{formatCurrency(totals.usd.salesTransfer, 'USD')}</span></div>
+                )}
+                {totals.usd.salesYape > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">• Yape:</span><span className="font-semibold">{formatCurrency(totals.usd.salesYape, 'USD')}</span></div>
+                )}
+                {totals.usd.salesPlin > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">• Plin:</span><span className="font-semibold">{formatCurrency(totals.usd.salesPlin, 'USD')}</span></div>
+                )}
+                {!hideExpectedForCashier && (
+                  <div className="border-t border-emerald-200 pt-2 mt-2 flex justify-between">
+                    <span className="text-sm font-semibold text-gray-700">Efectivo USD Esperado:</span>
+                    <span className="text-lg font-bold text-emerald-700">{formatCurrency(totals.usd.expected, 'USD')}</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-gray-500">
+                  Apertura USD ({formatCurrency(currentSession?.openingAmountUSD || 0, 'USD')}) + Ventas Efectivo USD + Ingresos USD - Egresos USD
+                </p>
+              </div>
+
+              <Input
+                label="Efectivo USD Contado"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={closingCountsUSD.cash}
+                onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, cash: e.target.value })}
+                helperText="Cuenta los dólares en efectivo de la caja"
+              />
+              {totals.usd.salesCard > 0 && (
+                <Input label="Total USD en Tarjetas" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.card} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, card: e.target.value })} />
+              )}
+              {totals.usd.salesTransfer > 0 && (
+                <Input label="Total USD en Transferencias" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.transfer} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, transfer: e.target.value })} />
+              )}
+              {totals.usd.salesYape > 0 && (
+                <Input label="Total USD en Yape" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.yape} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, yape: e.target.value })} />
+              )}
+              {totals.usd.salesPlin > 0 && (
+                <Input label="Total USD en Plin" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.plin} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, plin: e.target.value })} />
+              )}
+
+              {closingCountsUSD.cash && !hideExpectedForCashier && (
+                <div className="bg-emerald-50/60 border border-emerald-200 p-3 rounded">
+                  <p className="text-xs font-medium text-gray-700 mb-1">Diferencia USD:</p>
+                  <p className={`text-lg font-bold ${
+                    parseFloat(closingCountsUSD.cash) - totals.usd.expected >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(parseFloat(closingCountsUSD.cash || 0) - totals.usd.expected, 'USD')}
+                  </p>
+                  {parseFloat(closingCountsUSD.cash) - totals.usd.expected !== 0 && (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {parseFloat(closingCountsUSD.cash) - totals.usd.expected > 0 ? 'Sobrante' : 'Faltante'}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 pt-4">
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-2">
@@ -3274,7 +3440,8 @@ export default function CashRegister() {
                 variant="outline"
                 onClick={() => {
                   setShowCloseModal(false)
-                  setClosingCounts({ cash: '', card: '', transfer: '' })
+                  setClosingCounts({ cash: '', card: '', transfer: '', yape: '', plin: '', rappi: '', pedidosYa: '', diDiFood: '' })
+                  setClosingCountsUSD({ cash: '', card: '', transfer: '', yape: '', plin: '', rappi: '', pedidosYa: '', diDiFood: '' })
                 }}
                 className="w-full"
               >
@@ -3455,6 +3622,29 @@ export default function CashRegister() {
             onChange={(e) => setMovementData({ ...movementData, amount: e.target.value })}
             required
           />
+
+          {/* Multi-divisa: selector de moneda del movimiento (solo si flag on) */}
+          {cashMultiCurrencyOn && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
+              <div className="flex gap-2">
+                {['PEN', 'USD'].map(ccy => (
+                  <button
+                    key={ccy}
+                    type="button"
+                    onClick={() => setMovementData({ ...movementData, currency: ccy })}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                      (movementData.currency || 'PEN') === ccy
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {ccy === 'PEN' ? 'S/ Soles' : '$ Dólares'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

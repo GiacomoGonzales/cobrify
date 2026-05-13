@@ -1839,7 +1839,7 @@ export const getOpenCashSessions = async (businessId, branchId = null) => {
  * @param {string|null} userUid - Firebase UID del usuario que abre la caja
  * @param {string|null} userName - Nombre del usuario que abre la caja
  */
-export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null) => {
+export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0) => {
   try {
     // Verificar que no haya una caja abierta para esta sucursal Y este usuario
     const currentSession = await getCashRegisterSession(userId, branchId, userUid)
@@ -1853,6 +1853,13 @@ export const openCashRegister = async (userId, openingAmount, branchId = null, u
       openedAt: serverTimestamp(),
       openedBy: userId,
       createdAt: serverTimestamp(),
+    }
+
+    // Multi-divisa: si el negocio activó USD y el cajero declaró saldo en
+    // dólares, guardamos también openingAmountUSD. Si vale 0, no se guarda
+    // para mantener limpios los docs de cajas PEN-only.
+    if (Number(openingAmountUSD) > 0) {
+      sessionData.openingAmountUSD = Number(openingAmountUSD)
     }
 
     // Solo agregar branchId si no es null (sucursal adicional)
@@ -1892,7 +1899,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount, deferredPayments, deferredTotal } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     const updateData = {
@@ -1926,6 +1933,38 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       // Pagos cobrados en esta sesión sobre comprobantes emitidos en sesiones previas
       deferredPayments: deferredPayments || [],
       deferredTotal: deferredTotal || 0,
+    }
+
+    // Multi-divisa: si vino bloque USD con datos, lo guardamos como objeto
+    // anidado. Las sesiones legacy (PEN-only) no tienen este campo y todo
+    // sigue funcionando idéntico.
+    if (usd && typeof usd === 'object') {
+      const usdClosingAmount = (usd.cash || 0) + (usd.card || 0) + (usd.transfer || 0) + (usd.yape || 0) + (usd.plin || 0) + (usd.rappi || 0) + (usd.pedidosYa || 0) + (usd.diDiFood || 0)
+      updateData.usd = {
+        openingAmount: usd.openingAmount || 0,
+        closingAmount: usdClosingAmount,
+        closingCash: usd.cash || 0,
+        closingCard: usd.card || 0,
+        closingTransfer: usd.transfer || 0,
+        closingYape: usd.yape || 0,
+        closingPlin: usd.plin || 0,
+        closingRappi: usd.rappi || 0,
+        closingPedidosYa: usd.pedidosYa || 0,
+        closingDiDiFood: usd.diDiFood || 0,
+        totalSales: usd.totalSales || 0,
+        salesCash: usd.salesCash || 0,
+        salesCard: usd.salesCard || 0,
+        salesTransfer: usd.salesTransfer || 0,
+        salesYape: usd.salesYape || 0,
+        salesPlin: usd.salesPlin || 0,
+        salesRappi: usd.salesRappi || 0,
+        salesPedidosYa: usd.salesPedidosYa || 0,
+        salesDiDiFood: usd.salesDiDiFood || 0,
+        totalIncome: usd.totalIncome || 0,
+        totalExpense: usd.totalExpense || 0,
+        expectedAmount: usd.expectedAmount || 0,
+        difference: usd.difference || 0,
+      }
     }
 
     // Guardar datos del usuario que cierra la caja
@@ -1984,7 +2023,7 @@ export const updateCashSession = async (userId, sessionId, updateData) => {
  */
 export const addCashMovement = async (userId, sessionId, movementData) => {
   try {
-    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashMovements'), {
+    const payload = {
       sessionId,
       type: movementData.type, // 'income' o 'expense'
       amount: movementData.amount,
@@ -1992,7 +2031,13 @@ export const addCashMovement = async (userId, sessionId, movementData) => {
       category: movementData.category || 'Otros',
       createdAt: serverTimestamp(),
       createdBy: userId,
-    })
+    }
+    // Multi-divisa: si vino currency='USD', persistirlo. PEN no se guarda
+    // (default implícito) para mantener compatibilidad con movimientos legacy.
+    if (movementData.currency === 'USD') {
+      payload.currency = 'USD'
+    }
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashMovements'), payload)
 
     return { success: true, id: docRef.id }
   } catch (error) {
