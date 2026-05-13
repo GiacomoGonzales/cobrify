@@ -323,6 +323,10 @@ export default function POS() {
   const [exchangeRate, setExchangeRate] = useState(1)
   const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs'|'cache'|'manual'
   const [loadingRate, setLoadingRate] = useState(false)
+  // Estado local de texto del input de TC. Permite que el campo quede
+  // vacío mientras el usuario escribe (sin forzar "0" al borrarlo).
+  const [exchangeRateInput, setExchangeRateInput] = useState('1')
+  const [tcInputFocused, setTcInputFocused] = useState(false)
 
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
@@ -616,6 +620,13 @@ export default function POS() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency])
+
+  // Sincronizar el texto del input cuando el TC cambia desde afuera (SBS,
+  // draft, etc.) — pero no mientras el usuario está escribiendo.
+  useEffect(() => {
+    if (tcInputFocused) return
+    setExchangeRateInput(exchangeRate > 0 ? String(exchangeRate) : '')
+  }, [exchangeRate, tcInputFocused])
 
   // Cuando el cajero edita el TC manualmente (o se actualiza desde SBS),
   // recomputamos los precios USD del carrito desde basePrice (PEN). Así
@@ -6204,10 +6215,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           type="number"
                           step="0.0001"
                           min="0"
-                          value={exchangeRate}
+                          value={exchangeRateInput}
+                          onFocus={() => setTcInputFocused(true)}
+                          onBlur={() => {
+                            setTcInputFocused(false)
+                            // Al perder foco: si quedó vacío o inválido,
+                            // restaurar el último TC válido.
+                            const parsed = parseFloat(exchangeRateInput)
+                            if (!Number.isFinite(parsed) || parsed <= 0) {
+                              setExchangeRateInput(exchangeRate > 0 ? String(exchangeRate) : '')
+                            }
+                          }}
                           onChange={(e) => {
-                            setExchangeRate(parseFloat(e.target.value) || 0)
-                            setExchangeRateSource('manual')
+                            const val = e.target.value
+                            setExchangeRateInput(val)
+                            const parsed = parseFloat(val)
+                            if (Number.isFinite(parsed) && parsed > 0) {
+                              setExchangeRate(parsed)
+                              setExchangeRateSource('manual')
+                            }
                           }}
                           className="flex-1 h-7 px-2 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
