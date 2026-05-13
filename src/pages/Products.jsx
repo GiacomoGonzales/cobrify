@@ -5924,7 +5924,7 @@ export default function Products() {
                                 {warehouse?.isDefault && <Badge variant="default" className="ml-2 text-xs">Principal</Badge>}
                               </span>
                               <span className={`font-semibold text-sm ${
-                                ws.stock > (product?.minStock ?? 3) ? 'text-green-600' :
+                                ws.stock > (viewingProduct?.minStock ?? 3) ? 'text-green-600' :
                                 ws.stock > 0 ? 'text-yellow-600' :
                                 'text-red-600'
                               }`}>
