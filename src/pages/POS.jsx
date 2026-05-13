@@ -684,12 +684,8 @@ export default function POS() {
       return
     }
 
-    // 3) Carrito con items: confirmar conversión con el TC efectivo.
-    const proceed = window.confirm(
-      `¿Convertir los precios del carrito de ${currency} a ${newCurrency} usando TC ${effectiveRate}?`
-    )
-    if (!proceed) return
-
+    // 3) Carrito con items: convertir precios usando el TC efectivo
+    //    (sin confirmación, cambio inmediato).
     setCart(prev => prev.map(item => {
       const oldPrice = Number(item.price) || 0
       let newPrice = oldPrice
