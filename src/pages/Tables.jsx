@@ -1528,17 +1528,18 @@ export default function Tables() {
                               {!isLinked && getStatusIcon(table.status)}
                             </div>
                             <div className={`flex items-center gap-2 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {/* Indicador sutil de precuenta impresa: ícono Receipt
-                                  ámbar con pulse suave. Combina con el borde
-                                  ámbar latente del card. Tooltip nativo muestra
-                                  "Precuenta impresa hace X min". */}
+                              {/* Indicador de precuenta impresa: ícono Receipt
+                                  + label "Precuenta impresa" en ámbar con pulse
+                                  suave. Combina con el borde ámbar latente del
+                                  card. Tooltip muestra "hace X min". */}
                               {hasPreBill && (
                                 <span
-                                  className="inline-flex items-center text-amber-600 animate-pulse"
+                                  className="inline-flex items-center gap-1 text-amber-700 animate-pulse"
                                   title={formatPreBillElapsed(table.preBillPrintedAt)}
                                   aria-label="Precuenta impresa"
                                 >
-                                  <Receipt className="w-4 h-4" />
+                                  <Receipt className="w-4 h-4 flex-shrink-0" />
+                                  <span className="text-xs font-semibold whitespace-nowrap">Precuenta impresa</span>
                                 </span>
                               )}
                               <span className="inline-flex items-center gap-1">
