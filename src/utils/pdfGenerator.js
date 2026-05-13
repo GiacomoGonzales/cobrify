@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
+import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { UNITS } from '@/components/product/ProductFormModal'
 import QRCode from 'qrcode'
@@ -431,6 +432,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     unit: 'pt',
     format: isA5 ? 'a5' : 'a4'
   })
+
+  // Multi-divisa: símbolo y nombre largo de la moneda del documento.
+  // PEN por default (compatibilidad con facturas viejas sin currency).
+  const invoiceCurrency = normalizeCurrency(invoice?.currency)
+  const CCY = getCurrencySymbol(invoiceCurrency) // 'S/' | '$'
+  const CCY_NAME_LONG = invoiceCurrency === 'USD' ? 'DOLARES AMERICANOS' : 'SOLES'
 
   // Paleta de colores
   const BLACK = [0, 0, 0]
@@ -1549,7 +1556,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   // ========== SON: (MONTO EN LETRAS) ==========
-  const montoEnLetras = numeroALetras(invoice.total || 0) + ' SOLES'
+  const montoEnLetras = numeroALetras(invoice.total || 0) + ' ' + CCY_NAME_LONG
 
   // Recuadro para "SON:"
   doc.setDrawColor(...BLACK)
@@ -1613,7 +1620,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    doc.text(CCY + ' ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
     footerY += totalRowHeight
   } else {
     // Mostrar desglose completo: gravada, descuento, IGV, recargo, total, detracción
@@ -1631,7 +1638,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
     doc.text(labelGravada, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text(CCY + ' ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
     // Fila 2: DESCUENTO (solo si hay descuento)
@@ -1642,7 +1649,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
       doc.setTextColor(180, 0, 0)
       doc.text('DESCUENTO', totalsX + 5, footerY + 10)
-      doc.text('- S/ ' + (invoice.discount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      doc.text('- ' + CCY + ' ' + (invoice.discount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
       doc.setTextColor(...BLACK)
       footerY += totalsRowHeight
     }
@@ -1655,7 +1662,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.setDrawColor(200, 200, 200)
         doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
         doc.text(`IGV (${rate}%)`, totalsX + 5, footerY + 10)
-        doc.text('S/ ' + (igvByRate[rate].igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+        doc.text(CCY + ' ' + (igvByRate[rate].igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
         footerY += totalsRowHeight
       })
     } else {
@@ -1664,7 +1671,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setDrawColor(200, 200, 200)
       doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
       doc.text(`IGV (${igvRateKeys[0] || igvRate}%)`, totalsX + 5, footerY + 10)
-      doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      doc.text(CCY + ' ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
       footerY += totalsRowHeight
     }
 
@@ -1678,7 +1685,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.text(`REC. CONSUMO (${invoice.recargoConsumoRate || 10}%)`, totalsX + 5, footerY + 10)
-      doc.text('S/ ' + (invoice.recargoConsumo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      doc.text(CCY + ' ' + (invoice.recargoConsumo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
       footerY += totalsRowHeight
     }
 
@@ -1691,7 +1698,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + (HAS_DETRACTION ? 10 : 14))
     doc.setFontSize(11)
-    doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + (HAS_DETRACTION ? 10 : 14), { align: 'right' })
+    doc.text(CCY + ' ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + (HAS_DETRACTION ? 10 : 14), { align: 'right' })
     footerY += totalRowHeight
   }
 
@@ -1706,7 +1713,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.text(`DETRACCIÓN (${invoice.detractionRate || 0}%)`, totalsX + 5, footerY + 10)
-    doc.text('- S/ ' + (invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text('- ' + CCY + ' ' + (invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
     // Fila: NETO A PAGAR (mismo estilo que TOTAL - color de acento de la empresa)
@@ -1717,7 +1724,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(9)
     doc.text('NETO A PAGAR', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (invoice.netPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    doc.text(CCY + ' ' + (invoice.netPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
     footerY += totalsRowHeight + 6
   }
 
@@ -1893,7 +1900,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.text('Monto de detracción:', detractionInfoX + 5, dataY)
     doc.setFont('helvetica', 'bold')
-    doc.text(`S/ ${(invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, detractionInfoX + 95, dataY)
+    doc.text(`${CCY} ${(invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, detractionInfoX + 95, dataY)
 
     // Guardar donde termina la sección de detracción
     detractionSectionEndY = detractionInfoY + detractionTotalHeight + 5
@@ -2051,7 +2058,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.text(detractionLabel, labelX, infoY)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(...BLACK)
-        const detractionVal = invoice.customer.detractionAmount ? `S/ ${parseFloat(invoice.customer.detractionAmount).toFixed(2)}` : ''
+        const detractionVal = invoice.customer.detractionAmount ? `${CCY} ${parseFloat(invoice.customer.detractionAmount).toFixed(2)}` : ''
         doc.text(detractionVal, valueX, infoY)
         infoY += 10
       }
@@ -2073,7 +2080,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.setTextColor(...DARK_GRAY)
         doc.text('Neto a Pagar', labelX, infoY)
         doc.setTextColor(...BLACK)
-        doc.text(`S/ ${netoAPagar.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, valueX, infoY)
+        doc.text(`${CCY} ${netoAPagar.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, valueX, infoY)
       }
 
       transportY += infoRowHeight
@@ -2166,7 +2173,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         }
 
         doc.text(`Cuota ${cuotaNum}:`, cuotasX, cuotasY)
-        doc.text(`S/ ${cuotaAmount}`, cuotasX + 35, cuotasY)
+        doc.text(`${CCY} ${cuotaAmount}`, cuotasX + 35, cuotasY)
         doc.text(`Vence: ${cuotaDueDate}`, cuotasX + 75, cuotasY)
         cuotasY += 10
       })
@@ -2214,7 +2221,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.text('Monto Pagado:', MARGIN_LEFT + 5, paymentY)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(...BLACK)
-        doc.text('S/ ' + (invoice.amountPaid || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
+        doc.text(CCY + ' ' + (invoice.amountPaid || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
         paymentY += 12
 
         // Saldo pendiente
@@ -2223,7 +2230,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.text('Saldo Pendiente:', MARGIN_LEFT + 5, paymentY)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(220, 38, 38) // Rojo para el saldo pendiente
-        doc.text('S/ ' + (invoice.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
+        doc.text(CCY + ' ' + (invoice.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
         paymentY += 12
       }
 
@@ -2241,7 +2248,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       for (const payment of invoice.paymentHistory) {
         const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date)
         const dateStr = paymentDate.toLocaleDateString('es-PE')
-        const amountStr = 'S/ ' + (payment.amount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })
+        const amountStr = CCY + ' ' + (payment.amount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })
         doc.text(`• ${dateStr} - ${amountStr} (${payment.method || 'Efectivo'})`, MARGIN_LEFT + 8, paymentY)
         paymentY += 10
       }

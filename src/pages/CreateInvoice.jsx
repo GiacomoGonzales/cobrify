@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Trash2, Save, Eye, Loader2, ArrowLeft } from 'lucide-react'
+import { Plus, Trash2, Save, Eye, Loader2, ArrowLeft, DollarSign, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -12,6 +14,16 @@ import Alert from '@/components/ui/Alert'
 import { invoiceSchema } from '@/utils/schemas'
 import { calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency } from '@/lib/utils'
+import {
+  isMultiCurrencyEnabled,
+  getDefaultCurrency,
+  convertToBase,
+  convertFromBase,
+  normalizeCurrency,
+  SUPPORTED_CURRENCIES,
+  BASE_CURRENCY,
+} from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import {
   getCustomers,
   getProducts,
@@ -92,6 +104,8 @@ const UNITS = [
 
 export default function CreateInvoice() {
   const { user } = useAuth()
+  const { businessSettings } = useAppContext()
+  const toast = useToast()
   const navigate = useNavigate()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -104,9 +118,69 @@ export default function CreateInvoice() {
     { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD' },
   ])
 
+  // Multi-divisa (USD) — solo se renderiza UI si el negocio activó la flag
+  // en Configuración → Ventas. Por default todo en PEN.
+  const multiCurrencyOn = useMemo(
+    () => isMultiCurrencyEnabled(businessSettings),
+    [businessSettings]
+  )
+  const initialCurrency = useMemo(
+    () => (multiCurrencyOn ? getDefaultCurrency(businessSettings) : BASE_CURRENCY),
+    [multiCurrencyOn, businessSettings]
+  )
+  const [currency, setCurrency] = useState(initialCurrency)
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs'|'cache'|'manual'
+  const [loadingRate, setLoadingRate] = useState(false)
+
   useEffect(() => {
     loadData()
   }, [user])
+
+  // Trae el TC del día desde SBS (vía Cloud Function). Si el usuario ya
+  // editó el TC a mano, no lo sobrescribe.
+  const fetchExchangeRate = async (forceForToday = false) => {
+    if (loadingRate) return
+    setLoadingRate(true)
+    try {
+      const result = await getRateForDate(forceForToday ? new Date() : new Date())
+      if (result && Number.isFinite(result.sell) && result.sell > 0) {
+        setExchangeRate(Number(result.sell.toFixed(4)))
+        setExchangeRateSource(result.source)
+        if (result.source === 'sbs') {
+          toast.success(`Tipo de cambio del día: S/ ${result.sell.toFixed(4)} (SBS)`)
+        }
+      } else {
+        setExchangeRateSource(null)
+        toast.error('No se pudo obtener el TC SBS. Ingresa el valor manualmente.')
+      }
+    } catch (err) {
+      console.error('Error obteniendo TC:', err)
+      toast.error('No se pudo obtener el TC. Ingresa el valor manualmente.')
+    } finally {
+      setLoadingRate(false)
+    }
+  }
+
+  // Al cambiar a USD, si todavía no hay TC válido (=1), traemos uno.
+  useEffect(() => {
+    if (currency === 'USD' && exchangeRate <= 1) {
+      fetchExchangeRate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency])
+
+  // SUNAT: las BOLETAS DE VENTA no admiten USD por norma. Si el usuario
+  // selecciona boleta con USD activo, forzamos a PEN con aviso.
+  useEffect(() => {
+    if (documentType === 'boleta' && currency === 'USD') {
+      setCurrency('PEN')
+      setExchangeRate(1)
+      setExchangeRateSource(null)
+      toast.info('Las boletas siempre se emiten en Soles (SUNAT).')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentType])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -158,7 +232,13 @@ export default function CreateInvoice() {
       const product = products.find(p => p.id === value)
       if (product) {
         newItems[index].name = product.name
-        newItems[index].unitPrice = product.hasVariants ? (product.basePrice || 0) : product.price
+        // Multi-divisa: el precio del producto está en PEN (moneda base).
+        // Si la factura es USD, convertimos al momento de cargar el item
+        // usando el TC actual. El usuario puede editar el precio luego.
+        const priceInBase = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
+        newItems[index].unitPrice = currency === 'USD' && exchangeRate > 0
+          ? Number(convertFromBase(priceInBase, 'USD', exchangeRate).toFixed(2))
+          : priceInBase
         newItems[index].unit = product.unit || 'UNIDAD'
         newItems[index].taxAffectation = product.taxAffectation || '10'
       }
@@ -283,6 +363,13 @@ export default function CreateInvoice() {
         subtotal: amounts.subtotal,
         igv: amounts.igv,
         total: amounts.total,
+        // Multi-divisa: moneda y TC CONGELADO. PEN=1, USD=el TC del día al
+        // momento de emitir. *InBase pre-calculados para reportes globales.
+        currency: normalizeCurrency(currency),
+        exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+        subtotalInBase: convertToBase(amounts.subtotal, currency, exchangeRate),
+        igvInBase: convertToBase(amounts.igv, currency, exchangeRate),
+        totalInBase: convertToBase(amounts.total, currency, exchangeRate),
         paymentMethod: 'Manual',
         status: 'pending',
         notes: '',
@@ -427,6 +514,91 @@ export default function CreateInvoice() {
                 )}
               </div>
             </div>
+
+            {/* === Multi-divisa: solo si el negocio activó la flag ====== */}
+            {multiCurrencyOn && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <label className="text-sm font-medium text-gray-700">
+                    Moneda
+                  </label>
+                  {documentType === 'boleta' && (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
+                      Boleta → solo PEN
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {SUPPORTED_CURRENCIES.map((ccy) => {
+                    const disabled = documentType === 'boleta' && ccy === 'USD'
+                    const active = currency === ccy
+                    return (
+                      <button
+                        key={ccy}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setCurrency(ccy)}
+                        className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                          active
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {ccy === 'PEN' ? 'S/  Soles' : '$  Dólares'}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {currency === 'USD' && (
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-700">
+                        Tipo de cambio (PEN por USD)
+                      </label>
+                      {exchangeRateSource === 'sbs' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                      )}
+                      {exchangeRateSource === 'cache' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
+                      )}
+                      {exchangeRateSource === 'manual' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        value={exchangeRate}
+                        onChange={(e) => {
+                          setExchangeRate(parseFloat(e.target.value) || 0)
+                          setExchangeRateSource('manual')
+                        }}
+                        className="flex-1 h-9 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fetchExchangeRate(true)}
+                        disabled={loadingRate}
+                        className="h-9 px-3 text-xs font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                        title="Obtener TC del día desde SBS"
+                      >
+                        {loadingRate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        SBS
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      El TC se congela al guardar. Los reportes en PEN
+                      usarán este TC para esta factura, sin recalcular.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -456,11 +628,20 @@ export default function CreateInvoice() {
                         onChange={e => updateItem(index, 'productId', e.target.value)}
                       >
                         <option value="">-- Manual --</option>
-                        {products.map(product => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - {formatCurrency(product.hasVariants ? (product.basePrice || 0) : product.price)}
-                          </option>
-                        ))}
+                        {products.map(product => {
+                          // El precio del producto vive en PEN; lo mostramos en
+                          // el dropdown en la moneda actual de la factura para
+                          // que el usuario vea cómo quedará al cargar el item.
+                          const priceInBase = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
+                          const displayPrice = currency === 'USD' && exchangeRate > 0
+                            ? convertFromBase(priceInBase, 'USD', exchangeRate)
+                            : priceInBase
+                          return (
+                            <option key={product.id} value={product.id}>
+                              {product.name} - {formatCurrency(displayPrice, currency)}
+                            </option>
+                          )
+                        })}
                       </Select>
                     </div>
 
@@ -550,7 +731,7 @@ export default function CreateInvoice() {
                         Subtotal
                       </label>
                       <Input
-                        value={formatCurrency(calculateItemTotal(item))}
+                        value={formatCurrency(calculateItemTotal(item), currency)}
                         disabled
                         className="bg-gray-100 font-semibold"
                       />
@@ -566,16 +747,21 @@ export default function CreateInvoice() {
                 <div className="w-full md:w-1/2 space-y-2">
                   <div className="flex justify-between text-sm text-gray-700">
                     <span>Subtotal:</span>
-                    <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
+                    <span className="font-medium">{formatCurrency(amounts.subtotal, currency)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-gray-700">
                     <span>IGV (18%):</span>
-                    <span className="font-medium">{formatCurrency(amounts.igv)}</span>
+                    <span className="font-medium">{formatCurrency(amounts.igv, currency)}</span>
                   </div>
                   <div className="flex justify-between text-2xl font-bold text-gray-900 border-t pt-2">
                     <span>Total:</span>
-                    <span className="text-primary-600">{formatCurrency(amounts.total)}</span>
+                    <span className="text-primary-600">{formatCurrency(amounts.total, currency)}</span>
                   </div>
+                  {currency === 'USD' && exchangeRate > 0 && (
+                    <div className="text-right text-xs text-gray-500 pt-1">
+                      ≈ {formatCurrency(convertToBase(amounts.total, 'USD', exchangeRate), 'PEN')} (TC {exchangeRate})
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
