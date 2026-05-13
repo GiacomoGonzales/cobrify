@@ -3311,7 +3311,14 @@ Gracias por tu preferencia.`
             <div className="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl p-5 -mx-1">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-primary-100 text-sm">{getDocumentTypeName(viewingInvoice.documentType)}</p>
+                  <p className="text-primary-100 text-sm flex items-center gap-2">
+                    {getDocumentTypeName(viewingInvoice.documentType)}
+                    {viewingInvoice.currency === 'USD' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 border border-emerald-300 font-semibold">
+                        USD · TC {viewingInvoice.exchangeRate || 1}
+                      </span>
+                    )}
+                  </p>
                   <p className="text-2xl font-bold mt-1">{viewingInvoice.number}</p>
                   <p className="text-primary-100 text-sm mt-2">
                     {getInvoiceDate(viewingInvoice) ? formatDateTime(getInvoiceDate(viewingInvoice)) : 'Sin fecha'}
@@ -3476,7 +3483,7 @@ Gracias por tu preferencia.`
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900">{item.name}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
-                          <span>{item.quantity} x {formatCurrency(item.unitPrice)}</span>
+                          <span>{item.quantity} x {formatCurrency(item.unitPrice, viewingInvoice.currency)}</span>
                           {item.code && <span className="text-gray-400">• Cód: {item.code}</span>}
                           {item.unit && <span className="text-gray-400">• {item.unit}</span>}
                           {item.taxAffectation === '20' && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Exonerado</span>}
@@ -3490,7 +3497,7 @@ Gracias por tu preferencia.`
                         )}
                         {item.observations && <p className="text-xs text-gray-500 mt-1 italic">{item.observations}</p>}
                       </div>
-                      <p className="font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(item.subtotal)}</p>
+                      <p className="font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(item.subtotal, viewingInvoice.currency)}</p>
                     </div>
                   </div>
                 ))}
@@ -3503,41 +3510,46 @@ Gracias por tu preferencia.`
                 {viewingInvoice.discount > 0 && (
                   <div className="flex justify-between text-red-600">
                     <span>Descuento{viewingInvoice.discountPercentage ? ` (${viewingInvoice.discountPercentage}%)` : ''}</span>
-                    <span>-{formatCurrency(viewingInvoice.discount)}</span>
+                    <span>-{formatCurrency(viewingInvoice.discount, viewingInvoice.currency)}</span>
                   </div>
                 )}
                 {viewingInvoice.opGravadas > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(viewingInvoice.opGravadas)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(viewingInvoice.opGravadas, viewingInvoice.currency)}</span></div>
                 )}
                 {viewingInvoice.opExoneradas > 0 && (
-                  <div className="flex justify-between text-amber-600"><span>Op. Exoneradas</span><span>{formatCurrency(viewingInvoice.opExoneradas)}</span></div>
+                  <div className="flex justify-between text-amber-600"><span>Op. Exoneradas</span><span>{formatCurrency(viewingInvoice.opExoneradas, viewingInvoice.currency)}</span></div>
                 )}
                 {viewingInvoice.opInafectas > 0 && (
-                  <div className="flex justify-between text-blue-600"><span>Op. Inafectas</span><span>{formatCurrency(viewingInvoice.opInafectas)}</span></div>
+                  <div className="flex justify-between text-blue-600"><span>Op. Inafectas</span><span>{formatCurrency(viewingInvoice.opInafectas, viewingInvoice.currency)}</span></div>
                 )}
-                <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{formatCurrency(viewingInvoice.subtotal)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{formatCurrency(viewingInvoice.subtotal, viewingInvoice.currency)}</span></div>
                 {viewingInvoice.igv > 0 && (
                   viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate).length > 1 ? (
                     Object.entries(viewingInvoice.igvByRate)
                       .sort(([a], [b]) => Number(b) - Number(a))
                       .map(([rate, data]) => {
                         const displayRate = rate === '10' ? '10.5' : rate
-                        return <div key={rate} className="flex justify-between"><span className="text-gray-600">IGV ({displayRate}%)</span><span>{formatCurrency(data.igv || 0)}</span></div>
+                        return <div key={rate} className="flex justify-between"><span className="text-gray-600">IGV ({displayRate}%)</span><span>{formatCurrency(data.igv || 0, viewingInvoice.currency)}</span></div>
                       })
                   ) : (
-                    <div className="flex justify-between"><span className="text-gray-600">IGV ({(() => { const r = (viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate)[0]) || viewingInvoice.taxConfig?.igvRate || 18; return r === '10' || r === 10 ? '10.5' : r })()}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-600">IGV ({(() => { const r = (viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate)[0]) || viewingInvoice.taxConfig?.igvRate || 18; return r === '10' || r === 10 ? '10.5' : r })()}%)</span><span>{formatCurrency(viewingInvoice.igv, viewingInvoice.currency)}</span></div>
                   )
                 )}
                 {viewingInvoice.recargoConsumo > 0 && (
-                  <div className="flex justify-between text-green-600"><span>Recargo al Consumo ({viewingInvoice.recargoConsumoRate || 10}%)</span><span>{formatCurrency(viewingInvoice.recargoConsumo)}</span></div>
+                  <div className="flex justify-between text-green-600"><span>Recargo al Consumo ({viewingInvoice.recargoConsumoRate || 10}%)</span><span>{formatCurrency(viewingInvoice.recargoConsumo, viewingInvoice.currency)}</span></div>
                 )}
                 {viewingInvoice.detractionAmount > 0 && (
-                  <div className="flex justify-between text-orange-600 pt-2 border-t"><span>Detracción ({viewingInvoice.detractionPercentage}%)</span><span>-{formatCurrency(viewingInvoice.detractionAmount)}</span></div>
+                  <div className="flex justify-between text-orange-600 pt-2 border-t"><span>Detracción ({viewingInvoice.detractionPercentage}%)</span><span>-{formatCurrency(viewingInvoice.detractionAmount, viewingInvoice.currency)}</span></div>
                 )}
                 <div className="flex justify-between text-xl font-bold pt-3 border-t border-gray-300">
                   <span>Total</span>
-                  <span className="text-primary-600">{formatCurrency(viewingInvoice.total)}</span>
+                  <span className="text-primary-600">{formatCurrency(viewingInvoice.total, viewingInvoice.currency)}</span>
                 </div>
+                {viewingInvoice.currency === 'USD' && (
+                  <div className="text-right text-xs text-gray-500 pt-1">
+                    ≈ {formatCurrency(getDocumentTotalInBase(viewingInvoice), 'PEN')} al TC congelado
+                  </div>
+                )}
               </div>
             </div>
 
@@ -3600,7 +3612,7 @@ Gracias por tu preferencia.`
                             )}
                           </div>
                           <span className="font-bold text-emerald-700 whitespace-nowrap">
-                            {formatCurrency(pago.amount)}
+                            {formatCurrency(pago.amount, viewingInvoice.currency)}
                           </span>
                         </div>
                       </div>
@@ -3611,12 +3623,12 @@ Gracias por tu preferencia.`
                 <div className="mt-3 pt-3 border-t border-emerald-200 grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-xs text-emerald-700">Total pagado</p>
-                    <p className="font-bold text-emerald-900">{formatCurrency(viewingInvoice.amountPaid || 0)}</p>
+                    <p className="font-bold text-emerald-900">{formatCurrency(viewingInvoice.amountPaid || 0, viewingInvoice.currency)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-emerald-700">Saldo pendiente</p>
                     <p className={`font-bold ${(viewingInvoice.balance || 0) > 0 ? 'text-amber-700' : 'text-emerald-900'}`}>
-                      {formatCurrency(viewingInvoice.balance || 0)}
+                      {formatCurrency(viewingInvoice.balance || 0, viewingInvoice.currency)}
                     </p>
                   </div>
                 </div>
@@ -3651,7 +3663,7 @@ Gracias por tu preferencia.`
                         <option value="PedidosYa">PedidosYa</option>
                         <option value="DiDiFood">DiDiFood</option>
                       </Select>
-                      <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount)}</span>
+                      <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount, viewingInvoice.currency)}</span>
                     </div>
                   ))}
                 </div>
