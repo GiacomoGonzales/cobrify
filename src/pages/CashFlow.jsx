@@ -460,15 +460,21 @@ export default function CashFlow() {
     const totalIncome = salesIncome + otherIncome + loansIncome + financialIncome
 
     // EGRESOS
-    // 1. Gastos operativos (filtrados por fecha y sucursal)
+    // 1. Gastos operativos (filtrados por fecha y sucursal).
+    // Multi-divisa: sumar en PEN base usando amountInBase si existe
+    // (gastos USD se almacenan con el TC congelado).
     const filteredExpenses = expenses.filter(e => isInDateRange(e.date, dateRange.startDate, dateRange.endDate) && filterByBranch(e, 'expense'))
-    const expensesTotal = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const expenseInBase = (e) => {
+      if (e.currency === 'USD') return e.amountInBase || convertToBase(e.amount, 'USD', e.exchangeRate)
+      return e.amount || 0
+    }
+    const expensesTotal = filteredExpenses.reduce((sum, e) => sum + expenseInBase(e), 0)
 
-    // Agrupar gastos por categoría
+    // Agrupar gastos por categoría (en PEN base)
     const expensesByCategory = filteredExpenses.reduce((acc, e) => {
       const cat = e.category || 'otros'
       if (!acc[cat]) acc[cat] = { amount: 0, items: [] }
-      acc[cat].amount += e.amount || 0
+      acc[cat].amount += expenseInBase(e)
       acc[cat].items.push(e)
       return acc
     }, {})

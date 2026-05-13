@@ -1216,26 +1216,31 @@ export default function Reports() {
 
   // Estadísticas de gastos
   const expenseStats = useMemo(() => {
-    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+    // Multi-divisa: convertir gastos USD a PEN base con su TC congelado
+    const expenseInBase = (e) => {
+      if (e.currency === 'USD') return e.amountInBase || convertToBase(e.amount, 'USD', e.exchangeRate)
+      return e.amount || 0
+    }
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + expenseInBase(e), 0)
 
-    // Por categoría
+    // Por categoría (en PEN base)
     const byCategory = filteredExpenses.reduce((acc, expense) => {
       const cat = expense.category || 'otros'
       if (!acc[cat]) {
         acc[cat] = { total: 0, count: 0 }
       }
-      acc[cat].total += expense.amount || 0
+      acc[cat].total += expenseInBase(expense)
       acc[cat].count += 1
       return acc
     }, {})
 
-    // Por método de pago
+    // Por método de pago (en PEN base)
     const byPaymentMethod = filteredExpenses.reduce((acc, expense) => {
       const method = expense.paymentMethod || 'efectivo'
       if (!acc[method]) {
         acc[method] = { total: 0, count: 0 }
       }
-      acc[method].total += expense.amount || 0
+      acc[method].total += expenseInBase(expense)
       acc[method].count += 1
       return acc
     }, {})
@@ -1375,7 +1380,7 @@ export default function Reports() {
       }
 
       if (periodsData[key]) {
-        periodsData[key].gastos = Number((periodsData[key].gastos + (expense.amount || 0)).toFixed(2))
+        periodsData[key].gastos = Number((periodsData[key].gastos + (expense.currency === 'USD' ? (expense.amountInBase || convertToBase(expense.amount, 'USD', expense.exchangeRate)) : (expense.amount || 0))).toFixed(2))
         periodsData[key].count += 1
       }
     })

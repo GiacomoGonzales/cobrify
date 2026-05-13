@@ -12,6 +12,8 @@ import {
   EXPENSE_PAYMENT_METHODS
 } from '@/services/expenseService'
 import { getActiveBranches } from '@/services/branchService'
+import { isMultiCurrencyEnabled, normalizeCurrency, convertToBase } from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import {
   Receipt,
   Plus,
@@ -139,7 +141,8 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, isDemoMode, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, hasMainBranchAccess, businessSettings } = useAppContext()
+  const expenseMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const toast = useToast()
   const { isOffline } = useOnlineStatus()
 
@@ -188,8 +191,13 @@ export default function Expenses() {
     reference: '',
     supplier: '',
     notes: '',
-    branchId: '' // '' = gasto general/corporativo
+    branchId: '', // '' = gasto general/corporativo
+    // Multi-divisa: solo se usa si la flag está activa
+    currency: 'PEN',
+    exchangeRate: 1,
   })
+  const [loadingExpenseRate, setLoadingExpenseRate] = useState(false)
+  const [expenseRateSource, setExpenseRateSource] = useState(null)
 
   // Cargar gastos y sucursales
   useEffect(() => {
@@ -300,16 +308,22 @@ export default function Expenses() {
     return branch?.name || 'Sucursal Principal'
   }
 
-  // Calcular totales
+  // Calcular totales. Multi-divisa: sumar todo en PEN base (los gastos
+  // USD se convierten con su TC congelado). totalUSD se acumula aparte
+  // para mostrar "+ $X USD" como subtítulo en la card.
   const totals = useMemo(() => {
-    const total = filteredExpenses.reduce((sum, e) => sum + e.amount, 0)
-    const byCategory = filteredExpenses.reduce((acc, e) => {
+    let total = 0
+    let totalUSD = 0
+    const byCategory = {}
+    filteredExpenses.forEach(e => {
+      const isUSD = e.currency === 'USD'
+      const inBase = isUSD ? (e.amountInBase || convertToBase(e.amount, 'USD', e.exchangeRate)) : (e.amount || 0)
+      total += inBase
+      if (isUSD) totalUSD += (e.amount || 0)
       const cat = e.category || 'otros'
-      acc[cat] = (acc[cat] || 0) + e.amount
-      return acc
-    }, {})
-
-    return { total, byCategory, count: filteredExpenses.length }
+      byCategory[cat] = (byCategory[cat] || 0) + inBase
+    })
+    return { total, totalUSD, byCategory, count: filteredExpenses.length }
   }, [filteredExpenses])
 
   // Handlers
@@ -333,8 +347,11 @@ export default function Expenses() {
       reference: '',
       supplier: '',
       notes: '',
-      branchId: ''
+      branchId: '',
+      currency: 'PEN',
+      exchangeRate: 1,
     })
+    setExpenseRateSource(null)
     // Generar ID único para esta sesión de "nuevo gasto" → idempotencia ante duplicados.
     const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
@@ -355,9 +372,33 @@ export default function Expenses() {
       reference: expense.reference || '',
       supplier: expense.supplier || '',
       notes: expense.notes || '',
-      branchId: expense.branchId || ''
+      branchId: expense.branchId || '',
+      // Multi-divisa: restaurar moneda y TC si existían
+      currency: normalizeCurrency(expense.currency),
+      exchangeRate: Number(expense.exchangeRate) > 0 ? Number(expense.exchangeRate) : 1,
     })
+    setExpenseRateSource(expense.exchangeRate ? 'manual' : null)
     setShowModal(true)
+  }
+
+  // Trae TC del día al cambiar a USD en el formulario
+  async function fetchExpenseRate() {
+    if (loadingExpenseRate) return
+    setLoadingExpenseRate(true)
+    try {
+      const result = await getRateForDate(new Date())
+      if (result && Number.isFinite(result.sell) && result.sell > 0) {
+        setForm(prev => ({ ...prev, exchangeRate: Number(result.sell.toFixed(4)) }))
+        setExpenseRateSource(result.source)
+        if (result.source === 'sbs') toast.success(`TC: S/ ${result.sell.toFixed(4)} (SBS)`)
+      } else {
+        toast.error('No se pudo obtener el TC. Ingrésalo manualmente.')
+      }
+    } catch {
+      toast.error('No se pudo obtener el TC.')
+    } finally {
+      setLoadingExpenseRate(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -380,12 +421,25 @@ export default function Expenses() {
       return
     }
 
+    // Multi-divisa: validar TC si es USD
+    if (expenseMultiCurrencyOn && form.currency === 'USD') {
+      const rate = parseFloat(form.exchangeRate)
+      if (!Number.isFinite(rate) || rate <= 0) {
+        toast.error('Ingresa un tipo de cambio válido para USD')
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const expenseData = {
         ...form,
         amount: parseFloat(form.amount),
-        createdBy: user.email || user.uid
+        createdBy: user.email || user.uid,
+        // Multi-divisa: solo enviar currency/exchangeRate si la flag está
+        // activa Y el usuario eligió USD. Lo demás queda PEN implícito.
+        currency: (expenseMultiCurrencyOn && form.currency === 'USD') ? 'USD' : 'PEN',
+        exchangeRate: form.currency === 'USD' ? (parseFloat(form.exchangeRate) || 1) : 1,
       }
 
       if (editingExpense) {
@@ -523,6 +577,11 @@ export default function Expenses() {
             <div className="text-right">
               <p className="text-sm text-gray-500">Total Gastos</p>
               <p className="text-xl font-bold text-red-600">{formatCurrency(totals.total)}</p>
+              {expenseMultiCurrencyOn && totals.totalUSD > 0 && (
+                <p className="text-xs text-emerald-700 mt-0.5 font-medium">
+                  + {formatCurrency(totals.totalUSD, 'USD')} USD
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -679,7 +738,12 @@ export default function Expenses() {
                       {expense.reference && <p className="text-xs text-gray-500">Ref: {expense.reference}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-red-600">{formatCurrency(expense.amount)}</span>
+                      <span className="font-bold text-red-600 flex items-center gap-1.5">
+                        {formatCurrency(expense.amount, expense.currency)}
+                        {expense.currency === 'USD' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                        )}
+                      </span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -865,8 +929,11 @@ export default function Expenses() {
                         {EXPENSE_PAYMENT_METHODS.find(m => m.id === expense.paymentMethod)?.name || expense.paymentMethod}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-red-600">
-                          {formatCurrency(expense.amount)}
+                        <span className="font-semibold text-red-600 inline-flex items-center gap-1.5 justify-end">
+                          {formatCurrency(expense.amount, expense.currency)}
+                          {expense.currency === 'USD' && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -956,7 +1023,9 @@ export default function Expenses() {
                   Monto *
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">S/</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    {form.currency === 'USD' ? '$' : 'S/'}
+                  </span>
                   <input
                     type="number"
                     step="0.01"
@@ -968,6 +1037,77 @@ export default function Expenses() {
                   />
                 </div>
               </div>
+
+              {/* Multi-divisa: selector de moneda + TC (solo si flag activa) */}
+              {expenseMultiCurrencyOn && (
+                <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-3 space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Moneda del gasto</label>
+                  <div className="flex gap-2">
+                    {['PEN', 'USD'].map(ccy => (
+                      <button
+                        key={ccy}
+                        type="button"
+                        onClick={async () => {
+                          setForm({ ...form, currency: ccy })
+                          // Auto-fetch TC al pasar a USD por primera vez
+                          if (ccy === 'USD' && (!form.exchangeRate || form.exchangeRate <= 1)) {
+                            await fetchExpenseRate()
+                          }
+                        }}
+                        className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                          form.currency === ccy
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {ccy === 'PEN' ? 'S/ Soles' : '$ Dólares'}
+                      </button>
+                    ))}
+                  </div>
+                  {form.currency === 'USD' && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-gray-700">TC (PEN por USD)</label>
+                        {expenseRateSource === 'sbs' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                        )}
+                        {expenseRateSource === 'cache' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
+                        )}
+                        {expenseRateSource === 'manual' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          value={form.exchangeRate}
+                          onChange={e => {
+                            setForm({ ...form, exchangeRate: parseFloat(e.target.value) || 0 })
+                            setExpenseRateSource('manual')
+                          }}
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={fetchExpenseRate}
+                          disabled={loadingExpenseRate}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {loadingExpenseRate ? '...' : 'SBS'}
+                        </button>
+                      </div>
+                      {form.amount && parseFloat(form.amount) > 0 && form.exchangeRate > 0 && (
+                        <p className="text-[11px] text-gray-500">
+                          ≈ S/ {(parseFloat(form.amount) * parseFloat(form.exchangeRate)).toFixed(2)} al TC actual
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Descripción */}
               <div>

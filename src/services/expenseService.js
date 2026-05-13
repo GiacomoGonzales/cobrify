@@ -115,8 +115,9 @@ export async function createExpense(userId, expenseData) {
   try {
     const expensesRef = collection(db, 'businesses', userId, 'expenses')
 
+    const amount = parseFloat(expenseData.amount)
     const newExpense = {
-      amount: parseFloat(expenseData.amount),
+      amount,
       description: expenseData.description?.trim() || '',
       category: expenseData.category,
       // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
@@ -127,6 +128,16 @@ export async function createExpense(userId, expenseData) {
       notes: expenseData.notes?.trim() || '',
       createdAt: Timestamp.now(),
       createdBy: expenseData.createdBy || 'unknown'
+    }
+
+    // Multi-divisa: solo se guarda currency/exchangeRate cuando el gasto
+    // es en USD. Los gastos PEN-only (99% de casos) quedan sin estos
+    // campos para mantener docs legacy idénticos.
+    if (expenseData.currency === 'USD') {
+      const rate = Number(expenseData.exchangeRate) || 1
+      newExpense.currency = 'USD'
+      newExpense.exchangeRate = rate
+      newExpense.amountInBase = Number((amount * rate).toFixed(2))
     }
 
     let docId
@@ -158,8 +169,9 @@ export async function updateExpense(userId, expenseId, expenseData) {
   try {
     const expenseRef = doc(db, 'businesses', userId, 'expenses', expenseId)
 
+    const amount = parseFloat(expenseData.amount)
     const updateData = {
-      amount: parseFloat(expenseData.amount),
+      amount,
       description: expenseData.description?.trim() || '',
       category: expenseData.category,
       // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
@@ -169,6 +181,21 @@ export async function updateExpense(userId, expenseId, expenseData) {
       supplier: expenseData.supplier?.trim() || '',
       notes: expenseData.notes?.trim() || '',
       updatedAt: Timestamp.now()
+    }
+
+    // Multi-divisa: si viene como USD, persistir; si viene como PEN o sin
+    // currency, limpiar los campos USD por si el gasto se editó desde
+    // USD a PEN.
+    if (expenseData.currency === 'USD') {
+      const rate = Number(expenseData.exchangeRate) || 1
+      updateData.currency = 'USD'
+      updateData.exchangeRate = rate
+      updateData.amountInBase = Number((amount * rate).toFixed(2))
+    } else {
+      const { deleteField } = await import('firebase/firestore')
+      updateData.currency = deleteField()
+      updateData.exchangeRate = deleteField()
+      updateData.amountInBase = deleteField()
     }
 
     await updateDoc(expenseRef, updateData)
