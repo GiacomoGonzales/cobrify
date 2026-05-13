@@ -688,12 +688,26 @@ export default function POS() {
     //    (sin confirmación, cambio inmediato).
     setCart(prev => prev.map(item => {
       const oldPrice = Number(item.price) || 0
+      // Si el item tiene basePrice (PEN como source of truth), recomputamos
+      // el precio desde ahí para evitar pérdida de precisión en round-trips
+      // (300 PEN → 87.36 USD → 299.97 PEN ❌; con basePrice → 300 PEN ✅).
+      // Si no hay basePrice (item viejo o editado manualmente), caemos al
+      // método de conversión directa (puede perder precisión).
       let newPrice = oldPrice
-      // PEN → USD: dividir entre TC. USD → PEN: multiplicar.
-      if (currency === 'PEN' && newCurrency === 'USD') {
-        newPrice = Number(convertFromBase(oldPrice, 'USD', effectiveRate).toFixed(2))
-      } else if (currency === 'USD' && newCurrency === 'PEN') {
-        newPrice = Number(convertToBase(oldPrice, 'USD', effectiveRate).toFixed(2))
+      const baseInPEN = Number(item.basePrice)
+      const hasBase = Number.isFinite(baseInPEN) && baseInPEN > 0
+      if (hasBase) {
+        // Recomputar desde la fuente PEN sin redondeos intermedios.
+        newPrice = newCurrency === 'PEN'
+          ? baseInPEN
+          : Number(convertFromBase(baseInPEN, 'USD', effectiveRate).toFixed(2))
+      } else {
+        // Fallback (sin basePrice): conversión directa antigua.
+        if (currency === 'PEN' && newCurrency === 'USD') {
+          newPrice = Number(convertFromBase(oldPrice, 'USD', effectiveRate).toFixed(2))
+        } else if (currency === 'USD' && newCurrency === 'PEN') {
+          newPrice = Number(convertToBase(oldPrice, 'USD', effectiveRate).toFixed(2))
+        }
       }
       // También convertir itemDiscount si es monto (no porcentaje)
       let newItemDiscount = item.itemDiscount
@@ -2523,12 +2537,16 @@ export default function POS() {
 
       // Multi-divisa: convertir el precio a la moneda activa de la sesión.
       // Catálogo guarda PEN; si la sesión es USD, dividimos por el TC.
+      // Guardamos basePrice (siempre en PEN) como source of truth para
+      // evitar pérdida de precisión en round-trips de moneda.
       const priceForCart = isFreeProduct ? 0 : toSessionCurrency(effectivePrice)
+      const basePriceForCart = isFreeProduct ? 0 : Number(effectivePrice) || 0
 
       const cartItem = {
         ...product,
         quantity: 1,
         price: priceForCart,
+        basePrice: basePriceForCart,
         ...(isFreeProduct && {
           isBonificacion: true,
           taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
@@ -3290,12 +3308,19 @@ export default function POS() {
       newPrice = parseFloat((newPrice * (1 + igvRate / 100)).toFixed(2))
     }
 
+    // Multi-divisa: actualizar también basePrice (PEN) para mantener
+    // consistencia en round-trips de moneda. Si la sesión es USD, el
+    // newPrice viene en USD → convertir a PEN para guardar como base.
+    const newBasePrice = currency === 'USD'
+      ? Number(convertToBase(newPrice, 'USD', exchangeRate).toFixed(2))
+      : newPrice
+
     // Propagar el precio a todos los miembros del grupo de series (si aplica)
     const groupIds = new Set(getSerialGroupCartIds(itemId))
     setCart(cart.map(item => {
       const currentItemId = item.cartId || item.id
       if (groupIds.has(currentItemId)) {
-        return { ...item, price: newPrice }
+        return { ...item, price: newPrice, basePrice: newBasePrice }
       }
       return item
     }))
