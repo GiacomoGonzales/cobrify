@@ -297,7 +297,7 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
   const PH = 297;
   const CW = PW - ML * 2;
   const RX = PW - ML; // right x
-  const fmt = (n) => `S/ ${(n || 0).toFixed(2)}`;
+  const fmt = (n, ccy = 'PEN') => `${ccy === 'USD' ? '$' : 'S/'} ${(n || 0).toFixed(2)}`;
 
   let y = 0;
 
@@ -518,6 +518,121 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
   doc.text(fmt(difference), RX - 2, y + 6, { align: 'right' });
   y += 13;
 
+  // ===== BLOQUE USD (solo si la sesión tuvo actividad en dólares) =====
+  const usd = sessionData?.usd
+  if (usd) {
+    if (y > PH - 60) { doc.addPage(); y = 10; }
+
+    // Banner USD
+    const USD_ACCENT = [16, 185, 129] // emerald-500
+    doc.setFillColor(...USD_ACCENT)
+    doc.roundedRect(ML, y, CW, 8, 1, 1, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(255, 255, 255)
+    doc.text('CAJA EN DOLARES (USD)', ML + 3, y + 5.5)
+    y += 12
+
+    // 4 mini-cards USD
+    const usdCards = [
+      { lbl: 'Monto Inicial USD', val: fmt(usd.openingAmount || 0, 'USD'), bg: [230, 242, 255], tc: [30, 80, 180] },
+      { lbl: 'Ventas USD', val: fmt(usd.totalSales || 0, 'USD'), bg: [230, 250, 240], tc: [5, 120, 80] },
+      { lbl: 'Otros Ingresos USD', val: fmt(usd.totalIncome || 0, 'USD'), bg: [240, 238, 255], tc: [100, 40, 200] },
+      { lbl: 'Egresos USD', val: fmt(usd.totalExpense || 0, 'USD'), bg: [255, 238, 238], tc: [180, 30, 30] },
+    ]
+    usdCards.forEach((c, i) => {
+      const cx = ML + i * (cw4 + 1.5)
+      doc.setFillColor(...c.bg)
+      doc.roundedRect(cx, y, cw4, ch, 1.5, 1.5, 'F')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(5.5)
+      doc.setTextColor(...MED)
+      doc.text(c.lbl, cx + 3, y + 5)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(...c.tc)
+      doc.text(c.val, cx + 3, y + 11)
+    })
+    y += ch + 6
+
+    // Dos columnas: Ventas por método USD | Arqueo USD
+    const sYL = y
+    doc.setFillColor(...USD_ACCENT); doc.rect(colL, sYL, colW, 0.6, 'F')
+    let yLu = sYL + 4
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...DARK)
+    doc.text('VENTAS USD POR MÉTODO', colL, yLu); yLu += 4
+
+    const salesUSD = [
+      ['Efectivo', usd.salesCash || 0],
+      ['Tarjetas', usd.salesCard || 0],
+      ['Transferencias', usd.salesTransfer || 0],
+      ...(usd.salesYape ? [['Yape', usd.salesYape]] : []),
+      ...(usd.salesPlin ? [['Plin', usd.salesPlin]] : []),
+    ]
+    salesUSD.forEach(([lbl, val], i) => {
+      if (i % 2 === 0) { doc.setFillColor(...LIGHT); doc.rect(colL, yLu, colW, 5, 'F') }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...DARK)
+      doc.text(lbl, colL + 2, yLu + 3.5)
+      doc.text(fmt(val, 'USD'), colL + colW - 2, yLu + 3.5, { align: 'right' })
+      yLu += 5
+    })
+    doc.setFillColor(...USD_ACCENT); doc.rect(colL, yLu, colW, 5.5, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255)
+    doc.text('TOTAL VENTAS USD', colL + 2, yLu + 3.8)
+    doc.text(fmt(usd.totalSales || 0, 'USD'), colL + colW - 2, yLu + 3.8, { align: 'right' })
+    yLu += 5.5
+
+    let yRu = sYL
+    doc.setFillColor(...USD_ACCENT); doc.rect(colR, yRu, colW, 0.6, 'F'); yRu += 4
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...DARK)
+    doc.text('ARQUEO USD', colR, yRu); yRu += 4
+
+    const closingUSD = [
+      ['Efectivo Contado', usd.closingCash || 0],
+      ['Tarjetas', usd.closingCard || 0],
+      ['Transferencias', usd.closingTransfer || 0],
+      ...(usd.closingYape ? [['Yape', usd.closingYape]] : []),
+      ...(usd.closingPlin ? [['Plin', usd.closingPlin]] : []),
+    ]
+    closingUSD.forEach(([lbl, val], i) => {
+      if (i % 2 === 0) { doc.setFillColor(...LIGHT); doc.rect(colR, yRu, colW, 5, 'F') }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...DARK)
+      doc.text(lbl, colR + 2, yRu + 3.5)
+      doc.text(fmt(val, 'USD'), colR + colW - 2, yRu + 3.5, { align: 'right' })
+      yRu += 5
+    })
+    doc.setFillColor(...USD_ACCENT); doc.rect(colR, yRu, colW, 5.5, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255)
+    doc.text('TOTAL CONTADO USD', colR + 2, yRu + 3.8)
+    doc.text(fmt(usd.closingAmount || 0, 'USD'), colR + colW - 2, yRu + 3.8, { align: 'right' })
+    yRu += 5.5
+
+    y = Math.max(yLu, yRu) + 5
+
+    // Efectivo esperado USD
+    doc.setFillColor(240, 240, 240)
+    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
+    doc.text('Efectivo USD Esperado (Inicial USD + Ventas Efectivo USD + Ingresos USD - Egresos USD)', ML + 2, y + 4.5)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
+    doc.text(fmt(usd.expectedAmount || 0, 'USD'), RX - 2, y + 4.8, { align: 'right' })
+    y += 9
+
+    // Diferencia USD
+    const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
+    const diffUSDOk = diffUSD >= 0
+    const diffUSDBg = diffUSDOk ? [230, 250, 240] : [255, 235, 235]
+    const diffUSDTc = diffUSDOk ? [5, 120, 80] : [180, 30, 30]
+    const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (diffUSDOk ? 'Sobrante' : 'Faltante')
+    doc.setFillColor(...diffUSDBg)
+    doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffUSDTc)
+    doc.text(`DIFERENCIA EN EFECTIVO USD — ${diffUSDLbl}`, ML + 2, y + 5.5)
+    doc.setFontSize(10)
+    doc.text(fmt(diffUSD, 'USD'), RX - 2, y + 6, { align: 'right' })
+    y += 13
+  }
+
   // ===== PAGOS DE COMPROBANTES ANTERIORES (cobros diferidos) =====
   if (deferredPayments.length > 0) {
     if (y > PH - 40) { doc.addPage(); y = 10; }
@@ -633,7 +748,7 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       doc.text(payStr.substring(0, 22), ML + 105, y + 3.3);
       doc.setFont('helvetica', 'bold');
       const isNC = inv.documentType === 'nota_credito';
-      doc.text(`${isNC ? '-' : ''}S/ ${(inv.total || 0).toFixed(2)}`, ML + 143, y + 3.3, { align: 'right' });
+      doc.text(`${isNC ? '-' : ''}${fmt(inv.total || 0, inv.currency)}`, ML + 143, y + 3.3, { align: 'right' });
       // Estado badge
       doc.setFontSize(5); doc.setTextColor(...st.color);
       doc.text(st.label, ML + 148, y + 3.3);
