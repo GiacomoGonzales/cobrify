@@ -1579,9 +1579,11 @@ export default function Tables() {
                             </Badge>
                           )}
 
-                          {/* Mozo: visible en ocupadas y en la principal del grupo. En vinculadas se omite (la cuenta es de la principal) */}
+                          {/* Mozo: visible en ocupadas y en la principal del grupo. En vinculadas se omite (la cuenta es de la principal).
+                              Estilo "glass" neutro: se adapta a cualquier color
+                              de fondo del card (rojo/ámbar/azul) sin chocar. */}
                           {table.status === 'occupied' && table.waiter && !isLinked && (
-                            <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-center mb-2">
+                            <div className="bg-white/60 text-gray-700 px-2 py-1 rounded-md text-center mb-2 border border-gray-200/70 backdrop-blur-sm">
                               <span className="text-xs font-semibold">👤 {table.waiter}</span>
                             </div>
                           )}
