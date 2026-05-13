@@ -4189,6 +4189,9 @@ export default function POS() {
           quantity: item.quantity,
           unit: item.unit || 'NIU',
           unitPrice: item.price,
+          ...(currency === 'USD' && Number(item.basePrice) > 0 && {
+            basePrice: Number(item.basePrice),
+          }),
           subtotal: item.price * item.quantity,
           taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
           ...(item.observations && { observations: item.observations }),
@@ -4378,6 +4381,12 @@ export default function POS() {
         quantity: item.quantity,
         unit: item.unit || 'NIU',
         unitPrice: item.price,
+        // Multi-divisa: persistir basePrice (PEN exacto) cuando la venta es
+        // USD, para que NC/ND/reportes futuros puedan reconstruir el
+        // equivalente PEN sin pérdida de redondeo.
+        ...(currency === 'USD' && Number(item.basePrice) > 0 && {
+          basePrice: Number(item.basePrice),
+        }),
         subtotal: item.price * item.quantity,
         taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
         ...(!taxConfig.igvExempt && (taxConfig.taxType === 'reduced' ? { igvRate: taxConfig.igvRate } : (item.igvRate ? { igvRate: item.igvRate } : {}))), // Ley restaurantes: forzar tasa global

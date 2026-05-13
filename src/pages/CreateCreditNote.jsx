@@ -298,6 +298,60 @@ export default function CreateCreditNote() {
     return { subtotal, igv, total, igvRate, igvExempt }
   }
 
+  // Multi-divisa: calcula los equivalentes PEN exactos para una NC USD.
+  // Prioridad: 1) item.basePrice (PEN exacto guardado en cada item); si
+  // no existe → 2) totalInBase proporcional de la factura padre; si tampoco
+  // → 3) conversión directa TC × USD (último recurso, puede redondear).
+  const calculatePENBaseTotals = () => {
+    if (!selectedInvoice || normalizeCurrency(selectedInvoice.currency) !== 'USD') {
+      const t = calculateTotals()
+      return { subtotalInBase: t.subtotal, igvInBase: t.igv, totalInBase: t.total }
+    }
+    const selectedItems = formData.items.filter(item => item.selected)
+    const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
+    const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
+
+    // 1) Items con basePrice (PEN exacto guardado en venta nueva): suma exacta.
+    const allHaveBase = selectedItems.length > 0 && selectedItems.every(it => Number(it.basePrice) > 0)
+    if (allHaveBase) {
+      const totalConIgvBase = selectedItems.reduce(
+        (sum, item) => sum + (Number(item.basePrice) * Number(item.quantity)), 0
+      )
+      const subtotalBase = igvExempt ? totalConIgvBase : totalConIgvBase / (1 + igvRate / 100)
+      const igvBase = igvExempt ? 0 : totalConIgvBase - subtotalBase
+      return {
+        subtotalInBase: Number(subtotalBase.toFixed(2)),
+        igvInBase: Number(igvBase.toFixed(2)),
+        totalInBase: Number(totalConIgvBase.toFixed(2)),
+      }
+    }
+
+    // 2) Proporción del totalInBase original (facturas pre-fix de POS).
+    const totalUSD = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
+    const invTotal = Number(selectedInvoice.total) || 0
+    const invTotBase = Number(selectedInvoice.totalInBase) || 0
+    const invSubBase = Number(selectedInvoice.subtotalInBase) || 0
+    const invIgvBase = Number(selectedInvoice.igvInBase) || 0
+    if (invTotal > 0 && invTotBase > 0) {
+      const ratio = totalUSD / invTotal
+      return {
+        subtotalInBase: Number((invSubBase * ratio).toFixed(2)),
+        igvInBase: Number((invIgvBase * ratio).toFixed(2)),
+        totalInBase: Number((invTotBase * ratio).toFixed(2)),
+      }
+    }
+
+    // 3) Fallback: conversión directa.
+    const rate = Number(selectedInvoice.exchangeRate) || 1
+    const subtotalUSD = igvExempt ? totalUSD : totalUSD / (1 + igvRate / 100)
+    const igvUSD = igvExempt ? 0 : totalUSD - subtotalUSD
+    return {
+      subtotalInBase: Number(convertToBase(subtotalUSD, 'USD', rate).toFixed(2)),
+      igvInBase: Number(convertToBase(igvUSD, 'USD', rate).toFixed(2)),
+      totalInBase: Number(convertToBase(totalUSD, 'USD', rate).toFixed(2)),
+    }
+  }
+
   // Handler para factura externa
   const handleExternalSubmit = async (e) => {
     e.preventDefault()
@@ -547,30 +601,9 @@ export default function CreateCreditNote() {
         // documento original. El usuario NO puede cambiarlos.
         currency: normalizeCurrency(selectedInvoice.currency),
         exchangeRate: Number(selectedInvoice.exchangeRate) > 0 ? Number(selectedInvoice.exchangeRate) : 1,
-        // Equivalentes en PEN base. Para NC USD: en vez de TC × USD
-        // redondeado (genera 299.99 por 87.36*3.434), usamos el totalInBase
-        // de la factura original proporcional a los items. NC total = exacto.
-        // NC parcial = proporcional. Fallback a conversión directa si no
-        // hay totalInBase guardado (facturas legacy).
-        ...((() => {
-          const invTotal = Number(selectedInvoice.total) || 0
-          const invSubBase = Number(selectedInvoice.subtotalInBase) || 0
-          const invIgvBase = Number(selectedInvoice.igvInBase) || 0
-          const invTotBase = Number(selectedInvoice.totalInBase) || 0
-          if (invTotal > 0 && invTotBase > 0) {
-            const ratio = total / invTotal
-            return {
-              subtotalInBase: Number((invSubBase * ratio).toFixed(2)),
-              igvInBase: Number((invIgvBase * ratio).toFixed(2)),
-              totalInBase: Number((invTotBase * ratio).toFixed(2)),
-            }
-          }
-          return {
-            subtotalInBase: convertToBase(subtotal, selectedInvoice.currency, selectedInvoice.exchangeRate),
-            igvInBase: convertToBase(igv, selectedInvoice.currency, selectedInvoice.exchangeRate),
-            totalInBase: convertToBase(total, selectedInvoice.currency, selectedInvoice.exchangeRate),
-          }
-        })()),
+        // Equivalentes en PEN base — exactos cuando los items tienen
+        // basePrice. Detalles en calculatePENBaseTotals().
+        ...calculatePENBaseTotals(),
 
         // Configuración de impuestos (heredada del documento original)
         taxConfig: {
@@ -1009,23 +1042,7 @@ export default function CreateCreditNote() {
                 </div>
                 {normalizeCurrency(selectedInvoice?.currency) === 'USD' && (
                   <div className="text-right text-xs text-gray-500 pt-1">
-                    ≈ {formatCurrency(
-                      (() => {
-                        // Equivalente PEN exacto: usa el totalInBase de la
-                        // factura original (que se guardó sin redondeo USD)
-                        // proporcional a los items seleccionados. Para NC
-                        // total (ratio=1) es exacto. Para NC parcial es
-                        // proporcional. Fallback: TC × USD redondeado.
-                        const invTotal = Number(selectedInvoice.total) || 0
-                        const invBase = Number(selectedInvoice.totalInBase) || 0
-                        if (invTotal > 0 && invBase > 0) {
-                          const ratio = totals.total / invTotal
-                          return invBase * ratio
-                        }
-                        return convertToBase(totals.total, 'USD', selectedInvoice?.exchangeRate)
-                      })(),
-                      'PEN'
-                    )} (TC {selectedInvoice?.exchangeRate || 1})
+                    ≈ {formatCurrency(calculatePENBaseTotals().totalInBase, 'PEN')} (TC {selectedInvoice?.exchangeRate || 1})
                   </div>
                 )}
               </div>
