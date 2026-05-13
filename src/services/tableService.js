@@ -246,6 +246,9 @@ export const releaseTable = async (businessId, tableId) => {
           isGroupPrimary: false,
           groupTableNumbers: null,
           allItemsServed: false,
+          // Limpiar marca de precuenta impresa (la próxima ocupación de
+          // la mesa arranca sin el indicador).
+          preBillPrintedAt: null,
           updatedAt: serverTimestamp(),
         }).catch((err) => console.warn(`No se pudo liberar mesa ${t.id}:`, err))
       )
@@ -373,6 +376,57 @@ export const updateTableServedStatus = async (businessId, tableId, allItemsServe
     return { success: true }
   } catch (error) {
     console.error('Error al actualizar estado de servido:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Marcar una mesa como "precuenta impresa". Se llama desde handlePrintPreBill
+ * después de imprimir exitosamente, para que la grilla muestre un indicador
+ * sutil al mozo de que la mesa ya pidió la cuenta y está por liberarse.
+ *
+ * Si la mesa pertenece a un grupo (fusión), marca a TODAS las mesas del
+ * grupo (porque la precuenta es una sola para todo el grupo).
+ *
+ * Se limpia automáticamente en releaseTable() al liberar la mesa.
+ */
+export const markPreBillPrinted = async (businessId, tableId) => {
+  try {
+    const tableRef = doc(db, 'businesses', businessId, 'tables', tableId)
+    const tableSnap = await getDoc(tableRef)
+    if (!tableSnap.exists()) {
+      return { success: false, error: 'Mesa no encontrada' }
+    }
+    const tableData = tableSnap.data()
+
+    // Determinar el conjunto de mesas a marcar (incluyendo agrupadas).
+    let tablesToMark = [tableId]
+    if (tableData.groupId) {
+      try {
+        const groupQuery = query(
+          collection(db, 'businesses', businessId, 'tables'),
+          where('groupId', '==', tableData.groupId)
+        )
+        const groupSnap = await getDocs(groupQuery)
+        const ids = []
+        groupSnap.forEach((d) => ids.push(d.id))
+        if (ids.length > 0) tablesToMark = ids
+      } catch (err) {
+        console.warn('No se pudo cargar grupo, marcando solo la mesa solicitada:', err)
+      }
+    }
+
+    await Promise.all(
+      tablesToMark.map((id) =>
+        updateDoc(doc(db, 'businesses', businessId, 'tables', id), {
+          preBillPrintedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }).catch((err) => console.warn(`No se pudo marcar precuenta en mesa ${id}:`, err))
+      )
+    )
+    return { success: true, data: { markedCount: tablesToMark.length } }
+  } catch (error) {
+    console.error('Error al marcar precuenta impresa:', error)
     return { success: false, error: error.message }
   }
 }

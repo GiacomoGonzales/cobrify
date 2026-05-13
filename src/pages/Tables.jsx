@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2 } from 'lucide-react'
+import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2, Receipt } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -37,6 +37,7 @@ import {
   splitTableItems,
   mergeTables,
   unmergeTable,
+  markPreBillPrinted,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder, updateItemStatus } from '@/services/orderService'
@@ -815,6 +816,16 @@ export default function Tables() {
           printedBy: user.uid,
           printedByName: user.displayName || user.email || 'Usuario',
         }).catch(err => console.error('Error al guardar snapshot de precuenta:', err))
+
+        // Marcar la mesa como "precuenta impresa" para que la grilla muestre
+        // un indicador sutil al mozo (ícono pulsante + tooltip). Se limpia
+        // automáticamente al liberar la mesa. Solo aplica a precuentas
+        // completas (no a divididas por persona/ítem).
+        if (selectedTable.id) {
+          markPreBillPrinted(businessId, selectedTable.id).catch(err =>
+            console.error('Error al marcar precuenta impresa:', err)
+          )
+        }
       }
 
       // Obtener información del negocio desde Firestore
@@ -1355,6 +1366,24 @@ export default function Tables() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // Tooltip humano para "precuenta impresa hace X". Devuelve string vacío
+  // si el timestamp no es válido. Usado en el indicador sutil de la mesa.
+  const formatPreBillElapsed = (timestamp) => {
+    if (!timestamp) return ''
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const ms = Date.now() - date.getTime()
+    if (ms < 0) return 'Precuenta impresa'
+    const minutes = Math.floor(ms / 60000)
+    if (minutes < 1) return 'Precuenta impresa hace unos segundos'
+    if (minutes === 1) return 'Precuenta impresa hace 1 minuto'
+    if (minutes < 60) return `Precuenta impresa hace ${minutes} minutos`
+    const hours = Math.floor(minutes / 60)
+    const remMin = minutes % 60
+    if (hours === 1 && remMin === 0) return 'Precuenta impresa hace 1 hora'
+    if (remMin === 0) return `Precuenta impresa hace ${hours} horas`
+    return `Precuenta impresa hace ${hours}h ${remMin}min`
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1494,9 +1523,24 @@ export default function Tables() {
                               </span>
                               {!isLinked && getStatusIcon(table.status)}
                             </div>
-                            <div className={`flex items-center gap-1 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
-                              <Users className="w-4 h-4" />
-                              <span>{table.capacity}</span>
+                            <div className={`flex items-center gap-2 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {/* Indicador sutil de precuenta impresa: ícono Receipt
+                                  ámbar con pulse suave. Solo en mesas ocupadas (no
+                                  vinculadas) que tengan preBillPrintedAt. Tooltip
+                                  nativo muestra "Precuenta impresa hace X min". */}
+                              {!isLinked && table.status === 'occupied' && table.preBillPrintedAt && (
+                                <span
+                                  className="inline-flex items-center text-amber-600 animate-pulse"
+                                  title={formatPreBillElapsed(table.preBillPrintedAt)}
+                                  aria-label="Precuenta impresa"
+                                >
+                                  <Receipt className="w-4 h-4" />
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1">
+                                <Users className="w-4 h-4" />
+                                <span>{table.capacity}</span>
+                              </span>
                             </div>
                           </div>
 
