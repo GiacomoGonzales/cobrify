@@ -773,6 +773,13 @@ export default function CashRegister() {
       })()
 
       // Multi-divisa: armar bloque USD si la sesión tuvo actividad USD.
+      // Incluye ambas convenciones de nombre:
+      //   - `cash, card, transfer, ...` → consumido por closeCashRegister
+      //     (service que los re-mapea a `closingCash, closingCard...` al
+      //     persistir en Firestore).
+      //   - `closingCash, closingCard, ...` → consumido por el PDF/Ticket
+      //     cuando reciben el closedData en memoria (antes de re-fetchar).
+      const closingAmountUSD = cashUSD + cardUSD + transferUSD + yapeUSD + plinUSD + rappiUSD + pedidosYaUSD + diDiFoodUSD
       const usdBlock = totals.usd ? {
         openingAmount: currentSession.openingAmountUSD || 0,
         cash: cashUSD,
@@ -783,6 +790,17 @@ export default function CashRegister() {
         rappi: rappiUSD,
         pedidosYa: pedidosYaUSD,
         diDiFood: diDiFoodUSD,
+        // Mismos valores con prefijo "closing" para que PDF/Ticket los lean
+        // directo desde closedSessionData sin re-fetchar de Firestore.
+        closingAmount: closingAmountUSD,
+        closingCash: cashUSD,
+        closingCard: cardUSD,
+        closingTransfer: transferUSD,
+        closingYape: yapeUSD,
+        closingPlin: plinUSD,
+        closingRappi: rappiUSD,
+        closingPedidosYa: pedidosYaUSD,
+        closingDiDiFood: diDiFoodUSD,
         totalSales: totals.usd.sales,
         salesCash: totals.usd.salesCash,
         salesCard: totals.usd.salesCard,
