@@ -48,15 +48,19 @@ export const onNewSale = onDocumentCreated(
       // Enviar notificación push al dueño
       const businessName = business.name || business.businessName || 'tu negocio'
       const paymentMethod = invoice.paymentMethod || 'Efectivo'
+      // Multi-divisa: usar el símbolo de la moneda real del invoice. Si la
+      // factura es USD, mostrar "$ 87.36" en vez de "S/ 87.36".
+      const currencySymbol = invoice.currency === 'USD' ? '$' : 'S/'
       const result = await sendPushNotification(
         ownerId,
         'Nueva Venta Realizada',
-        `Venta de S/ ${invoice.total.toFixed(2)} - ${paymentMethod} en ${businessName}`,
+        `Venta de ${currencySymbol} ${invoice.total.toFixed(2)} - ${paymentMethod} en ${businessName}`,
         {
           type: 'new_sale',
           invoiceId: invoiceId,
           businessId,
-          amount: invoice.total.toString()
+          amount: invoice.total.toString(),
+          currency: invoice.currency || 'PEN'
         }
       )
 
