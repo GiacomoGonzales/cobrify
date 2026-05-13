@@ -5339,7 +5339,7 @@ export default function POS() {
                           lastInvoiceData.documentType === 'nota_credito' ? 'Nota de Crédito' :
                           lastInvoiceData.documentType === 'nota_debito' ? 'Nota de Débito' : 'Nota de Venta'
       const customerName = lastInvoiceData.customer?.name || 'Cliente'
-      const total = formatCurrency(lastInvoiceData.total)
+      const total = formatCurrency(lastInvoiceData.total, lastInvoiceData.currency)
 
       // Crear mensaje con link de descarga
       const message = `Hola ${customerName},
@@ -5437,7 +5437,7 @@ Gracias por tu preferencia.`
             console.log('PDF guardado en:', savedFile.uri)
 
             // Crear mensaje
-            const total = formatCurrency(lastInvoiceData.total)
+            const total = formatCurrency(lastInvoiceData.total, lastInvoiceData.currency)
             const message = `Hola ${customerName},
 
 Gracias por tu compra.
@@ -8036,13 +8036,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <div className="p-3 bg-gray-50 rounded-lg space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Total pagado:</span>
-                        <span className="font-semibold text-gray-900">{formatCurrency(totalPaid)}</span>
+                        <span className="font-semibold text-gray-900">{formatCurrency(totalPaid, currency)}</span>
                       </div>
                       {remaining !== 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">{remaining > 0 ? 'Falta:' : 'Cambio:'}</span>
                           <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(Math.abs(remaining))}
+                            {formatCurrency(Math.abs(remaining), currency)}
                           </span>
                         </div>
                       )}

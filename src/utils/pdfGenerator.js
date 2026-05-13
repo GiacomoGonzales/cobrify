@@ -1065,11 +1065,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     rightY += dataLineHeight
   } else {
     // ===== CAMPOS PARA FACTURA/BOLETA/NOTA DE VENTA =====
-    // Moneda
+    // Moneda — dinámico según invoice.currency (multi-divisa)
     doc.setFont('helvetica', 'bold')
     doc.text('MONEDA:', colRightX, rightY)
     doc.setFont('helvetica', 'normal')
-    doc.text('SOLES', rightValueX, rightY)
+    doc.text(invoice.currency === 'USD' ? 'DÓLARES' : 'SOLES', rightValueX, rightY)
     rightY += dataLineHeight
 
     // Forma de pago

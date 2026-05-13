@@ -169,9 +169,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
     })
   }
 
-  // Formatear moneda
+  // Formatear moneda — usa el símbolo de la moneda del documento
+  // (PEN → "S/", USD → "$"). Si la factura no tiene currency, default PEN.
+  const currencySymbol = invoice?.currency === 'USD' ? '$' : 'S/'
   const formatCurrency = (value) => {
-    return `S/ ${Number(value).toFixed(2)}`
+    return `${currencySymbol} ${Number(value).toFixed(2)}`
   }
 
   return (

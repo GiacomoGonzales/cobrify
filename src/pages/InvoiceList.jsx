@@ -2524,7 +2524,12 @@ Gracias por tu preferencia.`
                   {/* Fila inferior: Total + fecha + badges */}
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-sm">{formatCurrency(invoice.total)}</span>
+                      <span className="font-semibold text-sm flex items-center gap-1.5">
+                        {formatCurrency(invoice.total, invoice.currency)}
+                        {invoice.currency === 'USD' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                        )}
+                      </span>
                       <span className="text-xs text-gray-500">
                         {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : 'N/A'}
                       </span>
@@ -2552,12 +2557,12 @@ Gracias por tu preferencia.`
                   ) && (
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && invoice.paymentStatus === 'pending' && (
-                        <span className="text-xs text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</span>
+                        <span className="text-xs text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0, invoice.currency)}</span>
                       )}
                       {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && invoice.paymentStatus === 'partial' && (
                         <>
-                          <span className="text-xs text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</span>
-                          <span className="text-xs text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</span>
+                          <span className="text-xs text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0, invoice.currency)}</span>
+                          <span className="text-xs text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0, invoice.currency)}</span>
                         </>
                       )}
                       {invoice.convertedTo && (
@@ -2663,16 +2668,21 @@ Gracias por tu preferencia.`
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
+                        <span className="font-semibold text-sm whitespace-nowrap flex items-center gap-1.5">
+                          {formatCurrency(invoice.total, invoice.currency)}
+                          {invoice.currency === 'USD' && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                          )}
+                        </span>
                         {/* Mostrar info de pago parcial o al crédito si aplica */}
                         {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura') && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <div className="text-xs space-y-0.5">
                             {invoice.paymentStatus === 'pending' ? (
-                              <div className="text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</div>
+                              <div className="text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0, invoice.currency)}</div>
                             ) : (
                               <>
-                                <div className="text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</div>
-                                <div className="text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</div>
+                                <div className="text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0, invoice.currency)}</div>
+                                <div className="text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0, invoice.currency)}</div>
                               </>
                             )}
                           </div>
