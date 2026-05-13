@@ -547,10 +547,30 @@ export default function CreateCreditNote() {
         // documento original. El usuario NO puede cambiarlos.
         currency: normalizeCurrency(selectedInvoice.currency),
         exchangeRate: Number(selectedInvoice.exchangeRate) > 0 ? Number(selectedInvoice.exchangeRate) : 1,
-        // Equivalentes en PEN base para reportes globales (mismo TC que la factura).
-        subtotalInBase: convertToBase(subtotal, selectedInvoice.currency, selectedInvoice.exchangeRate),
-        igvInBase: convertToBase(igv, selectedInvoice.currency, selectedInvoice.exchangeRate),
-        totalInBase: convertToBase(total, selectedInvoice.currency, selectedInvoice.exchangeRate),
+        // Equivalentes en PEN base. Para NC USD: en vez de TC × USD
+        // redondeado (genera 299.99 por 87.36*3.434), usamos el totalInBase
+        // de la factura original proporcional a los items. NC total = exacto.
+        // NC parcial = proporcional. Fallback a conversión directa si no
+        // hay totalInBase guardado (facturas legacy).
+        ...((() => {
+          const invTotal = Number(selectedInvoice.total) || 0
+          const invSubBase = Number(selectedInvoice.subtotalInBase) || 0
+          const invIgvBase = Number(selectedInvoice.igvInBase) || 0
+          const invTotBase = Number(selectedInvoice.totalInBase) || 0
+          if (invTotal > 0 && invTotBase > 0) {
+            const ratio = total / invTotal
+            return {
+              subtotalInBase: Number((invSubBase * ratio).toFixed(2)),
+              igvInBase: Number((invIgvBase * ratio).toFixed(2)),
+              totalInBase: Number((invTotBase * ratio).toFixed(2)),
+            }
+          }
+          return {
+            subtotalInBase: convertToBase(subtotal, selectedInvoice.currency, selectedInvoice.exchangeRate),
+            igvInBase: convertToBase(igv, selectedInvoice.currency, selectedInvoice.exchangeRate),
+            totalInBase: convertToBase(total, selectedInvoice.currency, selectedInvoice.exchangeRate),
+          }
+        })()),
 
         // Configuración de impuestos (heredada del documento original)
         taxConfig: {
@@ -989,7 +1009,23 @@ export default function CreateCreditNote() {
                 </div>
                 {normalizeCurrency(selectedInvoice?.currency) === 'USD' && (
                   <div className="text-right text-xs text-gray-500 pt-1">
-                    ≈ {formatCurrency(convertToBase(totals.total, 'USD', selectedInvoice?.exchangeRate), 'PEN')} (TC {selectedInvoice?.exchangeRate || 1})
+                    ≈ {formatCurrency(
+                      (() => {
+                        // Equivalente PEN exacto: usa el totalInBase de la
+                        // factura original (que se guardó sin redondeo USD)
+                        // proporcional a los items seleccionados. Para NC
+                        // total (ratio=1) es exacto. Para NC parcial es
+                        // proporcional. Fallback: TC × USD redondeado.
+                        const invTotal = Number(selectedInvoice.total) || 0
+                        const invBase = Number(selectedInvoice.totalInBase) || 0
+                        if (invTotal > 0 && invBase > 0) {
+                          const ratio = totals.total / invTotal
+                          return invBase * ratio
+                        }
+                        return convertToBase(totals.total, 'USD', selectedInvoice?.exchangeRate)
+                      })(),
+                      'PEN'
+                    )} (TC {selectedInvoice?.exchangeRate || 1})
                   </div>
                 )}
               </div>
