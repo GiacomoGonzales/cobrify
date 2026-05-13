@@ -1182,13 +1182,31 @@ function CartDrawer({
 }) {
   // Helpers de moneda del catálogo. Los precios en `cart` están en PEN
   // del catálogo (source of truth). Convertimos y formateamos para display.
-  const fmtCart = (priceInPen) => {
-    const n = Number(priceInPen) || 0
-    if (catalogCurrency === 'PEN' || n === 0) return formatCurrency(n, 'PEN')
-    return formatCurrency(Number(convertFromBase(n, 'USD', catalogExchangeRate || 1).toFixed(2)), 'USD')
-  }
-  const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
+  // Multi-divisa: precio unitario del item en la moneda del catálogo.
+  // Si el item tiene fixedPriceUSD (producto con priceUSD definido) y
+  // el catálogo es USD, devolvemos ese precio directamente sin TC.
+  // En otro caso, convertimos el unitPrice (PEN) con TC.
+  const itemUnitInCatalogCcy = (item) => {
+    const fixedUSD = Number(item.fixedPriceUSD)
+    if (catalogCurrency === 'USD' && Number.isFinite(fixedUSD) && fixedUSD > 0) {
+      return fixedUSD
+    }
+    const penPrice = Number(item.unitPrice || item.price) || 0
+    if (catalogCurrency === 'PEN') return penPrice
+    return Number(convertFromBase(penPrice, 'USD', catalogExchangeRate || 1).toFixed(2))
+  }
+  // Línea formateada en la moneda del catálogo (price * quantity).
+  const fmtCartLine = (item) => formatCurrency(itemUnitInCatalogCcy(item) * item.quantity, catalogCurrency)
+  // Precio unitario formateado en la moneda del catálogo.
+  const fmtCartUnit = (item) => formatCurrency(itemUnitInCatalogCcy(item), catalogCurrency)
+
+  // Total en moneda del catálogo: suma cada línea ya convertida (USD si
+  // catálogo es USD, sumando fixedPriceUSD * qty para items con priceUSD).
+  const totalInCatalogCcy = cart.reduce(
+    (sum, item) => sum + itemUnitInCatalogCcy(item) * item.quantity,
+    0
+  )
   // Estados para modo restaurante / tienda virtual retail
   // Retail: siempre 'delivery' (siempre pide dirección, no hay toggle)
   const defaultOrderType = isRestaurantMenu
@@ -1350,20 +1368,31 @@ function CartDrawer({
       }
 
       // Preparar items de la orden.
-      // En USD: price/total se guardan ya convertidos a USD (con TC del catálogo).
-      // basePrice/totalInBase mantienen el equivalente en PEN para auditoría y
-      // para que el POS pueda re-convertir si cambia el TC al facturar.
+      // En USD: price/total se guardan ya convertidos a USD (con TC del catálogo)
+      // o, si el producto tiene priceUSD, ese precio se usa directamente.
+      // basePrice y totalInBase mantienen el equivalente en PEN para auditoría
+      // y para reportes globales. Para items con fixedPriceUSD, totalInBase
+      // se calcula como priceUSD * TC * qty (PEN equivalente de lo cobrado).
       const items = cart.map(item => {
         const pricePen = item.unitPrice || item.price
-        const priceDisplay = convertToOrderCcy(pricePen)
-        const totalPen = pricePen * item.quantity
+        const fixedUSD = Number(item.fixedPriceUSD)
+        const hasFixedUSD = isCatalogUSD && Number.isFinite(fixedUSD) && fixedUSD > 0
+        // Display price: priceUSD fijo, o conversión por TC.
+        const priceDisplay = hasFixedUSD ? fixedUSD : convertToOrderCcy(pricePen)
+        const totalDisplay = priceDisplay * item.quantity
+        // totalInBase: PEN equivalente de lo cobrado.
+        //  - Sin priceUSD: pricePen * qty (precio PEN original definido)
+        //  - Con priceUSD: priceUSD * TC * qty (equivalente PEN del USD cobrado)
+        const totalInBase = hasFixedUSD
+          ? Number((fixedUSD * orderRate * item.quantity).toFixed(2))
+          : pricePen * item.quantity
         return {
           itemId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           productId: item.id,
           name: item.name,
           price: priceDisplay,
           quantity: item.quantity,
-          total: priceDisplay * item.quantity,
+          total: totalDisplay,
           modifiers: item.selectedModifiers || [],
           ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
           notes: item.notes || '',
@@ -1374,29 +1403,46 @@ function CartDrawer({
           // Multi-divisa: basePrice/totalInBase siempre en PEN para round-trip.
           ...(isCatalogUSD && {
             basePrice: pricePen,
-            totalInBase: totalPen,
+            totalInBase,
+            ...(hasFixedUSD && { fixedPriceUSD: fixedUSD }),
           }),
         }
       })
 
-      // Calcular totales en PEN base (siempre).
-      // IMPORTANTE: la configuración fiscal vive en business.emissionConfig.taxConfig
-      // (mismo path que usa POS). Antes leíamos business.taxConfig directo y como
-      // ese campo no existe en el documento, igvExempt siempre quedaba false y se
-      // generaba IGV a empresas exoneradas.
-      const orderTotal = cart.reduce((sum, item) => sum + (item.unitPrice || item.price) * item.quantity, 0)
+      // Calcular totales del pedido.
+      // En USD: orderTotalDisplay = suma de items.total (display ccy).
+      //   orderTotalInBase = suma de items.totalInBase (PEN equivalente).
+      // En PEN: ambos son iguales (suma de unitPrice * quantity).
+      // IMPORTANTE: la configuración fiscal vive en business.emissionConfig.taxConfig.
+      const orderTotalDisplay = items.reduce((sum, it) => sum + it.total, 0)
+      const orderTotalInBase = isCatalogUSD
+        ? items.reduce((sum, it) => sum + (it.totalInBase || 0), 0)
+        : orderTotalDisplay
       const taxCfg = business.emissionConfig?.taxConfig || business.taxConfig || {}
       const igvRate = taxCfg.igvRate || 18
       const igvExempt = taxCfg.igvExempt === true
-      let subtotal, tax
-
+      // Subtotal/tax en moneda display (sobre orderTotalDisplay).
+      let subtotalDisplay, taxDisplay
       if (igvExempt) {
-        subtotal = orderTotal
-        tax = 0
+        subtotalDisplay = orderTotalDisplay
+        taxDisplay = 0
       } else {
-        subtotal = orderTotal / (1 + igvRate / 100)
-        tax = orderTotal - subtotal
+        subtotalDisplay = orderTotalDisplay / (1 + igvRate / 100)
+        taxDisplay = orderTotalDisplay - subtotalDisplay
       }
+      // Subtotal/tax en PEN base (sobre orderTotalInBase).
+      let subtotalInBase, taxInBase
+      if (igvExempt) {
+        subtotalInBase = orderTotalInBase
+        taxInBase = 0
+      } else {
+        subtotalInBase = orderTotalInBase / (1 + igvRate / 100)
+        taxInBase = orderTotalInBase - subtotalInBase
+      }
+      // Compatibilidad con código legacy en este archivo (usa `orderTotal`
+      // para actualizar amount de mesa en branches activeTableOrder).
+      // Apuntamos al valor en PEN base.
+      const orderTotal = orderTotalInBase
 
       const newOrder = {
         orderNumber: orderNum,
@@ -1416,17 +1462,20 @@ function CartDrawer({
         // Items
         items,
 
-        // Totales (en moneda del catálogo si es USD, sino PEN)
-        subtotal: convertToOrderCcy(subtotal),
-        tax: convertToOrderCcy(tax),
-        total: convertToOrderCcy(orderTotal),
+        // Totales (en moneda del catálogo si es USD, sino PEN).
+        // Display ya respeta priceUSD: subtotalDisplay/taxDisplay/totalDisplay
+        // se calcularon desde items[].total (que para items con priceUSD usa
+        // ese precio directamente sin TC).
+        subtotal: Number(subtotalDisplay.toFixed(2)),
+        tax: Number(taxDisplay.toFixed(2)),
+        total: Number(orderTotalDisplay.toFixed(2)),
         // Multi-divisa: moneda + TC congelados
         currency: orderCurrency,
         exchangeRate: orderRate,
         // Equivalentes en PEN base (para reportes globales)
-        subtotalInBase: subtotal,
-        taxInBase: tax,
-        totalInBase: orderTotal,
+        subtotalInBase: Number(subtotalInBase.toFixed(2)),
+        taxInBase: Number(taxInBase.toFixed(2)),
+        totalInBase: Number(orderTotalInBase.toFixed(2)),
 
         // Estado
         status: 'pending',
@@ -1634,8 +1683,8 @@ function CartDrawer({
                       line += ` (${item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(', ')})`
                     }
                     if (showPrices && !item.catalogHidePrice) {
-                      const unitPrice = item.unitPrice || item.price || 0
-                      line += ` - ${fmtCart(unitPrice * item.quantity)}`
+                      // Multi-divisa: respeta fixedPriceUSD si aplica.
+                      line += ` - ${fmtCartLine(item)}`
                     } else {
                       line += ' - (A consultar)'
                     }
@@ -1643,11 +1692,15 @@ function CartDrawer({
                   }).join('\n')
                   const hasHidden = (orderConfirmItems || []).some(i => i.catalogHidePrice)
                   const showTotal = showPrices && !hasHidden
-                  const total = (orderConfirmItems || []).reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
+                  // Total en moneda del catálogo (PEN o USD), respeta priceUSD.
+                  const totalDisplay = (orderConfirmItems || []).reduce(
+                    (sum, item) => sum + itemUnitInCatalogCcy(item) * item.quantity,
+                    0
+                  )
                   let msg = `🛒 *¡Hola! He hecho un pedido ${orderType === 'delivery' ? 'DELIVERY' : 'PARA RECOGER'}*\n\n`
                   msg += `📋 *Pedido ${orderNumber}*\n${orderItems}\n\n`
                   if (showTotal) {
-                    msg += `💰 *Total: ${fmtCart(total)}*\n\n`
+                    msg += `💰 *Total: ${formatCurrency(totalDisplay, catalogCurrency)}*\n\n`
                   } else {
                     msg += `💰 *Total: A consultar*\n\n`
                   }
@@ -1760,7 +1813,7 @@ function CartDrawer({
                           ))}
                         </div>
                       )}
-                      {showPrices && <p className="text-gray-600 mt-1">{fmtCart(item.unitPrice || item.price)}</p>}
+                      {showPrices && <p className="text-gray-600 mt-1">{fmtCartUnit(item)}</p>}
                       <div className="flex items-center gap-2 mt-2">
                         <button
                           onClick={() => onUpdateQuantity(item.cartItemId || item.id, Math.max(0, item.quantity - 1))}
@@ -1796,7 +1849,7 @@ function CartDrawer({
               {showPrices && (
                 <div className="flex items-center justify-between text-lg">
                   <span className="text-gray-600">Total</span>
-                  <span className="text-2xl font-bold">{fmtCart(total)}</span>
+                  <span className="text-2xl font-bold">{formatCurrency(totalInCatalogCcy, catalogCurrency)}</span>
                 </div>
               )}
 
@@ -2491,6 +2544,22 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Formatea un precio del catálogo (acepta PEN nativo del producto).
   const fmtCatalog = (priceInPen) => formatCurrency(toCatalogDisplay(priceInPen), catalogCurrency)
 
+  // Multi-divisa: precio principal del producto formateado. Si el catálogo
+  // está en USD y el producto tiene `priceUSD` definido, se usa ese precio
+  // directamente (sin conversión TC). En PEN o sin priceUSD: convierte
+  // product.price con TC normalmente. Para productos con variantes mantiene
+  // la lógica anterior (variantes no soportan priceUSD por ahora).
+  const fmtProductMain = (product) => {
+    if (!product) return formatCurrency(0, catalogCurrency)
+    if (catalogCurrency === 'USD') {
+      const fixedUSD = Number(product.priceUSD)
+      if (Number.isFinite(fixedUSD) && fixedUSD > 0) {
+        return formatCurrency(fixedUSD, 'USD')
+      }
+    }
+    return fmtCatalog(product.price)
+  }
+
   const groupByCategory = business?.catalogGroupByCategory === true
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
@@ -2595,6 +2664,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             : item
         )
       }
+      // Multi-divisa: si el producto tiene priceUSD definido Y NO se aplicó
+      // un nivel de precio (price2/3/4), guardamos fixedPriceUSD para que
+      // el carrito/checkout muestre ese precio en sesiones USD sin depender
+      // del TC. Si se aplicó un nivel de precio, ese precio (PEN) se convierte.
+      const fixedUSD = Number(product.priceUSD)
+      const hasFixedUSD = !finalPriceLabel && Number.isFinite(fixedUSD) && fixedUSD > 0
       return [...prev, {
         ...product,
         cartItemId,
@@ -2602,7 +2677,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         selectedModifiers,
         unitPrice: finalUnitPrice,
         originalUnitPrice: unitPrice || product.price,
-        priceLevelLabel: finalPriceLabel
+        priceLevelLabel: finalPriceLabel,
+        ...(hasFixedUSD && { fixedPriceUSD: fixedUSD }),
       }]
     })
   }
@@ -2666,8 +2742,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }
 
     const phone = (business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')
+    // Multi-divisa: helper para convertir el precio de un item a la moneda
+    // del catálogo. Respeta fixedPriceUSD (priceUSD del producto) si aplica.
+    const itemDisplay = (item) => {
+      const fixedUSD = Number(item.fixedPriceUSD)
+      if (catalogCurrency === 'USD' && Number.isFinite(fixedUSD) && fixedUSD > 0) {
+        return fixedUSD
+      }
+      const pricePen = Number(item.unitPrice || item.price) || 0
+      if (catalogCurrency === 'PEN') return pricePen
+      return Number(convertFromBase(pricePen, 'USD', catalogExchangeRate || 1).toFixed(2))
+    }
     const items = cart.map(item => {
-      const price = item.unitPrice || item.price
       let itemText = `• ${item.quantity}x ${item.name}`
       // Agregar nivel de precio si no es el default
       if (item.priceLevelLabel) {
@@ -2687,11 +2773,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       }
       // Respetar flag por-producto "catalogHidePrice" además del global showPrices
       if (showPrices && !item.catalogHidePrice) {
-        // Multi-divisa: cart guarda PEN, convertir al display.
-        const linePen = price * item.quantity
-        const lineDisplay = catalogCurrency === 'USD'
-          ? Number(convertFromBase(linePen, 'USD', catalogExchangeRate || 1).toFixed(2))
-          : linePen
+        const lineDisplay = itemDisplay(item) * item.quantity
         itemText += ` - ${formatCurrency(lineDisplay, catalogCurrency)}`
       } else {
         itemText += ' - (A consultar)'
@@ -2703,9 +2785,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     const showTotal = showPrices && !hasHidden
     let message
     if (showTotal) {
-      const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
+      // Total ya en moneda del catálogo, respeta priceUSD por item.
+      const totalDisplay = cart.reduce((sum, item) => sum + itemDisplay(item) * item.quantity, 0)
       message = encodeURIComponent(
-        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: ${catalogCurrency === 'USD' ? formatCurrency(Number(convertFromBase(total, 'USD', catalogExchangeRate || 1).toFixed(2)), 'USD') : formatCurrency(total, 'PEN')}*\n\nGracias!`
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: ${formatCurrency(totalDisplay, catalogCurrency)}*\n\nGracias!`
       )
     } else {
       message = encodeURIComponent(
@@ -3194,7 +3277,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                   <span className={`${thPrice}`}>
                                     {product.hasVariants && product.variants?.length > 0
                                       ? fmtCatalog(Math.min(...product.variants.map(v => v.price)))
-                                      : fmtCatalog(product.price)
+                                      : fmtProductMain(product)
                                     }
                                   </span>
                                 </div>
@@ -3420,7 +3503,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde ${fmtCatalog(Math.min(...product.variants.map(v => v.price)))}`
-                                  : fmtCatalog(product.price)
+                                  : fmtProductMain(product)
                                 }
                               </span>
                             )
@@ -3535,7 +3618,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
                                   ? `Desde ${fmtCatalog(Math.min(...product.variants.map(v => v.price)))}`
-                                  : fmtCatalog(product.price)
+                                  : fmtProductMain(product)
                                 }
                               </span>
                             )

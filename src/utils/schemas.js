@@ -190,6 +190,25 @@ export const productSchema = z.object({
     )
     .nullable()
     .optional(),
+  // Precio fijo en USD (multi-divisa). Cuando se especifica, en sesiones USD
+  // el POS/catálogo lo usa directamente en vez de convertir `price` con el TC.
+  // Permite que productos importados o pricing en dólar mantengan su valor
+  // exacto sin depender del tipo de cambio del día.
+  priceUSD: z
+    .number()
+    .positive('El precio USD debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
   cost: z
     .number()
     .nonnegative('El costo no puede ser negativo')

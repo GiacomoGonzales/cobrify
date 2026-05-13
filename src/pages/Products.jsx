@@ -353,6 +353,7 @@ export default function Products() {
       price2: '',
       price3: '',
       price4: '',
+      priceUSD: '',
       cost: '',
       weight: '',
       unit: 'NIU',
@@ -565,6 +566,7 @@ export default function Products() {
       description: '',
       marca: '',
       price: '',
+      priceUSD: '',
       cost: '',
       weight: '',
       unit: 'NIU',
@@ -716,6 +718,7 @@ export default function Products() {
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
+      priceUSD: product.priceUSD != null ? product.priceUSD.toString() : '',
       cost: product.cost?.toString() || '',
       weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
@@ -830,6 +833,7 @@ export default function Products() {
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
+      priceUSD: product.priceUSD != null ? product.priceUSD.toString() : '',
       cost: product.cost?.toString() || '',
       weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
@@ -1118,6 +1122,17 @@ export default function Products() {
       productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
       productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
       productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
+
+      // Multi-divisa: precio fijo en USD. Solo se persiste si el negocio
+      // tiene multi-divisa activada. Para negocios PEN-only siempre null,
+      // así no se ensucia el documento con campos que no aplican.
+      if (businessSettings?.multiCurrencyEnabled) {
+        const usdRaw = data.priceUSD
+        const usdVal = usdRaw === '' || usdRaw == null ? null : parseFloat(usdRaw)
+        productData.priceUSD = Number.isFinite(usdVal) && usdVal > 0 ? usdVal : null
+      } else {
+        productData.priceUSD = null
+      }
 
       // Handle product images (multi, máx 5): subir las nuevas, mantener las existentes
       if (canUseProductImages) {
@@ -4555,6 +4570,27 @@ export default function Products() {
                 </div>
               )}
 
+              {/* Precio fijo USD - solo si el negocio tiene multi-divisa activada.
+                  Cuando se especifica, en sesiones USD el POS/catálogo usa este
+                  precio directamente en vez de convertir el precio PEN con el TC.
+                  Útil para productos importados o pricing en dólar. */}
+              {businessSettings?.multiCurrencyEnabled && !hasVariants && (
+                <div>
+                  <Input
+                    label="Precio fijo en USD"
+                    type="number"
+                    step="any"
+                    placeholder="0.00 (opcional)"
+                    error={errors.priceUSD?.message}
+                    {...register('priceUSD')}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Si se especifica, en ventas en dólares se usa este precio en
+                    vez de convertir el precio en soles con el tipo de cambio.
+                  </p>
+                </div>
+              )}
+
               {/* Precio antes (tachado) - solo si está visible en catálogo */}
               {catalogVisible && !hasVariants && !catalogHidePrice && (
                 <div>
@@ -5852,6 +5888,16 @@ export default function Products() {
                     {viewingProduct.weight ? `${viewingProduct.weight} kg` : '-'}
                   </p>
                 </div>
+                {/* Precio fijo USD: solo si está configurado y multi-divisa
+                    activo. Para el resto de negocios, queda oculto. */}
+                {businessSettings?.multiCurrencyEnabled && viewingProduct.priceUSD > 0 && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Precio fijo en USD</label>
+                    <p className="text-lg text-blue-600 font-bold mt-1">
+                      {formatCurrency(viewingProduct.priceUSD, 'USD')}
+                    </p>
+                  </div>
+                )}
                 {viewingProduct.price && viewingProduct.cost && (
                   <div className="md:col-span-2">
                     <label className="text-xs font-medium text-gray-500">Margen de Ganancia</label>

@@ -631,11 +631,16 @@ export default function POS() {
   // Cuando el cajero edita el TC manualmente (o se actualiza desde SBS),
   // recomputamos los precios USD del carrito desde basePrice (PEN). Así
   // si TC pasa de 3.454 → 3.60, el item de 300 PEN pasa de $86.86 a $83.33.
+  // EXCEPCIÓN: items con fixedPriceUSD (precio fijo USD del producto) NO
+  // se recalculan, mantienen su precio definido por el usuario.
   useEffect(() => {
     if (!posMultiCurrencyOn) return
     if (currency !== 'USD') return
     if (!exchangeRate || exchangeRate <= 0) return
     setCart(prev => prev.map(item => {
+      // Precio fijo USD: no recalcular con TC.
+      const fixedUSD = Number(item.fixedPriceUSD)
+      if (Number.isFinite(fixedUSD) && fixedUSD > 0) return item
       const baseInPEN = Number(item.basePrice)
       if (!Number.isFinite(baseInPEN) || baseInPEN <= 0) return item
       const newPrice = Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
@@ -655,11 +660,30 @@ export default function POS() {
     return Number(convertFromBase(n, currency, exchangeRate).toFixed(2))
   }
 
+  // Multi-divisa: precio del producto en la moneda activa de la sesión.
+  // - Sesión PEN: siempre devuelve product.price (PEN).
+  // - Sesión USD: si product.priceUSD > 0, lo devuelve directamente (precio
+  //   fijo definido por el usuario, no depende del TC). Si no hay priceUSD,
+  //   convierte product.price con el TC del día.
+  // Esto permite tener productos con pricing en dólar que no se descuadran
+  // cuando el TC cambia (ej. productos importados con precio de lista USD).
+  const getProductSessionPrice = (product) => {
+    if (!product) return 0
+    const penPrice = Number(product.price) || 0
+    if (currency === 'USD') {
+      const fixedUSD = Number(product.priceUSD)
+      if (Number.isFinite(fixedUSD) && fixedUSD > 0) return fixedUSD
+    }
+    return toSessionCurrency(penPrice)
+  }
+
   // Formatea el precio de un producto/variante mostrándolo en la moneda
   // activa de la sesión. Para productos con variantes muestra rango "X – Y".
   const formatCatalogPrice = (product) => {
     if (!product) return formatCurrency(0, currency)
     if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+      // Las variantes no soportan priceUSD por ahora (v1). Se convierte
+      // siempre con el TC. Roadmap: agregar priceUSD por variante.
       const prices = product.variants
         .map((v) => Number(v?.price))
         .filter((p) => Number.isFinite(p) && p > 0)
@@ -671,7 +695,7 @@ export default function POS() {
         ? formatCurrency(min, currency)
         : `${formatCurrency(min, currency)} – ${formatCurrency(max, currency)}`
     }
-    return formatCurrency(toSessionCurrency(Number(product.price) || 0), currency)
+    return formatCurrency(getProductSessionPrice(product), currency)
   }
 
   // Cambio de moneda. Si vamos a USD y no hay TC válido, lo obtenemos
@@ -718,6 +742,11 @@ export default function POS() {
     //    (sin confirmación, cambio inmediato).
     setCart(prev => prev.map(item => {
       const oldPrice = Number(item.price) || 0
+      // Si el item tiene fixedPriceUSD (precio fijo definido en el producto)
+      // y vamos a USD, usamos ese precio directamente —ignorando el TC—.
+      // En PEN seguimos usando basePrice como antes.
+      const fixedUSD = Number(item.fixedPriceUSD)
+      const hasFixedUSD = Number.isFinite(fixedUSD) && fixedUSD > 0
       // Si el item tiene basePrice (PEN como source of truth), recomputamos
       // el precio desde ahí para evitar pérdida de precisión en round-trips
       // (300 PEN → 87.36 USD → 299.97 PEN ❌; con basePrice → 300 PEN ✅).
@@ -726,7 +755,10 @@ export default function POS() {
       let newPrice = oldPrice
       const baseInPEN = Number(item.basePrice)
       const hasBase = Number.isFinite(baseInPEN) && baseInPEN > 0
-      if (hasBase) {
+      if (newCurrency === 'USD' && hasFixedUSD) {
+        // Precio fijo en USD definido en el producto: usar tal cual.
+        newPrice = fixedUSD
+      } else if (hasBase) {
         // Recomputar desde la fuente PEN sin redondeos intermedios.
         newPrice = newCurrency === 'PEN'
           ? baseInPEN
@@ -2583,7 +2615,17 @@ export default function POS() {
       // Catálogo guarda PEN; si la sesión es USD, dividimos por el TC.
       // Guardamos basePrice (siempre en PEN) como source of truth para
       // evitar pérdida de precisión en round-trips de moneda.
-      const priceForCart = isFreeProduct ? 0 : toSessionCurrency(effectivePrice)
+      // Si el producto tiene priceUSD (precio fijo en USD) Y NO se seleccionó
+      // un nivel de precio (price2/3/4), usamos priceUSD en sesiones USD.
+      // Si el cajero elige un nivel de precio explícito, ese precio (PEN)
+      // se convierte con TC normalmente.
+      const fixedUSD = Number(product.priceUSD)
+      const hasFixedUSD = selectedPrice == null && Number.isFinite(fixedUSD) && fixedUSD > 0
+      const priceForCart = isFreeProduct
+        ? 0
+        : (currency === 'USD' && hasFixedUSD
+          ? fixedUSD
+          : toSessionCurrency(effectivePrice))
       const basePriceForCart = isFreeProduct ? 0 : Number(effectivePrice) || 0
 
       const cartItem = {
@@ -2591,6 +2633,10 @@ export default function POS() {
         quantity: 1,
         price: priceForCart,
         basePrice: basePriceForCart,
+        // Multi-divisa: recordar precio fijo USD si el producto lo tiene
+        // y se usa el precio principal (sin nivel de precio explícito).
+        // Sobrevive a cambios de moneda del POS (PEN ↔ USD).
+        ...(hasFixedUSD && { fixedPriceUSD: fixedUSD }),
         ...(isFreeProduct && {
           isBonificacion: true,
           taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
