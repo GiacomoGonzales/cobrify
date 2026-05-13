@@ -1139,7 +1139,12 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     }
 
     // QR personalizado al pie (configurable en Settings)
-    if (receiptData.ticketQrEnabled && receiptData.ticketQrContent && receiptData.ticketQrContent.trim()) {
+    // NOTA: BLE solo soporta el modo 'auto' (generar QR desde contenido).
+    // Para el modo 'image' (imagen subida) se requiere ESC/POS raster que
+    // este path no implementa todavía. Si el usuario configuró modo 'image'
+    // y está imprimiendo vía BLE, se omite el QR sin romper el ticket.
+    if (receiptData.ticketQrEnabled && receiptData.ticketQrContent && receiptData.ticketQrContent.trim()
+        && receiptData.ticketQrMode !== 'image') {
       commands.push(ESCPOSCommands.text('\n'));
       const customQrCmds = generateQRCommands(receiptData.ticketQrContent.trim(), paperWidth === 58 ? 5 : 7);
       for (const cmd of customQrCmds) {

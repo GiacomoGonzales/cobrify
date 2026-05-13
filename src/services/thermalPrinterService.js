@@ -642,7 +642,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       try {
         console.log(`📄 Usando impresora de documentos (${docPrinter.ip}) para ticket...`);
         const docPaperWidth = docPrinter.paperWidth || paperWidth;
-        const base64Data = buildTicketEscPos(invoice, business, docPaperWidth);
+        const base64Data = await buildTicketEscPos(invoice, business, docPaperWidth);
         return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
       } catch (error) {
         console.error('Error printing to document printer:', error);
@@ -1309,14 +1309,41 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
-    // QR personalizado al pie (configurado por el usuario)
-    if (business.ticketQrEnabled && business.ticketQrContent && business.ticketQrContent.trim()) {
-      printer = printer
-        .align('center')
-        .text('\n')
-        .qr(business.ticketQrContent.trim());
-      if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
-        printer = printer.text(convertSpanishText(business.ticketQrCaption.trim() + '\n'));
+    // QR personalizado al pie (configurado por el usuario).
+    // Dos modos:
+    //  - 'image' (subió una imagen, ej. QR Yape/Plin del banco): se imprime
+    //    como bitmap con dithering Floyd-Steinberg (vía prepareLogoForPrinting).
+    //  - 'auto' (default): se genera el QR desde el contenido usando el
+    //    comando nativo .qr() de ESC/POS.
+    if (business.ticketQrEnabled) {
+      const qrMode = business.ticketQrMode === 'image' ? 'image' : 'auto'
+      const hasImage = qrMode === 'image' && business.ticketQrImageUrl
+      const hasContent = qrMode === 'auto' && business.ticketQrContent && business.ticketQrContent.trim()
+
+      if (hasImage) {
+        try {
+          const qrConfig = await prepareLogoForPrinting(business.ticketQrImageUrl, paperWidth);
+          printer = printer.align('center').text('\n');
+          if (qrConfig.ready && qrConfig.base64) {
+            const dataUrl = `data:image/png;base64,${qrConfig.base64}`;
+            printer = printer.image(dataUrl);
+          } else if (qrConfig.ready && qrConfig.url) {
+            printer = printer.image(qrConfig.url);
+          }
+          if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+            printer = printer.text(convertSpanishText(business.ticketQrCaption.trim() + '\n'));
+          }
+        } catch (qrError) {
+          console.error('Error al imprimir QR (imagen):', qrError);
+        }
+      } else if (hasContent) {
+        printer = printer
+          .align('center')
+          .text('\n')
+          .qr(business.ticketQrContent.trim());
+        if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+          printer = printer.text(convertSpanishText(business.ticketQrCaption.trim() + '\n'));
+        }
       }
     }
 
@@ -1856,6 +1883,8 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       ticketQrEnabled: business?.ticketQrEnabled === true,
       ticketQrContent: business?.ticketQrContent || '',
       ticketQrCaption: business?.ticketQrCaption || '',
+      ticketQrMode: business?.ticketQrMode === 'image' ? 'image' : 'auto',
+      ticketQrImageUrl: business?.ticketQrImageUrl || '',
 
       // Vendedor
       sellerName: invoice.sellerName || '',
@@ -2258,7 +2287,7 @@ class EscPosBuilder {
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  * @returns {string} Datos en base64
  */
-const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
+const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
 
@@ -2518,12 +2547,34 @@ const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
       }
     }
 
-    // QR personalizado al pie (configurado por el usuario)
-    if (business.ticketQrEnabled && business.ticketQrContent && business.ticketQrContent.trim()) {
-      const paperWidth = business.ticketPaperWidth || 58
-      builder.newLine().alignCenter().qr(business.ticketQrContent.trim(), paperWidth === 58 ? 5 : 7)
-      if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
-        builder.text(business.ticketQrCaption.trim()).newLine()
+    // QR personalizado al pie (configurado por el usuario).
+    // Modo 'image': imprime una imagen subida con dithering (ej. QR Yape/Plin).
+    // Modo 'auto' (default): genera el QR a partir del contenido con .qr() nativo.
+    if (business.ticketQrEnabled) {
+      const qrMode = business.ticketQrMode === 'image' ? 'image' : 'auto'
+      const ticketPaperWidth = business.ticketPaperWidth || paperWidth || 58
+
+      if (qrMode === 'image' && business.ticketQrImageUrl) {
+        try {
+          const qrConfig = await prepareLogoForPrinting(business.ticketQrImageUrl, ticketPaperWidth)
+          builder.newLine().alignCenter()
+          if (qrConfig.ready && qrConfig.base64) {
+            const dataUrl = `data:image/png;base64,${qrConfig.base64}`
+            builder.image(dataUrl, qrConfig.width)
+          } else if (qrConfig.ready && qrConfig.url) {
+            builder.image(qrConfig.url, qrConfig.width)
+          }
+          if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+            builder.text(business.ticketQrCaption.trim()).newLine()
+          }
+        } catch (qrError) {
+          console.error('Error al imprimir QR (imagen):', qrError)
+        }
+      } else if (business.ticketQrContent && business.ticketQrContent.trim()) {
+        builder.newLine().alignCenter().qr(business.ticketQrContent.trim(), ticketPaperWidth === 58 ? 5 : 7)
+        if (business.ticketQrCaption && business.ticketQrCaption.trim()) {
+          builder.text(business.ticketQrCaption.trim()).newLine()
+        }
       }
     }
 
@@ -2542,7 +2593,7 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
   }
 
   try {
-    const base64Data = buildTicketEscPos(invoice, business, paperWidth);
+    const base64Data = await buildTicketEscPos(invoice, business, paperWidth);
     const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {

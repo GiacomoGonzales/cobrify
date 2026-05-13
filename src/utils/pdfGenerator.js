@@ -2293,26 +2293,54 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   // ========== QR PERSONALIZADO AL PIE (configurable en Settings) ==========
-  if (companySettings?.ticketQrEnabled && companySettings.ticketQrContent && companySettings.ticketQrContent.trim()) {
-    try {
-      const customQrDataUrl = await QRCode.toDataURL(companySettings.ticketQrContent.trim(), {
-        width: 300,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-      })
-      const qrSize = 60
-      const qrX = MARGIN_LEFT + (CONTENT_WIDTH - qrSize) / 2
-      doc.addImage(customQrDataUrl, 'PNG', qrX, footerY + 10, qrSize, qrSize)
-      footerY += 10 + qrSize + 4
-      if (companySettings.ticketQrCaption && companySettings.ticketQrCaption.trim()) {
-        doc.setFontSize(7)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(80, 80, 80)
-        doc.text(companySettings.ticketQrCaption.trim(), MARGIN_LEFT + CONTENT_WIDTH / 2, footerY, { align: 'center' })
-        footerY += 8
+  // Dos modos:
+  //  - 'image': se subió una imagen del QR (ej. Yape/Plin del banco).
+  //  - 'auto' (default): se genera el QR a partir del contenido (URL/texto).
+  if (companySettings?.ticketQrEnabled) {
+    const qrMode = companySettings.ticketQrMode === 'image' ? 'image' : 'auto'
+    const hasImage = qrMode === 'image' && companySettings.ticketQrImageUrl
+    const hasContent = qrMode === 'auto' && companySettings.ticketQrContent && companySettings.ticketQrContent.trim()
+
+    if (hasImage || hasContent) {
+      try {
+        let customQrDataUrl
+        if (hasImage) {
+          // Cargar la imagen y convertirla a data URL para jsPDF.
+          customQrDataUrl = await new Promise((resolve, reject) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.onload = () => {
+              const canvas = document.createElement('canvas')
+              canvas.width = img.naturalWidth || 300
+              canvas.height = img.naturalHeight || 300
+              const ctx = canvas.getContext('2d')
+              ctx.drawImage(img, 0, 0)
+              resolve(canvas.toDataURL('image/png'))
+            }
+            img.onerror = reject
+            img.src = companySettings.ticketQrImageUrl
+          })
+        } else {
+          customQrDataUrl = await QRCode.toDataURL(companySettings.ticketQrContent.trim(), {
+            width: 300,
+            margin: 1,
+            errorCorrectionLevel: 'M',
+          })
+        }
+        const qrSize = 60
+        const qrX = MARGIN_LEFT + (CONTENT_WIDTH - qrSize) / 2
+        doc.addImage(customQrDataUrl, 'PNG', qrX, footerY + 10, qrSize, qrSize)
+        footerY += 10 + qrSize + 4
+        if (companySettings.ticketQrCaption && companySettings.ticketQrCaption.trim()) {
+          doc.setFontSize(7)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(80, 80, 80)
+          doc.text(companySettings.ticketQrCaption.trim(), MARGIN_LEFT + CONTENT_WIDTH / 2, footerY, { align: 'center' })
+          footerY += 8
+        }
+      } catch (error) {
+        console.error('Error generando QR personalizado del ticket:', error)
       }
-    } catch (error) {
-      console.error('Error generando QR personalizado del ticket:', error)
     }
   }
 

@@ -183,6 +183,12 @@ export default function Settings() {
   const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
   const [ticketQrContent, setTicketQrContent] = useState('')
   const [ticketQrCaption, setTicketQrCaption] = useState('')
+  // Modo del QR: 'auto' (genera QR desde el contenido) o 'image' (sube
+  // una imagen del QR ya hecho). Útil para QR Yape/Plin que da el banco.
+  const [ticketQrMode, setTicketQrMode] = useState('auto')
+  const [ticketQrImageUrl, setTicketQrImageUrl] = useState('')
+  const [ticketQrImageFile, setTicketQrImageFile] = useState(null)
+  const [uploadingQrImage, setUploadingQrImage] = useState(false)
 
   // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
   const [companySlogan, setCompanySlogan] = useState('')
@@ -932,6 +938,10 @@ export default function Settings() {
         setTicketQrEnabled(businessData.ticketQrEnabled === true)
         setTicketQrContent(businessData.ticketQrContent || '')
         setTicketQrCaption(businessData.ticketQrCaption || '')
+        // Modo del QR: por defecto 'auto' para retrocompatibilidad
+        // (negocios existentes ya tienen ticketQrContent escrito).
+        setTicketQrMode(businessData.ticketQrMode === 'image' ? 'image' : 'auto')
+        setTicketQrImageUrl(businessData.ticketQrImageUrl || '')
         if (businessData.pdfAccentColor) {
           setPdfAccentColor(businessData.pdfAccentColor)
         }
@@ -1424,6 +1434,67 @@ export default function Settings() {
     }
   }
 
+  // Subir imagen del QR para el ticket. Mismo flujo que el logo: valida
+  // tipo/tamaño, muestra preview con FileReader, y deja el File en
+  // ticketQrImageFile para subirlo a Storage al hacer "Guardar".
+  const handleQrImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('El archivo debe ser una imagen (JPG, PNG o WEBP)')
+      return
+    }
+
+    // Max 2MB (mismo límite que el logo). QR es una imagen simple, no
+    // necesita más.
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen no debe superar los 2MB')
+      return
+    }
+
+    setTicketQrImageFile(file)
+
+    // Preview con data URL (no se sube hasta Guardar).
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setTicketQrImageUrl(ev.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Quita la imagen del QR (storage + Firestore) y limpia el preview.
+  const handleRemoveQrImage = async () => {
+    if (!user?.uid) return
+
+    try {
+      // Si la URL apunta a Firebase Storage, intentar eliminar el blob.
+      if (ticketQrImageUrl && ticketQrImageUrl.includes('firebase')) {
+        try {
+          const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+          await deleteObject(qrRef)
+        } catch (error) {
+          console.log('No se pudo eliminar la imagen del QR anterior:', error)
+        }
+      }
+
+      // Limpiar campos en Firestore (no toca el resto de la config).
+      const businessRef = doc(db, 'businesses', getBusinessId())
+      await setDoc(businessRef, {
+        ticketQrImageUrl: null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      setTicketQrImageUrl('')
+      setTicketQrImageFile(null)
+      toast.success('Imagen del QR eliminada')
+    } catch (error) {
+      console.error('Error al eliminar imagen del QR:', error)
+      toast.error('Error al eliminar la imagen del QR')
+    }
+  }
+
   // Buscar datos de RUC automáticamente
   const handleLookupRuc = async () => {
     const rucNumber = watch('ruc')
@@ -1493,6 +1564,27 @@ export default function Settings() {
         }
       }
 
+      // Si hay una imagen del QR pendiente y el modo es 'image', subirla.
+      // (Mismo patrón que el logo. Se invalida la caché de imágenes para
+      // que la próxima impresión la re-descargue con el dithering nuevo.)
+      let uploadedQrImageUrl = ticketQrImageUrl
+      if (ticketQrImageFile && ticketQrMode === 'image') {
+        setUploadingQrImage(true)
+        try {
+          const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+          await uploadBytes(qrRef, ticketQrImageFile)
+          uploadedQrImageUrl = await getDownloadURL(qrRef)
+          // Invalida caché de imágenes (logo + QR comparten la misma).
+          invalidateLogoCache()
+          console.log('✅ Imagen del QR subida exitosamente')
+        } catch (qrError) {
+          console.error('Error al subir imagen del QR:', qrError)
+          toast.error('Error al subir la imagen del QR. Se guardará el resto de la configuración.')
+        } finally {
+          setUploadingQrImage(false)
+        }
+      }
+
       // Crear o actualizar datos de la empresa usando userId como businessId
       const businessRef = doc(db, 'businesses', getBusinessId())
 
@@ -1535,6 +1627,7 @@ export default function Settings() {
       }, { merge: true })
 
       setLogoFile(null) // Limpiar archivo temporal
+      setTicketQrImageFile(null) // Limpiar archivo temporal del QR
       if (refreshBusinessSettings) await refreshBusinessSettings()
       toast.success('Configuración guardada exitosamente')
     } catch (error) {
@@ -5085,40 +5178,118 @@ export default function Settings() {
                         Imprimir código QR al pie del ticket
                       </span>
                       <p className="text-xs text-gray-500 mt-1">
-                        El sistema genera un QR automáticamente a partir del link o texto que pongas abajo y lo imprime en el ticket.
+                        Generá el QR a partir de un enlace, o subí tu propia imagen (por ejemplo, el QR oficial de Yape o Plin).
                       </p>
                     </div>
                   </label>
 
                   {ticketQrEnabled && (
                     <div className="mt-3 ml-7">
+                      {/* Selector de modo: generar automáticamente desde una
+                          URL, o subir una imagen ya hecha (ej. QR Yape/Plin). */}
+                      <div className="flex gap-2 mb-4">
+                        <button
+                          type="button"
+                          onClick={() => setTicketQrMode('auto')}
+                          className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                            ticketQrMode === 'auto'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          Generar desde un enlace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTicketQrMode('image')}
+                          className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                            ticketQrMode === 'image'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          Subir imagen del QR
+                        </button>
+                      </div>
+
+                      {/* Banner explicativo según el modo */}
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900 flex gap-2">
                         <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <strong>Cómo funciona:</strong> escribí a dónde querés que lleve el QR (por ejemplo, tu página web o un link de pago). Cuando tus clientes escaneen el QR impreso con la cámara del celular, se abrirá ese contenido. <strong>No hace falta subir una imagen</strong> — el ticket térmico imprime el QR solo.
-                        </div>
+                        {ticketQrMode === 'auto' ? (
+                          <div>
+                            <strong>Cómo funciona:</strong> escribí a dónde querés que lleve el QR (por ejemplo, tu página web o un link de pago). Cuando tus clientes escaneen el QR impreso con la cámara del celular, se abrirá ese contenido. <strong>No hace falta subir una imagen</strong> — el ticket térmico imprime el QR solo.
+                          </div>
+                        ) : (
+                          <div>
+                            <strong>Modo imagen:</strong> ideal si ya tenés un QR generado (por ejemplo, el QR oficial de Yape o Plin que te dio el banco). Subí la imagen y se imprimirá tal cual en cada ticket. Recomendado: imagen PNG cuadrada con fondo blanco.
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-start">
-                        {/* Inputs */}
+                        {/* Inputs / Upload según modo */}
                         <div className="space-y-3 min-w-0">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              ¿A dónde debe llevar el QR cuando lo escaneen?
-                            </label>
-                            <textarea
-                              value={ticketQrContent}
-                              onChange={(e) => setTicketQrContent(e.target.value.slice(0, 500))}
-                              rows={3}
-                              maxLength={500}
-                              placeholder={'Ejemplos:\nhttps://mitienda.com\nhttps://wa.me/51987654321\nyape:987654321'}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
-                            />
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-xs text-gray-400">URL de tu web, link de WhatsApp, datos de pago, etc.</span>
-                              <span className="text-xs text-gray-400">{ticketQrContent.length}/500</span>
+                          {ticketQrMode === 'auto' ? (
+                            <>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  ¿A dónde debe llevar el QR cuando lo escaneen?
+                                </label>
+                                <textarea
+                                  value={ticketQrContent}
+                                  onChange={(e) => setTicketQrContent(e.target.value.slice(0, 500))}
+                                  rows={3}
+                                  maxLength={500}
+                                  placeholder={'Ejemplos:\nhttps://mitienda.com\nhttps://wa.me/51987654321\nyape:987654321'}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                                />
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-xs text-gray-400">URL de tu web, link de WhatsApp, datos de pago, etc.</span>
+                                  <span className="text-xs text-gray-400">{ticketQrContent.length}/500</span>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Imagen del QR
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <label className="flex-1 cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    onChange={handleQrImageUpload}
+                                    className="hidden"
+                                  />
+                                  <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors text-center">
+                                    {uploadingQrImage ? (
+                                      <span className="flex items-center justify-center gap-2 text-gray-600">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Subiendo...
+                                      </span>
+                                    ) : ticketQrImageUrl ? (
+                                      <span className="text-primary-700 font-medium">Cambiar imagen</span>
+                                    ) : (
+                                      <span className="text-gray-600">Elegir archivo (PNG, JPG, WEBP — máx 2MB)</span>
+                                    )}
+                                  </div>
+                                </label>
+                                {ticketQrImageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveQrImage}
+                                    className="px-3 py-2 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Para mejor calidad de impresión: PNG cuadrado, mín 300x300 px, fondo blanco.
+                              </p>
                             </div>
-                          </div>
+                          )}
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Texto debajo del QR <span className="text-gray-400">(opcional)</span>
@@ -5138,7 +5309,27 @@ export default function Settings() {
                         {/* Preview */}
                         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col items-center md:w-[200px]">
                           <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-2">Vista previa</span>
-                          {ticketQrContent.trim() ? (
+                          {ticketQrMode === 'image' ? (
+                            ticketQrImageUrl ? (
+                              <>
+                                <div className="bg-white p-2 rounded border border-gray-300">
+                                  <img
+                                    src={ticketQrImageUrl}
+                                    alt="QR del ticket"
+                                    className="w-[140px] h-[140px] object-contain"
+                                  />
+                                </div>
+                                {ticketQrCaption.trim() && (
+                                  <p className="text-xs text-gray-700 mt-2 text-center font-medium">{ticketQrCaption.trim()}</p>
+                                )}
+                                <p className="text-[10px] text-gray-400 mt-2 text-center">Así se verá en el ticket</p>
+                              </>
+                            ) : (
+                              <div className="w-[140px] h-[140px] bg-gray-200 rounded flex items-center justify-center">
+                                <span className="text-xs text-gray-500 text-center px-2">Subí una imagen para ver la vista previa</span>
+                              </div>
+                            )
+                          ) : ticketQrContent.trim() ? (
                             <>
                               <div className="bg-white p-2 rounded border border-gray-300">
                                 <QRCodeSVG value={ticketQrContent.trim()} size={140} level="M" includeMargin={false} />
@@ -5674,13 +5865,35 @@ export default function Settings() {
 
                   setIsSaving(true)
                   try {
+                    // Subir imagen del QR (si hay pendiente y modo es 'image')
+                    // ANTES de hacer el setDoc, para que la URL quede en la
+                    // misma escritura. Mismo patrón que el save global.
+                    let uploadedQrImageUrl = ticketQrImageUrl
+                    if (ticketQrImageFile && ticketQrMode === 'image') {
+                      setUploadingQrImage(true)
+                      try {
+                        const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+                        await uploadBytes(qrRef, ticketQrImageFile)
+                        uploadedQrImageUrl = await getDownloadURL(qrRef)
+                        invalidateLogoCache()
+                        console.log('✅ Imagen del QR subida exitosamente')
+                      } catch (qrError) {
+                        console.error('Error al subir imagen del QR:', qrError)
+                        toast.error('Error al subir la imagen del QR. Se guardará el resto de la configuración.')
+                      } finally {
+                        setUploadingQrImage(false)
+                      }
+                    }
+
                     const businessRef = doc(db, 'businesses', getBusinessId())
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
                       ticketFooterMessage: ticketFooterMessage || '',
-        ticketQrEnabled: ticketQrEnabled === true,
-        ticketQrContent: ticketQrContent || '',
-        ticketQrCaption: ticketQrCaption || '',
+                      ticketQrEnabled: ticketQrEnabled === true,
+                      ticketQrContent: ticketQrContent || '',
+                      ticketQrCaption: ticketQrCaption || '',
+                      ticketQrMode: ticketQrMode === 'image' ? 'image' : 'auto',
+                      ticketQrImageUrl: uploadedQrImageUrl || null,
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
@@ -5698,6 +5911,7 @@ export default function Settings() {
                       hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
+                    setTicketQrImageFile(null) // Limpia archivo temporal
                     if (refreshBusinessSettings) await refreshBusinessSettings()
                     toast.success('Configuración de documentos guardada exitosamente.')
                   } catch (error) {
