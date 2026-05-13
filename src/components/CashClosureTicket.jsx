@@ -67,18 +67,28 @@ const CashClosureTicket = forwardRef(({
     return `${formatDate(dateValue)} ${formatTime(dateValue)}`
   }
 
-  // Formatear moneda
-  const formatCurrency = (value) => {
-    return `S/ ${Number(value || 0).toFixed(2)}`
+  // Formatear moneda — acepta 'USD' para tickets multi-divisa
+  const formatCurrency = (value, currency = 'PEN') => {
+    const symbol = currency === 'USD' ? '$' : 'S/'
+    return `${symbol} ${Number(value || 0).toFixed(2)}`
   }
 
-  // Calcular totales de movimientos
+  // Calcular totales de movimientos (PEN — los USD van separados)
   const totalIncome = movements
-    .filter(m => m.type === 'income')
+    .filter(m => m.type === 'income' && m.currency !== 'USD')
     .reduce((sum, m) => sum + (m.amount || 0), 0)
 
   const totalExpense = movements
-    .filter(m => m.type === 'expense')
+    .filter(m => m.type === 'expense' && m.currency !== 'USD')
+    .reduce((sum, m) => sum + (m.amount || 0), 0)
+
+  // Multi-divisa: bloque USD (si la sesión lo tiene)
+  const usd = sessionData?.usd || null
+  const totalIncomeUSD = movements
+    .filter(m => m.type === 'income' && m.currency === 'USD')
+    .reduce((sum, m) => sum + (m.amount || 0), 0)
+  const totalExpenseUSD = movements
+    .filter(m => m.type === 'expense' && m.currency === 'USD')
     .reduce((sum, m) => sum + (m.amount || 0), 0)
 
   // Datos de la sesión
@@ -500,7 +510,7 @@ const CashClosureTicket = forwardRef(({
                 {p.customerName}
               </span>
               <span style={{ alignSelf: 'flex-end', fontWeight: 600 }}>
-                {formatCurrency(p.amount)}
+                {formatCurrency(p.amount, p.currency)}{p.currency === 'USD' ? ' USD' : ''}
               </span>
             </div>
           ))}
@@ -616,6 +626,84 @@ const CashClosureTicket = forwardRef(({
           <span>{formatCurrency(difference)}</span>
         </div>
       </div>
+
+      {/* ===== Bloque USD ===== */}
+      {/* Solo si la sesión tuvo actividad USD (session.usd guardado al cerrar) */}
+      {usd && (
+        <>
+          <div className="ticket-section" style={{ borderTop: '2px solid #000', paddingTop: '6px', marginTop: '6px' }}>
+            <div className="section-title">CAJA EN DOLARES (USD)</div>
+
+            {(usd.openingAmount || 0) > 0 && (
+              <div className="info-row">
+                <span>MONTO INICIAL USD:</span>
+                <span>{formatCurrency(usd.openingAmount, 'USD')}</span>
+              </div>
+            )}
+
+            <div className="info-row">
+              <span>VENTAS USD:</span>
+              <span>{formatCurrency(usd.totalSales || 0, 'USD')}</span>
+            </div>
+            {(usd.salesCash || 0) > 0 && (
+              <div className="info-row" style={{ paddingLeft: '6px' }}>
+                <span>EFECTIVO:</span><span>{formatCurrency(usd.salesCash, 'USD')}</span>
+              </div>
+            )}
+            {(usd.salesCard || 0) > 0 && (
+              <div className="info-row" style={{ paddingLeft: '6px' }}>
+                <span>TARJETA:</span><span>{formatCurrency(usd.salesCard, 'USD')}</span>
+              </div>
+            )}
+            {(usd.salesTransfer || 0) > 0 && (
+              <div className="info-row" style={{ paddingLeft: '6px' }}>
+                <span>TRANSFERENCIA:</span><span>{formatCurrency(usd.salesTransfer, 'USD')}</span>
+              </div>
+            )}
+            {(usd.salesYape || 0) > 0 && (
+              <div className="info-row" style={{ paddingLeft: '6px' }}>
+                <span>YAPE:</span><span>{formatCurrency(usd.salesYape, 'USD')}</span>
+              </div>
+            )}
+            {(usd.salesPlin || 0) > 0 && (
+              <div className="info-row" style={{ paddingLeft: '6px' }}>
+                <span>PLIN:</span><span>{formatCurrency(usd.salesPlin, 'USD')}</span>
+              </div>
+            )}
+
+            {totalIncomeUSD > 0 && (
+              <div className="info-row">
+                <span>+ INGRESOS USD:</span><span>{formatCurrency(totalIncomeUSD, 'USD')}</span>
+              </div>
+            )}
+            {totalExpenseUSD > 0 && (
+              <div className="info-row">
+                <span>- EGRESOS USD:</span><span>{formatCurrency(totalExpenseUSD, 'USD')}</span>
+              </div>
+            )}
+
+            <div className="total-row" style={{ marginTop: '4px' }}>
+              <span>EFECTIVO USD ESPERADO:</span>
+              <span>{formatCurrency(usd.expectedAmount || 0, 'USD')}</span>
+            </div>
+            <div className="total-row">
+              <span>EFECTIVO USD CONTADO:</span>
+              <span>{formatCurrency(usd.closingCash || 0, 'USD')}</span>
+            </div>
+            <div className={`total-row highlight ${
+              (usd.difference || 0) > 0 ? 'difference-positive' :
+              (usd.difference || 0) < 0 ? 'difference-negative' :
+              'difference-zero'
+            }`}>
+              <span>
+                DIFERENCIA USD:
+                {(usd.difference || 0) > 0 ? ' (Sobrante)' : (usd.difference || 0) < 0 ? ' (Faltante)' : ''}
+              </span>
+              <span>{formatCurrency(usd.difference || 0, 'USD')}</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Footer */}
       <div className="ticket-footer">
