@@ -45,6 +45,16 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency, formatProductPrice, applyMarginToCost } from '@/lib/utils'
+import {
+  isMultiCurrencyEnabled,
+  getDefaultCurrency,
+  convertToBase,
+  convertFromBase,
+  normalizeCurrency,
+  SUPPORTED_CURRENCIES,
+  BASE_CURRENCY,
+} from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -299,6 +309,21 @@ export default function POS() {
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   const [cart, setCart] = useState([])
+
+  // ===== Multi-divisa (USD) — solo en modo retail con flag activa ======
+  // Restaurant, hotel, etc. quedan SIEMPRE en PEN. Si el negocio activó
+  // multi-divisa en Configuración Y está en retail, aparece el selector.
+  const posMultiCurrencyOn = React.useMemo(
+    () => businessMode === 'retail' && isMultiCurrencyEnabled(businessSettings),
+    [businessMode, businessSettings]
+  )
+  const [currency, setCurrency] = useState(
+    posMultiCurrencyOn ? getDefaultCurrency(businessSettings) : BASE_CURRENCY
+  )
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs'|'cache'|'manual'
+  const [loadingRate, setLoadingRate] = useState(false)
+
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
   // Ref del botón "Procesar Venta". Cuando el usuario selecciona un método de pago,
@@ -556,6 +581,131 @@ export default function POS() {
 
   // Clave única para el localStorage basada en el businessId
   const getDraftKey = () => `pos_draft_${getBusinessId()}`
+
+  // ===== Multi-divisa: helpers + efectos =================================
+
+  // Trae el TC del día (SBS vía Cloud Function). Si el TC actual fue editado
+  // manualmente, no lo pisa salvo que se pase forceForToday=true.
+  const fetchExchangeRate = async (forceForToday = false) => {
+    if (loadingRate) return
+    setLoadingRate(true)
+    try {
+      const result = await getRateForDate(forceForToday ? new Date() : new Date())
+      if (result && Number.isFinite(result.sell) && result.sell > 0) {
+        setExchangeRate(Number(result.sell.toFixed(4)))
+        setExchangeRateSource(result.source)
+        if (result.source === 'sbs') {
+          toast.success(`Tipo de cambio del día: S/ ${result.sell.toFixed(4)} (SBS)`)
+        }
+      } else {
+        setExchangeRateSource(null)
+        toast.error('No se pudo obtener el TC SBS. Ingresa el valor manualmente.')
+      }
+    } catch (err) {
+      console.error('Error obteniendo TC:', err)
+    } finally {
+      setLoadingRate(false)
+    }
+  }
+
+  // Al cambiar a USD, si TC no fue editado (<= 1), traemos uno automáticamente.
+  useEffect(() => {
+    if (!posMultiCurrencyOn) return
+    if (currency === 'USD' && exchangeRate <= 1) {
+      fetchExchangeRate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency])
+
+  // Convierte un precio del catálogo (siempre en PEN) a la moneda activa
+  // de la sesión POS. Si la sesión es PEN, devuelve el mismo número.
+  const toSessionCurrency = (priceInBase) => {
+    const n = Number(priceInBase) || 0
+    if (currency === BASE_CURRENCY || n === 0) return n
+    return Number(convertFromBase(n, currency, exchangeRate).toFixed(2))
+  }
+
+  // Formatea el precio de un producto/variante mostrándolo en la moneda
+  // activa de la sesión. Para productos con variantes muestra rango "X – Y".
+  const formatCatalogPrice = (product) => {
+    if (!product) return formatCurrency(0, currency)
+    if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+      const prices = product.variants
+        .map((v) => Number(v?.price))
+        .filter((p) => Number.isFinite(p) && p > 0)
+        .map((p) => toSessionCurrency(p))
+      if (prices.length === 0) return formatCurrency(0, currency)
+      const min = Math.min(...prices)
+      const max = Math.max(...prices)
+      return min === max
+        ? formatCurrency(min, currency)
+        : `${formatCurrency(min, currency)} – ${formatCurrency(max, currency)}`
+    }
+    return formatCurrency(toSessionCurrency(Number(product.price) || 0), currency)
+  }
+
+  // Cambio de moneda con carrito lleno: convertir los precios de los items
+  // con el TC actual o pedir confirmación para vaciar. Esto preserva la
+  // composición del carrito sin perder el trabajo del cajero.
+  const handleCurrencyChange = (newCurrency) => {
+    if (newCurrency === currency) return
+    if (cart.length === 0) {
+      setCurrency(newCurrency)
+      return
+    }
+    // Necesitamos un TC válido para convertir. Si vamos a USD y TC=1, esperar
+    // a que termine el fetch (o pedirle que lo ingrese).
+    if (newCurrency === 'USD' && exchangeRate <= 1) {
+      toast.error('Espera a que se obtenga el tipo de cambio o ingrésalo manualmente antes de cambiar de moneda.')
+      return
+    }
+    const proceed = window.confirm(
+      `¿Convertir los precios del carrito de ${currency} a ${newCurrency} usando TC ${exchangeRate}?`
+    )
+    if (!proceed) return
+
+    setCart(prev => prev.map(item => {
+      const oldPrice = Number(item.price) || 0
+      let newPrice = oldPrice
+      // PEN → USD: dividir entre TC. USD → PEN: multiplicar.
+      if (currency === 'PEN' && newCurrency === 'USD') {
+        newPrice = Number(convertFromBase(oldPrice, 'USD', exchangeRate).toFixed(2))
+      } else if (currency === 'USD' && newCurrency === 'PEN') {
+        newPrice = Number(convertToBase(oldPrice, 'USD', exchangeRate).toFixed(2))
+      }
+      // También convertir itemDiscount si es monto (no porcentaje)
+      let newItemDiscount = item.itemDiscount
+      if (typeof item.itemDiscount === 'number' && item.itemDiscount > 0 && item.itemDiscountType !== 'percentage') {
+        if (currency === 'PEN' && newCurrency === 'USD') {
+          newItemDiscount = Number(convertFromBase(item.itemDiscount, 'USD', exchangeRate).toFixed(2))
+        } else if (currency === 'USD' && newCurrency === 'PEN') {
+          newItemDiscount = Number(convertToBase(item.itemDiscount, 'USD', exchangeRate).toFixed(2))
+        }
+      }
+      return { ...item, price: newPrice, itemDiscount: newItemDiscount }
+    }))
+    setCurrency(newCurrency)
+  }
+
+  // SUNAT: boletas siempre PEN. Si el usuario tiene moneda USD y elige
+  // boleta, lo forzamos a factura con aviso.
+  useEffect(() => {
+    if (!posMultiCurrencyOn) return
+    if (currency === 'USD' && documentType === 'boleta') {
+      // Si está permitido factura, cambiamos a factura.
+      if (!allowedDocumentTypes || allowedDocumentTypes.includes('factura')) {
+        setDocumentType('factura')
+        toast.info('Las boletas solo se emiten en Soles (SUNAT). Cambiamos a factura.')
+      } else {
+        // Si NO se permite factura, volvemos a PEN.
+        setCurrency('PEN')
+        setExchangeRate(1)
+        setExchangeRateSource(null)
+        toast.info('Las boletas solo se emiten en Soles (SUNAT). Moneda cambiada a PEN.')
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency, documentType])
 
   // Auto-seleccionar primer tipo de comprobante permitido si el actual no está permitido
   useEffect(() => {
@@ -2321,9 +2471,14 @@ export default function POS() {
       const isFreeProduct = Number(effectivePrice) === 0
       const alreadyLabeled = (product.name || '').includes('(BONIFICACIÓN)')
 
+      // Multi-divisa: convertir el precio a la moneda activa de la sesión.
+      // Catálogo guarda PEN; si la sesión es USD, dividimos por el TC.
+      const priceForCart = isFreeProduct ? 0 : toSessionCurrency(effectivePrice)
+
       const cartItem = {
         ...product,
         quantity: 1,
+        price: priceForCart,
         ...(isFreeProduct && {
           isBonificacion: true,
           taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
@@ -3497,6 +3652,12 @@ export default function POS() {
       }
     }
 
+    // Multi-divisa: equivalentes en moneda base (PEN) usando el TC actual.
+    // Si la sesión es PEN, son iguales a los nativos.
+    const subtotalInBase = convertToBase(subtotalAfterDiscount, currency, exchangeRate)
+    const igvInBase = convertToBase(igvAfterDiscount, currency, exchangeRate)
+    const totalInBase = convertToBase(totalFinal, currency, exchangeRate)
+
     return {
       subtotal: Number(baseAmounts.subtotal.toFixed(2)),
       discount: Number(totalDiscount.toFixed(2)), // Total de descuentos (ítems + global)
@@ -3508,12 +3669,16 @@ export default function POS() {
       recargoConsumo: Number(recargoConsumo.toFixed(2)),
       recargoConsumoRate: recargoConsumoConfig.enabled ? recargoConsumoConfig.rate : 0,
       total: Number(totalFinal.toFixed(2)),
+      // Equivalentes en PEN base
+      subtotalInBase: Number(subtotalInBase.toFixed(2)),
+      igvInBase: Number(igvInBase.toFixed(2)),
+      totalInBase: Number(totalInBase.toFixed(2)),
       // Montos por tipo de afectación (para mostrar desglose)
       gravado: baseAmounts.gravado,
       exonerado: baseAmounts.exonerado,
       inafecto: baseAmounts.inafecto,
     }
-  }, [cart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode])
+  }, [cart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
 
   // Actualizar pantalla de cliente cuando cambia el carrito
   useEffect(() => {
@@ -3971,6 +4136,12 @@ export default function POS() {
           igv: amounts.igv,
           igvByRate: amounts.igvByRate || {},
           total: amounts.total,
+          // Multi-divisa (demo): mismo modelo que la creación real
+          currency: normalizeCurrency(currency),
+          exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+          subtotalInBase: amounts.subtotalInBase,
+          igvInBase: amounts.igvInBase,
+          totalInBase: amounts.totalInBase,
           // Montos por tipo de afectación tributaria
           opGravadas: amounts.gravado?.total || 0,
           opExoneradas: amounts.exonerado?.total || 0,
@@ -4179,6 +4350,14 @@ export default function POS() {
         igv: amounts.igv,
         igvByRate: amounts.igvByRate || {},
         total: amounts.total,
+        // Multi-divisa: moneda nativa del documento + TC CONGELADO. PEN=1
+        // si no se activó multi-divisa o si se vende en soles. NUNCA se
+        // recalculan a posteriori los *InBase (reportes históricos fijos).
+        currency: normalizeCurrency(currency),
+        exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+        subtotalInBase: amounts.subtotalInBase,
+        igvInBase: amounts.igvInBase,
+        totalInBase: amounts.totalInBase,
         // Montos por tipo de afectación tributaria
         opGravadas: amounts.gravado?.total || 0,
         opExoneradas: amounts.exonerado?.total || 0,
@@ -5641,10 +5820,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {/* Móvil: precio y stock en línea */}
                       <div className="flex items-center justify-between sm:hidden gap-2">
                         <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {formatProductPrice(product)}
+                          {formatCatalogPrice(product)}
                           {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
                             <span className="text-[10px] font-normal text-gray-400 ml-1">
-                              - {formatCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2'))}
+                              - {formatCurrency(toSessionCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2')), currency)}
                             </span>
                           )}
                         </p>
@@ -5658,7 +5837,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {/* Tablet/Desktop: precio arriba, stock abajo */}
                       <div className="hidden sm:block overflow-hidden">
                         <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {formatProductPrice(product)}
+                          {formatCatalogPrice(product)}
                         </p>
                         <div className="flex items-center justify-between mt-1">
                           {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
@@ -5869,6 +6048,85 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   )}
                 </div>
               </div>
+
+              {/* 4b. Moneda (solo retail con flag multi-divisa activa) ===== */}
+              {posMultiCurrencyOn && (
+                <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-2.5 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    <label className="text-xs font-medium text-gray-700">
+                      Moneda
+                    </label>
+                    {documentType === 'boleta' && (
+                      <span className="text-[9px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
+                        Boleta → solo PEN
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    {SUPPORTED_CURRENCIES.map((ccy) => {
+                      const disabled = documentType === 'boleta' && ccy === 'USD'
+                      const active = currency === ccy
+                      return (
+                        <button
+                          key={ccy}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => handleCurrencyChange(ccy)}
+                          className={`flex-1 px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                            active
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {ccy === 'PEN' ? 'S/ Soles' : '$ Dólares'}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {currency === 'USD' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[11px] font-medium text-gray-700">
+                          TC (PEN/USD)
+                        </label>
+                        {exchangeRateSource === 'sbs' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                        )}
+                        {exchangeRateSource === 'cache' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
+                        )}
+                        {exchangeRateSource === 'manual' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 items-center">
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          value={exchangeRate}
+                          onChange={(e) => {
+                            setExchangeRate(parseFloat(e.target.value) || 0)
+                            setExchangeRateSource('manual')
+                          }}
+                          className="flex-1 h-7 px-2 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fetchExchangeRate(true)}
+                          disabled={loadingRate}
+                          className="h-7 px-2 text-[10px] font-medium rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          title="Obtener TC del día desde SBS"
+                        >
+                          {loadingRate ? '...' : 'SBS'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 5. Fecha de Emisión */}
               {businessSettings?.allowCustomEmissionDate && (
@@ -6516,7 +6774,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 <div className="text-[10px] text-gray-600 bg-white p-2 rounded border border-gray-200">
                                   <div className="flex justify-between">
                                     <span>Total Factura:</span>
-                                    <span className="font-medium">{formatCurrency(amounts.total)}</span>
+                                    <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
                                   </div>
                                   <div className="flex justify-between text-amber-700">
                                     <span>(-) Detracción ({DETRACTION_TYPES.find(t => t.code === detractionType)?.rate}%):</span>
@@ -6858,7 +7116,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {cart.length > 0 && (
                   <span className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 border border-primary-200 rounded-md">
                     <span className="text-[11px] font-medium text-primary-700">Total</span>
-                    <span className="text-sm font-bold text-primary-700">{formatCurrency(amounts.total)}</span>
+                    <span className="text-sm font-bold text-primary-700">{formatCurrency(amounts.total, currency)}</span>
                   </span>
                 )}
                 <div className="flex items-center gap-1">
@@ -7263,13 +7521,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     <div className="text-right">
                                       {displayQty > 1 && (
                                         <p className="text-sm text-gray-500">
-                                          {displayQty} x {formatCurrency(item.price)}
+                                          {displayQty} x {formatCurrency(item.price, currency)}
                                         </p>
                                       )}
                                       {displayDiscount > 0 ? (
                                         <>
                                           <p className="text-sm text-gray-400 line-through">
-                                            {formatCurrency(item.price * displayQty)}
+                                            {formatCurrency(item.price * displayQty, currency)}
                                           </p>
                                           <p className="font-bold text-orange-600 text-base xl:text-lg">
                                             {formatCurrency((item.price * displayQty) - displayDiscount)}
@@ -7277,7 +7535,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                         </>
                                       ) : (
                                         <p className="font-bold text-gray-900 text-base xl:text-lg">
-                                          {formatCurrency(item.price * displayQty)}
+                                          {formatCurrency(item.price * displayQty, currency)}
                                         </p>
                                       )}
                                     </div>
@@ -7305,7 +7563,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
+                  <span className="font-medium">{formatCurrency(amounts.subtotal, currency)}</span>
                 </div>
 
                 {/* Descuento General */}
@@ -7404,19 +7662,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     {amounts.itemDiscounts > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-orange-600">Dcto. por ítems:</span>
-                        <span className="font-semibold text-orange-600">-{formatCurrency(amounts.itemDiscounts)}</span>
+                        <span className="font-semibold text-orange-600">-{formatCurrency(amounts.itemDiscounts, currency)}</span>
                       </div>
                     )}
                     {amounts.globalDiscount > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-green-600">Dcto. general:</span>
-                        <span className="font-semibold text-green-600">-{formatCurrency(amounts.globalDiscount)}</span>
+                        <span className="font-semibold text-green-600">-{formatCurrency(amounts.globalDiscount, currency)}</span>
                       </div>
                     )}
                     {amounts.itemDiscounts > 0 && amounts.globalDiscount > 0 && (
                       <div className="flex justify-between text-base font-bold border-t border-gray-200 pt-2 mt-2">
                         <span className="text-gray-700">Total Descuentos:</span>
-                        <span className="text-red-600">-{formatCurrency(amounts.discount)}</span>
+                        <span className="text-red-600">-{formatCurrency(amounts.discount, currency)}</span>
                       </div>
                     )}
                   </div>
@@ -7431,14 +7689,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       .map(([rate, data]) => (
                         <div key={rate} className="flex justify-between text-sm">
                           <span className="text-gray-600">IGV ({rate}%):</span>
-                          <span className="font-medium">{formatCurrency(data.igv)}</span>
+                          <span className="font-medium">{formatCurrency(data.igv, currency)}</span>
                         </div>
                       ))
                   ) : (
                     // Tasa única: mostrar una sola línea
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">IGV ({Object.keys(amounts.igvByRate)[0] || taxConfig.igvRate}%):</span>
-                      <span className="font-medium">{formatCurrency(amounts.igv)}</span>
+                      <span className="font-medium">{formatCurrency(amounts.igv, currency)}</span>
                     </div>
                   )
                 )}
@@ -7446,21 +7704,21 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {amounts.recargoConsumo > 0 && (
                   <div className="flex justify-between text-sm text-green-700">
                     <span>Recargo Consumo ({amounts.recargoConsumoRate}%):</span>
-                    <span className="font-medium">{formatCurrency(amounts.recargoConsumo)}</span>
+                    <span className="font-medium">{formatCurrency(amounts.recargoConsumo, currency)}</span>
                   </div>
                 )}
                 {/* Mostrar montos exonerados si hay productos exonerados */}
                 {amounts.exonerado?.total > 0 && (
                   <div className="flex justify-between text-sm text-amber-700">
                     <span>Op. Exoneradas:</span>
-                    <span className="font-medium">{formatCurrency(amounts.exonerado.total)}</span>
+                    <span className="font-medium">{formatCurrency(amounts.exonerado.total, currency)}</span>
                   </div>
                 )}
                 {/* Mostrar montos inafectos si hay productos inafectos */}
                 {amounts.inafecto?.total > 0 && (
                   <div className="flex justify-between text-sm text-blue-700">
                     <span>Op. Inafectas:</span>
-                    <span className="font-medium">{formatCurrency(amounts.inafecto.total)}</span>
+                    <span className="font-medium">{formatCurrency(amounts.inafecto.total, currency)}</span>
                   </div>
                 )}
                 {/* Mostrar badge si está exonerado de IGV (empresa) */}
@@ -7470,9 +7728,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 )}
                 <div className="flex justify-between text-xl sm:text-2xl font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span className="text-primary-600">{formatCurrency(amounts.total)}</span>
+                  <span className="flex items-center gap-2">
+                    Total:
+                    {posMultiCurrencyOn && currency === 'USD' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD · TC {exchangeRate}</span>
+                    )}
+                  </span>
+                  <span className="text-primary-600">{formatCurrency(amounts.total, currency)}</span>
                 </div>
+                {posMultiCurrencyOn && currency === 'USD' && exchangeRate > 0 && (
+                  <div className="text-right text-xs text-gray-500 -mt-1">
+                    ≈ {formatCurrency(amounts.totalInBase, 'PEN')} al TC congelado
+                  </div>
+                )}
 
                 {/* Advertencia SUNAT para boletas mayores a 700 soles */}
                 {documentType === 'boleta' && amounts.total > 700 && (
@@ -7543,11 +7811,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <div className="text-xs space-y-1 pt-1">
                             <div className="flex justify-between text-gray-600">
                               <span>Pagando ahora:</span>
-                              <span className="font-semibold">{formatCurrency(parseFloat(partialPaymentAmount))}</span>
+                              <span className="font-semibold">{formatCurrency(parseFloat(partialPaymentAmount), currency)}</span>
                             </div>
                             <div className="flex justify-between text-orange-600">
                               <span>Saldo pendiente:</span>
-                              <span className="font-semibold">{formatCurrency(amounts.total - parseFloat(partialPaymentAmount))}</span>
+                              <span className="font-semibold">{formatCurrency(amounts.total - parseFloat(partialPaymentAmount), currency)}</span>
                             </div>
                           </div>
                         )}
@@ -7579,7 +7847,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             No requiere pago inmediato. El cliente pagará según las condiciones de crédito.
                           </p>
                           <p className="text-xs text-amber-700 mt-2">
-                            <strong>Monto pendiente:</strong> {formatCurrency(amounts.total)}
+                            <strong>Monto pendiente:</strong> {formatCurrency(amounts.total, currency)}
                           </p>
                           {paymentDueDate && (
                             <p className="text-xs text-amber-700 mt-1">
@@ -7601,7 +7869,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             No requiere pago inmediato. El cliente pagará después.
                           </p>
                           <p className="text-xs text-blue-700 mt-2">
-                            <strong>Saldo pendiente:</strong> {formatCurrency(amounts.total)}
+                            <strong>Saldo pendiente:</strong> {formatCurrency(amounts.total, currency)}
                           </p>
                         </div>
                       </div>
