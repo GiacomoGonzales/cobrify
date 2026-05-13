@@ -5904,7 +5904,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
         {/* Cart Panel */}
         <div className={`${expandedCart ? 'lg:col-span-2' : ''} min-w-0 lg:overflow-y-auto lg:overscroll-contain custom-scrollbar`}>
-          <Card className="flex flex-col h-full min-w-0">
+          {/* min-h-full + flex permite que la Card crezca con su contenido
+              cuando hay muchos campos (datos del cliente + carrito + métodos
+              de pago). Con h-full el fondo blanco se cortaba a la mitad y
+              los elementos quedaban en el aire. */}
+          <Card className="flex flex-col min-h-full min-w-0">
             <div className={`min-w-0 ${expandedCart ? 'lg:grid lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-gray-100' : ''}`}>
             <CardContent className="p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
               {/* 1. Sucursal (para series de documentos) */}
