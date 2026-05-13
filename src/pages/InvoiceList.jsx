@@ -40,6 +40,7 @@ import {
   Minus,
   ClipboardList,
   RefreshCw,
+  Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
@@ -198,6 +199,11 @@ export default function InvoiceList() {
 
   // Estados para exportación XML/CDR
   const [showXMLExportModal, setShowXMLExportModal] = useState(false)
+  // Modal para editar la fecha de emisión de una NC pendiente/rechazada
+  // antes de re-enviarla a SUNAT (típico: SUNAT rechaza por fecha vieja).
+  const [editingDateNC, setEditingDateNC] = useState(null) // doc completo de la NC
+  const [newIssueDate, setNewIssueDate] = useState('')
+  const [savingNCDate, setSavingNCDate] = useState(false)
   const [xmlExportFilters, setXmlExportFilters] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -1786,6 +1792,62 @@ Gracias por tu preferencia.`
   }
 
   // Función específica para enviar Notas de Crédito a SUNAT
+  // Abre el modal con la fecha actual de la NC para que el usuario la
+  // edite y la reenvíe a SUNAT (caso típico: SUNAT rechaza por fecha vieja).
+  const openEditNCDate = (invoice) => {
+    const currentDate = invoice.issueDate?.toDate
+      ? invoice.issueDate.toDate()
+      : invoice.issueDate
+        ? new Date(invoice.issueDate)
+        : new Date()
+    const yyyy = currentDate.getFullYear()
+    const mm = String(currentDate.getMonth() + 1).padStart(2, '0')
+    const dd = String(currentDate.getDate()).padStart(2, '0')
+    setNewIssueDate(`${yyyy}-${mm}-${dd}`)
+    setEditingDateNC(invoice)
+  }
+
+  const handleSaveNCDate = async (sendAfter = false) => {
+    if (!editingDateNC || !newIssueDate) return
+    if (savingNCDate) return
+    setSavingNCDate(true)
+    try {
+      const businessId = getBusinessId()
+      // Convertir YYYY-MM-DD a Date local (mediodía para evitar problemas TZ)
+      const [y, m, d] = newIssueDate.split('-').map(Number)
+      const issueDate = new Date(y, m - 1, d, 12, 0, 0)
+      const result = await updateInvoice(businessId, editingDateNC.id, {
+        issueDate,
+        // emissionDate también, por compatibilidad con XML SUNAT
+        emissionDate: newIssueDate,
+        // Reset estado SUNAT a "pending" si estaba rechazada o atascada,
+        // para que pueda re-enviarse con la nueva fecha.
+        ...((editingDateNC.sunatStatus === 'rejected' || editingDateNC.sunatStatus === 'signed' || editingDateNC.sunatStatus === 'SIGNED' || editingDateNC.sunatStatus === 'sending') && {
+          sunatStatus: 'pending',
+          sunatErrorMessage: null,
+        }),
+      })
+      if (!result.success) throw new Error(result.error || 'Error al actualizar fecha')
+
+      toast.success('Fecha de emisión actualizada')
+      const ncId = editingDateNC.id
+      setEditingDateNC(null)
+      setNewIssueDate('')
+
+      if (sendAfter) {
+        // Reenviar a SUNAT con la nueva fecha
+        await handleSendCreditNoteToSunat(ncId)
+      } else {
+        loadInvoices()
+      }
+    } catch (err) {
+      console.error('Error actualizando fecha NC:', err)
+      toast.error(err.message || 'No se pudo actualizar la fecha')
+    } finally {
+      setSavingNCDate(false)
+    }
+  }
+
   const handleSendCreditNoteToSunat = async (creditNoteId) => {
     if (!user?.uid) return
 
@@ -2962,6 +3024,24 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
+                  {/* Editar fecha de emisión (NC pendiente o rechazada).
+                      Útil cuando SUNAT rechaza por fecha vieja. */}
+                  {invoice.documentType === 'nota_credito' &&
+                   (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'rejected' ||
+                    invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'SIGNED' ||
+                    invoice.sunatStatus === 'sending') && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        openEditNCDate(invoice)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                      <span>Editar fecha y reenviar a SUNAT</span>
+                    </button>
+                  )}
+
                   {/* Reenviar Nota de Crédito a SUNAT (rechazada, firmada o atascada) */}
                   {invoice.documentType === 'nota_credito' &&
                    (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
@@ -3954,6 +4034,90 @@ Gracias por tu preferencia.`
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Editar fecha de emisión de NC pendiente/rechazada */}
+      <Modal
+        isOpen={!!editingDateNC}
+        onClose={() => {
+          if (!savingNCDate) {
+            setEditingDateNC(null)
+            setNewIssueDate('')
+          }
+        }}
+        title="Editar Fecha de Emisión"
+        size="md"
+      >
+        {editingDateNC && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-900">
+                <strong>NC:</strong> {editingDateNC.number}
+              </p>
+              {editingDateNC.referencedDocumentId && (
+                <p className="text-xs text-blue-700 mt-1">
+                  Documento original: {editingDateNC.referencedDocumentId}
+                </p>
+              )}
+              {editingDateNC.sunatStatus === 'rejected' && (
+                <p className="text-xs text-red-700 mt-2 font-medium">
+                  ⚠️ Rechazada por SUNAT. Actualizar la fecha y reintentar.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nueva fecha de emisión
+              </label>
+              <input
+                type="date"
+                value={newIssueDate}
+                onChange={(e) => setNewIssueDate(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                SUNAT acepta fechas dentro de los últimos días. Lo más seguro
+                es usar la fecha de hoy si la NC aún no fue aceptada.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingDateNC(null)
+                  setNewIssueDate('')
+                }}
+                disabled={savingNCDate}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSaveNCDate(false)}
+                disabled={savingNCDate || !newIssueDate}
+              >
+                {savingNCDate ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</>
+                ) : (
+                  'Solo guardar'
+                )}
+              </Button>
+              <Button
+                onClick={() => handleSaveNCDate(true)}
+                disabled={savingNCDate || !newIssueDate}
+              >
+                {savingNCDate ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enviando...</>
+                ) : (
+                  <><Send className="w-4 h-4 mr-2" />Guardar y enviar a SUNAT</>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Void SUNAT Invoice Modal (Comunicación de Baja) */}
