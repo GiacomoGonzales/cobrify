@@ -33,6 +33,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import {
   getQuotations,
   deleteQuotation,
@@ -312,6 +313,9 @@ export default function Quotations() {
             items: convertingQuotation.items,
             discount: convertingQuotation.discount || 0,
             discountType: convertingQuotation.discountType || 'fixed',
+            // Multi-divisa: propagar moneda y TC al POS
+            currency: convertingQuotation.currency || 'PEN',
+            exchangeRate: convertingQuotation.exchangeRate || 1,
           }
         })
 
@@ -340,6 +344,9 @@ export default function Quotations() {
           notes: quotationData.notes || '',
           discount: quotationData.discount || 0,
           discountType: quotationData.discountType || 'fixed',
+          // Multi-divisa: propagar moneda y TC heredados de la cotización
+          currency: quotationData.currency || 'PEN',
+          exchangeRate: quotationData.exchangeRate || 1,
         }
       })
 
@@ -502,9 +509,11 @@ export default function Quotations() {
     sent: dateFilteredQuotations.filter(q => q.status === 'sent').length,
     accepted: dateFilteredQuotations.filter(q => q.status === 'accepted').length,
     converted: dateFilteredQuotations.filter(q => q.status === 'converted').length,
+    // Multi-divisa: sumar equivalente PEN base usando TC congelado en cada
+    // cotización. PEN → tal cual; USD → multiplicado por su TC.
     totalAmount: dateFilteredQuotations
       .filter(q => q.status !== 'rejected' && q.status !== 'expired')
-      .reduce((sum, q) => sum + (q.total || 0), 0),
+      .reduce((sum, q) => sum + getDocumentTotalInBase(q), 0),
   }
 
   if (isLoading) {
@@ -793,7 +802,12 @@ export default function Quotations() {
                   {/* Fila inferior: Total + fechas + badge estado */}
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-sm">{formatCurrency(quotation.total)}</span>
+                      <span className="font-semibold text-sm flex items-center gap-1.5">
+                        {formatCurrency(quotation.total, quotation.currency)}
+                        {normalizeCurrency(quotation.currency) === 'USD' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                        )}
+                      </span>
                       <span className="text-xs text-gray-500">
                         {quotation.issueDate ? formatDate(getDateFromTimestamp(quotation.issueDate)) : quotation.createdAt ? formatDate(getDateFromTimestamp(quotation.createdAt)) : 'N/A'}
                       </span>
@@ -951,8 +965,11 @@ export default function Quotations() {
                       </div>
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
-                      <span className="font-semibold text-sm whitespace-nowrap">
-                        {formatCurrency(quotation.total)}
+                      <span className="font-semibold text-sm whitespace-nowrap flex items-center gap-1.5">
+                        {formatCurrency(quotation.total, quotation.currency)}
+                        {normalizeCurrency(quotation.currency) === 'USD' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
@@ -1215,10 +1232,10 @@ export default function Quotations() {
                         </p>
                       )}
                       <p className="text-xs text-gray-500 mt-1">
-                        {item.quantity} x {formatCurrency(item.unitPrice)}
+                        {item.quantity} x {formatCurrency(item.unitPrice, viewingQuotation?.currency)}
                       </p>
                     </div>
-                    <p className="font-semibold">{formatCurrency(item.subtotal)}</p>
+                    <p className="font-semibold">{formatCurrency(item.subtotal, viewingQuotation?.currency)}</p>
                   </div>
                 ))}
               </div>
@@ -1230,7 +1247,7 @@ export default function Quotations() {
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">{formatCurrency(viewingQuotation.subtotal)}</span>
+                    <span className="font-medium">{formatCurrency(viewingQuotation.subtotal, viewingQuotation.currency)}</span>
                   </div>
                   {viewingQuotation.discount && viewingQuotation.discount > 0 && (
                     <div className="flex justify-between text-sm">
@@ -1245,21 +1262,32 @@ export default function Quotations() {
                         - {formatCurrency(
                           viewingQuotation.discountType === 'percentage'
                             ? (viewingQuotation.subtotal * viewingQuotation.discount) / 100
-                            : viewingQuotation.discount
+                            : viewingQuotation.discount,
+                          viewingQuotation.currency
                         )}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGV (18%):</span>
-                    <span className="font-medium">{formatCurrency(viewingQuotation.igv)}</span>
+                    <span className="font-medium">{formatCurrency(viewingQuotation.igv, viewingQuotation.currency)}</span>
                   </div>
                 </>
               )}
               <div className="flex justify-between text-xl font-bold border-t pt-2">
-                <span>Total:</span>
-                <span className="text-primary-600">{formatCurrency(viewingQuotation.total)}</span>
+                <span className="flex items-center gap-2">
+                  Total:
+                  {normalizeCurrency(viewingQuotation.currency) === 'USD' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD · TC {viewingQuotation.exchangeRate || 1}</span>
+                  )}
+                </span>
+                <span className="text-primary-600">{formatCurrency(viewingQuotation.total, viewingQuotation.currency)}</span>
               </div>
+              {normalizeCurrency(viewingQuotation.currency) === 'USD' && (
+                <div className="text-right text-xs text-gray-500 pt-1">
+                  ≈ {formatCurrency(getDocumentTotalInBase(viewingQuotation), 'PEN')} al TC congelado
+                </div>
+              )}
             </div>
 
             {/* Notes */}

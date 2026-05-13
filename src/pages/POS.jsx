@@ -1312,6 +1312,20 @@ export default function POS() {
         setDocumentType('factura')
       }
 
+      // Multi-divisa: heredar moneda y TC de la cotización (si la flag
+      // está activa). El cajero podrá ajustar el TC antes de cobrar.
+      if (posMultiCurrencyOn && quotationInfo.currency) {
+        const qCcy = normalizeCurrency(quotationInfo.currency)
+        setCurrency(qCcy)
+        if (qCcy === 'USD') {
+          const r = Number(quotationInfo.exchangeRate)
+          if (Number.isFinite(r) && r > 0) {
+            setExchangeRate(r)
+            setExchangeRateSource('manual')
+          }
+        }
+      }
+
       toast.success(`Cotización ${quotationInfo.quotationNumber} cargada - ${quotationInfo.items?.length || 0} items. Revisa y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,6 +12,16 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency } from '@/lib/utils'
+import {
+  isMultiCurrencyEnabled,
+  getDefaultCurrency,
+  convertToBase,
+  convertFromBase,
+  normalizeCurrency,
+  SUPPORTED_CURRENCIES,
+  BASE_CURRENCY,
+} from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -138,6 +148,20 @@ export default function CreateQuotation() {
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
   const [hideIgv, setHideIgv] = useState(isIgvExempt)
 
+  // ===== Multi-divisa (opt-in) =====
+  const quoteMultiCurrencyOn = useMemo(
+    () => isMultiCurrencyEnabled(businessSettings),
+    [businessSettings]
+  )
+  const [currency, setCurrency] = useState(
+    quoteMultiCurrencyOn ? getDefaultCurrency(businessSettings) : BASE_CURRENCY
+  )
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRateSource, setExchangeRateSource] = useState(null)
+  const [loadingRate, setLoadingRate] = useState(false)
+  const [exchangeRateInput, setExchangeRateInput] = useState('1')
+  const [tcInputFocused, setTcInputFocused] = useState(false)
+
   // Serie y número personalizado
   const [customSeries, setCustomSeries] = useState('')
   const [customNumber, setCustomNumber] = useState('')
@@ -177,6 +201,121 @@ export default function CreateQuotation() {
       setHideIgv(true)
     }
   }, [isIgvExempt, quotationId])
+
+  // ===== Multi-divisa: handlers y efectos =====
+
+  // Trae el TC del día (SBS via Cloud Function).
+  const fetchExchangeRate = async () => {
+    if (loadingRate) return
+    setLoadingRate(true)
+    try {
+      const result = await getRateForDate(new Date())
+      if (result && Number.isFinite(result.sell) && result.sell > 0) {
+        setExchangeRate(Number(result.sell.toFixed(4)))
+        setExchangeRateSource(result.source)
+        if (result.source === 'sbs') {
+          toast.success(`Tipo de cambio: S/ ${result.sell.toFixed(4)} (SBS)`)
+        }
+      } else {
+        setExchangeRateSource(null)
+        toast.error('No se pudo obtener el TC SBS. Ingrésalo manualmente.')
+      }
+    } catch (err) {
+      console.error('Error obteniendo TC:', err)
+    } finally {
+      setLoadingRate(false)
+    }
+  }
+
+  // Al cambiar a USD por primera vez, traer TC del día.
+  useEffect(() => {
+    if (!quoteMultiCurrencyOn) return
+    if (currency === 'USD' && exchangeRate <= 1) {
+      fetchExchangeRate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency])
+
+  // Sincronizar texto del input TC con el state (solo cuando NO está enfocado).
+  useEffect(() => {
+    if (tcInputFocused) return
+    setExchangeRateInput(exchangeRate > 0 ? String(exchangeRate) : '')
+  }, [exchangeRate, tcInputFocused])
+
+  // Convierte un precio del catálogo (siempre PEN) a la moneda activa.
+  const toSessionCurrency = (priceInBase) => {
+    const n = Number(priceInBase) || 0
+    if (currency === BASE_CURRENCY || n === 0) return n
+    return Number(convertFromBase(n, currency, exchangeRate).toFixed(2))
+  }
+
+  // Cambiar moneda — si hay items en el carrito, convertir sus precios
+  // usando basePrice (PEN) cuando exista, sino conversión directa.
+  const handleCurrencyChange = async (newCurrency) => {
+    if (newCurrency === currency) return
+
+    // Asegurar TC válido si vamos a USD.
+    let effectiveRate = exchangeRate
+    if (newCurrency === 'USD' && exchangeRate <= 1) {
+      setLoadingRate(true)
+      try {
+        const result = await getRateForDate(new Date())
+        if (result && Number.isFinite(result.sell) && result.sell > 0) {
+          effectiveRate = Number(result.sell.toFixed(4))
+          setExchangeRate(effectiveRate)
+          setExchangeRateSource(result.source)
+          if (result.source === 'sbs') toast.success(`TC: S/ ${effectiveRate} (SBS)`)
+        } else {
+          toast.error('No se pudo obtener el TC. Ingrésalo manualmente.')
+          setLoadingRate(false)
+          return
+        }
+      } catch (err) {
+        console.error(err)
+        toast.error('No se pudo obtener el TC. Ingrésalo manualmente.')
+        setLoadingRate(false)
+        return
+      }
+      setLoadingRate(false)
+    }
+
+    // Si hay items, recalcular precios desde basePrice cuando exista.
+    setQuotationItems(prev => prev.map(item => {
+      const oldPrice = Number(item.unitPrice) || 0
+      if (oldPrice === 0) return item
+      const baseInPEN = Number(item.basePrice)
+      const hasBase = Number.isFinite(baseInPEN) && baseInPEN > 0
+      let newPrice = oldPrice
+      if (hasBase) {
+        newPrice = newCurrency === 'PEN'
+          ? baseInPEN
+          : Number(convertFromBase(baseInPEN, 'USD', effectiveRate).toFixed(2))
+      } else {
+        if (currency === 'PEN' && newCurrency === 'USD') {
+          newPrice = Number(convertFromBase(oldPrice, 'USD', effectiveRate).toFixed(2))
+        } else if (currency === 'USD' && newCurrency === 'PEN') {
+          newPrice = Number(convertToBase(oldPrice, 'USD', effectiveRate).toFixed(2))
+        }
+      }
+      return { ...item, unitPrice: newPrice }
+    }))
+    setCurrency(newCurrency)
+  }
+
+  // Cuando el cajero edita TC manualmente, recomputar precios USD del
+  // carrito desde basePrice (PEN) sin pérdida de precisión.
+  useEffect(() => {
+    if (!quoteMultiCurrencyOn) return
+    if (currency !== 'USD' || !exchangeRate || exchangeRate <= 0) return
+    setQuotationItems(prev => prev.map(item => {
+      const baseInPEN = Number(item.basePrice)
+      if (!Number.isFinite(baseInPEN) || baseInPEN <= 0) return item
+      const newPrice = Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
+      if (Math.abs((Number(item.unitPrice) || 0) - newPrice) < 0.005) return item
+      return { ...item, unitPrice: newPrice }
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchangeRate])
 
   // Cargar borrador al montar (solo en modo creación nueva, no edición ni clonación)
   useEffect(() => {
@@ -376,6 +515,15 @@ export default function CreateQuotation() {
           setNotes(q.notes || '')
           setHideIgv(q.hideIgv || false)
 
+          // Multi-divisa: restaurar moneda y TC de la cotización
+          if (quoteMultiCurrencyOn) {
+            const qCcy = normalizeCurrency(q.currency)
+            setCurrency(qCcy)
+            const r = Number(q.exchangeRate)
+            setExchangeRate(Number.isFinite(r) && r > 0 ? r : 1)
+            setExchangeRateSource(q.exchangeRate ? 'manual' : null)
+          }
+
           // Cargar destinatario
           setRecipientName(q.recipientName || '')
           setRecipientPosition(q.recipientPosition || '')
@@ -468,6 +616,15 @@ export default function CreateQuotation() {
           setTerms(q.terms || '')
           setNotes(q.notes || '')
           setHideIgv(q.hideIgv || false)
+
+          // Multi-divisa: restaurar moneda y TC de la cotización
+          if (quoteMultiCurrencyOn) {
+            const qCcy = normalizeCurrency(q.currency)
+            setCurrency(qCcy)
+            const r = Number(q.exchangeRate)
+            setExchangeRate(Number.isFinite(r) && r > 0 ? r : 1)
+            setExchangeRateSource(q.exchangeRate ? 'manual' : null)
+          }
 
           // Cargar destinatario
           setRecipientName(q.recipientName || '')
@@ -587,7 +744,10 @@ export default function CreateQuotation() {
     newItems[index].productId = product.id
     newItems[index].name = finalName
     newItems[index].description = product.description || ''
-    newItems[index].unitPrice = finalPrice
+    // Multi-divisa: finalPrice viene del catálogo (PEN). Guardar basePrice
+    // como source of truth y convertir unitPrice si la sesión es USD.
+    newItems[index].basePrice = Number(finalPrice) || 0
+    newItems[index].unitPrice = toSessionCurrency(finalPrice)
     newItems[index].unit = finalUnit
     newItems[index].searchTerm = finalName
     newItems[index].presentationName = presentationInfo
@@ -741,7 +901,10 @@ export default function CreateQuotation() {
 
   const setItemPrice = (index, newPrice) => {
     const newItems = [...quotationItems]
-    newItems[index].unitPrice = newPrice
+    // newPrice viene del catálogo (PEN). En USD se convierte; basePrice
+    // se actualiza para que round-trips de moneda preserven valor exacto.
+    newItems[index].basePrice = Number(newPrice) || 0
+    newItems[index].unitPrice = toSessionCurrency(newPrice)
     setQuotationItems(newItems)
     setPricePickerIndex(null)
   }
@@ -996,6 +1159,11 @@ export default function CreateQuotation() {
           description: item.description || '',
           quantity: parseFloat(item.quantity),
           unitPrice: parseFloat(item.unitPrice),
+          // Multi-divisa: si la cotización es USD, persistir basePrice (PEN
+          // exacto) para conversiones futuras sin pérdida de precisión.
+          ...(currency === 'USD' && Number(item.basePrice) > 0 && {
+            basePrice: Number(item.basePrice),
+          }),
           unit: item.unit,
           subtotal: calculateItemTotal(item),
           imageUrl: item.imageUrl || productCatalog?.imageUrl || productCatalog?.image || '',
@@ -1031,6 +1199,25 @@ export default function CreateQuotation() {
       // Obtener datos del cliente
       const customerData = getCustomerData()
 
+      // Multi-divisa: equivalentes en PEN base. Si la cotización es USD,
+      // sumamos basePrice de items con basePrice + conversión TC para
+      // resto. Si es PEN, los inBase son iguales a los nativos.
+      const computeInBase = () => {
+        if (currency === 'PEN') {
+          return {
+            subtotalInBase: baseAmounts.subtotal,
+            igvInBase: finalIgv,
+            totalInBase: finalTotal,
+          }
+        }
+        return {
+          subtotalInBase: Number(convertToBase(baseAmounts.subtotal, 'USD', exchangeRate).toFixed(2)),
+          igvInBase: Number(convertToBase(finalIgv, 'USD', exchangeRate).toFixed(2)),
+          totalInBase: Number(convertToBase(finalTotal, 'USD', exchangeRate).toFixed(2)),
+        }
+      }
+      const inBaseAmounts = computeInBase()
+
       if (isEditing) {
         // MODO EDICIÓN: Actualizar cotización existente
         const quotationData = {
@@ -1042,6 +1229,10 @@ export default function CreateQuotation() {
           discountedSubtotal: discountedSubtotal,
           igv: finalIgv,
           total: finalTotal,
+          // Multi-divisa: moneda + TC congelado + equivalentes PEN base
+          currency: normalizeCurrency(currency),
+          exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+          ...inBaseAmounts,
           hideIgv: hideIgv,
           issueDate: new Date(issueDate + 'T00:00:00'),
           validityDays: parseInt(validityDays),
@@ -1090,6 +1281,10 @@ export default function CreateQuotation() {
           discountedSubtotal: discountedSubtotal,
           igv: finalIgv,
           total: finalTotal,
+          // Multi-divisa: moneda + TC congelado + equivalentes PEN base
+          currency: normalizeCurrency(currency),
+          exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
+          ...inBaseAmounts,
           hideIgv: hideIgv,
           issueDate: new Date(issueDate + 'T00:00:00'),
           validityDays: parseInt(validityDays),
@@ -1650,7 +1845,7 @@ export default function CreateQuotation() {
                                             )}
                                           </div>
                                           <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
-                                            {hasVariants ? `Desde ${formatCurrency(Math.min(...product.variants.map(v => v.price)))}` : formatCurrency(displayPrice)}
+                                            {hasVariants ? `Desde ${formatCurrency(toSessionCurrency(Math.min(...product.variants.map(v => v.price))), currency)}` : formatCurrency(toSessionCurrency(displayPrice), currency)}
                                           </span>
                                         </button>
                                       )
@@ -1729,7 +1924,7 @@ export default function CreateQuotation() {
                                             }`}
                                           >
                                             <span>{opt.label}</span>
-                                            <span className="font-medium">{formatCurrency(opt.value)}</span>
+                                            <span className="font-medium">{formatCurrency(toSessionCurrency(opt.value), currency)}</span>
                                           </button>
                                         ))}
                                       </div>
@@ -1743,7 +1938,7 @@ export default function CreateQuotation() {
                         {/* Subtotal */}
                         <td className="px-4 py-2 text-right">
                           <span className="font-semibold text-sm text-gray-900">
-                            {formatCurrency(calculateItemTotal(item))}
+                            {formatCurrency(calculateItemTotal(item), currency)}
                           </span>
                         </td>
                         {/* Eliminar */}
@@ -1981,7 +2176,7 @@ export default function CreateQuotation() {
                         <label className="block text-xs text-gray-500 mb-1">Subtotal</label>
                         <div className="h-[34px] flex items-center justify-center bg-gray-50 border border-gray-200 rounded">
                           <span className="font-semibold text-sm text-gray-900">
-                            {formatCurrency(calculateItemTotal(item))}
+                            {formatCurrency(calculateItemTotal(item), currency)}
                           </span>
                         </div>
                       </div>
@@ -2009,6 +2204,91 @@ export default function CreateQuotation() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Selector de Moneda (multi-divisa, opt-in) */}
+                {quoteMultiCurrencyOn && (
+                  <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <label className="text-sm font-medium text-gray-700">Moneda de la cotización</label>
+                    </div>
+                    <div className="flex gap-2">
+                      {SUPPORTED_CURRENCIES.map((ccy) => {
+                        const active = currency === ccy
+                        return (
+                          <button
+                            key={ccy}
+                            type="button"
+                            onClick={() => handleCurrencyChange(ccy)}
+                            className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              active
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {ccy === 'PEN' ? 'S/  Soles' : '$  Dólares'}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {currency === 'USD' && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-medium text-gray-700">
+                            Tipo de cambio (PEN por USD)
+                          </label>
+                          {exchangeRateSource === 'sbs' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                          )}
+                          {exchangeRateSource === 'cache' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
+                          )}
+                          {exchangeRateSource === 'manual' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            step="0.0001"
+                            min="0"
+                            value={exchangeRateInput}
+                            onFocus={() => setTcInputFocused(true)}
+                            onBlur={() => {
+                              setTcInputFocused(false)
+                              const parsed = parseFloat(exchangeRateInput)
+                              if (!Number.isFinite(parsed) || parsed <= 0) {
+                                setExchangeRateInput(exchangeRate > 0 ? String(exchangeRate) : '')
+                              }
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setExchangeRateInput(val)
+                              const parsed = parseFloat(val)
+                              if (Number.isFinite(parsed) && parsed > 0) {
+                                setExchangeRate(parsed)
+                                setExchangeRateSource('manual')
+                              }
+                            }}
+                            className="flex-1 h-9 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={fetchExchangeRate}
+                            disabled={loadingRate}
+                            className="h-9 px-3 text-xs font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                            title="Obtener TC del día desde SBS"
+                          >
+                            {loadingRate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                            SBS
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                          El TC se congela al guardar. Al convertir la cotización a factura, el POS heredará esta moneda.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <Input
                     type="date"
@@ -2030,13 +2310,13 @@ export default function CreateQuotation() {
                     value={discountType}
                     onChange={e => setDiscountType(e.target.value)}
                   >
-                    <option value="fixed">Monto Fijo (S/)</option>
+                    <option value="fixed">Monto Fijo ({currency === 'USD' ? '$' : 'S/'})</option>
                     <option value="percentage">Porcentaje (%)</option>
                   </Select>
 
                   <Input
                     type="number"
-                    label={`Descuento ${discountType === 'percentage' ? '(%)' : '(S/)'}`}
+                    label={`Descuento ${discountType === 'percentage' ? '(%)' : `(${currency === 'USD' ? '$' : 'S/'})`}`}
                     value={discount}
                     onChange={e => setDiscount(e.target.value)}
                     min="0"
@@ -2120,7 +2400,7 @@ export default function CreateQuotation() {
                   {!hideIgv && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
+                      <span className="font-medium">{formatCurrency(discountedSubtotal, currency)}</span>
                     </div>
                   )}
                   {discount > 0 && (
@@ -2128,24 +2408,34 @@ export default function CreateQuotation() {
                       <span>
                         Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
                       </span>
-                      <span className="font-medium">- {formatCurrency(discountAmount)}</span>
+                      <span className="font-medium">- {formatCurrency(discountAmount, currency)}</span>
                     </div>
                   )}
                   {!hideIgv && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">{isIgvExempt ? 'OP. EXONERADA:' : 'IGV (18%):'}</span>
-                      <span className="font-medium">{formatCurrency(finalIgv)}</span>
+                      <span className="font-medium">{formatCurrency(finalIgv, currency)}</span>
                     </div>
                   )}
                 </div>
 
                 <div className="pt-4 border-t">
                   <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900">Total:</span>
+                    <span className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      Total:
+                      {quoteMultiCurrencyOn && currency === 'USD' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD · TC {exchangeRate}</span>
+                      )}
+                    </span>
                     <span className="text-2xl font-bold text-primary-600">
-                      {formatCurrency(finalTotal)}
+                      {formatCurrency(finalTotal, currency)}
                     </span>
                   </div>
+                  {quoteMultiCurrencyOn && currency === 'USD' && exchangeRate > 0 && (
+                    <div className="text-right text-xs text-gray-500 mt-1">
+                      ≈ {formatCurrency(convertToBase(finalTotal, 'USD', exchangeRate), 'PEN')} al TC congelado
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t space-y-2 text-sm text-gray-600">
@@ -2342,7 +2632,7 @@ export default function CreateQuotation() {
                         ))}
                       </div>
                       <p className="text-lg font-bold text-primary-600">
-                        {formatCurrency(variant.price)}
+                        {formatCurrency(toSessionCurrency(variant.price), currency)}
                       </p>
                     </div>
                     <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
@@ -2396,7 +2686,7 @@ export default function CreateQuotation() {
                 </span>
               </div>
               <p className="text-lg font-bold text-primary-600">
-                {formatCurrency(priceSource?.price || 0)}
+                {formatCurrency(toSessionCurrency(priceSource?.price || 0), currency)}
               </p>
             </button>
 
@@ -2414,7 +2704,7 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-green-600">
-                  {formatCurrency(priceSource?.price2)}
+                  {formatCurrency(toSessionCurrency(priceSource?.price2), currency)}
                 </p>
               </button>
             )}
@@ -2433,7 +2723,7 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-blue-600">
-                  {formatCurrency(priceSource?.price3)}
+                  {formatCurrency(toSessionCurrency(priceSource?.price3), currency)}
                 </p>
               </button>
             )}
@@ -2452,7 +2742,7 @@ export default function CreateQuotation() {
                   </span>
                 </div>
                 <p className="text-lg font-bold text-purple-600">
-                  {formatCurrency(priceSource?.price4)}
+                  {formatCurrency(toSessionCurrency(priceSource?.price4), currency)}
                 </p>
               </button>
             )}
@@ -2503,7 +2793,7 @@ export default function CreateQuotation() {
                 </div>
               </div>
               <p className="text-lg font-bold text-primary-600">
-                {formatCurrency(pendingProductSelection?.product?.price || 0)}
+                {formatCurrency(toSessionCurrency(pendingProductSelection?.product?.price || 0), currency)}
               </p>
             </button>
 
@@ -2525,7 +2815,7 @@ export default function CreateQuotation() {
                   </div>
                 </div>
                 <p className="text-lg font-bold text-primary-600">
-                  {formatCurrency(presentation.price)}
+                  {formatCurrency(toSessionCurrency(presentation.price), currency)}
                 </p>
               </button>
             ))}

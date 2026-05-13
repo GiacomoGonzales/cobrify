@@ -277,7 +277,9 @@ export const convertToInvoice = async (userId, quotationId) => {
       return { success: false, error: 'La cotización ya fue convertida a factura' }
     }
 
-    // Retornar los datos necesarios para crear la factura
+    // Retornar los datos necesarios para crear la factura.
+    // Multi-divisa: propagar moneda y TC para que el POS los herede.
+    // El usuario podrá ajustar el TC al cobrar si difiere del cotizado.
     return {
       success: true,
       data: {
@@ -286,6 +288,8 @@ export const convertToInvoice = async (userId, quotationId) => {
         subtotal: quotation.subtotal,
         igv: quotation.igv,
         total: quotation.total,
+        currency: quotation.currency || 'PEN',
+        exchangeRate: quotation.exchangeRate || 1,
         notes: quotation.notes,
         discount: quotation.discount,
         discountType: quotation.discountType,

@@ -385,6 +385,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [120, 120, 120]
 
+  // Multi-divisa: símbolo y nombre según la moneda de la cotización
+  const quotationCurrency = quotation?.currency === 'USD' ? 'USD' : 'PEN'
+  const currencySymbol = quotationCurrency === 'USD' ? '$' : 'S/'
+  const currencyName = quotationCurrency === 'USD' ? 'DÓLARES' : 'SOLES'
+
   // Color de acento dinámico (configurado por el usuario)
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
@@ -782,8 +787,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   doc.setFont('helvetica', 'bold')
   doc.text('MONEDA:', colRightX, rightY)
+  // (USD si quotation.currency === 'USD', si no SOLES — ver currencyName)
   doc.setFont('helvetica', 'normal')
-  doc.text('SOLES', rightValueX, rightY)
+  doc.text(currencyName, rightValueX, rightY)
   rightY += dataLineHeight
 
   // Destinatario (si existe)
@@ -1176,7 +1182,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   let footerY = dataRowY + (spacious ? 15 : 8)
 
   // ========== SON: (MONTO EN LETRAS) ==========
-  const montoEnLetras = numeroALetras(quotation.total || 0) + ' SOLES'
+  const montoEnLetras = numeroALetras(quotation.total || 0) + ' ' + currencyName
 
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
@@ -1247,7 +1253,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    doc.text(currencySymbol + ' ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   } else {
     // Mostrar desglose completo: Subtotal, Descuento (si hay), IGV, TOTAL
     const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
@@ -1265,7 +1271,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
     doc.text(labelGravada, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (quotation.discountedSubtotal || quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text(currencySymbol + ' ' + (quotation.discountedSubtotal || quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
     // Fila de descuento (si hay)
@@ -1296,7 +1302,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
     doc.setTextColor(...BLACK)
     doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text(currencySymbol + ' ' + (quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
     // Fila: TOTAL
@@ -1307,7 +1313,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    doc.text(currencySymbol + ' ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   }
 
   // --- CUENTAS BANCARIAS (izquierda) ---
