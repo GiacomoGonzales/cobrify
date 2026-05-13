@@ -4,6 +4,7 @@ import { es } from 'date-fns/locale'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { normalizeCurrency } from '@/utils/currency'
 
 /**
  * Servicio de exportación para la página de Contabilidad.
@@ -133,6 +134,32 @@ const totalNumberStyle = {
   numFmt: '#,##0.00',
 }
 
+// Number format con prefijo de moneda (PEN/USD) para diferenciar
+// visualmente en hojas mixtas.
+const numberStyleCcy = (i, ccy) => ({
+  font: { sz: 10, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: i % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
+  alignment: { horizontal: 'right', vertical: 'center' },
+  border: BORDER_ALL,
+  numFmt: ccy === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+const totalNumberStyleCcy = (ccy) => ({
+  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: COLORS.totalBg } },
+  alignment: { horizontal: 'right', vertical: 'center' },
+  border: BORDER_ALL,
+  numFmt: ccy === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+// Badge USD/PEN para la columna Moneda
+const currencyTagStyle = (i, ccy) => ({
+  font: { bold: true, sz: 9, color: { rgb: ccy === 'USD' ? '047857' : '4B5563' } },
+  fill: { fgColor: { rgb: ccy === 'USD' ? 'D1FAE5' : (i % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg) } },
+  alignment: { horizontal: 'center', vertical: 'center' },
+  border: BORDER_ALL,
+})
+
 function setStyle(ws, row, col, style) {
   const addr = XLSX.utils.encode_cell({ r: row, c: col })
   if (!ws[addr]) ws[addr] = { t: 's', v: '' }
@@ -168,13 +195,25 @@ const hasXml = (inv) => {
  * Construye el workbook con estilos. Retorna el workbook listo para escribir.
  */
 function buildAccountingWorkbook(filtered, businessData = null, periodLabel = null) {
+  // Multi-divisa: detectar si hay facturas USD. Si las hay, agregamos
+  // columna "Moneda" y totales separados por moneda.
+  const hasUsdInvoices = filtered.some(inv => normalizeCurrency(inv.currency) === 'USD')
+
   const headers = [
     'Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
     'Subtotal', 'Descuento', 'IGV', 'Total',
+    ...(hasUsdInvoices ? ['Moneda'] : []),
     'Estado SUNAT', 'XML', 'CDR', 'Hash SUNAT',
   ]
   const totalCols = headers.length
+  // Índice de la columna "Moneda" (si existe). Se inserta justo después
+  // de "Total" (índice 11). Las columnas posteriores corren un slot.
+  const ccyCol = hasUsdInvoices ? 12 : -1
+  const sunatCol = hasUsdInvoices ? 13 : 12
+  const xmlCol = hasUsdInvoices ? 14 : 13
+  const cdrCol = hasUsdInvoices ? 15 : 14
+  const hashCol = hasUsdInvoices ? 16 : 15
 
   const aoa = []
   aoa.push(['REPORTE CONTABLE'])
@@ -191,11 +230,14 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   aoa.push(headers)
 
   const docTypes = [] // para estilizar el badge
+  const invoiceCurrencies = [] // moneda nativa por fila (para estilos)
 
   const dataStart = aoa.length
   filtered.forEach(inv => {
     const docType = inv.documentType || 'factura'
+    const invCcy = normalizeCurrency(inv.currency)
     docTypes.push(docType)
+    invoiceCurrencies.push(invCcy)
 
     // Calcular desglose tributario
     let opGravada = 0, opExonerada = 0, opInafecta = 0
@@ -232,6 +274,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
       Number((inv.discount || 0).toFixed(2)),
       Number((inv.igv || inv.tax || 0).toFixed(2)),
       Number((inv.total || 0).toFixed(2)),
+      ...(hasUsdInvoices ? [invCcy] : []),
       sunatLabel,
       hasXml(inv) ? 'Sí' : 'No',
       hasCdr(inv) ? 'Sí' : 'No',
@@ -240,8 +283,11 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   })
   const dataEnd = aoa.length - 1
 
-  // Totales
-  const totals = filtered.reduce((acc, inv) => {
+  // Totales agrupados por moneda. Cuando hay solo PEN, se mantiene una
+  // fila "TOTALES" como antes. Cuando hay USD también, dos filas.
+  const totalsByCurrency = filtered.reduce((acc, inv) => {
+    const ccy = normalizeCurrency(inv.currency)
+    if (!acc[ccy]) acc[ccy] = { gravada: 0, exonerada: 0, inafecta: 0, subtotal: 0, descuento: 0, igv: 0, total: 0 }
     let g = 0, e = 0, ia = 0
     inv.items?.forEach(item => {
       const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
@@ -249,30 +295,37 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
       else if (item.taxAffectation === '30') ia += t
       else g += t
     })
-    return {
-      gravada: acc.gravada + g,
-      exonerada: acc.exonerada + e,
-      inafecta: acc.inafecta + ia,
-      subtotal: acc.subtotal + (inv.subtotal || 0),
-      descuento: acc.descuento + (inv.discount || 0),
-      igv: acc.igv + (inv.igv || inv.tax || 0),
-      total: acc.total + (inv.total || 0),
-    }
-  }, { gravada: 0, exonerada: 0, inafecta: 0, subtotal: 0, descuento: 0, igv: 0, total: 0 })
+    acc[ccy].gravada += g
+    acc[ccy].exonerada += e
+    acc[ccy].inafecta += ia
+    acc[ccy].subtotal += (inv.subtotal || 0)
+    acc[ccy].descuento += (inv.discount || 0)
+    acc[ccy].igv += (inv.igv || inv.tax || 0)
+    acc[ccy].total += (inv.total || 0)
+    return acc
+  }, {})
 
   aoa.push([])
-  const totalRow = aoa.length
-  aoa.push([
-    '', '', '', '', 'TOTALES:',
-    Number(totals.gravada.toFixed(2)),
-    Number(totals.exonerada.toFixed(2)),
-    Number(totals.inafecta.toFixed(2)),
-    Number(totals.subtotal.toFixed(2)),
-    Number(totals.descuento.toFixed(2)),
-    Number(totals.igv.toFixed(2)),
-    Number(totals.total.toFixed(2)),
-    '', '', '', '',
-  ])
+  const totalRows = [] // { row, ccy } para estilizar
+  const totalsOrder = ['PEN', 'USD'].filter(c => totalsByCurrency[c])
+  totalsOrder.forEach(ccy => {
+    const t = totalsByCurrency[ccy]
+    const label = totalsOrder.length === 1 ? 'TOTALES:' : `TOTAL ${ccy}:`
+    const baseRow = [
+      '', '', '', '', label,
+      Number(t.gravada.toFixed(2)),
+      Number(t.exonerada.toFixed(2)),
+      Number(t.inafecta.toFixed(2)),
+      Number(t.subtotal.toFixed(2)),
+      Number(t.descuento.toFixed(2)),
+      Number(t.igv.toFixed(2)),
+      Number(t.total.toFixed(2)),
+    ]
+    if (hasUsdInvoices) baseRow.push(ccy)
+    baseRow.push('', '', '', '')
+    totalRows.push({ row: aoa.length, ccy })
+    aoa.push(baseRow)
+  })
 
   // Crear sheet
   const ws = XLSX.utils.aoa_to_sheet(aoa)
@@ -289,6 +342,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
     { wch: 12 },  // Descuento
     { wch: 11 },  // IGV
     { wch: 13 },  // Total
+    ...(hasUsdInvoices ? [{ wch: 10 }] : []),  // Moneda
     { wch: 14 },  // Estado SUNAT
     { wch: 8 },   // XML
     { wch: 8 },   // CDR
@@ -315,25 +369,34 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   for (let i = 0; i < filtered.length; i++) {
     const r = dataStart + i
     const docType = docTypes[i]
+    const invCcy = invoiceCurrencies[i]
     setStyle(ws, r, 0, centerStyle(i))  // Número
     setStyle(ws, r, 1, typeTagStyle(i, docType))  // Tipo badge
     setStyle(ws, r, 2, cellStyle(i))  // Cliente
     setStyle(ws, r, 3, centerStyle(i))  // RUC/DNI
     setStyle(ws, r, 4, centerStyle(i))  // Fecha
-    for (let c = 5; c <= 11; c++) setStyle(ws, r, c, numberStyle(i))  // Números
-    const statusText = aoa[r][12]
-    setStyle(ws, r, 12, statusStyle(i, statusText))
-    setStyle(ws, r, 13, checkStyle(i, aoa[r][13]))
-    setStyle(ws, r, 14, checkStyle(i, aoa[r][14]))
-    setStyle(ws, r, 15, { ...cellStyle(i), font: { ...cellStyle(i).font, sz: 9, color: { rgb: '6B7280' } } })
+    // Op. Gravada..Total — formato con prefijo de moneda si es USD
+    for (let c = 5; c <= 11; c++) {
+      setStyle(ws, r, c, hasUsdInvoices ? numberStyleCcy(i, invCcy) : numberStyle(i))
+    }
+    if (hasUsdInvoices) {
+      setStyle(ws, r, ccyCol, currencyTagStyle(i, invCcy))
+    }
+    setStyle(ws, r, sunatCol, statusStyle(i, aoa[r][sunatCol]))
+    setStyle(ws, r, xmlCol, checkStyle(i, aoa[r][xmlCol]))
+    setStyle(ws, r, cdrCol, checkStyle(i, aoa[r][cdrCol]))
+    setStyle(ws, r, hashCol, { ...cellStyle(i), font: { ...cellStyle(i).font, sz: 9, color: { rgb: '6B7280' } } })
   }
 
-  // Fila totales
-  for (let c = 0; c < totalCols; c++) {
-    if (c === 4) setStyle(ws, totalRow, c, totalLabelStyle)
-    else if (c >= 5 && c <= 11) setStyle(ws, totalRow, c, totalNumberStyle)
-    else setStyle(ws, totalRow, c, { ...totalNumberStyle, alignment: { horizontal: 'left', vertical: 'center' } })
-  }
+  // Filas de totales (una por moneda activa)
+  totalRows.forEach(({ row, ccy }) => {
+    for (let c = 0; c < totalCols; c++) {
+      if (c === 4) setStyle(ws, row, c, totalLabelStyle)
+      else if (c >= 5 && c <= 11) setStyle(ws, row, c, hasUsdInvoices ? totalNumberStyleCcy(ccy) : totalNumberStyle)
+      else if (c === ccyCol && hasUsdInvoices) setStyle(ws, row, c, { ...currencyTagStyle(0, ccy), font: { ...currencyTagStyle(0, ccy).font, bold: true } })
+      else setStyle(ws, row, c, { ...totalNumberStyle, alignment: { horizontal: 'left', vertical: 'center' } })
+    }
+  })
 
   ws['!freeze'] = { xSplit: 0, ySplit: headerRow + 1 }
 
