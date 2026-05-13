@@ -249,4 +249,21 @@
       transform: translateY(-8px);
     }
   }
+
+  /* Borde ámbar pulsante (latente) — usado en mesas con precuenta
+     impresa para indicar de forma sutil que está por liberarse.
+     Solo anima el COLOR del borde, no la opacidad del card, para
+     no afectar la legibilidad del contenido interno. */
+  .animate-pulse-border-amber {
+    animation: pulse-border-amber 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border-amber {
+    0%, 100% {
+      border-color: rgb(251 191 36); /* amber-400 */
+    }
+    50% {
+      border-color: rgb(253 230 138); /* amber-200 */
+    }
+  }
 }

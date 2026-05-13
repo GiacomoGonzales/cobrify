@@ -1502,6 +1502,10 @@ export default function Tables() {
                       const groupLabel = groupNumbers.length > 0
                         ? `${groupNumbers.join('+')}`
                         : ''
+                      // Indicador "precuenta impresa": borde ámbar latente +
+                      // ícono pulsante. Solo en mesas ocupadas no vinculadas
+                      // que tengan preBillPrintedAt. Se limpia al liberar.
+                      const hasPreBill = !isLinked && table.status === 'occupied' && !!table.preBillPrintedAt
                       return (
                       <div key={table.id} className="relative group">
                         <div
@@ -1514,7 +1518,7 @@ export default function Tables() {
                               : table.status === 'occupied' && table.allItemsServed
                               ? 'bg-blue-100 border-blue-400 hover:border-blue-500'
                               : getStatusColor(table.status)
-                          }`}
+                          } ${hasPreBill ? 'animate-pulse-border-amber' : ''}`}
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
@@ -1525,10 +1529,10 @@ export default function Tables() {
                             </div>
                             <div className={`flex items-center gap-2 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
                               {/* Indicador sutil de precuenta impresa: ícono Receipt
-                                  ámbar con pulse suave. Solo en mesas ocupadas (no
-                                  vinculadas) que tengan preBillPrintedAt. Tooltip
-                                  nativo muestra "Precuenta impresa hace X min". */}
-                              {!isLinked && table.status === 'occupied' && table.preBillPrintedAt && (
+                                  ámbar con pulse suave. Combina con el borde
+                                  ámbar latente del card. Tooltip nativo muestra
+                                  "Precuenta impresa hace X min". */}
+                              {hasPreBill && (
                                 <span
                                   className="inline-flex items-center text-amber-600 animate-pulse"
                                   title={formatPreBillElapsed(table.preBillPrintedAt)}
