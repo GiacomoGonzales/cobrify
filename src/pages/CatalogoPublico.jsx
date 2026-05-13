@@ -4,7 +4,9 @@ import { getCatalogThemeClasses } from '@/themes/catalogThemes'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { getCatalogMinQty } from '@/lib/utils'
+import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
+import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import {
   Search,
   ShoppingBag,
@@ -280,7 +282,16 @@ function CatalogImage({ src, alt, className = '', size = 'card', priority = fals
 }
 
 // Modal de producto con soporte para modificadores
-function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false }) {
+function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1 }) {
+  // Helpers locales para mostrar precios en la moneda del catálogo
+  const toCatalogDisplay = (priceInPen) => {
+    const n = Number(priceInPen) || 0
+    if (catalogCurrency === 'PEN' || n === 0) return n
+    return Number(convertFromBase(n, 'USD', catalogExchangeRate || 1).toFixed(2))
+  }
+  const fmtCatalog = (priceInPen) => formatCurrency(toCatalogDisplay(priceInPen), catalogCurrency)
+  // Función original con firma inalterada para minimizar diff (ver llamadas
+  // existentes `S/ X.toFixed(2)` → fmtCatalog(X)).
   const showPrices = globalShowPrices && !product?.catalogHidePrice
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
@@ -643,7 +654,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             {showPrices ? (
               <div>
                 {product.catalogComparePrice > 0 && (
-                  <span className="text-sm line-through block text-gray-400">S/ {product.catalogComparePrice.toFixed(2)}</span>
+                  <span className="text-sm line-through block text-gray-400">{fmtCatalog(product.catalogComparePrice)}</span>
                 )}
                 {(() => {
                   const showAllPrices = business?.catalogShowAllPrices !== false
@@ -652,7 +663,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                     const selected = availablePrices.find(p => p.key === selectedPriceLevel) || availablePrices[0]
                     return (
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-gray-900">S/ {selected.value.toFixed(2)}</span>
+                        <span className="text-3xl font-bold text-gray-900">{fmtCatalog(selected.value)}</span>
                         <span className="text-sm text-gray-500">{selected.label}</span>
                       </div>
                     )
@@ -664,7 +675,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                           const min = getCatalogMinQty(business, p.key, product)
                           return (
                             <div key={p.key} className="flex items-baseline gap-2">
-                              <span className="text-xl font-bold text-gray-900">S/ {p.value.toFixed(2)}</span>
+                              <span className="text-xl font-bold text-gray-900">{fmtCatalog(p.value)}</span>
                               <span className="text-sm text-gray-500">
                                 {p.label}
                                 {p.key !== 'price1' && min > 1 && (
@@ -679,7 +690,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                   }
                   return (
                     <div className="text-3xl font-bold text-gray-900">
-                      S/ {unitPrice.toFixed(2)}
+                      {fmtCatalog(unitPrice)}
                     </div>
                   )
                 })()}
@@ -734,7 +745,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         </span>
                       </div>
                       <span className="font-bold" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#111827' }}>
-                        S/ {priceItem.value.toFixed(2)}
+                        {fmtCatalog(priceItem.value)}
                       </span>
                     </button>
                   )
@@ -794,7 +805,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                       <div className="flex items-center gap-2">
                         {showPrices && (
                           <span className="text-sm font-medium text-gray-600">
-                            S/ {variant.price.toFixed(2)}
+                            {fmtCatalog(variant.price)}
                           </span>
                         )}
                         <div
@@ -857,7 +868,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                         </span>
                       </div>
                       <span className="font-bold" style={isSelected ? { color: business?.catalogColor || '#10B981' } : { color: '#111827' }}>
-                        S/ {priceItem.value.toFixed(2)}
+                        {fmtCatalog(priceItem.value)}
                       </span>
                     </button>
                   )
@@ -917,13 +928,13 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                                 {option.name}
                               </span>
                               {showPrices && option.priceAdjustment > 0 && (
-                                <span className="text-xs text-gray-500 block">+S/ {option.priceAdjustment.toFixed(2)} c/u</span>
+                                <span className="text-xs text-gray-500 block">+{fmtCatalog(option.priceAdjustment)} c/u</span>
                               )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               {showPrices && count > 0 && option.priceAdjustment > 0 && (
                                 <span className="text-xs font-medium" style={{ color: accentColor }}>
-                                  +S/ {(option.priceAdjustment * count).toFixed(2)}
+                                  +{fmtCatalog(option.priceAdjustment * count)}
                                 </span>
                               )}
                               <button
@@ -968,7 +979,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                               {option.name}
                             </span>
                             {showPrices && option.priceAdjustment > 0 && (
-                              <span className="text-xs text-gray-500 block">+S/ {option.priceAdjustment.toFixed(2)}</span>
+                              <span className="text-xs text-gray-500 block">+{fmtCatalog(option.priceAdjustment)}</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1049,7 +1060,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             ) : (
               <>
                 <ShoppingBag className="w-5 h-5" />
-                {showPrices ? `Agregar al carrito - S/ ${(unitPrice * quantity).toFixed(2)}` : 'Agregar al carrito'}
+                {showPrices ? `Agregar al carrito - ${fmtCatalog(unitPrice * quantity)}` : 'Agregar al carrito'}
               </>
             )}
           </button>
@@ -1071,6 +1082,11 @@ function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddM
   if (!isOpen || !activeTableOrder) return null
 
   const color = business?.catalogColor || '#10B981'
+
+  // Multi-divisa: la orden ya tiene items[].total y total en su propia moneda
+  // (PEN o USD). Solo formatear; no convertir.
+  const orderCurrency = normalizeCurrency(activeTableOrder.currency || 'PEN')
+  const fmtOrder = (v) => formatCurrency(v, orderCurrency)
 
   return (
     <>
@@ -1120,7 +1136,7 @@ function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddM
                   {item.notes && <p className="text-xs text-gray-400 mt-0.5">{item.notes}</p>}
                 </div>
                 <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
-                  S/ {item.total?.toFixed(2)}
+                  {fmtOrder(item.total)}
                 </span>
               </div>
             ))}
@@ -1131,7 +1147,7 @@ function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddM
         <div className="p-5 border-t bg-gray-50">
           <div className="flex items-center justify-between mb-4">
             <span className="text-base font-bold text-gray-900">Total</span>
-            <span className="text-xl font-bold" style={{ color }}>S/ {activeTableOrder.total.toFixed(2)}</span>
+            <span className="text-xl font-bold" style={{ color }}>{fmtOrder(activeTableOrder.total)}</span>
           </div>
           <button
             onClick={() => { onClose(); onAddMore() }}
@@ -1161,7 +1177,16 @@ function CartDrawer({
   tableNumber: initialTableNumber = '',
   activeTableOrder = null,
   onOrderAdded = null,
+  catalogCurrency = 'PEN',
+  catalogExchangeRate = 1,
 }) {
+  // Helpers de moneda del catálogo. Los precios en `cart` están en PEN
+  // del catálogo (source of truth). Convertimos y formateamos para display.
+  const fmtCart = (priceInPen) => {
+    const n = Number(priceInPen) || 0
+    if (catalogCurrency === 'PEN' || n === 0) return formatCurrency(n, 'PEN')
+    return formatCurrency(Number(convertFromBase(n, 'USD', catalogExchangeRate || 1).toFixed(2)), 'USD')
+  }
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
   // Estados para modo restaurante / tienda virtual retail
@@ -1311,29 +1336,55 @@ function CartDrawer({
       const ordersRef = collection(db, 'businesses', business.id, 'orders')
       const orderNum = await getDailyOrderNumber(business.id)
 
-      // Preparar items de la orden
-      const items = cart.map(item => ({
-        itemId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        productId: item.id,
-        name: item.name,
-        price: item.unitPrice || item.price,
-        quantity: item.quantity,
-        total: (item.unitPrice || item.price) * item.quantity,
-        modifiers: item.selectedModifiers || [],
-        ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
-        notes: item.notes || '',
-        status: 'pending',
-        firedAt: new Date(),
-        readyAt: null,
-        deliveredAt: null,
-      }))
+      // Multi-divisa: si el catálogo está en USD, los totales/items se
+      // convierten al guardar el order. Se persiste currency + TC para
+      // que el POS pueda heredarlos al convertir el pedido en factura.
+      // El carrito guarda PEN como source-of-truth (basePrice), así que
+      // convertimos UNA sola vez al momento de persistir.
+      const isCatalogUSD = catalogCurrency === 'USD'
+      const orderCurrency = isCatalogUSD ? 'USD' : 'PEN'
+      const orderRate = isCatalogUSD ? (catalogExchangeRate || 1) : 1
+      const convertToOrderCcy = (penAmount) => {
+        if (!isCatalogUSD) return penAmount
+        return Number(convertFromBase(penAmount, 'USD', orderRate).toFixed(2))
+      }
 
-      // Calcular totales.
+      // Preparar items de la orden.
+      // En USD: price/total se guardan ya convertidos a USD (con TC del catálogo).
+      // basePrice/totalInBase mantienen el equivalente en PEN para auditoría y
+      // para que el POS pueda re-convertir si cambia el TC al facturar.
+      const items = cart.map(item => {
+        const pricePen = item.unitPrice || item.price
+        const priceDisplay = convertToOrderCcy(pricePen)
+        const totalPen = pricePen * item.quantity
+        return {
+          itemId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          productId: item.id,
+          name: item.name,
+          price: priceDisplay,
+          quantity: item.quantity,
+          total: priceDisplay * item.quantity,
+          modifiers: item.selectedModifiers || [],
+          ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
+          notes: item.notes || '',
+          status: 'pending',
+          firedAt: new Date(),
+          readyAt: null,
+          deliveredAt: null,
+          // Multi-divisa: basePrice/totalInBase siempre en PEN para round-trip.
+          ...(isCatalogUSD && {
+            basePrice: pricePen,
+            totalInBase: totalPen,
+          }),
+        }
+      })
+
+      // Calcular totales en PEN base (siempre).
       // IMPORTANTE: la configuración fiscal vive en business.emissionConfig.taxConfig
       // (mismo path que usa POS). Antes leíamos business.taxConfig directo y como
       // ese campo no existe en el documento, igvExempt siempre quedaba false y se
       // generaba IGV a empresas exoneradas.
-      const orderTotal = items.reduce((sum, item) => sum + item.total, 0)
+      const orderTotal = cart.reduce((sum, item) => sum + (item.unitPrice || item.price) * item.quantity, 0)
       const taxCfg = business.emissionConfig?.taxConfig || business.taxConfig || {}
       const igvRate = taxCfg.igvRate || 18
       const igvExempt = taxCfg.igvExempt === true
@@ -1365,10 +1416,17 @@ function CartDrawer({
         // Items
         items,
 
-        // Totales
-        subtotal,
-        tax,
-        total: orderTotal,
+        // Totales (en moneda del catálogo si es USD, sino PEN)
+        subtotal: convertToOrderCcy(subtotal),
+        tax: convertToOrderCcy(tax),
+        total: convertToOrderCcy(orderTotal),
+        // Multi-divisa: moneda + TC congelados
+        currency: orderCurrency,
+        exchangeRate: orderRate,
+        // Equivalentes en PEN base (para reportes globales)
+        subtotalInBase: subtotal,
+        taxInBase: tax,
+        totalInBase: orderTotal,
 
         // Estado
         status: 'pending',
@@ -1577,7 +1635,7 @@ function CartDrawer({
                     }
                     if (showPrices && !item.catalogHidePrice) {
                       const unitPrice = item.unitPrice || item.price || 0
-                      line += ` - S/ ${(unitPrice * item.quantity).toFixed(2)}`
+                      line += ` - ${fmtCart(unitPrice * item.quantity)}`
                     } else {
                       line += ' - (A consultar)'
                     }
@@ -1589,7 +1647,7 @@ function CartDrawer({
                   let msg = `🛒 *¡Hola! He hecho un pedido ${orderType === 'delivery' ? 'DELIVERY' : 'PARA RECOGER'}*\n\n`
                   msg += `📋 *Pedido ${orderNumber}*\n${orderItems}\n\n`
                   if (showTotal) {
-                    msg += `💰 *Total: S/ ${total.toFixed(2)}*\n\n`
+                    msg += `💰 *Total: ${fmtCart(total)}*\n\n`
                   } else {
                     msg += `💰 *Total: A consultar*\n\n`
                   }
@@ -1702,7 +1760,7 @@ function CartDrawer({
                           ))}
                         </div>
                       )}
-                      {showPrices && <p className="text-gray-600 mt-1">S/ {(item.unitPrice || item.price)?.toFixed(2)}</p>}
+                      {showPrices && <p className="text-gray-600 mt-1">{fmtCart(item.unitPrice || item.price)}</p>}
                       <div className="flex items-center gap-2 mt-2">
                         <button
                           onClick={() => onUpdateQuantity(item.cartItemId || item.id, Math.max(0, item.quantity - 1))}
@@ -1738,7 +1796,7 @@ function CartDrawer({
               {showPrices && (
                 <div className="flex items-center justify-between text-lg">
                   <span className="text-gray-600">Total</span>
-                  <span className="text-2xl font-bold">S/ {total.toFixed(2)}</span>
+                  <span className="text-2xl font-bold">{fmtCart(total)}</span>
                 </div>
               )}
 
@@ -2112,6 +2170,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [business, setBusiness] = useState(null)
+  // Multi-divisa: TC del día para mostrar el catálogo en USD si el
+  // negocio configuró defaultCurrency='USD' con la flag activa.
+  const [catalogExchangeRate, setCatalogExchangeRate] = useState(1)
   // Negocio con suscripción suspendida: mostramos pantalla "fuera de servicio"
   // en lugar del catálogo, para no dejar al cliente final ver productos / hacer
   // pedidos cuando el dueño tiene el servicio cortado.
@@ -2149,11 +2210,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           return
         }
 
+        // Multi-divisa: si el negocio activó USD por default, fetchamos
+        // el TC del día UNA vez para todo el catálogo. Cache local 24h.
+        const fetchCatalogRate = async (biz) => {
+          try {
+            if (biz?.multiCurrencyEnabled === true && biz?.defaultCurrency === 'USD') {
+              const result = await getRateForDate(new Date())
+              if (result && result.sell > 0) {
+                setCatalogExchangeRate(Number(result.sell.toFixed(4)))
+              }
+            }
+          } catch (e) {
+            console.warn('No se pudo obtener TC para catálogo:', e?.message)
+          }
+        }
+
         // Usar datos precargados del negocio si están disponibles (dominio personalizado)
         let businessData
         if (preloadedBusiness) {
           businessData = preloadedBusiness
           setBusiness(businessData)
+          await fetchCatalogRate(businessData)
         } else {
           // Buscar negocio por catalogSlug o por customDomain
           let businessesSnap
@@ -2181,6 +2258,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           const businessDoc = businessesSnap.docs[0]
           businessData = { id: businessDoc.id, ...businessDoc.data() }
           setBusiness(businessData)
+          await fetchCatalogRate(businessData)
         }
 
         // Verificar estado de la suscripción del dueño del negocio. Si está
@@ -2394,6 +2472,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
   const ignoreStock = business?.catalogIgnoreStock === true
+
+  // ===== Multi-divisa: moneda del catálogo público =====
+  // El catálogo respeta defaultCurrency del negocio solo si activó la
+  // flag multiCurrencyEnabled. Para 99% de negocios (sin flag) → PEN.
+  const catalogCurrency = isMultiCurrencyEnabled(business)
+    ? normalizeCurrency(business?.defaultCurrency)
+    : BASE_CURRENCY
+
+  // Convierte un precio del catálogo (siempre PEN en Firestore) a la
+  // moneda activa del catálogo público.
+  const toCatalogDisplay = (priceInPen) => {
+    const n = Number(priceInPen) || 0
+    if (catalogCurrency === BASE_CURRENCY || n === 0) return n
+    return Number(convertFromBase(n, 'USD', catalogExchangeRate || 1).toFixed(2))
+  }
+
+  // Formatea un precio del catálogo (acepta PEN nativo del producto).
+  const fmtCatalog = (priceInPen) => formatCurrency(toCatalogDisplay(priceInPen), catalogCurrency)
+
   const groupByCategory = business?.catalogGroupByCategory === true
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
@@ -2590,7 +2687,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       }
       // Respetar flag por-producto "catalogHidePrice" además del global showPrices
       if (showPrices && !item.catalogHidePrice) {
-        itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+        // Multi-divisa: cart guarda PEN, convertir al display.
+        const linePen = price * item.quantity
+        const lineDisplay = catalogCurrency === 'USD'
+          ? Number(convertFromBase(linePen, 'USD', catalogExchangeRate || 1).toFixed(2))
+          : linePen
+        itemText += ` - ${formatCurrency(lineDisplay, catalogCurrency)}`
       } else {
         itemText += ' - (A consultar)'
       }
@@ -2603,7 +2705,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (showTotal) {
       const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
       message = encodeURIComponent(
-        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: ${catalogCurrency === 'USD' ? formatCurrency(Number(convertFromBase(total, 'USD', catalogExchangeRate || 1).toFixed(2)), 'USD') : formatCurrency(total, 'PEN')}*\n\nGracias!`
       )
     } else {
       message = encodeURIComponent(
@@ -3087,12 +3189,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                               {showPrices && !product.catalogHidePrice ? (
                                 <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                   {product.catalogComparePrice > 0 && (
-                                    <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                                    <span className={`text-xs line-through block ${thTextMuted}`}>{fmtCatalog(product.catalogComparePrice)}</span>
                                   )}
                                   <span className={`${thPrice}`}>
                                     {product.hasVariants && product.variants?.length > 0
-                                      ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                                      : `S/ ${product.price?.toFixed(2)}`
+                                      ? fmtCatalog(Math.min(...product.variants.map(v => v.price)))
+                                      : fmtCatalog(product.price)
                                     }
                                   </span>
                                 </div>
@@ -3166,12 +3268,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 {showPrices && !product.catalogHidePrice ? (
                                   <div className={outOfStock ? 'line-through text-gray-400' : ''}>
                                     {product.catalogComparePrice > 0 && (
-                                      <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                                      <span className={`text-xs line-through block ${thTextMuted}`}>{fmtCatalog(product.catalogComparePrice)}</span>
                                     )}
                                     <span className={`${thPrice}`}>
                                       {product.hasVariants && product.variants?.length > 0
-                                        ? `S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                                        : `S/ ${product.price?.toFixed(2)}`
+                                        ? fmtCatalog(Math.min(...product.variants.map(v => v.price)))
+                                        : fmtCatalog(product.price)
                                       }
                                     </span>
                                   </div>
@@ -3297,7 +3399,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {product.catalogComparePrice > 0 && (
-                            <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                            <span className={`text-xs line-through block ${thTextMuted}`}>{fmtCatalog(product.catalogComparePrice)}</span>
                           )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
@@ -3307,7 +3409,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className={`font-bold ${thText}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`font-bold ${thText}`}>{fmtCatalog(p.value)}</span>
                                       <span className={`text-xs ml-1 ${thTextMuted}`}>{p.label}</span>
                                     </span>
                                   ))}
@@ -3317,8 +3419,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                             return (
                               <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
-                                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                                  : `S/ ${product.price?.toFixed(2)}`
+                                  ? `Desde ${fmtCatalog(Math.min(...product.variants.map(v => v.price)))}`
+                                  : fmtCatalog(product.price)
                                 }
                               </span>
                             )
@@ -3412,7 +3514,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       {showPrices && !product.catalogHidePrice ? (
                         <div className={outOfStock ? 'text-gray-400 line-through' : ''}>
                           {product.catalogComparePrice > 0 && (
-                            <span className={`text-xs line-through block ${thTextMuted}`}>S/ {product.catalogComparePrice.toFixed(2)}</span>
+                            <span className={`text-xs line-through block ${thTextMuted}`}>{fmtCatalog(product.catalogComparePrice)}</span>
                           )}
                           {(() => {
                             const showAllPrices = business?.catalogShowAllPrices !== false
@@ -3422,7 +3524,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                                 <div className="flex flex-col">
                                   {prices.map(p => (
                                     <span key={p.key} className="text-sm leading-tight">
-                                      <span className={`font-bold ${thText}`}>S/ {p.value.toFixed(2)}</span>
+                                      <span className={`font-bold ${thText}`}>{fmtCatalog(p.value)}</span>
                                       <span className={`text-xs ml-1 ${thTextMuted}`}>{p.label}</span>
                                     </span>
                                   ))}
@@ -3432,8 +3534,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                             return (
                               <span className={`${thPrice}`}>
                                 {product.hasVariants && product.variants?.length > 0
-                                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                                  : `S/ ${product.price?.toFixed(2)}`
+                                  ? `Desde ${fmtCatalog(Math.min(...product.variants.map(v => v.price)))}`
+                                  : fmtCatalog(product.price)
                                 }
                               </span>
                             )
@@ -3603,6 +3705,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         showPrices={showPrices}
         business={business}
         ignoreStock={ignoreStock}
+        catalogCurrency={catalogCurrency}
+        catalogExchangeRate={catalogExchangeRate}
       />
 
       {/* Cart Drawer */}
@@ -3618,6 +3722,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         isRestaurantMenu={isRestaurantMenu}
         tableNumber={tableFromUrl}
         activeTableOrder={activeTableOrder}
+        catalogCurrency={catalogCurrency}
+        catalogExchangeRate={catalogExchangeRate}
         onOrderAdded={() => {
           // Recargar la orden activa después de agregar items
           if (business && tableFromUrl) {
