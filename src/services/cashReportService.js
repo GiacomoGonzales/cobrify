@@ -519,26 +519,37 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
   y += 13;
 
   // ===== BLOQUE USD (solo si la sesión tuvo actividad en dólares) =====
+  // Diseñado para verse como una continuación natural del bloque PEN:
+  // mismo estilo de section(), mismas cards, mismo ACCENT en headers/totals.
+  // La distinción USD se hace con un pill discreto y los valores con "$".
   const usd = sessionData?.usd
   if (usd) {
     if (y > PH - 60) { doc.addPage(); y = 10; }
 
-    // Banner USD
-    const USD_ACCENT = [16, 185, 129] // emerald-500
-    doc.setFillColor(...USD_ACCENT)
-    doc.roundedRect(ML, y, CW, 8, 1, 1, 'F')
+    // Separador visual: línea fina + título con pill "USD"
+    doc.setFillColor(...ACCENT)
+    doc.rect(ML, y, CW, 0.6, 'F')
+    y += 4
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(255, 255, 255)
-    doc.text('CAJA EN DOLARES (USD)', ML + 3, y + 5.5)
-    y += 12
+    doc.setFontSize(8)
+    doc.setTextColor(...DARK)
+    doc.text('CAJA EN DÓLARES', ML, y)
+    // Pill USD pequeño al lado del título
+    const titleW = doc.getTextWidth('CAJA EN DÓLARES')
+    doc.setFillColor(220, 245, 232)
+    doc.roundedRect(ML + titleW + 2, y - 2.5, 9, 3.5, 0.5, 0.5, 'F')
+    doc.setFontSize(5.5)
+    doc.setTextColor(5, 120, 80)
+    doc.text('USD', ML + titleW + 6.5, y + 0.3, { align: 'center' })
+    doc.setTextColor(...DARK)
+    y += 5
 
-    // 4 mini-cards USD
+    // 4 mini-cards USD — mismos colores semánticos que las PEN
     const usdCards = [
-      { lbl: 'Monto Inicial USD', val: fmt(usd.openingAmount || 0, 'USD'), bg: [230, 242, 255], tc: [30, 80, 180] },
-      { lbl: 'Ventas USD', val: fmt(usd.totalSales || 0, 'USD'), bg: [230, 250, 240], tc: [5, 120, 80] },
-      { lbl: 'Otros Ingresos USD', val: fmt(usd.totalIncome || 0, 'USD'), bg: [240, 238, 255], tc: [100, 40, 200] },
-      { lbl: 'Egresos USD', val: fmt(usd.totalExpense || 0, 'USD'), bg: [255, 238, 238], tc: [180, 30, 30] },
+      { lbl: 'Monto Inicial', val: fmt(usd.openingAmount || 0, 'USD'), bg: [230, 242, 255], tc: [30, 80, 180] },
+      { lbl: 'Ventas del Día', val: fmt(usd.totalSales || 0, 'USD'), bg: [230, 250, 240], tc: [5, 120, 80] },
+      { lbl: 'Otros Ingresos', val: fmt(usd.totalIncome || 0, 'USD'), bg: [240, 238, 255], tc: [100, 40, 200] },
+      { lbl: 'Egresos', val: fmt(usd.totalExpense || 0, 'USD'), bg: [255, 238, 238], tc: [180, 30, 30] },
     ]
     usdCards.forEach((c, i) => {
       const cx = ML + i * (cw4 + 1.5)
@@ -555,12 +566,12 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     })
     y += ch + 6
 
-    // Dos columnas: Ventas por método USD | Arqueo USD
+    // Dos columnas: Ventas por método | Arqueo — mismo estilo que PEN
     const sYL = y
-    doc.setFillColor(...USD_ACCENT); doc.rect(colL, sYL, colW, 0.6, 'F')
+    doc.setFillColor(...ACCENT); doc.rect(colL, sYL, colW, 0.6, 'F')
     let yLu = sYL + 4
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...DARK)
-    doc.text('VENTAS USD POR MÉTODO', colL, yLu); yLu += 4
+    doc.text('VENTAS POR MÉTODO DE PAGO', colL, yLu); yLu += 4
 
     const salesUSD = [
       ['Efectivo', usd.salesCash || 0],
@@ -576,16 +587,16 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       doc.text(fmt(val, 'USD'), colL + colW - 2, yLu + 3.5, { align: 'right' })
       yLu += 5
     })
-    doc.setFillColor(...USD_ACCENT); doc.rect(colL, yLu, colW, 5.5, 'F')
+    doc.setFillColor(...ACCENT); doc.rect(colL, yLu, colW, 5.5, 'F')
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255)
-    doc.text('TOTAL VENTAS USD', colL + 2, yLu + 3.8)
+    doc.text('TOTAL VENTAS', colL + 2, yLu + 3.8)
     doc.text(fmt(usd.totalSales || 0, 'USD'), colL + colW - 2, yLu + 3.8, { align: 'right' })
     yLu += 5.5
 
     let yRu = sYL
-    doc.setFillColor(...USD_ACCENT); doc.rect(colR, yRu, colW, 0.6, 'F'); yRu += 4
+    doc.setFillColor(...ACCENT); doc.rect(colR, yRu, colW, 0.6, 'F'); yRu += 4
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...DARK)
-    doc.text('ARQUEO USD', colR, yRu); yRu += 4
+    doc.text('ARQUEO DE CIERRE', colR, yRu); yRu += 4
 
     const closingUSD = [
       ['Efectivo Contado', usd.closingCash || 0],
@@ -601,24 +612,24 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       doc.text(fmt(val, 'USD'), colR + colW - 2, yRu + 3.5, { align: 'right' })
       yRu += 5
     })
-    doc.setFillColor(...USD_ACCENT); doc.rect(colR, yRu, colW, 5.5, 'F')
+    doc.setFillColor(...ACCENT); doc.rect(colR, yRu, colW, 5.5, 'F')
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(255, 255, 255)
-    doc.text('TOTAL CONTADO USD', colR + 2, yRu + 3.8)
+    doc.text('TOTAL CONTADO', colR + 2, yRu + 3.8)
     doc.text(fmt(usd.closingAmount || 0, 'USD'), colR + colW - 2, yRu + 3.8, { align: 'right' })
     yRu += 5.5
 
     y = Math.max(yLu, yRu) + 5
 
-    // Efectivo esperado USD
+    // Efectivo esperado USD (mismo estilo que PEN)
     doc.setFillColor(240, 240, 240)
     doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
-    doc.text('Efectivo USD Esperado (Inicial USD + Ventas Efectivo USD + Ingresos USD - Egresos USD)', ML + 2, y + 4.5)
+    doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5)
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
     doc.text(fmt(usd.expectedAmount || 0, 'USD'), RX - 2, y + 4.8, { align: 'right' })
     y += 9
 
-    // Diferencia USD
+    // Diferencia USD (mismo estilo que PEN)
     const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
     const diffUSDOk = diffUSD >= 0
     const diffUSDBg = diffUSDOk ? [230, 250, 240] : [255, 235, 235]
@@ -627,7 +638,7 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     doc.setFillColor(...diffUSDBg)
     doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffUSDTc)
-    doc.text(`DIFERENCIA EN EFECTIVO USD — ${diffUSDLbl}`, ML + 2, y + 5.5)
+    doc.text(`DIFERENCIA EN EFECTIVO — ${diffUSDLbl}`, ML + 2, y + 5.5)
     doc.setFontSize(10)
     doc.text(fmt(diffUSD, 'USD'), RX - 2, y + 6, { align: 'right' })
     y += 13
