@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -103,168 +103,671 @@ const formatPaymentMethods = (invoice) => {
   return invoice.paymentMethod || 'Efectivo';
 };
 
+// =================== ESTILOS (alineados con accountingExportService) ===================
+const XLS_COLORS = {
+  titleBg: '1E3A8A',       // azul principal
+  titleFg: 'FFFFFF',
+  subtitleBg: 'E0E7FF',    // banda metadata
+  sectionBg: '3730A3',     // header de sección
+  sectionFg: 'FFFFFF',
+  headerBg: '4338CA',      // header de tabla
+  headerFg: 'FFFFFF',
+  zebraBg: 'F9FAFB',
+  totalBg: 'FEF3C7',
+  kpiInitial: 'DBEAFE',    // KPI cards (4 colores)
+  kpiInitialText: '1E40AF',
+  kpiSales: 'DCFCE7',
+  kpiSalesText: '15803D',
+  kpiIncome: 'EDE9FE',
+  kpiIncomeText: '5B21B6',
+  kpiExpense: 'FEE2E2',
+  kpiExpenseText: 'B91C1C',
+  diffOk: 'D1FAE5',
+  diffOkText: '065F46',
+  diffBad: 'FECACA',
+  diffBadText: '991B1B',
+  usdTag: 'D1FAE5',
+  usdTagText: '047857',
+  border: 'CBD5E1',
+}
+
+const XLS_BORDER_ALL = {
+  top: { style: 'thin', color: { rgb: XLS_COLORS.border } },
+  bottom: { style: 'thin', color: { rgb: XLS_COLORS.border } },
+  left: { style: 'thin', color: { rgb: XLS_COLORS.border } },
+  right: { style: 'thin', color: { rgb: XLS_COLORS.border } },
+}
+
+const sTitle = {
+  font: { bold: true, sz: 16, color: { rgb: XLS_COLORS.titleFg } },
+  fill: { fgColor: { rgb: XLS_COLORS.titleBg } },
+  alignment: { horizontal: 'center', vertical: 'center' },
+}
+
+const sMetaLabel = {
+  font: { bold: true, sz: 10, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: XLS_COLORS.subtitleBg } },
+  alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+}
+
+const sMetaValue = {
+  font: { sz: 10, color: { rgb: '1F2937' } },
+  alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+}
+
+const sSection = {
+  font: { bold: true, sz: 12, color: { rgb: XLS_COLORS.sectionFg } },
+  fill: { fgColor: { rgb: XLS_COLORS.sectionBg } },
+  alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+}
+
+const sHeader = {
+  font: { bold: true, sz: 10, color: { rgb: XLS_COLORS.headerFg } },
+  fill: { fgColor: { rgb: XLS_COLORS.headerBg } },
+  alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+  border: XLS_BORDER_ALL,
+}
+
+const sCell = (i, opts = {}) => ({
+  font: { sz: 10, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: i % 2 === 0 ? 'FFFFFF' : XLS_COLORS.zebraBg } },
+  alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+  ...opts,
+})
+
+const sCellCenter = (i, opts = {}) => ({
+  ...sCell(i, opts),
+  alignment: { horizontal: 'center', vertical: 'center' },
+})
+
+const sCellNumber = (i, opts = {}) => ({
+  ...sCell(i, opts),
+  alignment: { horizontal: 'right', vertical: 'center', indent: 1 },
+  numFmt: opts.currency === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+const sKpiLabel = (bg) => ({
+  font: { bold: false, sz: 9, color: { rgb: '6B7280' } },
+  fill: { fgColor: { rgb: bg } },
+  alignment: { horizontal: 'center', vertical: 'center' },
+  border: XLS_BORDER_ALL,
+})
+
+const sKpiValue = (bg, fg, ccy = 'PEN') => ({
+  font: { bold: true, sz: 14, color: { rgb: fg } },
+  fill: { fgColor: { rgb: bg } },
+  alignment: { horizontal: 'center', vertical: 'center' },
+  border: XLS_BORDER_ALL,
+  numFmt: ccy === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+const sTotalLabel = {
+  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: XLS_COLORS.totalBg } },
+  alignment: { horizontal: 'right', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+}
+
+const sTotalNumber = (ccy = 'PEN') => ({
+  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
+  fill: { fgColor: { rgb: XLS_COLORS.totalBg } },
+  alignment: { horizontal: 'right', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+  numFmt: ccy === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+const sDifferenceLabel = (ok) => ({
+  font: { bold: true, sz: 11, color: { rgb: ok ? XLS_COLORS.diffOkText : XLS_COLORS.diffBadText } },
+  fill: { fgColor: { rgb: ok ? XLS_COLORS.diffOk : XLS_COLORS.diffBad } },
+  alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+})
+
+const sDifferenceNumber = (ok, ccy = 'PEN') => ({
+  font: { bold: true, sz: 12, color: { rgb: ok ? XLS_COLORS.diffOkText : XLS_COLORS.diffBadText } },
+  fill: { fgColor: { rgb: ok ? XLS_COLORS.diffOk : XLS_COLORS.diffBad } },
+  alignment: { horizontal: 'right', vertical: 'center', indent: 1 },
+  border: XLS_BORDER_ALL,
+  numFmt: ccy === 'USD' ? '"$" #,##0.00' : '"S/" #,##0.00',
+})
+
+const setS = (ws, row, col, style, value = undefined) => {
+  const addr = XLSX.utils.encode_cell({ r: row, c: col })
+  if (!ws[addr]) ws[addr] = { t: 's', v: value !== undefined ? value : '' }
+  if (value !== undefined) ws[addr].v = value
+  ws[addr].s = style
+}
+
+const docTypeLabels = {
+  factura: 'Factura',
+  boleta: 'Boleta',
+  nota_venta: 'Nota de Venta',
+  nota_credito: 'Nota de Crédito',
+  nota_debito: 'Nota de Débito',
+}
+
 /**
- * Generar reporte de cierre de caja en Excel
+ * Genera el reporte de cierre de caja en Excel con estilo moderno
+ * (estilos, colores, KPI cards, soporte multi-divisa PEN/USD).
  */
 export const generateCashReportExcel = async (sessionData, movements, invoices, businessData, deferredPayments = []) => {
-  const workbook = XLSX.utils.book_new();
+  const workbook = XLSX.utils.book_new()
 
-  // Convertir fechas
-  const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
-  const closedAtDate = getDateFromTimestamp(sessionData.closedAt);
+  const openedAtDate = getDateFromTimestamp(sessionData.openedAt)
+  const closedAtDate = getDateFromTimestamp(sessionData.closedAt)
+  const usd = sessionData?.usd || null
 
-  // Hoja 1: Resumen General
-  const summaryData = [
-    ['REPORTE DE CIERRE DE CAJA'],
-    [''],
-    ['Negocio:', businessData?.name || 'N/A'],
-    ['RUC:', businessData?.ruc || 'N/A'],
-    ['Fecha de Apertura:', openedAtDate ? format(openedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
-    ['Fecha de Cierre:', closedAtDate ? format(closedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
-    [''],
-    ['RESUMEN FINANCIERO'],
-    ['Monto Inicial:', sessionData.openingAmount || 0],
-    [''],
-    ['VENTAS DE LA SESIÓN'],
-    ['Total Ventas:', sessionData.totalSales || 0],
-    ['Cantidad de Comprobantes:', invoices.length],
-    [''],
-    ['OTROS MOVIMIENTOS'],
-    ['Ingresos Adicionales:', sessionData.totalIncome || 0],
-    ['Egresos:', sessionData.totalExpense || 0],
-    [''],
-    ['CIERRE'],
-    ['Efectivo Esperado:', sessionData.expectedAmount || 0],
-    ['Efectivo Contado:', sessionData.closingCash || 0],
-    ['Diferencia en Efectivo:', (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0)],
-    [''],
-    ['DETALLE DEL CONTEO'],
-    ['Efectivo:', sessionData.closingCash || 0],
-    ['Tarjetas:', sessionData.closingCard || 0],
-    ['Transferencias:', sessionData.closingTransfer || 0],
-    ...(sessionData.closingYape ? [['Yape:', sessionData.closingYape]] : []),
-    ...(sessionData.closingPlin ? [['Plin:', sessionData.closingPlin]] : []),
-    ...(sessionData.closingRappi ? [['Rappi:', sessionData.closingRappi]] : []),
-    ...(sessionData.closingPedidosYa ? [['PedidosYa:', sessionData.closingPedidosYa]] : []),
-    ...(sessionData.closingDiDiFood ? [['DiDiFood:', sessionData.closingDiDiFood]] : []),
-    [''],
-    ['VENTAS POR MÉTODO DE PAGO'],
-    ['Efectivo:', sessionData.salesCash || 0],
-    ['Tarjetas:', sessionData.salesCard || 0],
-    ['Transferencias:', sessionData.salesTransfer || 0],
-    ...(sessionData.salesYape ? [['Yape:', sessionData.salesYape]] : []),
-    ...(sessionData.salesPlin ? [['Plin:', sessionData.salesPlin]] : []),
-    ...(sessionData.salesRappi ? [['Rappi:', sessionData.salesRappi]] : []),
-    ...(sessionData.salesPedidosYa ? [['PedidosYa:', sessionData.salesPedidosYa]] : []),
-    ...(sessionData.salesDiDiFood ? [['DiDiFood:', sessionData.salesDiDiFood]] : []),
-  ];
+  // ========================================================================
+  // HOJA 1: RESUMEN
+  // ========================================================================
+  const aoa = []
 
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  summarySheet['!cols'] = [{ width: 30 }, { width: 20 }];
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
+  // Título (fila 0)
+  aoa.push(['REPORTE DE CIERRE DE CAJA', '', '', ''])
+  aoa.push([])
 
-  // Hoja 2: Comprobantes de la Sesión
+  // Metadata
+  aoa.push(['Negocio:', businessData?.name || 'N/A', '', ''])
+  aoa.push(['RUC:', businessData?.ruc || 'N/A', '', ''])
+  aoa.push(['Sucursal:', businessData?.branchName || '-', '', ''])
+  aoa.push(['Apertura:', openedAtDate ? format(openedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : '-', '', ''])
+  aoa.push(['Cierre:', closedAtDate ? format(closedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : '-', '', ''])
+  aoa.push(['Cajero:', sessionData?.closedByName || sessionData?.openedByName || '-', '', ''])
+  aoa.push(['Comprobantes:', invoices.length, '', ''])
+  const metaEndRow = aoa.length - 1
+  aoa.push([])
+
+  // KPI cards (PEN) — label en una fila, valor en la siguiente
+  aoa.push(['Monto Inicial', 'Ventas del Día', 'Otros Ingresos', 'Egresos'])
+  const kpiLabelRow = aoa.length - 1
+  aoa.push([
+    Number((sessionData.openingAmount || 0).toFixed(2)),
+    Number((sessionData.totalSales || 0).toFixed(2)),
+    Number((sessionData.totalIncome || 0).toFixed(2)),
+    Number((sessionData.totalExpense || 0).toFixed(2)),
+  ])
+  const kpiValueRow = aoa.length - 1
+  aoa.push([])
+
+  // VENTAS POR MÉTODO + ARQUEO (lado a lado en cols A-B y C-D)
+  aoa.push(['VENTAS POR MÉTODO DE PAGO', '', 'ARQUEO DE CIERRE', ''])
+  const sectionsRow = aoa.length - 1
+  aoa.push(['Método', 'Monto', 'Método', 'Monto'])
+  const tablesHeaderRow = aoa.length - 1
+
+  const salesMethods = [
+    ['Efectivo', sessionData.salesCash || 0],
+    ['Tarjetas', sessionData.salesCard || 0],
+    ['Transferencias', sessionData.salesTransfer || 0],
+    ...(sessionData.salesYape ? [['Yape', sessionData.salesYape]] : []),
+    ...(sessionData.salesPlin ? [['Plin', sessionData.salesPlin]] : []),
+    ...(sessionData.salesRappi ? [['Rappi', sessionData.salesRappi]] : []),
+    ...(sessionData.salesPedidosYa ? [['PedidosYa', sessionData.salesPedidosYa]] : []),
+    ...(sessionData.salesDiDiFood ? [['DiDiFood', sessionData.salesDiDiFood]] : []),
+  ]
+  const closingMethods = [
+    ['Efectivo Contado', sessionData.closingCash || 0],
+    ['Tarjetas', sessionData.closingCard || 0],
+    ['Transferencias', sessionData.closingTransfer || 0],
+    ...(sessionData.closingYape ? [['Yape', sessionData.closingYape]] : []),
+    ...(sessionData.closingPlin ? [['Plin', sessionData.closingPlin]] : []),
+    ...(sessionData.closingRappi ? [['Rappi', sessionData.closingRappi]] : []),
+    ...(sessionData.closingPedidosYa ? [['PedidosYa', sessionData.closingPedidosYa]] : []),
+    ...(sessionData.closingDiDiFood ? [['DiDiFood', sessionData.closingDiDiFood]] : []),
+  ]
+
+  const maxRows = Math.max(salesMethods.length, closingMethods.length)
+  const tableStartRow = aoa.length
+  for (let i = 0; i < maxRows; i++) {
+    const s = salesMethods[i] || ['', '']
+    const c = closingMethods[i] || ['', '']
+    aoa.push([s[0], s[1], c[0], c[1]])
+  }
+  const tableEndRow = aoa.length - 1
+
+  // Total ventas / Total contado
+  aoa.push([
+    'TOTAL VENTAS', Number((sessionData.totalSales || 0).toFixed(2)),
+    'TOTAL CONTADO', Number((sessionData.closingAmount || 0).toFixed(2)),
+  ])
+  const totalsRow = aoa.length - 1
+  aoa.push([])
+
+  // Efectivo esperado + diferencia
+  aoa.push(['Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((sessionData.expectedAmount || 0).toFixed(2))])
+  const expectedRow = aoa.length - 1
+  const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0)
+  const diffOk = difference >= 0
+  const diffLabel = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante')
+  aoa.push([`DIFERENCIA EN EFECTIVO — ${diffLabel}`, '', '', Number(difference.toFixed(2))])
+  const diffRow = aoa.length - 1
+  aoa.push([])
+
+  // ========== BLOQUE USD (solo si tuvo actividad) ==========
+  let usdSectionRow = -1, usdKpiLabelRow = -1, usdKpiValueRow = -1
+  let usdTableSectionRow = -1, usdTableHeaderRow = -1, usdTableStart = -1, usdTableEnd = -1
+  let usdTotalsRow = -1, usdExpectedRow = -1, usdDiffRow = -1
+  let usdDiffOk = false
+
+  if (usd) {
+    aoa.push(['CAJA EN DÓLARES (USD)', '', '', ''])
+    usdSectionRow = aoa.length - 1
+    aoa.push([])
+
+    aoa.push(['Monto Inicial', 'Ventas del Día', 'Otros Ingresos', 'Egresos'])
+    usdKpiLabelRow = aoa.length - 1
+    aoa.push([
+      Number((usd.openingAmount || 0).toFixed(2)),
+      Number((usd.totalSales || 0).toFixed(2)),
+      Number((usd.totalIncome || 0).toFixed(2)),
+      Number((usd.totalExpense || 0).toFixed(2)),
+    ])
+    usdKpiValueRow = aoa.length - 1
+    aoa.push([])
+
+    aoa.push(['VENTAS USD POR MÉTODO DE PAGO', '', 'ARQUEO USD', ''])
+    usdTableSectionRow = aoa.length - 1
+    aoa.push(['Método', 'Monto', 'Método', 'Monto'])
+    usdTableHeaderRow = aoa.length - 1
+
+    const usdSales = [
+      ['Efectivo', usd.salesCash || 0],
+      ['Tarjetas', usd.salesCard || 0],
+      ['Transferencias', usd.salesTransfer || 0],
+      ...(usd.salesYape ? [['Yape', usd.salesYape]] : []),
+      ...(usd.salesPlin ? [['Plin', usd.salesPlin]] : []),
+    ]
+    const usdClosing = [
+      ['Efectivo Contado', usd.closingCash || 0],
+      ['Tarjetas', usd.closingCard || 0],
+      ['Transferencias', usd.closingTransfer || 0],
+      ...(usd.closingYape ? [['Yape', usd.closingYape]] : []),
+      ...(usd.closingPlin ? [['Plin', usd.closingPlin]] : []),
+    ]
+    const usdMax = Math.max(usdSales.length, usdClosing.length)
+    usdTableStart = aoa.length
+    for (let i = 0; i < usdMax; i++) {
+      const s = usdSales[i] || ['', '']
+      const c = usdClosing[i] || ['', '']
+      aoa.push([s[0], s[1], c[0], c[1]])
+    }
+    usdTableEnd = aoa.length - 1
+
+    aoa.push([
+      'TOTAL VENTAS USD', Number((usd.totalSales || 0).toFixed(2)),
+      'TOTAL CONTADO USD', Number((usd.closingAmount || 0).toFixed(2)),
+    ])
+    usdTotalsRow = aoa.length - 1
+    aoa.push([])
+
+    aoa.push(['Efectivo USD Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((usd.expectedAmount || 0).toFixed(2))])
+    usdExpectedRow = aoa.length - 1
+    const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
+    usdDiffOk = diffUSD >= 0
+    const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (usdDiffOk ? 'Sobrante' : 'Faltante')
+    aoa.push([`DIFERENCIA USD — ${diffUSDLbl}`, '', '', Number(diffUSD.toFixed(2))])
+    usdDiffRow = aoa.length - 1
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!cols'] = [{ wch: 35 }, { wch: 16 }, { wch: 28 }, { wch: 16 }]
+  ws['!rows'] = []
+  ws['!rows'][0] = { hpt: 32 }
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // título
+    { s: { r: sectionsRow, c: 0 }, e: { r: sectionsRow, c: 1 } },
+    { s: { r: sectionsRow, c: 2 }, e: { r: sectionsRow, c: 3 } },
+    { s: { r: expectedRow, c: 0 }, e: { r: expectedRow, c: 2 } },
+    { s: { r: diffRow, c: 0 }, e: { r: diffRow, c: 2 } },
+  ]
+  if (usd) {
+    ws['!merges'].push(
+      { s: { r: usdSectionRow, c: 0 }, e: { r: usdSectionRow, c: 3 } },
+      { s: { r: usdTableSectionRow, c: 0 }, e: { r: usdTableSectionRow, c: 1 } },
+      { s: { r: usdTableSectionRow, c: 2 }, e: { r: usdTableSectionRow, c: 3 } },
+      { s: { r: usdExpectedRow, c: 0 }, e: { r: usdExpectedRow, c: 2 } },
+      { s: { r: usdDiffRow, c: 0 }, e: { r: usdDiffRow, c: 2 } },
+    )
+  }
+
+  // Aplicar estilos
+  for (let c = 0; c < 4; c++) setS(ws, 0, c, sTitle)
+
+  for (let r = 2; r <= metaEndRow; r++) {
+    setS(ws, r, 0, sMetaLabel)
+    setS(ws, r, 1, sMetaValue)
+  }
+
+  // KPI cards PEN
+  const kpiPalette = [
+    { bg: XLS_COLORS.kpiInitial, fg: XLS_COLORS.kpiInitialText },
+    { bg: XLS_COLORS.kpiSales, fg: XLS_COLORS.kpiSalesText },
+    { bg: XLS_COLORS.kpiIncome, fg: XLS_COLORS.kpiIncomeText },
+    { bg: XLS_COLORS.kpiExpense, fg: XLS_COLORS.kpiExpenseText },
+  ]
+  for (let c = 0; c < 4; c++) {
+    setS(ws, kpiLabelRow, c, sKpiLabel(kpiPalette[c].bg))
+    setS(ws, kpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'PEN'))
+  }
+  ws['!rows'][kpiValueRow] = { hpt: 26 }
+
+  // Sección tablas
+  for (let c = 0; c < 4; c++) setS(ws, sectionsRow, c, sSection)
+  for (let c = 0; c < 4; c++) setS(ws, tablesHeaderRow, c, sHeader)
+  for (let r = tableStartRow; r <= tableEndRow; r++) {
+    const i = r - tableStartRow
+    setS(ws, r, 0, sCell(i))
+    setS(ws, r, 1, sCellNumber(i, { currency: 'PEN' }))
+    setS(ws, r, 2, sCell(i))
+    setS(ws, r, 3, sCellNumber(i, { currency: 'PEN' }))
+  }
+  setS(ws, totalsRow, 0, sTotalLabel)
+  setS(ws, totalsRow, 1, sTotalNumber('PEN'))
+  setS(ws, totalsRow, 2, sTotalLabel)
+  setS(ws, totalsRow, 3, sTotalNumber('PEN'))
+
+  // Esperado + diferencia
+  setS(ws, expectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+  setS(ws, expectedRow, 3, sTotalNumber('PEN'))
+  setS(ws, diffRow, 0, sDifferenceLabel(diffOk))
+  setS(ws, diffRow, 3, sDifferenceNumber(diffOk, 'PEN'))
+
+  // Bloque USD
+  if (usd) {
+    for (let c = 0; c < 4; c++) setS(ws, usdSectionRow, c, sSection)
+    for (let c = 0; c < 4; c++) {
+      setS(ws, usdKpiLabelRow, c, sKpiLabel(kpiPalette[c].bg))
+      setS(ws, usdKpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'USD'))
+    }
+    ws['!rows'][usdKpiValueRow] = { hpt: 26 }
+
+    for (let c = 0; c < 4; c++) setS(ws, usdTableSectionRow, c, sSection)
+    for (let c = 0; c < 4; c++) setS(ws, usdTableHeaderRow, c, sHeader)
+    for (let r = usdTableStart; r <= usdTableEnd; r++) {
+      const i = r - usdTableStart
+      setS(ws, r, 0, sCell(i))
+      setS(ws, r, 1, sCellNumber(i, { currency: 'USD' }))
+      setS(ws, r, 2, sCell(i))
+      setS(ws, r, 3, sCellNumber(i, { currency: 'USD' }))
+    }
+    setS(ws, usdTotalsRow, 0, sTotalLabel)
+    setS(ws, usdTotalsRow, 1, sTotalNumber('USD'))
+    setS(ws, usdTotalsRow, 2, sTotalLabel)
+    setS(ws, usdTotalsRow, 3, sTotalNumber('USD'))
+
+    setS(ws, usdExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+    setS(ws, usdExpectedRow, 3, sTotalNumber('USD'))
+    setS(ws, usdDiffRow, 0, sDifferenceLabel(usdDiffOk))
+    setS(ws, usdDiffRow, 3, sDifferenceNumber(usdDiffOk, 'USD'))
+  }
+
+  XLSX.utils.book_append_sheet(workbook, ws, 'Resumen')
+
+  // ========================================================================
+  // HOJA 2: COMPROBANTES
+  // ========================================================================
   if (invoices.length > 0) {
-    const invoicesData = [
-      ['COMPROBANTES DE LA SESIÓN'],
-      [''],
-      ['Número', 'Tipo', 'Cliente', 'Método de Pago', 'Total', 'Fecha']
-    ];
+    const hasUsdInvoices = invoices.some(i => i.currency === 'USD')
+    const invHeaders = ['N°', 'Tipo', 'Cliente', 'Documento', 'Método de Pago', 'Total', ...(hasUsdInvoices ? ['Moneda'] : []), 'Estado', 'Fecha']
+    const totalCols = invHeaders.length
+    const ia = []
+    ia.push(['COMPROBANTES DE LA SESIÓN', ...Array(totalCols - 1).fill('')])
+    ia.push([])
+    ia.push(['Total:', invoices.length, '', '', '', '', ...(hasUsdInvoices ? [''] : []), '', ''])
+    ia.push([])
+    ia.push(invHeaders)
+    const invHeaderRow = ia.length - 1
+    const invStart = ia.length
+    invoices.forEach(inv => {
+      const invDate = getDateFromTimestamp(inv.createdAt)
+      const isVoided = inv.status === 'cancelled' || inv.status === 'voided'
+      const isNC = inv.documentType === 'nota_credito'
+      const isPending = inv.paymentStatus === 'pending'
+      const isPartial = inv.paymentStatus === 'partial'
+      const statusText = isVoided ? 'Anulado' : (isNC ? 'Devolución' : (isPending ? 'Crédito' : (isPartial ? 'Parcial' : 'Pagado')))
+      const row = [
+        inv.number || '-',
+        docTypeLabels[inv.documentType] || inv.documentType || '-',
+        inv.customer?.businessName || inv.customer?.name || inv.customerName || 'Cliente General',
+        inv.customer?.documentNumber || '-',
+        formatPaymentMethods(inv),
+        Number((inv.total || 0).toFixed(2)),
+        ...(hasUsdInvoices ? [inv.currency === 'USD' ? 'USD' : 'PEN'] : []),
+        statusText,
+        invDate ? format(invDate, 'dd/MM/yyyy HH:mm', { locale: es }) : '-',
+      ]
+      ia.push(row)
+    })
+    const invEnd = ia.length - 1
 
-    invoices.forEach(invoice => {
-      const invoiceDate = getDateFromTimestamp(invoice.createdAt);
-      invoicesData.push([
-        invoice.number || 'N/A',
-        invoice.type || 'N/A',
-        invoice.customerName || 'Cliente General',
-        formatPaymentMethods(invoice),
-        invoice.total || 0,
-        invoiceDate ? format(invoiceDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
-      ]);
-    });
+    const wsInv = XLSX.utils.aoa_to_sheet(ia)
+    const colWidths = [
+      { wch: 18 }, { wch: 14 }, { wch: 32 }, { wch: 14 },
+      { wch: 30 }, { wch: 13 },
+      ...(hasUsdInvoices ? [{ wch: 10 }] : []),
+      { wch: 13 }, { wch: 18 },
+    ]
+    wsInv['!cols'] = colWidths
+    wsInv['!rows'] = []
+    wsInv['!rows'][0] = { hpt: 28 }
+    wsInv['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }]
 
-    const invoicesSheet = XLSX.utils.aoa_to_sheet(invoicesData);
-    invoicesSheet['!cols'] = [
-      { width: 20 },
-      { width: 15 },
-      { width: 30 },
-      { width: 40 },  // Más ancho para mostrar pagos mixtos
-      { width: 15 },
-      { width: 20 }
-    ];
-    XLSX.utils.book_append_sheet(workbook, invoicesSheet, 'Comprobantes');
+    for (let c = 0; c < totalCols; c++) setS(wsInv, 0, c, sTitle)
+    setS(wsInv, 2, 0, sMetaLabel)
+    setS(wsInv, 2, 1, sMetaValue)
+    for (let c = 0; c < totalCols; c++) setS(wsInv, invHeaderRow, c, sHeader)
+    for (let r = invStart; r <= invEnd; r++) {
+      const i = r - invStart
+      const inv = invoices[i]
+      const isUSD = inv?.currency === 'USD'
+      setS(wsInv, r, 0, sCellCenter(i))   // N°
+      setS(wsInv, r, 1, sCellCenter(i))   // Tipo
+      setS(wsInv, r, 2, sCell(i))         // Cliente
+      setS(wsInv, r, 3, sCellCenter(i))   // Documento
+      setS(wsInv, r, 4, sCell(i))         // Método
+      setS(wsInv, r, 5, sCellNumber(i, { currency: isUSD ? 'USD' : 'PEN' })) // Total
+      let nextCol = 6
+      if (hasUsdInvoices) {
+        // Badge moneda
+        setS(wsInv, r, nextCol++, {
+          ...sCellCenter(i),
+          font: { bold: true, sz: 9, color: { rgb: isUSD ? XLS_COLORS.usdTagText : '6B7280' } },
+          fill: { fgColor: { rgb: isUSD ? XLS_COLORS.usdTag : (i % 2 === 0 ? 'FFFFFF' : XLS_COLORS.zebraBg) } },
+        })
+      }
+      setS(wsInv, r, nextCol++, sCellCenter(i)) // Estado
+      setS(wsInv, r, nextCol++, sCellCenter(i)) // Fecha
+    }
+    wsInv['!freeze'] = { xSplit: 0, ySplit: invHeaderRow + 1 }
+    XLSX.utils.book_append_sheet(workbook, wsInv, 'Comprobantes')
   }
 
-  // Hoja: Pagos de comprobantes anteriores (cobros diferidos)
+  // ========================================================================
+  // HOJA 3: PAGOS DE COMPROBANTES ANTERIORES (cobros diferidos)
+  // ========================================================================
   if (deferredPayments.length > 0) {
-    const deferredData = [
-      ['PAGOS DE COMPROBANTES ANTERIORES'],
-      ['(Cobros recibidos hoy sobre comprobantes emitidos en sesiones previas)'],
-      [''],
-      ['Comprobante', 'Cliente', 'Método', 'Monto', 'Hora']
-    ];
-    let deferredTotal = 0;
+    const hasUsdDef = deferredPayments.some(p => p.currency === 'USD')
+    const defHeaders = ['Comprobante', 'Cliente', 'Método', 'Monto', ...(hasUsdDef ? ['Moneda'] : []), 'Hora']
+    const totalDef = defHeaders.length
+    const da = []
+    da.push(['PAGOS DE COMPROBANTES ANTERIORES', ...Array(totalDef - 1).fill('')])
+    da.push(['(Cobros recibidos hoy sobre comprobantes emitidos en sesiones previas)', ...Array(totalDef - 1).fill('')])
+    da.push([])
+    da.push(defHeaders)
+    const defHeaderRow = da.length - 1
+    const defStart = da.length
+    let defTotalPEN = 0, defTotalUSD = 0
     deferredPayments.forEach(p => {
-      deferredTotal += p.amount || 0;
-      const time = p.date instanceof Date
-        ? format(p.date, 'dd/MM/yyyy HH:mm', { locale: es })
-        : '-';
-      deferredData.push([
+      const time = p.date instanceof Date ? format(p.date, 'dd/MM/yyyy HH:mm', { locale: es }) : '-'
+      const isUSD = p.currency === 'USD'
+      if (isUSD) defTotalUSD += p.amount || 0
+      else defTotalPEN += p.amount || 0
+      da.push([
         p.invoiceNumber || '-',
-        p.customerName || 'Cliente General',
+        p.customerName || '-',
         p.method || '-',
-        p.amount || 0,
+        Number((p.amount || 0).toFixed(2)),
+        ...(hasUsdDef ? [isUSD ? 'USD' : 'PEN'] : []),
         time,
-      ]);
-    });
-    deferredData.push([], ['', '', 'TOTAL', deferredTotal, '']);
+      ])
+    })
+    const defEnd = da.length - 1
+    da.push([])
+    da.push(['', '', 'TOTAL PEN', Number(defTotalPEN.toFixed(2)), ...(hasUsdDef ? [''] : []), ''])
+    const defTotalRow = da.length - 1
+    let defTotalUSDRow = -1
+    if (hasUsdDef && defTotalUSD > 0) {
+      da.push(['', '', 'TOTAL USD', Number(defTotalUSD.toFixed(2)), '', ''])
+      defTotalUSDRow = da.length - 1
+    }
 
-    const deferredSheet = XLSX.utils.aoa_to_sheet(deferredData);
-    deferredSheet['!cols'] = [{ width: 20 }, { width: 30 }, { width: 15 }, { width: 12 }, { width: 18 }];
-    XLSX.utils.book_append_sheet(workbook, deferredSheet, 'Pagos Anteriores');
+    const wsDef = XLSX.utils.aoa_to_sheet(da)
+    wsDef['!cols'] = [
+      { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 13 },
+      ...(hasUsdDef ? [{ wch: 10 }] : []),
+      { wch: 18 },
+    ]
+    wsDef['!rows'] = []
+    wsDef['!rows'][0] = { hpt: 28 }
+    wsDef['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalDef - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: totalDef - 1 } },
+    ]
+
+    for (let c = 0; c < totalDef; c++) setS(wsDef, 0, c, sTitle)
+    setS(wsDef, 1, 0, { ...sMetaValue, font: { ...sMetaValue.font, italic: true, color: { rgb: '6B7280' } } })
+    for (let c = 0; c < totalDef; c++) setS(wsDef, defHeaderRow, c, sHeader)
+    for (let r = defStart; r <= defEnd; r++) {
+      const i = r - defStart
+      const p = deferredPayments[i]
+      const isUSD = p?.currency === 'USD'
+      setS(wsDef, r, 0, sCellCenter(i))
+      setS(wsDef, r, 1, sCell(i))
+      setS(wsDef, r, 2, sCellCenter(i))
+      setS(wsDef, r, 3, sCellNumber(i, { currency: isUSD ? 'USD' : 'PEN' }))
+      let nextCol = 4
+      if (hasUsdDef) {
+        setS(wsDef, r, nextCol++, {
+          ...sCellCenter(i),
+          font: { bold: true, sz: 9, color: { rgb: isUSD ? XLS_COLORS.usdTagText : '6B7280' } },
+          fill: { fgColor: { rgb: isUSD ? XLS_COLORS.usdTag : (i % 2 === 0 ? 'FFFFFF' : XLS_COLORS.zebraBg) } },
+        })
+      }
+      setS(wsDef, r, nextCol++, sCellCenter(i))
+    }
+    setS(wsDef, defTotalRow, 2, sTotalLabel)
+    setS(wsDef, defTotalRow, 3, sTotalNumber('PEN'))
+    if (defTotalUSDRow >= 0) {
+      setS(wsDef, defTotalUSDRow, 2, sTotalLabel)
+      setS(wsDef, defTotalUSDRow, 3, sTotalNumber('USD'))
+    }
+    wsDef['!freeze'] = { xSplit: 0, ySplit: defHeaderRow + 1 }
+    XLSX.utils.book_append_sheet(workbook, wsDef, 'Pagos Anteriores')
   }
 
-  // Hoja 3: Movimientos Adicionales
+  // ========================================================================
+  // HOJA 4: MOVIMIENTOS MANUALES
+  // ========================================================================
   if (movements.length > 0) {
-    const movementsData = [
-      ['MOVIMIENTOS ADICIONALES'],
-      [''],
-      ['Tipo', 'Categoría', 'Descripción', 'Monto', 'Fecha']
-    ];
+    const hasUsdMov = movements.some(m => m.currency === 'USD')
+    const movHeaders = ['Tipo', 'Categoría', 'Descripción', 'Monto', ...(hasUsdMov ? ['Moneda'] : []), 'Fecha']
+    const totalMov = movHeaders.length
+    const ma = []
+    ma.push(['MOVIMIENTOS MANUALES (Ingresos y Egresos adicionales)', ...Array(totalMov - 1).fill('')])
+    ma.push([])
+    ma.push(movHeaders)
+    const movHeaderRow = ma.length - 1
+    const movStart = ma.length
+    let totalIncomePEN = 0, totalExpensePEN = 0, totalIncomeUSD = 0, totalExpenseUSD = 0
+    movements.forEach(m => {
+      const mDate = getDateFromTimestamp(m.createdAt)
+      const isUSD = m.currency === 'USD'
+      const amt = m.amount || 0
+      if (m.type === 'income') { if (isUSD) totalIncomeUSD += amt; else totalIncomePEN += amt }
+      else { if (isUSD) totalExpenseUSD += amt; else totalExpensePEN += amt }
+      ma.push([
+        m.type === 'income' ? 'Ingreso' : 'Egreso',
+        m.category || 'Otros',
+        m.description || '-',
+        Number(amt.toFixed(2)),
+        ...(hasUsdMov ? [isUSD ? 'USD' : 'PEN'] : []),
+        mDate ? format(mDate, 'dd/MM/yyyy HH:mm', { locale: es }) : '-',
+      ])
+    })
+    const movEnd = ma.length - 1
+    ma.push([])
+    ma.push(['', '', 'Total Ingresos PEN:', Number(totalIncomePEN.toFixed(2)), ...(hasUsdMov ? [''] : []), ''])
+    const tIPenRow = ma.length - 1
+    ma.push(['', '', 'Total Egresos PEN:', Number(totalExpensePEN.toFixed(2)), ...(hasUsdMov ? [''] : []), ''])
+    const tEPenRow = ma.length - 1
+    let tIUsdRow = -1, tEUsdRow = -1
+    if (hasUsdMov) {
+      ma.push(['', '', 'Total Ingresos USD:', Number(totalIncomeUSD.toFixed(2)), '', ''])
+      tIUsdRow = ma.length - 1
+      ma.push(['', '', 'Total Egresos USD:', Number(totalExpenseUSD.toFixed(2)), '', ''])
+      tEUsdRow = ma.length - 1
+    }
 
-    movements.forEach(movement => {
-      const movementDate = getDateFromTimestamp(movement.createdAt);
-      movementsData.push([
-        movement.type === 'income' ? 'Ingreso' : 'Egreso',
-        movement.category || 'N/A',
-        movement.description || 'N/A',
-        movement.amount || 0,
-        movementDate ? format(movementDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
-      ]);
-    });
+    const wsMov = XLSX.utils.aoa_to_sheet(ma)
+    wsMov['!cols'] = [
+      { wch: 12 }, { wch: 22 }, { wch: 40 }, { wch: 13 },
+      ...(hasUsdMov ? [{ wch: 10 }] : []),
+      { wch: 18 },
+    ]
+    wsMov['!rows'] = []
+    wsMov['!rows'][0] = { hpt: 28 }
+    wsMov['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalMov - 1 } }]
 
-    const movementsSheet = XLSX.utils.aoa_to_sheet(movementsData);
-    movementsSheet['!cols'] = [
-      { width: 15 },
-      { width: 20 },
-      { width: 40 },
-      { width: 15 },
-      { width: 20 }
-    ];
-    XLSX.utils.book_append_sheet(workbook, movementsSheet, 'Movimientos');
+    for (let c = 0; c < totalMov; c++) setS(wsMov, 0, c, sTitle)
+    for (let c = 0; c < totalMov; c++) setS(wsMov, movHeaderRow, c, sHeader)
+    for (let r = movStart; r <= movEnd; r++) {
+      const i = r - movStart
+      const m = movements[i]
+      const isUSD = m?.currency === 'USD'
+      setS(wsMov, r, 0, sCellCenter(i))
+      setS(wsMov, r, 1, sCell(i))
+      setS(wsMov, r, 2, sCell(i))
+      setS(wsMov, r, 3, sCellNumber(i, { currency: isUSD ? 'USD' : 'PEN' }))
+      let nextCol = 4
+      if (hasUsdMov) {
+        setS(wsMov, r, nextCol++, {
+          ...sCellCenter(i),
+          font: { bold: true, sz: 9, color: { rgb: isUSD ? XLS_COLORS.usdTagText : '6B7280' } },
+          fill: { fgColor: { rgb: isUSD ? XLS_COLORS.usdTag : (i % 2 === 0 ? 'FFFFFF' : XLS_COLORS.zebraBg) } },
+        })
+      }
+      setS(wsMov, r, nextCol++, sCellCenter(i))
+    }
+    setS(wsMov, tIPenRow, 2, sTotalLabel)
+    setS(wsMov, tIPenRow, 3, sTotalNumber('PEN'))
+    setS(wsMov, tEPenRow, 2, sTotalLabel)
+    setS(wsMov, tEPenRow, 3, sTotalNumber('PEN'))
+    if (tIUsdRow >= 0) {
+      setS(wsMov, tIUsdRow, 2, sTotalLabel)
+      setS(wsMov, tIUsdRow, 3, sTotalNumber('USD'))
+      setS(wsMov, tEUsdRow, 2, sTotalLabel)
+      setS(wsMov, tEUsdRow, 3, sTotalNumber('USD'))
+    }
+    wsMov['!freeze'] = { xSplit: 0, ySplit: movHeaderRow + 1 }
+    XLSX.utils.book_append_sheet(workbook, wsMov, 'Movimientos')
   }
 
+  // ========================================================================
   // Generar archivo
-  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
-
-  const isNativePlatform = Capacitor.isNativePlatform();
+  // ========================================================================
+  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`
+  const isNativePlatform = Capacitor.isNativePlatform()
   if (isNativePlatform) {
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-    await saveAndShareFile(excelBuffer, fileName);
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
+    await saveAndShareFile(excelBuffer, fileName)
   } else {
-    XLSX.writeFile(workbook, fileName);
+    XLSX.writeFile(workbook, fileName)
   }
-};
+}
 
 /**
  * Helper para convertir hex a RGB
