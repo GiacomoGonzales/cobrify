@@ -1798,6 +1798,11 @@ export default function CashRegister() {
                     <p className="text-2xl font-bold text-gray-900">
                       {formatCurrency(currentSession.openingAmount)}
                     </p>
+                    {cashMultiCurrencyOn && (currentSession.openingAmountUSD || 0) > 0 && (
+                      <p className="text-xs text-emerald-700 mt-0.5 font-medium">
+                        + {formatCurrency(currentSession.openingAmountUSD, 'USD')}
+                      </p>
+                    )}
                   </div>
                   <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                     <DollarSign className="w-6 h-6 text-blue-600" />
@@ -1814,6 +1819,11 @@ export default function CashRegister() {
                     <p className="text-2xl font-bold text-green-600">
                       {formatCurrency(totals.sales)}
                     </p>
+                    {cashMultiCurrencyOn && totals.usd && totals.usd.sales > 0 && (
+                      <p className="text-xs text-emerald-700 mt-0.5 font-medium">
+                        + {formatCurrency(totals.usd.sales, 'USD')}
+                      </p>
+                    )}
                   </div>
                   <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                     <TrendingUp className="w-6 h-6 text-green-600" />
@@ -1831,6 +1841,11 @@ export default function CashRegister() {
                     <p className="text-2xl font-bold text-blue-600">
                       {formatCurrency(totals.income)}
                     </p>
+                    {cashMultiCurrencyOn && totals.usd && totals.usd.income > 0 && (
+                      <p className="text-xs text-emerald-700 mt-0.5 font-medium">
+                        + {formatCurrency(totals.usd.income, 'USD')}
+                      </p>
+                    )}
                   </div>
                   <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                     <TrendingUp className="w-6 h-6 text-blue-600" />
@@ -1847,6 +1862,11 @@ export default function CashRegister() {
                     <p className="text-2xl font-bold text-red-600">
                       {formatCurrency(totals.expense)}
                     </p>
+                    {cashMultiCurrencyOn && totals.usd && totals.usd.expense > 0 && (
+                      <p className="text-xs text-emerald-700 mt-0.5 font-medium">
+                        + {formatCurrency(totals.usd.expense, 'USD')}
+                      </p>
+                    )}
                   </div>
                   <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                     <TrendingDown className="w-6 h-6 text-red-600" />
@@ -1982,6 +2002,92 @@ export default function CashRegister() {
                     Abierto: {getDateFromTimestamp(currentSession.openedAt) ? formatDate(getDateFromTimestamp(currentSession.openedAt)) : 'Hoy'}
                   </div>
                 </div>
+
+                {/* ===== BLOQUE USD ===== */}
+                {/* Solo se muestra si hay actividad USD en la sesión        */}
+                {cashMultiCurrencyOn && totals.usd && (
+                  <div className="mt-5 pt-4 border-t-2 border-emerald-200 space-y-3">
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded p-2.5">
+                      <DollarSign className="w-4 h-4 text-emerald-700" />
+                      <p className="text-sm font-semibold text-emerald-900">Caja en Dólares (USD)</p>
+                    </div>
+
+                    {(totals.usd.openingAmount || 0) > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-gray-600">Monto Inicial USD:</span>
+                        <span className="text-sm font-semibold">{formatCurrency(totals.usd.openingAmount, 'USD')}</span>
+                      </div>
+                    )}
+
+                    <div className="py-1.5 border-b">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Ventas USD:</span>
+                        <span className="text-sm font-bold text-green-600">{formatCurrency(totals.usd.sales, 'USD')}</span>
+                      </div>
+                      <div className="pl-3 space-y-1 text-xs">
+                        {totals.usd.salesCash > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>• Efectivo:</span>
+                            <span className="font-medium text-green-600">{formatCurrency(totals.usd.salesCash, 'USD')}</span>
+                          </div>
+                        )}
+                        {totals.usd.salesCard > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>• Tarjeta:</span>
+                            <span className="font-medium">{formatCurrency(totals.usd.salesCard, 'USD')}</span>
+                          </div>
+                        )}
+                        {totals.usd.salesTransfer > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>• Transferencia:</span>
+                            <span className="font-medium">{formatCurrency(totals.usd.salesTransfer, 'USD')}</span>
+                          </div>
+                        )}
+                        {totals.usd.salesYape > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>• Yape:</span>
+                            <span className="font-medium">{formatCurrency(totals.usd.salesYape, 'USD')}</span>
+                          </div>
+                        )}
+                        {totals.usd.salesPlin > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>• Plin:</span>
+                            <span className="font-medium">{formatCurrency(totals.usd.salesPlin, 'USD')}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {totals.usd.income > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-blue-600">+ Otros Ingresos USD:</span>
+                        <span className="text-sm font-semibold text-blue-600">{formatCurrency(totals.usd.income, 'USD')}</span>
+                      </div>
+                    )}
+                    {totals.usd.expense > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-red-600">- Egresos USD:</span>
+                        <span className="text-sm font-semibold text-red-600">{formatCurrency(totals.usd.expense, 'USD')}</span>
+                      </div>
+                    )}
+                    {totals.usd.pendingCount > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b bg-orange-50 px-2 rounded">
+                        <span className="text-xs sm:text-sm text-orange-600">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          Pendiente USD ({totals.usd.pendingCount}):
+                        </span>
+                        <span className="text-sm font-semibold text-orange-600">{formatCurrency(totals.usd.pendingTotal, 'USD')}</span>
+                      </div>
+                    )}
+
+                    {!hideExpectedForCashier && (
+                      <div className="flex justify-between items-center py-2.5 bg-emerald-50 px-3 rounded-lg">
+                        <span className="text-sm font-semibold text-emerald-900">Efectivo USD Esperado:</span>
+                        <span className="text-lg font-bold text-emerald-700">{formatCurrency(totals.usd.expected, 'USD')}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2032,11 +2138,14 @@ export default function CashRegister() {
                         <div className="flex items-center gap-3">
                           <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-0 sm:text-right">
                             <p
-                              className={`text-base sm:text-lg font-bold ${
+                              className={`text-base sm:text-lg font-bold flex items-center gap-1.5 ${
                                 movement.type === 'income' ? 'text-green-600' : 'text-red-600'
                               }`}
                             >
-                              {movement.type === 'income' ? '+' : '-'} {formatCurrency(movement.amount)}
+                              {movement.type === 'income' ? '+' : '-'} {formatCurrency(movement.amount, movement.currency)}
+                              {movement.currency === 'USD' && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                              )}
                             </p>
                             <p className="text-xs text-gray-500">
                               {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
@@ -2243,7 +2352,12 @@ export default function CashRegister() {
                                     <td className="py-2 pr-3 truncate max-w-[140px] text-gray-700" title={userLabel}>{userLabel}</td>
                                     <td className="py-2 pr-3 text-gray-600">{payMethod}</td>
                                     <td className={`py-2 pr-3 text-right font-medium ${isNC ? 'text-red-600' : ''}`}>
-                                      {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
+                                      <span className="inline-flex items-center gap-1.5 justify-end">
+                                        {isNC ? '-' : ''}{formatCurrency(inv.total || 0, inv.currency)}
+                                        {normalizeCurrency(inv.currency) === 'USD' && (
+                                          <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                                        )}
+                                      </span>
                                     </td>
                                     <td className="py-2 pr-3">{statusBadge}</td>
                                     <td className="py-2 text-right text-gray-500">{timeStr}</td>
@@ -2995,7 +3109,12 @@ export default function CashRegister() {
                                 <td className="py-1.5 pr-2 text-xs text-gray-700 truncate max-w-[110px]" title={userLabel}>{userLabel}</td>
                                 <td className="py-1.5 pr-2 text-xs text-gray-600">{payMethod}</td>
                                 <td className={`py-1.5 pr-2 text-right text-xs font-medium ${isNC ? 'text-red-600' : ''}`}>
-                                  {isNC ? '-' : ''}{formatCurrency(inv.total || 0)}
+                                  <span className="inline-flex items-center gap-1 justify-end">
+                                    {isNC ? '-' : ''}{formatCurrency(inv.total || 0, inv.currency)}
+                                    {normalizeCurrency(inv.currency) === 'USD' && (
+                                      <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD</span>
+                                    )}
+                                  </span>
                                 </td>
                                 <td className="py-1.5">{statusBadge}</td>
                               </tr>
