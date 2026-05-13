@@ -617,6 +617,25 @@ export default function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency])
 
+  // Cuando el cajero edita el TC manualmente (o se actualiza desde SBS),
+  // recomputamos los precios USD del carrito desde basePrice (PEN). Así
+  // si TC pasa de 3.454 → 3.60, el item de 300 PEN pasa de $86.86 a $83.33.
+  useEffect(() => {
+    if (!posMultiCurrencyOn) return
+    if (currency !== 'USD') return
+    if (!exchangeRate || exchangeRate <= 0) return
+    setCart(prev => prev.map(item => {
+      const baseInPEN = Number(item.basePrice)
+      if (!Number.isFinite(baseInPEN) || baseInPEN <= 0) return item
+      const newPrice = Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
+      // Si el precio ya coincide (margen redondeo), no tocar para evitar
+      // renders innecesarios.
+      if (Math.abs((Number(item.price) || 0) - newPrice) < 0.005) return item
+      return { ...item, price: newPrice }
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchangeRate])
+
   // Convierte un precio del catálogo (siempre en PEN) a la moneda activa
   // de la sesión POS. Si la sesión es PEN, devuelve el mismo número.
   const toSessionCurrency = (priceInBase) => {
