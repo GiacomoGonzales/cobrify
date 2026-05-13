@@ -644,23 +644,49 @@ export default function POS() {
     return formatCurrency(toSessionCurrency(Number(product.price) || 0), currency)
   }
 
-  // Cambio de moneda con carrito lleno: convertir los precios de los items
-  // con el TC actual o pedir confirmación para vaciar. Esto preserva la
-  // composición del carrito sin perder el trabajo del cajero.
-  const handleCurrencyChange = (newCurrency) => {
+  // Cambio de moneda. Si vamos a USD y no hay TC válido, lo obtenemos
+  // antes de hacer cualquier otra cosa. Si hay carrito, convertimos los
+  // precios con el TC efectivo recién obtenido.
+  const handleCurrencyChange = async (newCurrency) => {
     if (newCurrency === currency) return
+
+    // 1) Asegurar TC válido si vamos a USD. Si la SBS no responde,
+    //    bloqueamos el cambio y pedimos ingreso manual.
+    let effectiveRate = exchangeRate
+    if (newCurrency === 'USD' && exchangeRate <= 1) {
+      setLoadingRate(true)
+      try {
+        const result = await getRateForDate(new Date())
+        if (result && Number.isFinite(result.sell) && result.sell > 0) {
+          effectiveRate = Number(result.sell.toFixed(4))
+          setExchangeRate(effectiveRate)
+          setExchangeRateSource(result.source)
+          if (result.source === 'sbs') {
+            toast.success(`Tipo de cambio del día: S/ ${effectiveRate} (SBS)`)
+          }
+        } else {
+          toast.error('No se pudo obtener el TC. Ingrésalo manualmente y vuelve a intentar.')
+          setLoadingRate(false)
+          return
+        }
+      } catch (err) {
+        console.error('Error obteniendo TC:', err)
+        toast.error('No se pudo obtener el TC. Ingrésalo manualmente y vuelve a intentar.')
+        setLoadingRate(false)
+        return
+      }
+      setLoadingRate(false)
+    }
+
+    // 2) Carrito vacío: cambio directo.
     if (cart.length === 0) {
       setCurrency(newCurrency)
       return
     }
-    // Necesitamos un TC válido para convertir. Si vamos a USD y TC=1, esperar
-    // a que termine el fetch (o pedirle que lo ingrese).
-    if (newCurrency === 'USD' && exchangeRate <= 1) {
-      toast.error('Espera a que se obtenga el tipo de cambio o ingrésalo manualmente antes de cambiar de moneda.')
-      return
-    }
+
+    // 3) Carrito con items: confirmar conversión con el TC efectivo.
     const proceed = window.confirm(
-      `¿Convertir los precios del carrito de ${currency} a ${newCurrency} usando TC ${exchangeRate}?`
+      `¿Convertir los precios del carrito de ${currency} a ${newCurrency} usando TC ${effectiveRate}?`
     )
     if (!proceed) return
 
@@ -669,17 +695,17 @@ export default function POS() {
       let newPrice = oldPrice
       // PEN → USD: dividir entre TC. USD → PEN: multiplicar.
       if (currency === 'PEN' && newCurrency === 'USD') {
-        newPrice = Number(convertFromBase(oldPrice, 'USD', exchangeRate).toFixed(2))
+        newPrice = Number(convertFromBase(oldPrice, 'USD', effectiveRate).toFixed(2))
       } else if (currency === 'USD' && newCurrency === 'PEN') {
-        newPrice = Number(convertToBase(oldPrice, 'USD', exchangeRate).toFixed(2))
+        newPrice = Number(convertToBase(oldPrice, 'USD', effectiveRate).toFixed(2))
       }
       // También convertir itemDiscount si es monto (no porcentaje)
       let newItemDiscount = item.itemDiscount
       if (typeof item.itemDiscount === 'number' && item.itemDiscount > 0 && item.itemDiscountType !== 'percentage') {
         if (currency === 'PEN' && newCurrency === 'USD') {
-          newItemDiscount = Number(convertFromBase(item.itemDiscount, 'USD', exchangeRate).toFixed(2))
+          newItemDiscount = Number(convertFromBase(item.itemDiscount, 'USD', effectiveRate).toFixed(2))
         } else if (currency === 'USD' && newCurrency === 'PEN') {
-          newItemDiscount = Number(convertToBase(item.itemDiscount, 'USD', exchangeRate).toFixed(2))
+          newItemDiscount = Number(convertToBase(item.itemDiscount, 'USD', effectiveRate).toFixed(2))
         }
       }
       return { ...item, price: newPrice, itemDiscount: newItemDiscount }
