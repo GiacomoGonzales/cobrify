@@ -806,6 +806,14 @@ export default function POS() {
           if (draft.discountPercentage) setDiscountPercentage(draft.discountPercentage)
           if (draft.orderType) setOrderType(draft.orderType)
           if (draft.selectedSeller) setSelectedSeller(draft.selectedSeller)
+          // Multi-divisa: restaurar moneda, TC y fuente del TC. Solo aplica
+          // si el negocio tiene multi-divisa activa (si la flag se desactivó
+          // mientras tanto, ignoramos el draft USD y mantenemos PEN).
+          if (draft.currency && posMultiCurrencyOn) {
+            setCurrency(draft.currency)
+            if (draft.exchangeRate) setExchangeRate(Number(draft.exchangeRate))
+            if (draft.exchangeRateSource) setExchangeRateSource(draft.exchangeRateSource)
+          }
 
           // Mostrar notificación si hay items en el carrito
           if (draft.cart?.length > 0) {
@@ -850,6 +858,10 @@ export default function POS() {
           discountPercentage,
           orderType,
           selectedSeller,
+          // Multi-divisa: persistir moneda + TC + fuente del TC
+          currency,
+          exchangeRate,
+          exchangeRateSource,
           timestamp: Date.now(),
         }
         localStorage.setItem(getDraftKey(), JSON.stringify(draft))
@@ -859,7 +871,7 @@ export default function POS() {
     }, 500) // Esperar 500ms antes de guardar
 
     return () => clearTimeout(timeoutId)
-  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, user])
+  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, currency, exchangeRate, exchangeRateSource, user])
 
   // Función para limpiar el borrador del localStorage
   const clearDraft = () => {
@@ -925,6 +937,10 @@ export default function POS() {
       selectedSeller,
       generalNotes,
       paymentType,
+      // Multi-divisa: preservar moneda, TC y fuente al aparcar.
+      currency,
+      exchangeRate,
+      exchangeRateSource,
       timestamp: Date.now(),
     }
     saveHeldSales([...heldSales, held])
@@ -950,6 +966,18 @@ export default function POS() {
     setSelectedSeller(sale.selectedSeller || null)
     setGeneralNotes(sale.generalNotes || '')
     setPaymentType(sale.paymentType || 'contado')
+    // Multi-divisa: restaurar moneda y TC si estaban guardados (solo si la
+    // flag sigue activa; si la apagaron, ignorar y dejar PEN).
+    if (sale.currency && posMultiCurrencyOn) {
+      setCurrency(sale.currency)
+      if (sale.exchangeRate) setExchangeRate(Number(sale.exchangeRate))
+      if (sale.exchangeRateSource) setExchangeRateSource(sale.exchangeRateSource)
+    } else if (posMultiCurrencyOn) {
+      // Venta aparcada antes de la flag: forzar PEN para consistencia.
+      setCurrency('PEN')
+      setExchangeRate(1)
+      setExchangeRateSource(null)
+    }
     setSaleCompleted(false)
     setLastInvoiceData(null)
     saveHeldSales(heldSales.filter(s => s.id !== heldId))
