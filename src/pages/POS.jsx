@@ -6574,7 +6574,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             {/* Una sola cuota - mostrar campo simple con opción de editar */}
                             {paymentInstallments.length === 1 && (
                               <div className="flex items-center gap-2 bg-gray-50 p-2 rounded">
-                                <span className="text-xs text-gray-500">S/</span>
+                                <span className="text-xs text-gray-500">{currency === 'USD' ? '$' : 'S/'}</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -7499,7 +7499,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                             : 'bg-white text-gray-500 hover:bg-gray-50'
                                         }`}
                                       >
-                                        S/
+                                        {currency === 'USD' ? '$' : 'S/'}
                                       </button>
                                     </div>
                                     {/* Mostrar peso calculado en modo S/ */}
@@ -7654,7 +7654,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                     <div className="flex items-center gap-1.5 xl:gap-3 min-w-0">
                       <div className="flex items-center gap-1 xl:gap-2 flex-1 min-w-0">
-                        <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">S/</span>
+                        <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">{currency === 'USD' ? '$' : 'S/'}</span>
                         <input
                           type="number"
                           value={discountAmount}
