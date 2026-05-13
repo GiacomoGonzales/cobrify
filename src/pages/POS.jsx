@@ -3757,11 +3757,53 @@ export default function POS() {
       }
     }
 
-    // Multi-divisa: equivalentes en moneda base (PEN) usando el TC actual.
-    // Si la sesión es PEN, son iguales a los nativos.
-    const subtotalInBase = convertToBase(subtotalAfterDiscount, currency, exchangeRate)
-    const igvInBase = convertToBase(igvAfterDiscount, currency, exchangeRate)
-    const totalInBase = convertToBase(totalFinal, currency, exchangeRate)
+    // Multi-divisa: equivalentes en moneda base (PEN).
+    //
+    // Si todos los items tienen basePrice (PEN como source of truth),
+    // recalculamos los *InBase corriendo el mismo cálculo de impuestos
+    // pero con precios en PEN. Esto evita el error de redondeo
+    // S/300 → $92.31 → S/300.01 que ocurre al hacer (totalUSD × TC).
+    //
+    // Si no hay basePrice (carrito legacy o PEN puro), conversión directa.
+    const allItemsHaveBase = currency === 'USD'
+      && cart.length > 0
+      && cart.every(item => Number(item.basePrice) > 0)
+
+    let subtotalInBase, igvInBase, totalInBase
+    if (allItemsHaveBase) {
+      // Recalcular en PEN base usando basePrices (sin pérdida de precisión).
+      // Los itemDiscount y globalDiscount están en USD → convertir a PEN.
+      const baseAmountsInPEN = calculateMixedInvoiceAmounts(
+        cart.map(item => {
+          const basePriceVal = Number(item.basePrice) || 0
+          const lineTotalPEN = basePriceVal * item.quantity
+          const itemDiscountInPEN = (item.itemDiscount || 0) > 0
+            ? convertToBase(item.itemDiscount, 'USD', exchangeRate)
+            : 0
+          const effectivePricePEN = itemDiscountInPEN > 0
+            ? (lineTotalPEN - itemDiscountInPEN) / item.quantity
+            : basePriceVal
+          return {
+            price: effectivePricePEN,
+            quantity: item.quantity,
+            taxAffectation: taxConfig.igvExempt ? '20' : (item.taxAffectation || '10'),
+            igvRate: taxConfig.igvExempt ? 0 : (taxConfig.taxType === 'reduced' ? taxConfig.igvRate : item.igvRate),
+          }
+        }),
+        taxConfig.igvRate
+      )
+      const globalDiscountInPEN = convertToBase(globalDiscount, 'USD', exchangeRate)
+      const totalPENAfterDiscount = Math.max(0, baseAmountsInPEN.total - globalDiscountInPEN)
+      const ratioPEN = baseAmountsInPEN.total > 0 ? totalPENAfterDiscount / baseAmountsInPEN.total : 1
+      totalInBase = totalPENAfterDiscount
+      subtotalInBase = (baseAmountsInPEN.gravado.subtotal + baseAmountsInPEN.exonerado.total + baseAmountsInPEN.inafecto.total) * ratioPEN
+      igvInBase = baseAmountsInPEN.gravado.igv * ratioPEN
+    } else {
+      // PEN session o legacy: convertir directo desde session totals.
+      subtotalInBase = convertToBase(subtotalAfterDiscount, currency, exchangeRate)
+      igvInBase = convertToBase(igvAfterDiscount, currency, exchangeRate)
+      totalInBase = convertToBase(totalFinal, currency, exchangeRate)
+    }
 
     return {
       subtotal: Number(baseAmounts.subtotal.toFixed(2)),
