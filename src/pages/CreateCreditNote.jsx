@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendCreditNoteToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
@@ -495,9 +495,13 @@ export default function CreateCreditNote() {
         // Envío automático a SUNAT si está configurado
         if (companySettings?.autoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito (externa) automáticamente a SUNAT...')
-          sendInvoiceToSunat(user.uid, result.id)
-            .then(() => {
-              console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+          sendCreditNoteToSunat(user.uid, result.id)
+            .then((res) => {
+              if (res?.success) {
+                console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+              } else {
+                console.error('❌ NC enviada pero SUNAT no aceptó:', res?.error || res?.message)
+              }
             })
             .catch((sunatError) => {
               console.error('❌ Error al enviar NC a SUNAT:', sunatError)
@@ -758,9 +762,13 @@ export default function CreateCreditNote() {
         // Envío automático a SUNAT si está configurado
         if (companySettings?.autoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito automáticamente a SUNAT...')
-          sendInvoiceToSunat(user.uid, result.id)
-            .then(() => {
-              console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+          sendCreditNoteToSunat(user.uid, result.id)
+            .then((res) => {
+              if (res?.success) {
+                console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
+              } else {
+                console.error('❌ NC enviada pero SUNAT no aceptó:', res?.error || res?.message)
+              }
             })
             .catch((sunatError) => {
               console.error('❌ Error al enviar NC a SUNAT:', sunatError)
