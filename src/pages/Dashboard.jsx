@@ -22,7 +22,7 @@ import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getDocumentTotalInBase } from '@/utils/currency'
+import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
 import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -30,7 +30,9 @@ import { getTablesStats } from '@/services/tableService'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess, businessSettings } = useAppContext()
+  // Multi-divisa: solo si el negocio activó la flag en Configuración.
+  const dashMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
@@ -240,22 +242,27 @@ export default function Dashboard() {
 
   // Calcular ventas del día — multi-divisa: cada factura se convierte a
   // PEN base con el TC congelado en ella. Para facturas PEN es no-op.
-  const todaysSales = validInvoicesForSales
-    .filter(inv => {
-      const invDate = getInvoiceDate(inv)
-      if (!invDate) return false
-      return invDate >= getStartOfTodayPeru()
-    })
-    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+  const todayInvoices = validInvoicesForSales.filter(inv => {
+    const invDate = getInvoiceDate(inv)
+    if (!invDate) return false
+    return invDate >= getStartOfTodayPeru()
+  })
+  const todaysSales = todayInvoices.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+  // Total USD nativo (sin convertir) para subtítulo informativo en la card.
+  const todaysSalesUSD = todayInvoices
+    .filter(inv => normalizeCurrency(inv.currency) === 'USD')
+    .reduce((sum, inv) => sum + (Number(inv.total) || 0), 0)
 
   // Calcular ventas del mes
-  const monthSales = validInvoicesForSales
-    .filter(inv => {
-      const invDate = getInvoiceDate(inv)
-      if (!invDate) return false
-      return invDate >= getStartOfMonthPeru()
-    })
-    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+  const monthInvoices = validInvoicesForSales.filter(inv => {
+    const invDate = getInvoiceDate(inv)
+    if (!invDate) return false
+    return invDate >= getStartOfMonthPeru()
+  })
+  const monthSales = monthInvoices.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+  const monthSalesUSD = monthInvoices
+    .filter(inv => normalizeCurrency(inv.currency) === 'USD')
+    .reduce((sum, inv) => sum + (Number(inv.total) || 0), 0)
 
   // Facturas pendientes
   const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
@@ -341,6 +348,10 @@ export default function Dashboard() {
       title: 'Ventas del Día',
       subtitle: todayLabel,
       value: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
+      // Multi-divisa: línea info "+ $ X USD" si hubo ventas USD hoy
+      usdSubtitle: dashMultiCurrencyOn && todaysSalesUSD > 0 && showAmounts
+        ? `+ ${formatCurrency(todaysSalesUSD, 'USD')} USD (incluido en el total)`
+        : null,
       icon: DollarSign,
       change: todaysSales > yesterdaySales ? `+${todayChange}%` : `${todayChange}%`,
       changeType: todaysSales >= yesterdaySales ? 'positive' : 'negative',
@@ -356,6 +367,9 @@ export default function Dashboard() {
       title: 'Ventas del Mes',
       subtitle: monthRangeLabel,
       value: showAmounts ? formatCurrency(monthSales) : hiddenAmount,
+      usdSubtitle: dashMultiCurrencyOn && monthSalesUSD > 0 && showAmounts
+        ? `+ ${formatCurrency(monthSalesUSD, 'USD')} USD (incluido en el total)`
+        : null,
       icon: TrendingUp,
       change: `${validInvoicesForSales.filter(inv => {
         const invDate = getInvoiceDate(inv)
@@ -484,6 +498,9 @@ export default function Dashboard() {
                     <p className="text-xs text-primary-600 mt-0.5">{stat.subtitle}</p>
                   )}
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                  {stat.usdSubtitle && (
+                    <p className="text-xs text-emerald-700 mt-0.5 font-medium">{stat.usdSubtitle}</p>
+                  )}
                   {stat.restaurantBreakdown ? (
                     <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
                       <div className="flex items-center justify-between text-xs">
