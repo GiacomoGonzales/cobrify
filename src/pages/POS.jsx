@@ -6285,21 +6285,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                   <div className="flex gap-1.5">
                     {SUPPORTED_CURRENCIES.map((ccy) => {
-                      const disabled = documentType === 'boleta' && ccy === 'USD'
+                      const disabled = (documentType === 'boleta' && ccy === 'USD') || loadingRate
                       const active = currency === ccy
+                      const isLoadingThis = loadingRate && ccy === 'USD'
                       return (
                         <button
                           key={ccy}
                           type="button"
                           disabled={disabled}
                           onClick={() => handleCurrencyChange(ccy)}
-                          className={`flex-1 px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                          className={`flex-1 px-2 py-1 rounded text-xs font-medium border transition-colors inline-flex items-center justify-center gap-1.5 ${
                             active
                               ? 'bg-emerald-600 text-white border-emerald-600'
                               : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          {ccy === 'PEN' ? 'S/ Soles' : '$ Dólares'}
+                          {isLoadingThis && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          {ccy === 'PEN' ? 'S/ Soles' : (isLoadingThis ? 'Cargando TC…' : '$ Dólares')}
                         </button>
                       )
                     })}
