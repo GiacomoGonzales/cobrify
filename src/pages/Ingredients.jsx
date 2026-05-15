@@ -501,7 +501,17 @@ export default function Ingredients() {
         name: user?.displayName || 'Mi Negocio',
         ruc: user?.ruc || 'N/A'
       }
-      await generateIngredientsExcel(filteredIngredients, businessData, categories)
+      // Cargar recetas para la hoja "Recetas que lo usan"
+      let recipes = []
+      try {
+        const { getRecipes } = await import('@/services/recipeService')
+        const businessId = getBusinessId()
+        if (businessId) {
+          const r = await getRecipes(businessId)
+          if (r.success) recipes = r.data || []
+        }
+      } catch (e) { void e }
+      await generateIngredientsExcel(filteredIngredients, businessData, categories, recipes)
       toast.success('Excel exportado exitosamente')
     } catch (error) {
       console.error('Error al exportar:', error)

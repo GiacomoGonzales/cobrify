@@ -380,6 +380,12 @@ export const generateQuotationsExcel = async (quotations, filters = {}, business
     XLSX.utils.book_append_sheet(wb, ws, 'Resumen por Estado')
   }
 
+  // ============== HOJAS EXTRA DE ANALÍTICA ==============
+  appendBySellerSheet(wb, quotations, businessData)
+  appendByMonthSheet(wb, quotations, businessData)
+  appendExpiringSoonSheet(wb, quotations, businessData)
+  appendTopQuotedProductsSheet(wb, quotations, businessData)
+
   const statusInfo = filters.status && filters.status !== 'all' ? filters.status : ''
   const dateInfo = (filters.startDate || filters.endDate) ? 'filtrado' : ''
   const fileName = buildExcelFileName('Cotizaciones', [statusInfo, dateInfo])
@@ -389,4 +395,320 @@ export const generateQuotationsExcel = async (quotations, filters = {}, business
     shareText: `Reporte de cotizaciones: ${fileName}`,
     subDirectory: 'Cotizaciones',
   })
+}
+
+// =================== HOJAS EXTRA DE ANALÍTICA ===================
+
+const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+/** Por Vendedor — agrupado por createdByName/createdBy. */
+function appendBySellerSheet(wb, quotations, businessData) {
+  const agg = new Map()
+  for (const q of quotations) {
+    const seller = q.createdByName || q.createdBy || 'Sin asignar'
+    if (!agg.has(seller)) agg.set(seller, { name: seller, count: 0, total: 0, accepted: 0, rejected: 0 })
+    const e = agg.get(seller)
+    e.count += 1
+    e.total += (q.total || 0)
+    if (q.status === 'accepted' || q.status === 'converted') e.accepted += 1
+    else if (q.status === 'rejected' || q.status === 'expired') e.rejected += 1
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => b.total - a.total)
+
+  const headers = ['Vendedor', '# Cotizaciones', 'Total', 'Aceptadas', 'Rechazadas/Vencidas', 'Tasa Conversión %', 'Ticket Promedio']
+  const totalCols = headers.length
+
+  const aoa = [['COTIZACIONES POR VENDEDOR'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total vendedores',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  let totalCount = 0, totalAmount = 0, totalAccepted = 0, totalRejected = 0
+  rows.forEach(r => {
+    const conv = r.count > 0 ? (r.accepted / r.count) * 100 : 0
+    const ticket = r.count > 0 ? r.total / r.count : 0
+    totalCount += r.count
+    totalAmount += r.total
+    totalAccepted += r.accepted
+    totalRejected += r.rejected
+    aoa.push([
+      r.name, r.count,
+      Number(r.total.toFixed(2)),
+      r.accepted, r.rejected,
+      Number(conv.toFixed(1)),
+      Number(ticket.toFixed(2)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  const totalConv = totalCount > 0 ? (totalAccepted / totalCount) * 100 : 0
+  aoa.push([
+    'TOTALES', totalCount,
+    Number(totalAmount.toFixed(2)),
+    totalAccepted, totalRejected,
+    Number(totalConv.toFixed(1)),
+    Number((totalCount > 0 ? totalAmount / totalCount : 0).toFixed(2)),
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [26, 14, 14, 12, 18, 16, 16])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, intStyle(i))
+    setStyle(ws, r, 2, numberStyle(i))
+    setStyle(ws, r, 3, intStyle(i))
+    setStyle(ws, r, 4, intStyle(i))
+    setStyle(ws, r, 5, numberStyle(i))
+    setStyle(ws, r, 6, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 3, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 4, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 5, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 6, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Por Vendedor')
+}
+
+/** Por Mes — agrupado por mes/año de createdAt. */
+function appendByMonthSheet(wb, quotations, businessData) {
+  const agg = new Map()
+  for (const q of quotations) {
+    const d = toDate(q.createdAt)
+    if (!d) continue
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (!agg.has(key)) agg.set(key, { year: d.getFullYear(), month: d.getMonth() + 1, count: 0, total: 0, accepted: 0 })
+    const e = agg.get(key)
+    e.count += 1
+    e.total += (q.total || 0)
+    if (q.status === 'accepted' || q.status === 'converted') e.accepted += 1
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month))
+
+  const headers = ['Mes', '# Cotizaciones', 'Monto Total', 'Aceptadas', 'Conversión %']
+  const totalCols = headers.length
+
+  const aoa = [['COTIZACIONES POR MES'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total meses con actividad',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  let totalCount = 0, totalAmount = 0, totalAccepted = 0
+  rows.forEach(r => {
+    const label = `${MONTH_LABELS[r.month - 1]} ${r.year}`
+    const conv = r.count > 0 ? (r.accepted / r.count) * 100 : 0
+    totalCount += r.count
+    totalAmount += r.total
+    totalAccepted += r.accepted
+    aoa.push([label, r.count, Number(r.total.toFixed(2)), r.accepted, Number(conv.toFixed(1))])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  const totalConv = totalCount > 0 ? (totalAccepted / totalCount) * 100 : 0
+  aoa.push(['TOTALES', totalCount, Number(totalAmount.toFixed(2)), totalAccepted, Number(totalConv.toFixed(1))])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [22, 14, 16, 12, 14])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, intStyle(i))
+    setStyle(ws, r, 2, numberStyle(i))
+    setStyle(ws, r, 3, intStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 3, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 4, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Por Mes')
+}
+
+/** Vencen Pronto — cotizaciones cuyo vencimiento es <= 7 días desde ahora. */
+function appendExpiringSoonSheet(wb, quotations, businessData) {
+  const now = new Date()
+  const threshold = new Date(now.getTime() + 7 * 86400000)
+
+  const soon = quotations
+    .filter(q => {
+      if (q.status === 'accepted' || q.status === 'converted' || q.status === 'rejected' || q.status === 'expired') return false
+      const exp = toDate(q.expiryDate)
+      return exp && exp >= now && exp <= threshold
+    })
+    .map(q => {
+      const exp = toDate(q.expiryDate)
+      return { q, exp, daysLeft: Math.ceil((exp - now) / 86400000) }
+    })
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+
+  if (soon.length === 0) return
+
+  const headers = ['Número', 'Cliente', 'Fecha Emisión', 'Vence', 'Días Restantes', 'Total', 'Estado', 'Email', 'Teléfono']
+  const totalCols = headers.length
+
+  const aoa = [['COTIZACIONES QUE VENCEN PRONTO (≤ 7 DÍAS)'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total que vencen pronto',
+    totalItems: soon.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const rowStatuses = []
+  soon.forEach(({ q, exp, daysLeft }) => {
+    const created = toDate(q.createdAt)
+    rowStatuses.push(q.status || 'draft')
+    aoa.push([
+      q.number || 'N/A',
+      q.customer?.name || q.customer?.businessName || 'Cliente General',
+      created ? formatDateLocale(created) : 'N/A',
+      formatDateLocale(exp),
+      daysLeft,
+      Number((q.total || 0).toFixed(2)),
+      STATUS_LABELS[q.status] || q.status || 'N/A',
+      q.customer?.email || '',
+      q.customer?.phone || '',
+    ])
+  })
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [14, 28, 14, 14, 14, 14, 16, 26, 14])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < soon.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, centerStyle(i))
+    setStyle(ws, r, 4, { ...intStyle(i), font: { ...intStyle(i).font, bold: true, color: { rgb: 'B45309' } } })
+    setStyle(ws, r, 5, numberStyle(i))
+    setStyle(ws, r, 6, statusBadge(rowStatuses[i]))
+    setStyle(ws, r, 7, cellStyle(i))
+    setStyle(ws, r, 8, centerStyle(i))
+  }
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Vencen Pronto')
+}
+
+/** Top Productos Cotizados — agregación de items. */
+function appendTopQuotedProductsSheet(wb, quotations, businessData) {
+  const agg = new Map()
+  for (const q of quotations) {
+    if (!Array.isArray(q.items)) continue
+    const wasAccepted = q.status === 'accepted' || q.status === 'converted'
+    for (const item of q.items) {
+      const name = item.name || item.description || 'Producto'
+      const sku = item.sku || item.code || ''
+      const key = `${name}|${sku}`
+      if (!agg.has(key)) {
+        agg.set(key, { name, sku, qty: 0, count: 0, revenue: 0, acceptedCount: 0 })
+      }
+      const e = agg.get(key)
+      const qty = item.quantity || 1
+      const price = item.unitPrice || item.price || 0
+      const disc = item.discount || 0
+      e.qty += qty
+      e.count += 1
+      e.revenue += qty * price - disc
+      if (wasAccepted) e.acceptedCount += 1
+    }
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => b.revenue - a.revenue)
+
+  const headers = ['#', 'Producto', 'SKU', 'Cantidad Cotizada', '# Cotizaciones', 'Monto Total', 'En Aceptadas', '% Conversión']
+  const totalCols = headers.length
+
+  const aoa = [['TOP PRODUCTOS COTIZADOS'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total productos únicos cotizados',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0)
+  let totalQty = 0, totalCount = 0, totalAccepted = 0
+  rows.forEach((p, idx) => {
+    const conv = p.count > 0 ? (p.acceptedCount / p.count) * 100 : 0
+    totalQty += p.qty
+    totalCount += p.count
+    totalAccepted += p.acceptedCount
+    aoa.push([
+      idx + 1, p.name, p.sku,
+      Number(p.qty), p.count,
+      Number(p.revenue.toFixed(2)),
+      p.acceptedCount,
+      Number(conv.toFixed(1)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  const totalConv = totalCount > 0 ? (totalAccepted / totalCount) * 100 : 0
+  aoa.push(['', 'TOTALES', '', Number(totalQty), totalCount, Number(totalRevenue.toFixed(2)), totalAccepted, Number(totalConv.toFixed(1))])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [6, 38, 16, 14, 14, 14, 14, 14])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, intStyle(i))
+    setStyle(ws, r, 5, numberStyle(i))
+    setStyle(ws, r, 6, intStyle(i))
+    setStyle(ws, r, 7, numberStyle(i))
+  }
+  for (let c = 0; c <= 2; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 5, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 6, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 7, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Top Productos Cotizados')
 }

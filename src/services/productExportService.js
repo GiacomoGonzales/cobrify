@@ -277,7 +277,7 @@ const UNIT_LABELS = {
 }
 
 /** Reporte de productos con detalle + árbol de categorías + estadísticas. */
-export const generateProductsExcel = async (products, categories, businessData, branchLabel = null, warehouseLabel = null) => {
+export const generateProductsExcel = async (products, categories, businessData, branchLabel = null, warehouseLabel = null, brands = [], warehouses = []) => {
   const wb = XLSX.utils.book_new()
 
   const getCategoryHierarchy = (categoryId) => {
@@ -463,6 +463,11 @@ export const generateProductsExcel = async (products, categories, businessData, 
     XLSX.utils.book_append_sheet(wb, ws, 'Categorías')
   }
 
+  // ============== HOJAS EXTRA DE ANALÍTICA ==============
+  appendStockByWarehouseSheet(wb, products, warehouses, businessData)
+  appendProductsByBrandSheet(wb, products, brands, businessData)
+  appendValueByCategorySheet(wb, products, categories, businessData)
+
   const fileName = buildExcelFileName('Productos')
   await saveAndShareExcel(wb, fileName, {
     shareTitle: fileName,
@@ -553,4 +558,254 @@ export const exportProductsForRappi = async (products, categories) => {
     shareTitle: fileName,
     shareText: 'Productos para Self Mapping en Rappi',
   })
+}
+
+// =================== HOJAS EXTRA DE ANALÍTICA ===================
+
+/** Hoja "Stock por Almacén" — matriz Producto × Almacén. */
+function appendStockByWarehouseSheet(wb, products, warehouses, businessData) {
+  if (!warehouses || warehouses.length === 0) return
+  if (!products || products.length === 0) return
+
+  const headers = ['SKU', 'Producto', ...warehouses.map(w => w.name), 'Total']
+  const totalCols = headers.length
+
+  const aoa = [['STOCK POR ALMACÉN'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total productos',
+    totalItems: products.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const stockPerWarehouse = warehouses.map(() => 0)
+  let totalUnits = 0
+
+  products.forEach(p => {
+    if (p.trackStock === false) return
+    const row = [p.sku || '', p.name || 'N/A']
+    let productTotal = 0
+    warehouses.forEach((w, wIdx) => {
+      let stock = 0
+      if (p.hasVariants && p.variants?.length > 0) {
+        stock = p.variants.reduce((sum, v) => {
+          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === w.id)
+          return sum + (ws?.stock || 0)
+        }, 0)
+      } else {
+        const ws = (p.warehouseStocks || []).find(s => s.warehouseId === w.id)
+        stock = ws?.stock || 0
+      }
+      row.push(Number(stock))
+      productTotal += stock
+      stockPerWarehouse[wIdx] += stock
+    })
+    row.push(Number(productTotal))
+    totalUnits += productTotal
+    aoa.push(row)
+  })
+
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['', 'TOTALES', ...stockPerWarehouse.map(s => Number(s)), Number(totalUnits)])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [16, 32, ...warehouses.map(() => 14), 14])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+
+  const dataRowCount = products.filter(p => p.trackStock !== false).length
+  for (let i = 0; i < dataRowCount; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    for (let c = 2; c < totalCols - 1; c++) setStyle(ws, r, c, intStyle(i))
+    setStyle(ws, r, totalCols - 1, { ...intStyle(i), font: { ...intStyle(i).font, bold: true } })
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+  for (let c = 2; c < totalCols; c++) {
+    setStyle(ws, totalRowIdx, c, { ...totalNumberStyle, numFmt: '#,##0' })
+  }
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock por Almacén')
+}
+
+/** Hoja "Por Marca" — agrupación de productos por brandId. */
+function appendProductsByBrandSheet(wb, products, brands, businessData) {
+  if (!brands || brands.length === 0) return
+  if (!products || products.length === 0) return
+
+  const brandMap = new Map(brands.map(b => [b.id, b.name]))
+  const agg = new Map()
+  for (const p of products) {
+    const key = p.brandId && brandMap.has(p.brandId) ? p.brandId : '__NO_BRAND__'
+    const name = p.brandId && brandMap.has(p.brandId) ? brandMap.get(p.brandId) : 'Sin marca'
+    const stock = Number(p.stock) || 0
+    const price = p.hasVariants && p.variants?.length > 0 ? (Number(p.variants[0].price) || 0) : (Number(p.price) || 0)
+    if (!agg.has(key)) {
+      agg.set(key, { name, count: 0, totalStock: 0, totalValue: 0 })
+    }
+    const e = agg.get(key)
+    e.count += 1
+    e.totalStock += stock
+    e.totalValue += stock * price
+  }
+
+  const rows = [...agg.values()].sort((a, b) => b.totalValue - a.totalValue)
+  if (rows.length === 0) return
+
+  const headers = ['Marca', '# Productos', 'Stock Total', 'Valor Total', '% Valor']
+  const totalCols = headers.length
+
+  const aoa = [['PRODUCTOS POR MARCA'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total marcas',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const totalValue = rows.reduce((s, r) => s + r.totalValue, 0)
+  let totalCount = 0, totalStock = 0
+  rows.forEach(b => {
+    const pct = totalValue > 0 ? (b.totalValue / totalValue) * 100 : 0
+    totalCount += b.count
+    totalStock += b.totalStock
+    aoa.push([
+      b.name, b.count,
+      Number(b.totalStock),
+      Number(b.totalValue.toFixed(2)),
+      Number(pct.toFixed(1)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['TOTALES', totalCount, Number(totalStock), Number(totalValue.toFixed(2)), 100])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [30, 14, 14, 16, 12])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, intStyle(i))
+    setStyle(ws, r, 2, intStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Por Marca')
+}
+
+/** Hoja "Valor por Categoría" — valor de inventario agregado por categoría. */
+function appendValueByCategorySheet(wb, products, categories, businessData) {
+  if (!products || products.length === 0) return
+
+  const catMap = new Map((categories || []).map(c => [c.id, c.name]))
+  const getCategoryName = (catId) => {
+    if (!catId) return 'Sin categoría'
+    return catMap.get(catId) || catId
+  }
+
+  const agg = new Map()
+  for (const p of products) {
+    const catName = getCategoryName(p.category)
+    const stock = Number(p.stock) || 0
+    const price = p.hasVariants && p.variants?.length > 0 ? (Number(p.variants[0].price) || 0) : (Number(p.price) || 0)
+    const cost = Number(p.cost) || 0
+    if (!agg.has(catName)) {
+      agg.set(catName, {
+        name: catName, count: 0,
+        totalStock: 0, totalValuePrice: 0, totalValueCost: 0,
+      })
+    }
+    const e = agg.get(catName)
+    e.count += 1
+    e.totalStock += stock
+    e.totalValuePrice += stock * price
+    e.totalValueCost += stock * cost
+  }
+
+  const rows = [...agg.values()].sort((a, b) => b.totalValuePrice - a.totalValuePrice)
+  if (rows.length === 0) return
+
+  const headers = ['Categoría', '# Productos', 'Stock Total', 'Valor a Costo', 'Valor a Precio', 'Margen Potencial']
+  const totalCols = headers.length
+
+  const aoa = [['VALOR DE INVENTARIO POR CATEGORÍA'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    totalLabel: 'Total categorías',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  let totalCount = 0, totalStock = 0, totalCost = 0, totalPrice = 0
+  rows.forEach(c => {
+    const margin = c.totalValuePrice - c.totalValueCost
+    totalCount += c.count
+    totalStock += c.totalStock
+    totalCost += c.totalValueCost
+    totalPrice += c.totalValuePrice
+    aoa.push([
+      c.name, c.count,
+      Number(c.totalStock),
+      Number(c.totalValueCost.toFixed(2)),
+      Number(c.totalValuePrice.toFixed(2)),
+      Number(margin.toFixed(2)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push([
+    'TOTALES', totalCount,
+    Number(totalStock),
+    Number(totalCost.toFixed(2)),
+    Number(totalPrice.toFixed(2)),
+    Number((totalPrice - totalCost).toFixed(2)),
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [30, 14, 14, 16, 16, 16])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, intStyle(i))
+    setStyle(ws, r, 2, intStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+    setStyle(ws, r, 5, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 5, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Valor por Categoría')
 }
