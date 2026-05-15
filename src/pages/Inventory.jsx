@@ -2487,7 +2487,7 @@ export default function Inventory() {
                               <span className="text-xs text-gray-500">S/C</span>
                             ) : (
                               <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock <= (item?.minStock ?? 3) ? 'text-yellow-600' : 'text-green-600'}`}>
-                                {item.isIngredient ? realStock.toFixed(2) : realStock} {item.unit || 'uds'}
+                                {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock} {item.unit || 'uds'}
                               </span>
                             )}
                             <span className="text-sm text-gray-700">{isProduct ? formatProductPrice(item) : formatCurrency(item.averageCost || 0)}</span>
@@ -2975,7 +2975,7 @@ export default function Inventory() {
                                           : 'text-green-600'
                                       }`}
                                     >
-                                      {item.isIngredient ? realStock.toFixed(2) : realStock}
+                                      {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock}
                                     </span>
                                   )}
                                 </div>
