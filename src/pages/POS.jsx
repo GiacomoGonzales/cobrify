@@ -5056,10 +5056,25 @@ export default function POS() {
                     let remainingToDeduct = quantityToDeduct
                     const updatedBatches = [...productData.batches]
 
+                    // Helpers para matching robusto: normaliza casing/espacios y filtra por almacén.
+                    // Alinea con la lógica de merge en CreatePurchase y evita que ventas con typos
+                    // o diferencias de casing caigan silenciosamente a FEFO.
+                    const normalizeBn = (s) => String(s || '').trim().toLowerCase()
+                    const targetWarehouseId = bgSelectedWarehouse?.id || null
+                    const batchMatchesWarehouse = (b) => {
+                      // Sin contexto de almacén: aceptar cualquier lote (comportamiento legacy).
+                      if (!targetWarehouseId) return true
+                      // Lote legacy sin warehouseId: aceptarlo en el almacén actual.
+                      if (!b.warehouseId) return true
+                      return b.warehouseId === targetWarehouseId
+                    }
+
                     if (item.batchNumber) {
-                      // Descontar del lote específico seleccionado por el usuario
+                      // Descontar del lote específico seleccionado por el usuario (mismo nº y almacén).
+                      const itemBn = normalizeBn(item.batchNumber)
                       const batchIdx = updatedBatches.findIndex(b =>
-                        (b.lotNumber || b.batchNumber) === item.batchNumber
+                        normalizeBn(b.lotNumber || b.batchNumber) === itemBn &&
+                        batchMatchesWarehouse(b)
                       )
                       if (batchIdx !== -1) {
                         const deductFromBatch = Math.min(updatedBatches[batchIdx].quantity, remainingToDeduct)
@@ -5073,40 +5088,51 @@ export default function POS() {
                           quantity: deductFromBatch,
                           expirationDate: updatedBatches[batchIdx].expirationDate || null
                         })
+                      } else {
+                        // Diagnóstico: la venta tenía batchNumber pero no se encontró el lote.
+                        // Indica typo, desincronización o lote en otro almacén. Caerá a FEFO.
+                        console.warn(
+                          `[POS] Lote "${item.batchNumber}" no encontrado para producto ${item.id} ` +
+                          `en almacén ${targetWarehouseId || '(ninguno)'}. Cayendo a FEFO.`
+                        )
                       }
                     }
 
-                    // Si queda remanente (o no se seleccionó lote), usar FEFO
+                    // Si queda remanente (o no se seleccionó lote), usar FEFO filtrando por almacén.
                     if (remainingToDeduct > 0) {
-                      updatedBatches.sort((a, b) => {
-                        if (!a.expirationDate) return 1
-                        if (!b.expirationDate) return -1
-                        const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
-                        const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
-                        return dateA - dateB
-                      })
+                      // Construir índices ordenados sin mutar el orden del array persistido.
+                      const fefoIndices = updatedBatches
+                        .map((b, idx) => ({ b, idx }))
+                        .filter(({ b }) => batchMatchesWarehouse(b) && (b.quantity || 0) > 0)
+                        .sort((x, y) => {
+                          if (!x.b.expirationDate) return 1
+                          if (!y.b.expirationDate) return -1
+                          const dateA = x.b.expirationDate.toDate ? x.b.expirationDate.toDate() : new Date(x.b.expirationDate)
+                          const dateB = y.b.expirationDate.toDate ? y.b.expirationDate.toDate() : new Date(y.b.expirationDate)
+                          return dateA - dateB
+                        })
+                        .map(({ idx }) => idx)
 
-                      for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
+                      for (const i of fefoIndices) {
+                        if (remainingToDeduct <= 0) break
                         const batch = updatedBatches[i]
-                        if (batch.quantity > 0) {
-                          const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
-                          updatedBatches[i] = {
-                            ...batch,
-                            quantity: batch.quantity - deductFromBatch
-                          }
-                          remainingToDeduct -= deductFromBatch
-                          const lotNum = batch.lotNumber || batch.batchNumber || ''
-                          // No duplicar si ya se registró este lote
-                          const existing = batchBreakdown.find(b => b.lotNumber === lotNum)
-                          if (existing) {
-                            existing.quantity += deductFromBatch
-                          } else {
-                            batchBreakdown.push({
-                              lotNumber: lotNum,
-                              quantity: deductFromBatch,
-                              expirationDate: batch.expirationDate || null
-                            })
-                          }
+                        const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
+                        updatedBatches[i] = {
+                          ...batch,
+                          quantity: batch.quantity - deductFromBatch
+                        }
+                        remainingToDeduct -= deductFromBatch
+                        const lotNum = batch.lotNumber || batch.batchNumber || ''
+                        // No duplicar si ya se registró este lote
+                        const existing = batchBreakdown.find(b => b.lotNumber === lotNum)
+                        if (existing) {
+                          existing.quantity += deductFromBatch
+                        } else {
+                          batchBreakdown.push({
+                            lotNumber: lotNum,
+                            quantity: deductFromBatch,
+                            expirationDate: batch.expirationDate || null
+                          })
                         }
                       }
                     }
