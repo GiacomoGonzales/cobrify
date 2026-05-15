@@ -22,6 +22,7 @@ import {
   Check,
   Calendar,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Settings2,
   Eye,
@@ -74,6 +75,7 @@ import {
   updateProductStockTransaction,
   getNextDocumentNumber,
   getProductCategories,
+  getProductBrands,
   sendInvoiceToSunat,
   upsertCustomerFromSale,
   getCashRegisterSession,
@@ -418,7 +420,41 @@ export default function POS() {
 
   // Categories
   const [categories, setCategories] = useState([])
+  const [brands, setBrands] = useState([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
+  // Categoría raíz cuya rama de subcategorías está expandida. Una sola raíz a la vez.
+  const [expandedRootCategoryId, setExpandedRootCategoryId] = useState(null)
+  // Colapso global de TODA la sección de chips de categorías. Persiste en localStorage.
+  const [categoriesSectionCollapsed, setCategoriesSectionCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('pos_categories_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const toggleCategoriesSection = () => {
+    setCategoriesSectionCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('pos_categories_collapsed', String(next)) } catch (e) { void e }
+      return next
+    })
+  }
+  // Filtro por marca (independiente de categoría; se combinan con AND).
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
+  const [brandsSectionCollapsed, setBrandsSectionCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('pos_brands_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const toggleBrandsSection = () => {
+    setBrandsSectionCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('pos_brands_collapsed', String(next)) } catch (e) { void e }
+      return next
+    })
+  }
 
   // Pagination for products
   const [visibleProductsCount, setVisibleProductsCount] = useState(12)
@@ -1911,12 +1947,14 @@ export default function POS() {
       const [
         settingsResult,
         categoriesResult,
+        brandsResult,
         warehousesResult,
         branchesResult,
         sellersResult
       ] = await Promise.all([
         getCompanySettings(businessId),
         getProductCategories(businessId),
+        getProductBrands(businessId),
         getWarehouses(businessId),
         getActiveBranches(businessId),
         getSellers(businessId)
@@ -2009,6 +2047,11 @@ export default function POS() {
       if (categoriesResult.success) {
         const migratedCategories = migrateLegacyCategories(categoriesResult.data || [])
         setCategories(migratedCategories)
+      }
+
+      // Procesar marcas administradas
+      if (brandsResult?.success) {
+        setBrands(brandsResult.data || [])
       }
 
       // Procesar almacenes y seleccionar el default
@@ -2195,6 +2238,16 @@ export default function POS() {
           subcategoryIds.includes(p.category)
       }
 
+      // Filtro de marca (managed brandId). "Sin marca" = sin brandId.
+      let matchesBrand = true
+      if (selectedBrandFilter !== 'all') {
+        if (selectedBrandFilter === 'sin-marca') {
+          matchesBrand = !p.brandId
+        } else {
+          matchesBrand = p.brandId === selectedBrandFilter
+        }
+      }
+
       // Filtro de stock: ocultar productos con stock 0 si está habilitado
       if (businessSettings?.posCustomFields?.hideOutOfStockInPOS && p.trackStock !== false) {
         let totalStock = 0
@@ -2215,9 +2268,9 @@ export default function POS() {
         if (totalStock <= 0) return false
       }
 
-      return matchesSearch && matchesCategory
+      return matchesSearch && matchesCategory && matchesBrand
     })
-  }, [products, searchTerm, selectedCategoryFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
+  }, [products, searchTerm, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
 
   // Apply pagination only when there's no search term (optimizado con useMemo)
   const displayedProducts = React.useMemo(() => {
@@ -2234,10 +2287,29 @@ export default function POS() {
 
   // Reset pagination when search or filter changes
   useEffect(() => {
-    if (searchTerm || selectedCategoryFilter !== 'all') {
+    if (searchTerm || selectedCategoryFilter !== 'all' || selectedBrandFilter !== 'all') {
       setVisibleProductsCount(6) // Reset to initial
     }
-  }, [searchTerm, selectedCategoryFilter])
+  }, [searchTerm, selectedCategoryFilter, selectedBrandFilter])
+
+  // Sincronizar la expansión de la rama de subcategorías con la categoría seleccionada.
+  // - "Todas" o "Sin categoría" → colapsar todo.
+  // - Raíz con subcategorías → expandir esa raíz.
+  // - Subcategoría → expandir su raíz padre.
+  useEffect(() => {
+    if (!selectedCategoryFilter || selectedCategoryFilter === 'all' || selectedCategoryFilter === 'sin-categoria') {
+      setExpandedRootCategoryId(null)
+      return
+    }
+    const cat = categories.find(c => c.id === selectedCategoryFilter)
+    if (!cat) return
+    if (cat.parentId) {
+      setExpandedRootCategoryId(cat.parentId)
+    } else {
+      const hasSubs = getSubcategories(categories, cat.id).length > 0
+      setExpandedRootCategoryId(hasSubs ? cat.id : null)
+    }
+  }, [selectedCategoryFilter, categories])
 
   // Auto-agregar producto cuando se escanea código de barras o SKU
   // Debounce de 500ms para evitar que códigos cortos (ej: L34) se agreguen
@@ -5860,6 +5932,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           {/* Category Filter Chips */}
           {categories.length > 0 && (
             <div className="flex flex-wrap gap-2 bg-white p-3 rounded-lg border border-gray-200">
+              {/* Toggle global para colapsar/expandir toda la sección de categorías */}
+              <button
+                onClick={toggleCategoriesSection}
+                className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 inline-flex items-center gap-1"
+                title={categoriesSectionCollapsed ? 'Mostrar categorías' : 'Ocultar categorías'}
+              >
+                {categoriesSectionCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                <span>Categorías</span>
+                {categoriesSectionCollapsed && selectedCategoryFilter !== 'all' && (
+                  <span className="text-primary-700 font-semibold">
+                    · {selectedCategoryFilter === 'sin-categoria'
+                      ? 'Sin categoría'
+                      : (categories.find(c => c.id === selectedCategoryFilter)?.name || selectedCategoryFilter)}
+                  </span>
+                )}
+              </button>
+              {!categoriesSectionCollapsed && (
+              <>
               <button
                 onClick={() => setSelectedCategoryFilter('all')}
                 className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -5873,20 +5963,35 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               </button>
               {getRootCategories(categories).map((category) => {
                 const subcats = getSubcategories(categories, category.id)
+                const hasSubs = subcats.length > 0
+                const isExpanded = expandedRootCategoryId === category.id
                 return (
                   <React.Fragment key={category.id}>
                     <button
-                      onClick={() => setSelectedCategoryFilter(category.id)}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      onClick={() => {
+                        // Si ya está seleccionada esta raíz y tiene subs, toggle (permite colapsar manualmente).
+                        if (selectedCategoryFilter === category.id && hasSubs) {
+                          setExpandedRootCategoryId(prev => prev === category.id ? null : category.id)
+                        } else {
+                          setSelectedCategoryFilter(category.id)
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors inline-flex items-center gap-1 ${
                         selectedCategoryFilter === category.id
                           ? 'bg-primary-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      <Folder className="w-3.5 h-3.5 inline mr-1" />
-                      {category.name}
+                      <Folder className="w-3.5 h-3.5" />
+                      <span>{category.name}</span>
+                      {hasSubs && (
+                        isExpanded
+                          ? <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                          : <ChevronRight className="w-3.5 h-3.5 opacity-70" />
+                      )}
                     </button>
-                    {subcats.map((subcat) => (
+                    {/* Subcategorías visibles solo cuando la raíz está expandida */}
+                    {isExpanded && subcats.map((subcat) => (
                       <button
                         key={subcat.id}
                         onClick={() => setSelectedCategoryFilter(subcat.id)}
@@ -5913,6 +6018,68 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               >
                 Sin categoría
               </button>
+              </>
+              )}
+            </div>
+          )}
+
+          {/* Brand Filter Chips */}
+          {brands.length > 0 && (
+            <div className="flex flex-wrap gap-2 bg-white p-3 rounded-lg border border-gray-200">
+              <button
+                onClick={toggleBrandsSection}
+                className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 inline-flex items-center gap-1"
+                title={brandsSectionCollapsed ? 'Mostrar marcas' : 'Ocultar marcas'}
+              >
+                {brandsSectionCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                <span>Marcas</span>
+                {brandsSectionCollapsed && selectedBrandFilter !== 'all' && (
+                  <span className="text-primary-700 font-semibold">
+                    · {selectedBrandFilter === 'sin-marca'
+                      ? 'Sin marca'
+                      : (brands.find(b => b.id === selectedBrandFilter)?.name || selectedBrandFilter)}
+                  </span>
+                )}
+              </button>
+              {!brandsSectionCollapsed && (
+                <>
+                  <button
+                    onClick={() => setSelectedBrandFilter('all')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      selectedBrandFilter === 'all'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5 inline mr-1" />
+                    Todas
+                  </button>
+                  {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map((brand) => (
+                    <button
+                      key={brand.id}
+                      onClick={() => setSelectedBrandFilter(brand.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                        selectedBrandFilter === brand.id
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Tag className="w-3.5 h-3.5 inline mr-1" />
+                      {brand.name}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setSelectedBrandFilter('sin-marca')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      selectedBrandFilter === 'sin-marca'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Sin marca
+                  </button>
+                </>
+              )}
             </div>
           )}
 

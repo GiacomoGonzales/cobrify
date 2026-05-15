@@ -25,6 +25,8 @@ import {
   deleteProduct,
   getProductCategories,
   saveProductCategories,
+  getProductBrands,
+  saveProductBrands,
   getNextSkuNumber,
 } from '@/services/firestoreService'
 import { exportProductsForImport, exportProductsForRappi } from '@/services/productExportService'
@@ -267,8 +269,55 @@ export default function Products() {
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryShowInCatalog, setCategoryShowInCatalog] = useState(true)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
+  // Categoría raíz cuya rama de subcategorías está expandida. Una sola raíz expandida
+  // a la vez. Click en una raíz: filtra + expande. Click en una subcategoría: filtra
+  // y mantiene la raíz expandida. Click en "Todas"/"Sin categoría": colapsa todo.
+  const [expandedRootCategoryId, setExpandedRootCategoryId] = useState(null)
+  // Colapso global de TODA la sección de chips de categorías (para ganar espacio
+  // cuando hay muchas categorías). Se persiste en localStorage.
+  const [categoriesSectionCollapsed, setCategoriesSectionCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('products_categories_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const toggleCategoriesSection = () => {
+    setCategoriesSectionCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('products_categories_collapsed', String(next)) } catch (e) { void e }
+      return next
+    })
+  }
+  // Filtro por marca (independiente del filtro de categoría — se combinan).
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
+  const [brandsSectionCollapsed, setBrandsSectionCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('products_brands_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const toggleBrandsSection = () => {
+    setBrandsSectionCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('products_brands_collapsed', String(next)) } catch (e) { void e }
+      return next
+    })
+  }
   const [selectedCategories, setSelectedCategories] = useState(new Set())
   const [isDeletingCategories, setIsDeletingCategories] = useState(false)
+
+  // Brand management state (mismo patrón que categorías, sin jerarquía).
+  const [brands, setBrands] = useState([])
+  const [isBrandsModalOpen, setIsBrandsModalOpen] = useState(false)
+  const [newBrandName, setNewBrandName] = useState('')
+  const [editingBrand, setEditingBrand] = useState(null)
+  const [isSavingBrand, setIsSavingBrand] = useState(false)
+  const [isMigratingBrands, setIsMigratingBrands] = useState(false)
+  const [showMigrationPreview, setShowMigrationPreview] = useState(false)
+  // Set de keys (normalizadas) seleccionadas para migrar.
+  const [migrationSelected, setMigrationSelected] = useState(new Set())
 
   // Import modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -301,7 +350,8 @@ export default function Products() {
     presentation: '',          // Ej: Tabletas x 100, Jarabe 120ml
     laboratoryId: '',          // ID del laboratorio
     laboratoryName: '',        // Nombre del laboratorio (para mostrar)
-    marca: '',                 // Marca del producto
+    marca: '',                 // Marca del producto (back-compat texto libre)
+    brandId: '',               // Marca administrada (ID)
     batchNumber: '',           // Número de lote
     activeIngredient: '',      // Principio activo
     therapeuticAction: '',     // Acción terapéutica (Analgésico, Antibiótico, etc.)
@@ -445,9 +495,10 @@ export default function Products() {
       }
 
       const businessId = getBusinessId()
-      const [productsResult, categoriesResult] = await Promise.all([
+      const [productsResult, categoriesResult, brandsResult] = await Promise.all([
         getProducts(businessId),
-        getProductCategories(businessId)
+        getProductCategories(businessId),
+        getProductBrands(businessId),
       ])
 
       if (productsResult.success) {
@@ -461,6 +512,12 @@ export default function Products() {
         setCategories(migratedCategories)
       } else {
         console.error('Error al cargar categorías:', categoriesResult.error)
+      }
+
+      if (brandsResult.success) {
+        setBrands(brandsResult.data || [])
+      } else {
+        console.error('Error al cargar marcas:', brandsResult.error)
       }
     } catch (error) {
       console.error('Error:', error)
@@ -565,6 +622,7 @@ export default function Products() {
       name: '',
       description: '',
       marca: '',
+      brandId: '',
       price: '',
       priceUSD: '',
       cost: '',
@@ -593,6 +651,7 @@ export default function Products() {
       laboratoryId: '',
       laboratoryName: '',
       marca: '',
+      brandId: '',
       batchNumber: '',
       activeIngredient: '',
       therapeuticAction: '',
@@ -666,6 +725,7 @@ export default function Products() {
       laboratoryId: product.laboratoryId || '',
       laboratoryName: product.laboratoryName || '',
       marca: product.marca || '',
+      brandId: product.brandId || '',
       batchNumber: product.batchNumber || '',
       activeIngredient: product.activeIngredient || '',
       therapeuticAction: product.therapeuticAction || '',
@@ -714,6 +774,7 @@ export default function Products() {
       name: product.name,
       description: product.description || '',
       marca: product.marca || '',
+      brandId: product.brandId || '',
       price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
@@ -784,6 +845,7 @@ export default function Products() {
       laboratoryId: product.laboratoryId || '',
       laboratoryName: product.laboratoryName || '',
       marca: product.marca || '',
+      brandId: product.brandId || '',
       batchNumber: '', // Limpiar lote para el producto clonado
       activeIngredient: product.activeIngredient || '',
       therapeuticAction: product.therapeuticAction || '',
@@ -829,6 +891,7 @@ export default function Products() {
       name: `${product.name} (copia)`, // Agregar indicador de copia
       description: product.description || '',
       marca: product.marca || '',
+      brandId: product.brandId || '',
       price: productHasVariants ? '1' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
@@ -976,8 +1039,15 @@ export default function Products() {
           )
           return Object.keys(clean).length > 0 ? clean : null
         })() : null,
-        // Marca (disponible en todos los modos, pharmacy lo sobreescribe desde pharmacyData)
-        ...(businessMode !== 'pharmacy' && { marca: data.marca || null }),
+        // Marca: si hay brandId administrado, derivamos `marca` (texto) del nombre
+        // de la marca. Mantenemos marca como back-compat para reportes/exports viejos.
+        ...(businessMode !== 'pharmacy' && (() => {
+          const brand = brands.find(b => b.id === data.brandId)
+          return {
+            brandId: data.brandId || null,
+            marca: brand ? brand.name : (data.marca || null),
+          }
+        })()),
         // Product location (works in all modes when enabled)
         location: businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null),
         // Add modifiers if in restaurant mode (only include if exists)
@@ -991,7 +1061,14 @@ export default function Products() {
           presentation: pharmacyData.presentation || null,
           laboratoryId: pharmacyData.laboratoryId || null,
           laboratoryName: pharmacyData.laboratoryName || null,
-          marca: pharmacyData.marca || null,
+          // Marca: igual al flujo no-pharmacy, derivamos texto desde brandId si aplica.
+          ...((() => {
+            const brand = brands.find(b => b.id === pharmacyData.brandId)
+            return {
+              brandId: pharmacyData.brandId || null,
+              marca: brand ? brand.name : (pharmacyData.marca || null),
+            }
+          })()),
           batchNumber: pharmacyData.batchNumber || null,
           activeIngredient: pharmacyData.activeIngredient || null,
           therapeuticAction: pharmacyData.therapeuticAction || null,
@@ -2181,6 +2258,208 @@ export default function Products() {
     toast.success('Categorías ordenadas alfabéticamente')
   }
 
+  // ============== MARCAS ==============
+
+  // Normaliza para deduplicar (trim + minúsculas + colapsar espacios).
+  const normalizeBrandKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  // Detecta marcas escritas a mano en productos que NO están vinculadas a una marca administrada.
+  // Devuelve un array de { key, displayName, variants, productIds } para mostrar en el wizard.
+  const detectHandwrittenBrands = () => {
+    const managedKeys = new Set(brands.map(b => normalizeBrandKey(b.name)))
+    const map = new Map() // key → { key, displayName, variants: Set, productIds: [] }
+    for (const p of products) {
+      // Si ya tiene brandId administrado, skip
+      if (p.brandId && brands.some(b => b.id === p.brandId)) continue
+      const raw = String(p.marca || '').trim()
+      if (!raw) continue
+      const key = normalizeBrandKey(raw)
+      if (!key) continue
+      if (managedKeys.has(key)) continue // ya existe administrada, no es huérfana
+      if (!map.has(key)) {
+        map.set(key, { key, displayName: raw, variants: new Set([raw]), productIds: [] })
+      } else {
+        map.get(key).variants.add(raw)
+      }
+      map.get(key).productIds.push(p.id)
+    }
+    return [...map.values()].map(g => ({ ...g, variants: [...g.variants] }))
+  }
+
+  const openBrandsModal = () => {
+    setNewBrandName('')
+    setEditingBrand(null)
+    setShowMigrationPreview(false)
+    setMigrationSelected(new Set())
+    setIsBrandsModalOpen(true)
+  }
+
+  const handleAddBrand = async () => {
+    const name = newBrandName.trim()
+    if (!name || !user?.uid) return
+    // Evitar duplicados (case-insensitive)
+    const key = normalizeBrandKey(name)
+    if (brands.some(b => normalizeBrandKey(b.name) === key)) {
+      toast.error('Ya existe una marca con ese nombre')
+      return
+    }
+    setIsSavingBrand(true)
+    try {
+      const newBrand = {
+        id: `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name,
+      }
+      const updated = [...brands, newBrand]
+      setBrands(updated)
+      const result = await saveProductBrands(getBusinessId(), updated)
+      if (!result.success) throw new Error(result.error)
+      toast.success('Marca creada')
+      setNewBrandName('')
+    } catch (err) {
+      console.error('Error al crear marca:', err)
+      toast.error('Error al crear la marca')
+    } finally {
+      setIsSavingBrand(false)
+    }
+  }
+
+  const handleEditBrand = (brand) => {
+    setEditingBrand(brand)
+    setNewBrandName(brand.name)
+  }
+
+  const handleUpdateBrand = async () => {
+    const name = newBrandName.trim()
+    if (!name || !editingBrand || !user?.uid) return
+    const key = normalizeBrandKey(name)
+    // No permitir renombrar a uno que choque con OTRA marca existente.
+    if (brands.some(b => b.id !== editingBrand.id && normalizeBrandKey(b.name) === key)) {
+      toast.error('Ya existe otra marca con ese nombre')
+      return
+    }
+    setIsSavingBrand(true)
+    try {
+      const updated = brands.map(b => b.id === editingBrand.id ? { ...b, name } : b)
+      setBrands(updated)
+      const result = await saveProductBrands(getBusinessId(), updated)
+      if (!result.success) throw new Error(result.error)
+      toast.success('Marca actualizada')
+      setEditingBrand(null)
+      setNewBrandName('')
+    } catch (err) {
+      console.error('Error al actualizar marca:', err)
+      toast.error('Error al actualizar la marca')
+    } finally {
+      setIsSavingBrand(false)
+    }
+  }
+
+  const handleDeleteBrand = async (brandId) => {
+    if (!user?.uid) return
+    // Bloquear si hay productos vinculados a esta marca.
+    const linkedCount = products.filter(p => p.brandId === brandId).length
+    if (linkedCount > 0) {
+      toast.error(`Esta marca tiene ${linkedCount} producto(s) vinculado(s). Reasignalos antes de eliminar.`)
+      return
+    }
+    if (!window.confirm('¿Eliminar esta marca?')) return
+    try {
+      const updated = brands.filter(b => b.id !== brandId)
+      setBrands(updated)
+      const result = await saveProductBrands(getBusinessId(), updated)
+      if (!result.success) throw new Error(result.error)
+      toast.success('Marca eliminada')
+    } catch (err) {
+      console.error('Error al eliminar marca:', err)
+      toast.error('Error al eliminar la marca')
+    }
+  }
+
+  // Crea una marca rápida desde el form de producto. Si ya existe (matchea por
+  // nombre normalizado), devuelve el id existente. Devuelve null si falla.
+  const createQuickBrand = async (name) => {
+    const trimmed = String(name || '').trim()
+    if (!trimmed || !user?.uid) return null
+    const key = normalizeBrandKey(trimmed)
+    const existing = brands.find(b => normalizeBrandKey(b.name) === key)
+    if (existing) return existing.id
+    const newBrand = {
+      id: `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: trimmed,
+    }
+    const updated = [...brands, newBrand]
+    setBrands(updated)
+    const result = await saveProductBrands(getBusinessId(), updated)
+    if (!result.success) {
+      toast.error('Error al crear marca')
+      return null
+    }
+    toast.success(`Marca "${trimmed}" creada`)
+    return newBrand.id
+  }
+
+  // Wizard de migración: crea las marcas seleccionadas + vincula productos por brandId.
+  const handleMigrateBrands = async () => {
+    if (!user?.uid) return
+    const handwritten = detectHandwrittenBrands()
+    const toCreate = handwritten.filter(g => migrationSelected.has(g.key))
+    if (toCreate.length === 0) {
+      toast.error('Seleccioná al menos una marca para importar')
+      return
+    }
+    setIsMigratingBrands(true)
+    try {
+      // 1. Crear nuevas marcas administradas
+      const newBrands = toCreate.map(g => ({
+        id: `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: g.displayName,
+      }))
+      const updatedBrands = [...brands, ...newBrands]
+
+      // Mapeo key → brandId para vincular productos rápido
+      const keyToBrandId = new Map(toCreate.map((g, i) => [g.key, newBrands[i].id]))
+
+      // 2. Actualizar productos: setear brandId. Mantener `marca` como texto por back-compat.
+      const businessId = getBusinessId()
+      const productUpdates = []
+      let touchedProducts = 0
+      for (const p of products) {
+        const raw = String(p.marca || '').trim()
+        if (!raw) continue
+        const key = normalizeBrandKey(raw)
+        const brandId = keyToBrandId.get(key)
+        if (!brandId) continue
+        if (p.brandId === brandId) continue
+        productUpdates.push(updateProduct(businessId, p.id, { brandId }))
+        touchedProducts++
+      }
+
+      // 3. Guardar marcas y aplicar updates en paralelo
+      await Promise.all([
+        saveProductBrands(businessId, updatedBrands),
+        ...productUpdates,
+      ])
+
+      // 4. Refrescar estado local
+      setBrands(updatedBrands)
+      setProducts(prev => prev.map(p => {
+        const raw = String(p.marca || '').trim()
+        if (!raw) return p
+        const brandId = keyToBrandId.get(normalizeBrandKey(raw))
+        return brandId ? { ...p, brandId } : p
+      }))
+
+      toast.success(`${newBrands.length} marca(s) importada(s) — ${touchedProducts} producto(s) vinculado(s)`)
+      setShowMigrationPreview(false)
+      setMigrationSelected(new Set())
+    } catch (err) {
+      console.error('Error al migrar marcas:', err)
+      toast.error('Error al migrar marcas')
+    } finally {
+      setIsMigratingBrands(false)
+    }
+  }
+
   const handleDeleteCategory = async (categoryId) => {
     if (!user?.uid) return
 
@@ -2830,6 +3109,16 @@ export default function Products() {
           descendantIds.includes(product.category)
       }
 
+      // Check brand filter (managed brandId). "Sin marca" = sin brandId administrado.
+      let matchesBrand = true
+      if (selectedBrandFilter !== 'all') {
+        if (selectedBrandFilter === 'sin-marca') {
+          matchesBrand = !product.brandId
+        } else {
+          matchesBrand = product.brandId === selectedBrandFilter
+        }
+      }
+
       // Check expiration filter
       let matchesExpiration = true
       if (showExpiringOnly) {
@@ -2842,7 +3131,7 @@ export default function Products() {
         }
       }
 
-      return matchesSearch && matchesCategory && matchesExpiration
+      return matchesSearch && matchesCategory && matchesBrand && matchesExpiration
     })
 
     // Ordenar productos
@@ -2876,6 +3165,14 @@ export default function Products() {
           aValue = getCategoryPath(categories, a.category) || ''
           bValue = getCategoryPath(categories, b.category) || ''
           break
+        case 'brand': {
+          // Preferimos el nombre de la marca administrada; fallback al texto libre.
+          const aBrand = a.brandId ? brands.find(br => br.id === a.brandId) : null
+          const bBrand = b.brandId ? brands.find(br => br.id === b.brandId) : null
+          aValue = aBrand?.name || (a.marca || '')
+          bValue = bBrand?.name || (b.marca || '')
+          break
+        }
         default:
           aValue = a.name || ''
           bValue = b.name || ''
@@ -2891,7 +3188,7 @@ export default function Products() {
     })
 
     return sorted
-  }, [products, searchTerm, selectedCategoryFilter, showExpiringOnly, categories, sortField, sortDirection])
+  }, [products, searchTerm, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -2915,7 +3212,27 @@ export default function Products() {
   // Resetear a página 1 cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedCategoryFilter, showExpiringOnly])
+  }, [searchTerm, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly])
+
+  // Sincronizar la expansión de la rama de subcategorías con la categoría seleccionada.
+  // - Si seleccionan "Todas" o "Sin categoría" → colapsar todo.
+  // - Si seleccionan una raíz con subcategorías → expandir esa raíz.
+  // - Si seleccionan una subcategoría → expandir su raíz padre.
+  useEffect(() => {
+    if (!selectedCategoryFilter || selectedCategoryFilter === 'all' || selectedCategoryFilter === 'sin-categoria') {
+      setExpandedRootCategoryId(null)
+      return
+    }
+    const cat = categories.find(c => c.id === selectedCategoryFilter)
+    if (!cat) return
+    if (cat.parentId) {
+      setExpandedRootCategoryId(cat.parentId)
+    } else {
+      // Es una raíz: expandir solo si tiene subcategorías.
+      const hasSubs = getSubcategories(categories, cat.id).length > 0
+      setExpandedRootCategoryId(hasSubs ? cat.id : null)
+    }
+  }, [selectedCategoryFilter, categories])
 
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
@@ -2965,6 +3282,7 @@ export default function Products() {
     description: products.some(p => p.description && p.description.trim() !== ''),
     cost: products.some(p => p.cost !== undefined && p.cost !== null),
     category: products.some(p => p.category && p.category.trim() !== ''),
+    brand: products.some(p => p.brandId || (p.marca && String(p.marca).trim() !== '')),
     location: products.some(p => p.location && p.location.trim() !== ''),
     expiration: products.some(p => p.trackExpiration && p.expirationDate),
   }), [products])
@@ -2986,6 +3304,7 @@ export default function Products() {
     description: 'Descripción',
     cost: 'Costo / Utilidad',
     category: 'Categoría',
+    brand: 'Marca',
     location: 'Ubicación',
     expiration: 'Vencimiento',
   }
@@ -3125,6 +3444,14 @@ export default function Products() {
               <FolderPlus className="w-4 h-4 mr-2" />
               Categorías
             </Button>
+            <Button
+              variant="outline"
+              onClick={openBrandsModal}
+              className="flex-1 sm:flex-initial"
+            >
+              <Tag className="w-4 h-4 mr-2" />
+              Marcas
+            </Button>
             <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
               <Plus className="w-4 h-4 mr-2" />
               Nuevo Producto
@@ -3185,6 +3512,24 @@ export default function Products() {
           {/* Fila 3: Category Filter Chips */}
           {categories.length > 0 && (
             <div className="flex flex-wrap gap-2">
+              {/* Toggle global para colapsar/expandir toda la sección de categorías */}
+              <button
+                onClick={toggleCategoriesSection}
+                className="px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 inline-flex items-center gap-1"
+                title={categoriesSectionCollapsed ? 'Mostrar categorías' : 'Ocultar categorías'}
+              >
+                {categoriesSectionCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                <span>Categorías</span>
+                {categoriesSectionCollapsed && selectedCategoryFilter !== 'all' && (
+                  <span className="text-primary-700 font-semibold">
+                    · {selectedCategoryFilter === 'sin-categoria'
+                      ? 'Sin categoría'
+                      : (getCategoryById(categories, selectedCategoryFilter)?.name || selectedCategoryFilter)}
+                  </span>
+                )}
+              </button>
+              {!categoriesSectionCollapsed && (
+              <>
               <button
                 onClick={() => setSelectedCategoryFilter('all')}
                 className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
@@ -3196,24 +3541,39 @@ export default function Products() {
                 <Tag className="w-3 h-3 inline mr-1" />
                 Todas
               </button>
-              {/* Render root categories and their subcategories */}
+              {/* Render root categories. Subcategorías solo se muestran si su raíz
+                  está expandida. Click en raíz: filtra + (si tiene subs) toggle expansión. */}
               {getRootCategories(categories).map((category) => {
                 const subcats = getSubcategories(categories, category.id)
+                const hasSubs = subcats.length > 0
+                const isExpanded = expandedRootCategoryId === category.id
                 return (
                   <React.Fragment key={category.id}>
                     <button
-                      onClick={() => setSelectedCategoryFilter(category.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
+                      onClick={() => {
+                        // Si ya está seleccionada esta raíz y tiene subs, toggle (permite colapsar manualmente).
+                        if (selectedCategoryFilter === category.id && hasSubs) {
+                          setExpandedRootCategoryId(prev => prev === category.id ? null : category.id)
+                        } else {
+                          setSelectedCategoryFilter(category.id)
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm inline-flex items-center gap-1 ${
                         selectedCategoryFilter === category.id
                           ? 'bg-primary-600 text-white border border-primary-700'
                           : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                       }`}
                     >
-                      <Folder className="w-3 h-3 inline mr-1" />
-                      {category.name}
+                      <Folder className="w-3 h-3" />
+                      <span>{category.name}</span>
+                      {hasSubs && (
+                        isExpanded
+                          ? <ChevronDown className="w-3 h-3 opacity-70" />
+                          : <ChevronRight className="w-3 h-3 opacity-70" />
+                      )}
                     </button>
-                    {/* Render subcategories with visual indicator */}
-                    {subcats.map((subcat) => (
+                    {/* Subcategorías visibles solo cuando la raíz está expandida */}
+                    {isExpanded && subcats.map((subcat) => (
                       <button
                         key={subcat.id}
                         onClick={() => setSelectedCategoryFilter(subcat.id)}
@@ -3240,6 +3600,69 @@ export default function Products() {
               >
                 Sin categoría
               </button>
+              </>
+              )}
+            </div>
+          )}
+
+          {/* Fila 4: Brand Filter Chips */}
+          {brands.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {/* Toggle global de la sección de marcas */}
+              <button
+                onClick={toggleBrandsSection}
+                className="px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 inline-flex items-center gap-1"
+                title={brandsSectionCollapsed ? 'Mostrar marcas' : 'Ocultar marcas'}
+              >
+                {brandsSectionCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                <span>Marcas</span>
+                {brandsSectionCollapsed && selectedBrandFilter !== 'all' && (
+                  <span className="text-primary-700 font-semibold">
+                    · {selectedBrandFilter === 'sin-marca'
+                      ? 'Sin marca'
+                      : (brands.find(b => b.id === selectedBrandFilter)?.name || selectedBrandFilter)}
+                  </span>
+                )}
+              </button>
+              {!brandsSectionCollapsed && (
+                <>
+                  <button
+                    onClick={() => setSelectedBrandFilter('all')}
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
+                      selectedBrandFilter === 'all'
+                        ? 'bg-primary-600 text-white border border-primary-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                    }`}
+                  >
+                    <Tag className="w-3 h-3 inline mr-1" />
+                    Todas
+                  </button>
+                  {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map((brand) => (
+                    <button
+                      key={brand.id}
+                      onClick={() => setSelectedBrandFilter(brand.id)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
+                        selectedBrandFilter === brand.id
+                          ? 'bg-primary-600 text-white border border-primary-700'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                      }`}
+                    >
+                      <Tag className="w-3 h-3 inline mr-1" />
+                      {brand.name}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setSelectedBrandFilter('sin-marca')}
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      selectedBrandFilter === 'sin-marca'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Sin marca
+                  </button>
+                </>
+              )}
             </div>
           )}
         </CardContent>
@@ -3657,6 +4080,18 @@ export default function Products() {
                       </button>
                     </TableHead>
                   )}
+                  {visibleColumns.brand && (
+                    <TableHead className="hidden md:table-cell max-w-[120px]">
+                      <button
+                        onClick={() => handleSort('brand')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por marca"
+                      >
+                        Marca
+                        {getSortIcon('brand')}
+                      </button>
+                    </TableHead>
+                  )}
                   {visibleColumns.location && (
                     <TableHead className="hidden md:table-cell max-w-[110px]">Ubicación</TableHead>
                   )}
@@ -3822,6 +4257,26 @@ export default function Products() {
                             )}
                           </TableCell>
                         )}
+                        {visibleColumns.brand && (() => {
+                          // Prefiere marca administrada (brandId); fallback a marca texto.
+                          const managed = product.brandId ? brands.find(b => b.id === product.brandId) : null
+                          const display = managed?.name || (product.marca || '').trim()
+                          const isOrphan = !managed && !!display // marca a mano sin administrar
+                          return (
+                            <TableCell className="hidden md:table-cell max-w-[120px]">
+                              {display ? (
+                                <span
+                                  className={`text-xs truncate block ${isOrphan ? 'text-amber-700 italic' : 'text-gray-700'}`}
+                                  title={isOrphan ? `${display} (sin administrar)` : display}
+                                >
+                                  {display}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                          )
+                        })()}
                         {visibleColumns.location && (
                           <TableCell className="hidden md:table-cell max-w-[110px]">
                             {product.location ? (
@@ -4438,13 +4893,49 @@ export default function Products() {
             </div>
 
             {/* Marca - disponible en todos los modos excepto farmacia (que lo tiene en su sección) */}
-            {businessMode !== 'pharmacy' && (
-              <Input
-                label="Marca (Opcional)"
-                placeholder="Ej: Esika, Nike, Samsung"
-                {...register('marca')}
-              />
-            )}
+            {businessMode !== 'pharmacy' && (() => {
+              const sortedBrands = [...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
+              const currentMarca = watch ? watch('marca') : ''
+              const currentBrandId = watch ? watch('brandId') : ''
+              const hasOrphanText = !!(currentMarca && !currentBrandId)
+              return (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Marca (Opcional)
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      {...register('brandId')}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white"
+                    >
+                      <option value="">Sin marca</option>
+                      {sortedBrands.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const name = window.prompt('Nombre de la nueva marca:')
+                        if (!name?.trim()) return
+                        const newId = await createQuickBrand(name)
+                        if (newId) setValue('brandId', newId, { shouldDirty: true })
+                      }}
+                      className="px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 border border-primary-300 rounded-lg flex items-center gap-1"
+                      title="Crear nueva marca"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Nueva
+                    </button>
+                  </div>
+                  {hasOrphanText && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Marca actual escrita a mano: <strong>{currentMarca}</strong> — sin administrar. Seleccioná o creá una marca arriba.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* SKU */}
             <div>
@@ -5247,18 +5738,48 @@ export default function Products() {
                 </div>
 
                 {/* Marca */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Marca
-                  </label>
-                  <input
-                    type="text"
-                    value={pharmacyData.marca}
-                    onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
-                    placeholder="Ej: Panadol, Aspirina"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                  />
-                </div>
+                {(() => {
+                  const sortedBrands = [...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
+                  const hasOrphanText = !!(pharmacyData.marca && !pharmacyData.brandId)
+                  return (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Marca
+                      </label>
+                      <div className="flex gap-2">
+                        <select
+                          value={pharmacyData.brandId || ''}
+                          onChange={(e) => setPharmacyData({ ...pharmacyData, brandId: e.target.value })}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white"
+                        >
+                          <option value="">Sin marca</option>
+                          {sortedBrands.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const name = window.prompt('Nombre de la nueva marca:')
+                            if (!name?.trim()) return
+                            const newId = await createQuickBrand(name)
+                            if (newId) setPharmacyData(prev => ({ ...prev, brandId: newId }))
+                          }}
+                          className="px-3 py-2 text-sm text-green-700 hover:bg-green-50 border border-green-300 rounded-lg flex items-center gap-1"
+                          title="Crear nueva marca"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Nueva
+                        </button>
+                      </div>
+                      {hasOrphanText && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Marca actual escrita a mano: <strong>{pharmacyData.marca}</strong> — sin administrar.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Número de Lote */}
                 <div>
@@ -6622,6 +7143,224 @@ export default function Products() {
         </div>
       </Modal>
 
+      {/* Modal Gestionar Marcas */}
+      <Modal
+        isOpen={isBrandsModalOpen}
+        onClose={() => {
+          setIsBrandsModalOpen(false)
+          setEditingBrand(null)
+          setNewBrandName('')
+          setShowMigrationPreview(false)
+          setMigrationSelected(new Set())
+        }}
+        title="Gestionar Marcas"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              Las marcas te permiten organizar productos por fabricante y generar reportes de ventas por marca.
+              Por ejemplo: Nike, Samsung, Coca-Cola.
+            </p>
+          </div>
+
+          {/* Banner de migración: detectar marcas escritas a mano sin administrar */}
+          {(() => {
+            const handwritten = detectHandwrittenBrands()
+            if (handwritten.length === 0) return null
+            const totalProducts = handwritten.reduce((sum, g) => sum + g.productIds.length, 0)
+            return (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-900">
+                      Tenés {handwritten.length} marca{handwritten.length !== 1 ? 's' : ''} escrita{handwritten.length !== 1 ? 's' : ''} a mano sin administrar
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Detecté {handwritten.length} marca{handwritten.length !== 1 ? 's' : ''} en {totalProducts} producto{totalProducts !== 1 ? 's' : ''} que no están vinculadas a marcas administradas.
+                    </p>
+                  </div>
+                </div>
+                {!showMigrationPreview ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      // Pre-seleccionar todas por default
+                      setMigrationSelected(new Set(handwritten.map(g => g.key)))
+                      setShowMigrationPreview(true)
+                    }}
+                    className="w-full"
+                  >
+                    Revisar e importar
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="bg-white border border-amber-200 rounded-lg divide-y max-h-64 overflow-y-auto">
+                      {handwritten.map(g => (
+                        <label key={g.key} className="flex items-start gap-2 p-2.5 hover:bg-amber-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={migrationSelected.has(g.key)}
+                            onChange={(e) => {
+                              const next = new Set(migrationSelected)
+                              if (e.target.checked) next.add(g.key)
+                              else next.delete(g.key)
+                              setMigrationSelected(next)
+                            }}
+                            className="w-4 h-4 mt-0.5 text-primary-600 rounded"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-gray-900 truncate">{g.displayName}</span>
+                              <span className="text-xs text-gray-500 flex-shrink-0">{g.productIds.length} prod.</span>
+                            </div>
+                            {g.variants.length > 1 && (
+                              <p className="text-xs text-amber-700 mt-0.5">
+                                Variantes: {g.variants.join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-gray-600">
+                        {migrationSelected.size} de {handwritten.length} seleccionada{handwritten.length !== 1 ? 's' : ''}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowMigrationPreview(false)
+                            setMigrationSelected(new Set())
+                          }}
+                          disabled={isMigratingBrands}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleMigrateBrands}
+                          disabled={isMigratingBrands || migrationSelected.size === 0}
+                        >
+                          {isMigratingBrands ? (
+                            <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importando...</>
+                          ) : (
+                            `Importar ${migrationSelected.size}`
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Add/Edit Brand Form */}
+          <div className="space-y-2">
+            <Input
+              value={newBrandName}
+              onChange={e => setNewBrandName(e.target.value)}
+              placeholder="Nombre de la marca"
+              onKeyPress={e => {
+                if (e.key === 'Enter') {
+                  if (editingBrand) handleUpdateBrand()
+                  else handleAddBrand()
+                }
+              }}
+              disabled={isSavingBrand}
+            />
+            <div className="flex gap-2">
+              {editingBrand && (
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setEditingBrand(null)
+                    setNewBrandName('')
+                  }}
+                  disabled={isSavingBrand}
+                >
+                  Cancelar edición
+                </Button>
+              )}
+              <Button
+                className="flex-1"
+                onClick={editingBrand ? handleUpdateBrand : handleAddBrand}
+                disabled={isSavingBrand || !newBrandName.trim()}
+              >
+                {isSavingBrand ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Guardando...</>
+                ) : editingBrand ? (
+                  'Actualizar marca'
+                ) : (
+                  <><Plus className="w-4 h-4 mr-2" /> Agregar marca</>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Lista de marcas */}
+          {brands.length > 0 ? (
+            <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
+              {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(brand => {
+                const productCount = products.filter(p => p.brandId === brand.id).length
+                return (
+                  <div key={brand.id} className="flex items-center justify-between p-2.5 hover:bg-gray-50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{brand.name}</p>
+                      <p className="text-xs text-gray-500">{productCount} producto{productCount !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleEditBrand(brand)}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBrand(brand.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                        title={productCount > 0 ? 'No se puede eliminar: hay productos vinculados' : 'Eliminar'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 text-sm border border-dashed border-gray-300 rounded-lg">
+              <Tag className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p>No hay marcas administradas todavía</p>
+              <p className="text-xs text-gray-400">Creá tu primera marca arriba</p>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsBrandsModalOpen(false)
+                setEditingBrand(null)
+                setNewBrandName('')
+                setShowMigrationPreview(false)
+                setMigrationSelected(new Set())
+              }}
+            >
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Bulk Actions Modal */}
       <Modal
         isOpen={bulkActionModalOpen}
@@ -6826,6 +7565,7 @@ export default function Products() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportProducts}
+        brands={brands}
       />
 
       {/* Modal de impresión de etiquetas */}

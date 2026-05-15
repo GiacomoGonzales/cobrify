@@ -9,7 +9,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getWarehouses } from '@/services/warehouseService'
 
-export default function ImportProductsModal({ isOpen, onClose, onImport }) {
+export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [] }) {
   const { businessMode, getBusinessId } = useAppContext()
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -139,6 +139,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   const validateAndMapProducts = (data) => {
     const validProducts = []
     const errors = []
+
+    // Index de marcas administradas para matchear el texto del Excel (case-insensitive).
+    // Si una marca del Excel matchea, le inyectamos brandId al producto.
+    const normalizeBrandKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const brandByKey = new Map()
+    for (const b of brands) {
+      const key = normalizeBrandKey(b.name)
+      if (key && !brandByKey.has(key)) brandByKey.set(key, b.id)
+    }
 
     data.forEach((row, index) => {
       const rowNum = index + 2 // +2 porque Excel empieza en 1 y tiene header
@@ -429,6 +438,14 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         presentation: String(row.presentacion || row.Presentacion || row.PRESENTACION || row.presentation || '').trim() || null,
         laboratoryName: String(row.laboratorio || row.Laboratorio || row.LABORATORIO || row.laboratory || '').trim() || null,
         marca: String(row.marca || row.Marca || row.MARCA || row.brand || '').trim() || null,
+        // Si la marca del Excel matchea (case-insensitive) con una marca administrada
+        // existente, enlazamos por brandId. Si no, queda null y el usuario puede
+        // migrar después con el wizard del modal "Gestionar Marcas".
+        brandId: (() => {
+          const rawMarca = String(row.marca || row.Marca || row.MARCA || row.brand || '').trim()
+          if (!rawMarca) return null
+          return brandByKey.get(normalizeBrandKey(rawMarca)) || null
+        })(),
         activeIngredient: String(row.principio_activo || row.Principio_Activo || row.PRINCIPIO_ACTIVO || row.principioActivo || row.active_ingredient || '').trim() || null,
         therapeuticAction: String(row.accion_terapeutica || row.Accion_Terapeutica || row.ACCION_TERAPEUTICA || row.accionTerapeutica || row.therapeutic_action || '').trim() || null,
         saleCondition: String(row.condicion_venta || row.Condicion_Venta || row.CONDICION_VENTA || row.condicionVenta || row.sale_condition || '').trim().toLowerCase() || null,

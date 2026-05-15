@@ -1676,6 +1676,46 @@ export const saveProductCategories = async (userId, categories) => {
   }
 }
 
+// ==================== MARCAS ====================
+
+/**
+ * Obtener marcas administradas del negocio.
+ * Cada marca: { id, name }
+ */
+export const getProductBrands = async userId => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      const data = docSnap.data()
+      return { success: true, data: data.productBrands || [] }
+    } else {
+      return { success: true, data: [] }
+    }
+  } catch (error) {
+    console.error('Error al obtener marcas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Guardar todas las marcas (reemplaza el array completo).
+ */
+export const saveProductBrands = async (userId, brands) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    await updateDoc(docRef, {
+      productBrands: brands,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar marcas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 /**
  * Obtener categorías de ingredientes (insumos)
  */

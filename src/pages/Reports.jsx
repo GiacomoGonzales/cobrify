@@ -34,7 +34,7 @@ import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
-import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import {
@@ -161,6 +161,7 @@ export default function Reports() {
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [productCategories, setProductCategories] = useState([])
+  const [productBrands, setProductBrands] = useState([])
   const [recipes, setRecipes] = useState([])
   const [expenses, setExpenses] = useState([])
   const [purchases, setPurchases] = useState([])
@@ -263,6 +264,7 @@ export default function Reports() {
         getProducts(getBusinessId()),
         getRecipes(getBusinessId()),
         getProductCategories(getBusinessId()),
+        getProductBrands(getBusinessId()),
         getPurchases(getBusinessId()),
         Promise.all([
           getFinancialMovements(getBusinessId()),
@@ -278,13 +280,14 @@ export default function Reports() {
         return { success: false, data: [] }
       })))
 
-      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult, purchasesResult, movementsResults] = results
+      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult, brandsResult, purchasesResult, movementsResults] = results
 
       if (invoicesResult.success) setInvoices(invoicesResult.data || [])
       if (customersResult.success) setCustomers(customersResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (recipesResult.success) setRecipes(recipesResult.data || [])
       if (categoriesResult.success) setProductCategories(categoriesResult.data || [])
+      if (brandsResult?.success) setProductBrands(brandsResult.data || [])
       if (purchasesResult?.success) setPurchases(purchasesResult.data || [])
 
       // Movimientos financieros y de caja
@@ -695,6 +698,76 @@ export default function Reports() {
       }))
       .sort((a, b) => b.revenue - a.revenue)
   }, [filteredInvoices, products, recipes, productCategories])
+
+  // Ventas por marca (mismo patrón que ventas por categoría).
+  // Prefiere brandId (marca administrada). Fallback al texto libre product.marca
+  // para productos legacy todavía no migrados.
+  const salesByBrand = useMemo(() => {
+    const brandStats = {}
+
+    const getBrandName = (product) => {
+      if (!product) return 'Sin marca'
+      if (product.brandId) {
+        const brand = productBrands.find(b => b.id === product.brandId)
+        if (brand) return brand.name
+      }
+      const raw = String(product.marca || '').trim()
+      return raw || 'Sin marca'
+    }
+
+    filteredInvoices.forEach(invoice => {
+      const invoiceSubtotal = invoice.items?.reduce((sum, item) => {
+        const itemPrice = item.unitPrice || item.price || 0
+        const quantity = item.quantity || 0
+        return sum + (item.subtotal || (quantity * itemPrice))
+      }, 0) || 0
+
+      const invoiceTotal = invoice.total || invoiceSubtotal
+      const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
+
+      invoice.items?.forEach(item => {
+        const productId = item.productId || item.id
+        const quantity = item.quantity || 0
+        const itemPrice = item.unitPrice || item.price || 0
+        const itemSubtotal = item.subtotal || (quantity * itemPrice)
+        const itemRevenue = itemSubtotal * discountFactor
+
+        const product = products.find(p => p.id === productId)
+        const brandName = getBrandName(product)
+
+        if (!brandStats[brandName]) {
+          brandStats[brandName] = {
+            name: brandName,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            itemCount: 0,
+          }
+        }
+
+        brandStats[brandName].quantity += quantity
+        brandStats[brandName].revenue = Number((brandStats[brandName].revenue + itemRevenue).toFixed(2))
+        brandStats[brandName].itemCount += 1
+
+        let itemCost = 0
+        const recipe = recipes.find(r => r.productId === productId)
+        if (recipe) {
+          itemCost = (recipe.totalCost || 0) * quantity
+        } else if (product) {
+          itemCost = (product.cost || 0) * quantity
+        }
+        brandStats[brandName].cost = Number((brandStats[brandName].cost + itemCost).toFixed(2))
+      })
+    })
+
+    return Object.values(brandStats)
+      .map(b => ({
+        ...b,
+        profit: Number((b.revenue - b.cost).toFixed(2)),
+        profitMargin: b.revenue > 0 ? ((b.revenue - b.cost) / b.revenue) * 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+  }, [filteredInvoices, products, recipes, productBrands])
 
   // Top clientes
   const topCustomers = useMemo(() => {
@@ -2808,6 +2881,95 @@ export default function Reports() {
                                 : 'text-red-600'
                             }`}>
                               {category.profitMargin.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de ventas por marca */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Ventas por Marca</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {salesByBrand.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de marcas en este período</p>
+                ) : (
+                  salesByBrand.map((brand, index) => (
+                    <div key={index} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{brand.name}</span>
+                        <span className="font-bold text-gray-900">{formatCurrency(brand.revenue)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <span className="text-gray-500">{brand.itemCount} ventas · {brand.quantity.toFixed(0)} uds</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-medium ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            +{formatCurrency(brand.profit)}
+                          </span>
+                          <span className={`font-medium ${brand.profitMargin >= 30 ? 'text-green-600' : brand.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {brand.profitMargin.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Marca</TableHead>
+                      <TableHead className="text-right">Ventas</TableHead>
+                      <TableHead className="text-right">Unidades</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="text-right">Utilidad</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesByBrand.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No hay datos de marcas en este período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      salesByBrand.map((brand, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{brand.name}</TableCell>
+                          <TableCell className="text-right">{brand.itemCount}</TableCell>
+                          <TableCell className="text-right">{brand.quantity.toFixed(0)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(brand.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatCurrency(brand.cost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(brand.profit)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-medium ${
+                              brand.profitMargin >= 30
+                                ? 'text-green-600'
+                                : brand.profitMargin >= 15
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}>
+                              {brand.profitMargin.toFixed(1)}%
                             </span>
                           </TableCell>
                         </TableRow>
