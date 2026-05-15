@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp, Check, Combine, AlertTriangle, Tag } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp, Check, Combine, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -25,7 +25,6 @@ export default function TableActionModal({
   onUnmergeTable,
   onOpenPrimary,
   onPrintPreBill,
-  onApplyDiscount,
   onPrintKitchenTicket,
   onToggleItemServed,
   onMarkAllServed,
@@ -577,26 +576,21 @@ export default function TableActionModal({
                       if (onPrintPreBill) onPrintPreBill()
                     }}
                     variant="outline"
-                    className="flex items-center justify-center gap-2"
+                    className={`flex items-center justify-center gap-2 ${order?.discount ? 'border-green-500 text-green-700 bg-green-50' : ''}`}
                   >
                     <Printer className="w-5 h-5" />
-                    Imprimir Precuenta
+                    <span>Imprimir Precuenta</span>
+                    {order?.discount && (
+                      <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                        {order.discount.type === 'percent'
+                          ? `-${order.discount.value}%`
+                          : `-S/ ${(order.discount.amount || order.discount.value || 0).toFixed(2)}`}
+                      </span>
+                    )}
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    onClick={() => {
-                      if (onApplyDiscount) onApplyDiscount()
-                    }}
-                    variant="outline"
-                    className={`flex items-center justify-center gap-2 ${order?.discount ? 'border-green-500 text-green-700 bg-green-50' : ''}`}
-                  >
-                    <Tag className="w-5 h-5" />
-                    {order?.discount
-                      ? `Descuento: ${order.discount.type === 'percent' ? `-${order.discount.value}%` : `-S/ ${(order.discount.amount || order.discount.value || 0).toFixed(2)}`}`
-                      : 'Aplicar Descuento'}
-                  </Button>
+                <div className="grid grid-cols-1 gap-3">
                   <Button
                     onClick={() => {
                       if (onSplitBill) onSplitBill()

@@ -14,7 +14,7 @@ import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import SplitTableModal from '@/components/restaurant/SplitTableModal'
-import ApplyDiscountModal from '@/components/restaurant/ApplyDiscountModal'
+import PreBillPreviewModal from '@/components/restaurant/PreBillPreviewModal'
 import IndividualPaymentModal from '@/components/restaurant/IndividualPaymentModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import KitchenTicket from '@/components/KitchenTicket'
@@ -75,7 +75,9 @@ export default function Tables() {
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [isSplitTableModalOpen, setIsSplitTableModalOpen] = useState(false)
   const [isIndividualPaymentModalOpen, setIsIndividualPaymentModalOpen] = useState(false)
-  const [isApplyDiscountModalOpen, setIsApplyDiscountModalOpen] = useState(false)
+  const [isPreBillPreviewOpen, setIsPreBillPreviewOpen] = useState(false)
+  // Contexto del preview de precuenta: a qué modal volver al cerrar
+  const [preBillPreviewReturnTo, setPreBillPreviewReturnTo] = useState(null) // 'action' | 'split' | null
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Estado para división de cuenta por items
@@ -531,13 +533,33 @@ export default function Tables() {
     setIsEditOrderModalOpen(true)
   }
 
-  const handleApplyDiscount = () => {
+  // Abre la vista previa de la precuenta. El descuento se aplica desde aquí.
+  // returnTo indica a qué modal regresar al cerrar el preview ('action' o 'split').
+  const openPreBillPreview = (returnTo = 'action') => {
     if (!selectedOrder) {
-      toast.error('No hay orden activa para aplicar descuento')
+      toast.error('No hay orden activa para imprimir precuenta')
       return
     }
-    setIsActionModalOpen(false)
-    setIsApplyDiscountModalOpen(true)
+    if (returnTo === 'action') setIsActionModalOpen(false)
+    if (returnTo === 'split') setIsPrintSplitModalOpen(false)
+    setPreBillPreviewReturnTo(returnTo)
+    setIsPreBillPreviewOpen(true)
+  }
+
+  const closePreBillPreview = () => {
+    const returnTo = preBillPreviewReturnTo
+    setIsPreBillPreviewOpen(false)
+    setPreBillPreviewReturnTo(null)
+    if (returnTo === 'action') setIsActionModalOpen(true)
+    if (returnTo === 'split') setIsPrintSplitModalOpen(true)
+  }
+
+  // Confirmar impresión desde el preview: cierra el preview y dispara la impresión real.
+  // El descuento ya fue persistido por el modal antes de llamar a esta función.
+  // handlePrintPreBill lee la orden fresca de Firestore, así que captura el descuento recién aplicado.
+  const handleConfirmPreBillPrint = async () => {
+    closePreBillPreview()
+    await handlePrintPreBill()
   }
 
   // Marcar/desmarcar un ítem como servido al cliente
@@ -1777,8 +1799,7 @@ export default function Tables() {
         onMergeTables={handleMergeTables}
         onUnmergeTable={handleUnmergeTable}
         onOpenPrimary={handleOpenPrimary}
-        onPrintPreBill={handlePrintPreBill}
-        onApplyDiscount={handleApplyDiscount}
+        onPrintPreBill={() => openPreBillPreview('action')}
         onPrintKitchenTicket={handlePrintKitchenTicket}
         onToggleItemServed={handleToggleItemServed}
         onMarkAllServed={handleMarkAllServed}
@@ -1836,16 +1857,13 @@ export default function Tables() {
         onConfirm={handleConfirmSplitTable}
       />
 
-      {/* Modal para aplicar descuento global a la orden */}
-      <ApplyDiscountModal
-        isOpen={isApplyDiscountModalOpen}
-        onClose={() => {
-          setIsApplyDiscountModalOpen(false)
-          setIsActionModalOpen(true)
-        }}
+      {/* Vista previa de precuenta con descuento opcional al comensal */}
+      <PreBillPreviewModal
+        isOpen={isPreBillPreviewOpen}
+        onClose={closePreBillPreview}
         table={selectedTable}
         order={selectedOrder}
-        onSuccess={reloadSelectedTableAndOrder}
+        onConfirmPrint={handleConfirmPreBillPrint}
       />
 
       {/* Modal para cerrar mesa y generar comprobante */}
@@ -1933,7 +1951,7 @@ export default function Tables() {
               </span>
             </button>
             <button
-              onClick={() => handlePrintPreBill()}
+              onClick={() => openPreBillPreview('split')}
               className="w-full p-3 border-2 border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"
             >
               <span className="text-gray-700 font-medium">
