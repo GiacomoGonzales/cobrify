@@ -1781,22 +1781,11 @@ Gracias por tu preferencia.`
         // Recargar facturas para ver el estado actualizado
         loadInvoices()
       } else {
-        const err = new Error(result.error || 'Error al enviar a SUNAT')
-        err.sunatCode = result.sunatCode
-        err.sunatDescription = result.sunatDescription
-        err.sunatIsTransient = result.sunatIsTransient
-        err.sunatMethod = result.sunatMethod
-        throw err
+        throw new Error(result.error)
       }
     } catch (error) {
-      console.error('❌ Error al enviar a SUNAT:', error)
-      // Componer mensaje claro: [CODE] descripción
-      const code = error.sunatCode || ''
-      const desc = error.sunatDescription || error.message || 'Error desconocido'
-      const composed = code ? `[${code}] ${desc}` : desc
-      toast.error(composed, 10000)
-      // Recargar facturas para reflejar nuevo estado (rejected/pending) en la lista
-      loadInvoices()
+      console.error('Error al enviar a SUNAT:', error)
+      toast.error(error.message || 'Error al enviar a SUNAT. Inténtalo nuevamente.', 5000)
     } finally {
       setSendingToSunat(null)
     }
@@ -3436,92 +3425,35 @@ Gracias por tu preferencia.`
             </div>
 
             {/* ========== ERROR SUNAT ========== */}
-            {(() => {
-              const sr = viewingInvoice.sunatResponse
-              const lastErr = viewingInvoice.lastRetryError
-              const status = viewingInvoice.sunatStatus
-              // Mostrar panel si:
-              // - Está rechazada
-              // - O está pendiente con un error guardado (intento previo fallido / temporal)
-              const isRejected = status === 'rejected'
-              const hasPendingError = status === 'pending' && (sr?.error === true || lastErr)
-              if (!isRejected && !hasPendingError) return null
-
-              const code = (isRejected ? sr?.code : (lastErr?.code || sr?.code)) || ''
-              const description = (isRejected ? sr?.description : (lastErr?.description || sr?.description)) || 'Error desconocido'
-              const observations = sr?.observations || []
-              const method = sr?.method || ''
-              const isTransient = !isRejected && (lastErr?.isTransient || sr?.isTransient)
-              const palette = isRejected
-                ? { bg: 'bg-red-50', border: 'border-red-200', accent: 'text-red-500', title: 'text-red-800', body: 'text-red-700', list: 'text-red-600', btn: 'border-red-300 text-red-700 hover:bg-red-100' }
-                : { bg: 'bg-amber-50', border: 'border-amber-200', accent: 'text-amber-500', title: 'text-amber-800', body: 'text-amber-700', list: 'text-amber-600', btn: 'border-amber-300 text-amber-700 hover:bg-amber-100' }
-              const headerLabel = isRejected
-                ? 'Rechazado por SUNAT'
-                : (isTransient ? 'Error temporal SUNAT (reintento pendiente)' : 'Último intento falló')
-              const fullPayload = JSON.stringify(sr || lastErr || {}, null, 2)
-
-              return (
-                <div className={`${palette.bg} border ${palette.border} rounded-xl p-4`}>
-                  <div className="flex gap-3">
-                    <AlertTriangle className={`w-5 h-5 ${palette.accent} flex-shrink-0 mt-0.5`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className={`font-semibold ${palette.title}`}>{headerLabel}</p>
-                        {code && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold ${palette.bg} border ${palette.border} ${palette.title}`}>
-                            Código {code}
-                          </span>
-                        )}
-                        {method && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-white/60 border border-gray-200 text-gray-600">
-                            {method}
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-sm ${palette.body} mt-1 break-words`}>{description}</p>
-                      {observations.length > 0 && (
-                        <ul className={`mt-2 text-sm ${palette.list} list-disc list-inside`}>
-                          {observations.map((obs, i) => <li key={i}>{obs}</li>)}
-                        </ul>
+            {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-red-800">Rechazado por SUNAT</p>
+                    <p className="text-sm text-red-700 mt-1">{viewingInvoice.sunatResponse.description || 'Error desconocido'}</p>
+                    {viewingInvoice.sunatResponse.observations?.length > 0 && (
+                      <ul className="mt-2 text-sm text-red-600 list-disc list-inside">
+                        {viewingInvoice.sunatResponse.observations.map((obs, i) => <li key={i}>{obs}</li>)}
+                      </ul>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
+                      onClick={() => { setViewingInvoice(null); handleSendToSunat(viewingInvoice.id); }}
+                      disabled={sendingToSunat === viewingInvoice.id}
+                    >
+                      {sendingToSunat === viewingInvoice.id ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reenviando...</>
+                      ) : (
+                        <><Send className="w-4 h-4 mr-2" />Reintentar envío</>
                       )}
-                      <details className="mt-3">
-                        <summary className={`text-xs cursor-pointer ${palette.body} underline`}>Ver respuesta SUNAT completa</summary>
-                        <div className="mt-2 flex items-start gap-2">
-                          <pre className="flex-1 text-[11px] bg-white/70 border border-gray-200 rounded p-2 overflow-x-auto max-h-60 font-mono text-gray-700 whitespace-pre-wrap break-words">{fullPayload}</pre>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(fullPayload)
-                                toast.success('Copiado al portapapeles')
-                              } catch (_) {
-                                toast.error('No se pudo copiar')
-                              }
-                            }}
-                            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50"
-                          >
-                            Copiar
-                          </button>
-                        </div>
-                      </details>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className={`mt-3 ${palette.btn}`}
-                        onClick={() => { setViewingInvoice(null); handleSendToSunat(viewingInvoice.id); }}
-                        disabled={sendingToSunat === viewingInvoice.id}
-                      >
-                        {sendingToSunat === viewingInvoice.id ? (
-                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reenviando...</>
-                        ) : (
-                          <><Send className="w-4 h-4 mr-2" />Reintentar envío</>
-                        )}
-                      </Button>
-                    </div>
+                    </Button>
                   </div>
                 </div>
-              )
-            })()}
+              </div>
+            )}
 
             {/* ========== INFO VENTA ========== */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

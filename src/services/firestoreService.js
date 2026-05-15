@@ -1384,18 +1384,7 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
       } catch {
         errorData = { error: errorText }
       }
-      const sunatCode = errorData.code || ''
-      const sunatDescription = errorData.description || errorData.error || ''
-      const composedMessage = sunatCode
-        ? `[${sunatCode}] ${sunatDescription || `HTTP ${response.status}`}`
-        : (sunatDescription || `HTTP error! status: ${response.status}`)
-      const err = new Error(composedMessage)
-      err.sunatCode = sunatCode
-      err.sunatDescription = sunatDescription
-      err.sunatMethod = errorData.method
-      err.sunatIsTransient = !!errorData.isTransient
-      err.httpStatus = response.status
-      throw err
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
@@ -1413,11 +1402,6 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
     return {
       success: false,
       error: error.message || 'Error al enviar a SUNAT',
-      sunatCode: error.sunatCode || '',
-      sunatDescription: error.sunatDescription || '',
-      sunatMethod: error.sunatMethod || '',
-      sunatIsTransient: !!error.sunatIsTransient,
-      httpStatus: error.httpStatus || 0,
     }
   }
 }
