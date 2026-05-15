@@ -41,7 +41,6 @@ import {
   Trash2,
   Store
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 
 // Datos demo
 const DEMO_DATA = {
@@ -822,59 +821,41 @@ export default function CashFlow() {
   }
 
   // Exportar a Excel
-  function exportToExcel() {
-    const wb = XLSX.utils.book_new()
+  async function exportToExcel() {
+    try {
+      // Resolver label de sucursal seleccionada
+      let branchLabel = 'Todas las sucursales'
+      if (branchFilter === 'main') {
+        branchLabel = 'Sede principal'
+      } else if (branchFilter !== 'all') {
+        const b = branches.find(x => x.id === branchFilter)
+        if (b) branchLabel = b.name
+      }
 
-    // Hoja de Resumen
-    const summaryData = [
-      ['FLUJO DE CAJA', '', ''],
-      ['Período', `${dateRange.startDate} al ${dateRange.endDate}`, ''],
-      ['', '', ''],
-      ['RESUMEN', '', ''],
-      ['Total Ingresos', cashFlowData.totalIncome, ''],
-      ['Total Egresos', cashFlowData.totalExpenses, ''],
-      ['Balance', cashFlowData.balance, ''],
-      ['', '', ''],
-      ['PROYECCIONES', '', ''],
-      ['Por Cobrar', cashFlowData.accountsReceivable, ''],
-      ['Por Pagar', cashFlowData.accountsPayable, ''],
-      ['Balance Proyectado', cashFlowData.projectedBalance, ''],
-    ]
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData)
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
+      // Cargar datos del negocio (para el encabezado del Excel)
+      let businessData = null
+      if (!isDemoMode && user?.uid) {
+        try {
+          const { getCompanySettings } = await import('@/services/firestoreService')
+          const r = await getCompanySettings(user.uid)
+          if (r.success) businessData = r.data
+        } catch (e) {
+          // si falla, seguimos sin businessData
+        }
+      }
 
-    // Hoja de Ingresos
-    const incomeData = [
-      ['INGRESOS', '', ''],
-      ['Tipo', 'Detalle', 'Monto'],
-      ['Ventas', 'Facturas pagadas', cashFlowData.salesIncome],
-      ['Préstamos Recibidos', `${cashFlowData.loansReceived.length} préstamo(s)`, cashFlowData.loansIncome],
-      ['Otros', 'Ingresos adicionales', cashFlowData.otherIncome],
-      ['TOTAL', '', cashFlowData.totalIncome],
-    ]
-    const wsIncome = XLSX.utils.aoa_to_sheet(incomeData)
-    XLSX.utils.book_append_sheet(wb, wsIncome, 'Ingresos')
-
-    // Hoja de Egresos
-    const expenseData = [
-      ['EGRESOS', '', ''],
-      ['Categoría', 'Monto', ''],
-      ...Object.entries(cashFlowData.expensesByCategory).map(([cat, data]) => [
-        EXPENSE_CATEGORIES.find(c => c.id === cat)?.name || cat,
-        data.amount,
-        ''
-      ]),
-      ['Compras', cashFlowData.purchasesTotal, ''],
-      ['Pago de Préstamos', cashFlowData.loanInstallmentsTotal, ''],
-      ['Otros Egresos', cashFlowData.otherExpenses, ''],
-      ['TOTAL', cashFlowData.totalExpenses, ''],
-    ]
-    const wsExpenses = XLSX.utils.aoa_to_sheet(expenseData)
-    XLSX.utils.book_append_sheet(wb, wsExpenses, 'Egresos')
-
-    const fileName = `flujo_caja_${dateRange.startDate}_${dateRange.endDate}.xlsx`
-    XLSX.writeFile(wb, fileName)
-    toast.success('Reporte exportado')
+      const { exportCashFlowExcel } = await import('@/services/cashFlowExportService')
+      await exportCashFlowExcel({
+        data: cashFlowData,
+        businessData,
+        dateRange,
+        branchLabel,
+      })
+      toast.success('Reporte exportado')
+    } catch (error) {
+      console.error('Error al exportar flujo de caja:', error)
+      toast.error(error.message || 'Error al generar el archivo Excel')
+    }
   }
 
   return (
