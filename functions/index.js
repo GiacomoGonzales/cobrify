@@ -732,6 +732,8 @@ export const sendInvoiceToSunat = onRequest(
 
           res.status(503).json({
             error: errorMessage,
+            code: errorCode,
+            description: errorMessage,
             method: emissionResult.method,
             isTransient: true,
             message: 'Error temporal de SUNAT. El documento se reintentará automáticamente.'
@@ -755,6 +757,8 @@ export const sendInvoiceToSunat = onRequest(
 
         res.status(500).json({
           error: errorMessage,
+          code: errorCode,
+          description: errorMessage,
           method: emissionResult.method
         })
         return
@@ -1139,7 +1143,11 @@ export const sendInvoiceToSunat = onRequest(
         console.error('⚠️ Error al revertir estado:', revertError)
       }
 
-      res.status(500).json({ error: error.message || 'Error al procesar el documento' })
+      res.status(500).json({
+        error: error.message || 'Error al procesar el documento',
+        code: 'EXCEPTION',
+        description: error.message || 'Excepción inesperada en el servidor'
+      })
     }
   }
 )
