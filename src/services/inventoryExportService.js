@@ -131,8 +131,8 @@ export const exportInventoryWithOptions = async ({
 
   const wb = XLSX.utils.book_new()
   const sheet = exportFormat === 'rows'
-    ? buildSheetRows(items, selectedWarehouses, categories, businessData)
-    : buildSheetColumns(items, selectedWarehouses, categories, businessData)
+    ? buildSheetRows(items, selectedWarehouses, categories, businessData, brands)
+    : buildSheetColumns(items, selectedWarehouses, categories, businessData, brands)
   XLSX.utils.book_append_sheet(wb, sheet, 'Inventario')
 
   const warehouseSheet = buildWarehouseInfoSheet(selectedWarehouses, items)
@@ -154,9 +154,15 @@ export const exportInventoryWithOptions = async ({
 
 // =================== FORMATO A: UNA COLUMNA POR ALMACÉN ===================
 
-function buildSheetColumns(items, selectedWarehouses, categories, businessData) {
+function buildSheetColumns(items, selectedWarehouses, categories, businessData, brands = []) {
+  const brandMap = new Map((brands || []).map(b => [b.id, b.name]))
+  const resolveBrand = (item) => {
+    if (item.brandId && brandMap.has(item.brandId)) return brandMap.get(item.brandId)
+    const legacy = String(item.marca || '').trim()
+    return legacy || ''
+  }
   const headers = [
-    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Unidad', 'Precio',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio',
     ...selectedWarehouses.map(w => `Stock\n${w.name}`),
     'Stock Total', 'Stock Mín.', 'Estado',
   ]
@@ -180,6 +186,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
           codigo: v.code || item.code || '',
           nombre: name,
           categoria: getCategoryLabel(item.category, categories),
+          marca: resolveBrand(item),
           unidad: item.unit || 'UNIDAD',
           precio: Number(v.price) || 0,
           stockPerWh,
@@ -199,6 +206,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
         codigo: item.code || '',
         nombre: item.name || '',
         categoria: getCategoryLabel(item.category, categories),
+        marca: isProduct ? resolveBrand(item) : '',
         unidad: item.unit || 'UNIDAD',
         precio: Number(item.price) || 0,
         stockPerWh,
@@ -226,7 +234,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
   const dataStart = aoa.length
   rows.forEach(r => {
     aoa.push([
-      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.unidad, r.precio,
+      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.marca, r.unidad, r.precio,
       ...r.stockPerWh,
       r.stockTotal, r.stockMin, r.status,
     ])
@@ -246,7 +254,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   applyColumnWidths(ws, [
-    11, 12, 14, 35, 22, 10, 10,
+    11, 12, 14, 35, 22, 18, 10, 10,
     ...selectedWarehouses.map(() => 14),
     12, 11, 12,
   ])
@@ -263,12 +271,13 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
     setStyle(ws, r, 2, cellStyle(i))                         // Código
     setStyle(ws, r, 3, cellStyle(i))                         // Nombre
     setStyle(ws, r, 4, cellStyle(i))                         // Categoría
-    setStyle(ws, r, 5, centerStyle(i))                       // Unidad
-    setStyle(ws, r, 6, numberStyle(i))                       // Precio
+    setStyle(ws, r, 5, cellStyle(i))                         // Marca
+    setStyle(ws, r, 6, centerStyle(i))                       // Unidad
+    setStyle(ws, r, 7, numberStyle(i))                       // Precio
     selectedWarehouses.forEach((_, wIdx) => {
-      setStyle(ws, r, 7 + wIdx, intStyle(i))
+      setStyle(ws, r, 8 + wIdx, intStyle(i))
     })
-    const totalCol = 7 + selectedWarehouses.length
+    const totalCol = 8 + selectedWarehouses.length
     setStyle(ws, r, totalCol, { ...intStyle(i), font: { ...intStyle(i).font, bold: true } })
     setStyle(ws, r, totalCol + 1, intStyle(i))
     setStyle(ws, r, totalCol + 2, statusStyle(i, row.status))
@@ -284,9 +293,15 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
 
 // =================== FORMATO B: UNA FILA POR (ITEM, ALMACÉN) ===================
 
-function buildSheetRows(items, selectedWarehouses, categories, businessData) {
+function buildSheetRows(items, selectedWarehouses, categories, businessData, brands = []) {
+  const brandMap = new Map((brands || []).map(b => [b.id, b.name]))
+  const resolveBrand = (item) => {
+    if (item.brandId && brandMap.has(item.brandId)) return brandMap.get(item.brandId)
+    const legacy = String(item.marca || '').trim()
+    return legacy || ''
+  }
   const headers = [
-    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Unidad', 'Precio',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio',
     'Almacén', 'Stock', 'Stock Mín.', 'Estado',
   ]
   const totalCols = headers.length
@@ -306,6 +321,7 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData) {
             codigo: v.code || item.code || '',
             nombre: name,
             categoria: getCategoryLabel(item.category, categories),
+            marca: resolveBrand(item),
             unidad: item.unit || 'UNIDAD',
             precio: Number(v.price) || 0,
             almacen: w.name,
@@ -326,6 +342,7 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData) {
           codigo: item.code || '',
           nombre: item.name || '',
           categoria: getCategoryLabel(item.category, categories),
+          marca: isProduct ? resolveBrand(item) : '',
           unidad: item.unit || 'UNIDAD',
           precio: Number(item.price) || 0,
           almacen: w.name,
@@ -352,13 +369,13 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData) {
   const dataStart = aoa.length
   rows.forEach(r => {
     aoa.push([
-      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.unidad,
+      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.marca, r.unidad,
       r.precio, r.almacen, r.stock, r.stockMin, r.status,
     ])
   })
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [11, 12, 14, 32, 22, 10, 10, 22, 11, 11, 12])
+  applyColumnWidths(ws, [11, 12, 14, 32, 22, 18, 10, 10, 22, 11, 11, 12])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
@@ -371,12 +388,13 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData) {
     setStyle(ws, r, 2, cellStyle(i))
     setStyle(ws, r, 3, cellStyle(i))
     setStyle(ws, r, 4, cellStyle(i))
-    setStyle(ws, r, 5, centerStyle(i))
-    setStyle(ws, r, 6, numberStyle(i))
-    setStyle(ws, r, 7, cellStyle(i))
-    setStyle(ws, r, 8, intStyle(i))
+    setStyle(ws, r, 5, cellStyle(i))
+    setStyle(ws, r, 6, centerStyle(i))
+    setStyle(ws, r, 7, numberStyle(i))
+    setStyle(ws, r, 8, cellStyle(i))
     setStyle(ws, r, 9, intStyle(i))
-    setStyle(ws, r, 10, statusStyle(i, row.status))
+    setStyle(ws, r, 10, intStyle(i))
+    setStyle(ws, r, 11, statusStyle(i, row.status))
   }
   applyFreezeBelow(ws, headerRow)
   return ws
