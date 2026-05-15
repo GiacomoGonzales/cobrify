@@ -5929,9 +5929,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </button>
           </div>
 
-          {/* Category Filter Chips */}
+          {/* Barra unificada de filtros (categorías + marcas) — un solo contenedor
+              para ahorrar espacio vertical. Cuando ambas secciones están colapsadas,
+              los toggles quedan lado a lado en una sola fila. */}
+          {(categories.length > 0 || brands.length > 0) && (
+          <div className="flex flex-wrap gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200">
           {categories.length > 0 && (
-            <div className="flex flex-wrap gap-2 bg-white p-3 rounded-lg border border-gray-200">
+            <>
               {/* Toggle global para colapsar/expandir toda la sección de categorías */}
               <button
                 onClick={toggleCategoriesSection}
@@ -6020,12 +6024,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               </button>
               </>
               )}
-            </div>
+            </>
           )}
 
-          {/* Brand Filter Chips */}
+          {/* Marcas (en el mismo contenedor) */}
           {brands.length > 0 && (
-            <div className="flex flex-wrap gap-2 bg-white p-3 rounded-lg border border-gray-200">
+            <>
               <button
                 onClick={toggleBrandsSection}
                 className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 inline-flex items-center gap-1"
@@ -6080,7 +6084,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </button>
                 </>
               )}
-            </div>
+            </>
+          )}
+          </div>
           )}
 
           {/* Products Grid */}

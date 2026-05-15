@@ -55,7 +55,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatProductPrice } from '@/lib/utils'
-import { getProducts, getProductCategories, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
+import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock } from '@/services/warehouseService'
@@ -95,6 +95,7 @@ const getCategoryPath = (categories, categoryId) => {
   return parent ? `${parent} > ${category.name}` : category.name
 }
 
+
 // Función para obtener el stock real de un item (suma de warehouseStocks o stock general)
 const getRealStockValue = (item) => {
   // Productos con variantes: sumar stock de todas las variantes
@@ -126,6 +127,9 @@ export default function Inventory() {
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
+  // Marcas administradas + filtro multi-select (mismo patrón que filterCategories)
+  const [brands, setBrands] = useState([])
+  const [filterBrands, setFilterBrands] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isScanning, setIsScanning] = useState(false)
@@ -244,6 +248,7 @@ export default function Inventory() {
     loadProducts()
     loadIngredients()
     loadCategories()
+    loadBrands()
     loadWarehouses()
     loadBranches()
     loadCompanySettings()
@@ -406,6 +411,21 @@ export default function Inventory() {
       }
     } catch (error) {
       console.error('Error al cargar categorías:', error)
+    }
+  }
+
+  const loadBrands = async () => {
+    try {
+      if (isDemoMode) {
+        setBrands(demoData?.brands || [])
+        return
+      }
+      const result = await getProductBrands(getBusinessId())
+      if (result.success) {
+        setBrands(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar marcas:', error)
     }
   }
 
@@ -1525,6 +1545,17 @@ export default function Inventory() {
       const matchesCategory =
         filterCategories.length === 0 || filterCategories.includes(item.category)
 
+      // Marca: multi-select. "sin-marca" matchea productos sin brandId. El resto
+      // matchea por brandId administrado.
+      let matchesBrand = true
+      if (filterBrands.length > 0) {
+        const wantsSinMarca = filterBrands.includes('sin-marca')
+        const wantedBrandIds = filterBrands.filter(id => id !== 'sin-marca')
+        matchesBrand =
+          (wantsSinMarca && !item.brandId) ||
+          wantedBrandIds.includes(item.brandId)
+      }
+
       // Usar stock filtrado por sucursal
       const branchStock = getStockForBranch(item)
 
@@ -1559,7 +1590,7 @@ export default function Inventory() {
         matchesStockTracking = item.trackStock === false || (item.stock === null && item.stock === undefined && !hasVariantStock)
       }
 
-      return matchesSearch && matchesCategory && matchesStatus && matchesStockTracking
+      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking
     })
 
     // Ordenar productos
@@ -1604,7 +1635,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, searchTerm, filterCategories, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
+  }, [allItems, searchTerm, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -1628,7 +1659,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategories, filterStatuses, filterBranch, filterWarehouses, filterStockTracking])
+  }, [searchTerm, filterCategories, filterBrands, filterStatuses, filterBranch, filterWarehouses, filterStockTracking])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -2142,6 +2173,73 @@ export default function Inventory() {
                   </div>
                 )}
               </div>
+
+              {/* Brand Multi-Select Filter (mismo estilo que categorías) */}
+              {brands.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === 'brands' ? null : 'brands')}
+                    className={`w-full flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterBrands.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
+                  >
+                    <Tag className="w-4 h-4 text-gray-500" />
+                    <span className="max-w-[150px] truncate">
+                      {filterBrands.length === 0
+                        ? 'Todas las marcas'
+                        : filterBrands.length === 1
+                          ? (filterBrands[0] === 'sin-marca'
+                              ? 'Sin marca'
+                              : (brands.find(b => b.id === filterBrands[0])?.name || 'Marca'))
+                          : `${filterBrands.length} marcas`}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openDropdown === 'brands' ? 'rotate-180' : ''}`} />
+                    {filterBrands.length > 0 && (
+                      <X
+                        className="w-4 h-4 text-gray-400 hover:text-gray-600"
+                        onClick={(e) => { e.stopPropagation(); setFilterBrands([]); }}
+                      />
+                    )}
+                  </button>
+                  {openDropdown === 'brands' && (
+                    <div className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(brand => (
+                        <label
+                          key={brand.id}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filterBrands.includes(brand.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFilterBrands([...filterBrands, brand.id])
+                              } else {
+                                setFilterBrands(filterBrands.filter(id => id !== brand.id))
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-gray-700">{brand.name}</span>
+                        </label>
+                      ))}
+                      <label className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-t border-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={filterBrands.includes('sin-marca')}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFilterBrands([...filterBrands, 'sin-marca'])
+                            } else {
+                              setFilterBrands(filterBrands.filter(id => id !== 'sin-marca'))
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-500 italic">Sin marca</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Status Multi-Select Filter */}
               <div className="relative">

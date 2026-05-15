@@ -3509,9 +3509,13 @@ export default function Products() {
             )}
           </div>
 
-          {/* Fila 3: Category Filter Chips */}
+          {/* Fila 3: Filtros (categorías + marcas) unificados en un solo flex para
+              ahorrar espacio vertical. Cuando ambas secciones están colapsadas, los
+              toggles quedan lado a lado en la misma fila. */}
+          {(categories.length > 0 || brands.length > 0) && (
+          <div className="flex flex-wrap gap-2">
           {categories.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <>
               {/* Toggle global para colapsar/expandir toda la sección de categorías */}
               <button
                 onClick={toggleCategoriesSection}
@@ -3602,12 +3606,12 @@ export default function Products() {
               </button>
               </>
               )}
-            </div>
+            </>
           )}
 
-          {/* Fila 4: Brand Filter Chips */}
+          {/* Marcas (en el mismo contenedor) */}
           {brands.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <>
               {/* Toggle global de la sección de marcas */}
               <button
                 onClick={toggleBrandsSection}
@@ -3663,7 +3667,9 @@ export default function Products() {
                   </button>
                 </>
               )}
-            </div>
+            </>
+          )}
+          </div>
           )}
         </CardContent>
       </Card>
