@@ -252,6 +252,35 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         if (Number.isFinite(parsed) && parsed >= 0) minStockValue = parsed
       }
 
+      // Cantidades mínimas para auto-precio por cantidad (precio2/3/4).
+      // Si al menos una columna está seteada con un entero >= 1, se activa
+      // useAutoPriceByQty automáticamente — sin necesidad de una columna extra.
+      const parseMinQty = (raw) => {
+        if (raw === undefined || raw === '' || raw === null) return null
+        const n = parseInt(raw)
+        return Number.isFinite(n) && n >= 1 ? n : null
+      }
+      const minQty2 = parseMinQty(
+        row.precio2_cantidad_minima || row.Precio2_Cantidad_Minima || row.PRECIO2_CANTIDAD_MINIMA
+        || row.precio2CantidadMinima || row.price2_min_qty || row.price2MinQty
+      )
+      const minQty3 = parseMinQty(
+        row.precio3_cantidad_minima || row.Precio3_Cantidad_Minima || row.PRECIO3_CANTIDAD_MINIMA
+        || row.precio3CantidadMinima || row.price3_min_qty || row.price3MinQty
+      )
+      const minQty4 = parseMinQty(
+        row.precio4_cantidad_minima || row.Precio4_Cantidad_Minima || row.PRECIO4_CANTIDAD_MINIMA
+        || row.precio4CantidadMinima || row.price4_min_qty || row.price4MinQty
+      )
+      const priceMinQtys = (() => {
+        const result = {}
+        if (minQty2 !== null) result.price2 = minQty2
+        if (minQty3 !== null) result.price3 = minQty3
+        if (minQty4 !== null) result.price4 = minQty4
+        return Object.keys(result).length > 0 ? result : null
+      })()
+      const useAutoPriceByQty = priceMinQtys !== null
+
       const product = {
         sku: sku,
         code: code,
@@ -262,6 +291,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
+        // Auto-precio por cantidad: si hay al menos una cantidad mínima, queda ON.
+        useAutoPriceByQty,
+        priceMinQtys,
         stock: stockValue,
         minStock: minStockValue,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
@@ -656,6 +688,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio2: 1.30,
           precio3: 1.10,
           precio4: 0.95,
+          // Cantidad mínima para auto-aplicar cada precio. Si al menos una
+          // está llenada, el sistema activa auto-precio por cantidad.
+          precio2_cantidad_minima: 10,
+          precio3_cantidad_minima: 30,
+          precio4_cantidad_minima: 100,
           stock: 500,
           stock_minimo: 50,
           trackStock: 'SI',
@@ -873,6 +910,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio2: 60.00,           // precio mayorista
           precio3: 55.00,           // precio distribuidor
           precio4: '',
+          // Cantidad mínima para auto-aplicar cada precio. Si al menos una
+          // está llenada, el sistema activa auto-precio por cantidad.
+          precio2_cantidad_minima: 6,
+          precio3_cantidad_minima: 12,
+          precio4_cantidad_minima: '',
           stock: 25,
           stock_minimo: 5,
           trackStock: 'SI',
@@ -1261,6 +1303,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 8 },  // precio2
         { wch: 8 },  // precio3
         { wch: 8 },  // precio4
+        { wch: 10 }, // precio2_cantidad_minima
+        { wch: 10 }, // precio3_cantidad_minima
+        { wch: 10 }, // precio4_cantidad_minima
         { wch: 8 },  // stock
         { wch: 12 }, // stock_minimo
         { wch: 10 }, // trackStock
@@ -1282,6 +1327,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 10 }, // precio2
         { wch: 10 }, // precio3
         { wch: 10 }, // precio4
+        { wch: 12 }, // precio2_cantidad_minima
+        { wch: 12 }, // precio3_cantidad_minima
+        { wch: 12 }, // precio4_cantidad_minima
         { wch: 10 }, // stock
         { wch: 12 }, // stock_minimo
         { wch: 12 }, // trackStock
@@ -1400,6 +1448,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           </button>
           <p className="text-xs text-gray-500 mt-1">
             Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Auto-precio por cantidad (opcional):</strong> llená <code>precio2_cantidad_minima</code>, <code>precio3_cantidad_minima</code> y/o <code>precio4_cantidad_minima</code> con la cantidad a partir de la cual aplica cada precio.
+            Si llenás al menos una, el sistema activa solo el auto-cambio de precio según la cantidad vendida.
           </p>
           <p className="text-xs text-gray-500 mt-1">
             Control de lotes y vencimientos (opcional, útil para farmacia): control_vencimiento (SI/NO), fecha_vencimiento (YYYY-MM-DD), numero_lote.
