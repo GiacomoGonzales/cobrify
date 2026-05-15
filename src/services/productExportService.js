@@ -1,582 +1,556 @@
-import * as XLSX from 'xlsx';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
+/**
+ * Servicio de exportación a Excel para productos.
+ *
+ * Tres funciones públicas:
+ *   - exportProductsForImport: plantilla compatible con el importador (mismo
+ *     orden de columnas que ImportProductsModal). Productos con variantes
+ *     emiten 1 fila por variante con campos del padre solo en la primera fila.
+ *   - generateProductsExcel: reporte detallado con jerarquía de categorías
+ *     y estadísticas (Resumen, Productos, Categorías).
+ *   - exportProductsForRappi: archivo simple para Self Mapping de Rappi.
+ *
+ * Toda la presentación se delega a excelStyles.
+ */
+import {
+  XLSX,
+  cellStyle, centerStyle, numberStyle, intStyle,
+  totalLabelStyle, totalNumberStyle,
+  setStyle,
+  applyTitleRow, applySubtitleRow, applyMetadataRows, applyHeaderRow,
+  applyFreezeBelow, applyColumnWidths,
+  buildBusinessMetadataRows,
+  buildExcelFileName,
+  saveAndShareExcel,
+  formatDate as formatDateLocale,
+} from './excelStyles'
+
+// =================== HELPERS COMUNES ===================
+
+const safeNum = (val) => {
+  if (val === undefined || val === null || val === '') return ''
+  const n = Number(val)
+  return isNaN(n) ? '' : n
+}
+
+const formatYmd = (val) => {
+  if (!val) return ''
+  let d
+  if (val?.toDate) d = val.toDate()
+  else if (val instanceof Date) d = val
+  else d = new Date(val)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const yn = (v) => v ? 'SI' : 'NO'
+
+const getTaxAffectationText = (taxAffectation) => {
+  switch (taxAffectation) {
+    case '20': return 'EXONERADO'
+    case '30': return 'INAFECTO'
+    default: return 'GRAVADO'
+  }
+}
+
+// =================== 1. PLANTILLA PARA IMPORTAR ===================
 
 /**
- * Exportar productos en formato compatible con importación.
- * El formato y orden de columnas coincide con la plantilla del importador,
- * por lo que el archivo exportado se puede reimportar directamente.
+ * Exporta productos en formato compatible con el importador. El archivo se
+ * puede reimportar sin cambios — usa los mismos nombres y orden de columnas
+ * que ImportProductsModal espera.
  *
- * Productos con variantes: emite UNA fila por variante (formato multi-fila),
- * con los campos del padre solo en la primera fila para mantener la
- * cuenta limpia. SKU/codigo_barras del padre van vacíos (cada variante
- * tiene su propio SKU).
+ * Productos con variantes: una fila por variante. El padre (sin variantes)
+ * usa la primera fila para los campos compartidos; las variantes posteriores
+ * solo llenan SKU/precio/stock de la variante.
  */
 export const exportProductsForImport = async (products, categories, businessMode = 'retail') => {
-  const workbook = XLSX.utils.book_new();
-
-  // Helper categoría/subcategoría
   const getCategoryAndSubcategory = (categoryId) => {
-    if (!categoryId) return { categoria: '', subcategoria: '' };
-    const category = categories.find(cat => cat.id === categoryId);
-    if (!category) return { categoria: '', subcategoria: '' };
+    if (!categoryId) return { categoria: '', subcategoria: '' }
+    const category = categories.find(cat => cat.id === categoryId)
+    if (!category) return { categoria: '', subcategoria: '' }
     if (category.parentId) {
-      const parent = categories.find(cat => cat.id === category.parentId);
-      return { categoria: parent ? parent.name : '', subcategoria: category.name };
+      const parent = categories.find(cat => cat.id === category.parentId)
+      return { categoria: parent ? parent.name : '', subcategoria: category.name }
     }
-    return { categoria: category.name, subcategoria: '' };
-  };
+    return { categoria: category.name, subcategoria: '' }
+  }
 
-  // Texto de afectación IGV
-  const getTaxAffectationText = (taxAffectation) => {
-    switch (taxAffectation) {
-      case '20': return 'EXONERADO';
-      case '30': return 'INAFECTO';
-      default: return 'GRAVADO';
-    }
-  };
+  // Headers (mismo orden que ImportProductsModal). Pharmacy agrega 8 columnas.
+  const baseHeaders = ['sku', 'codigo_barras', 'nombre', 'descripcion', 'marca', 'categoria', 'subcategoria', 'unidad']
+  const pharmacyHeaders = businessMode === 'pharmacy'
+    ? ['nombre_generico', 'concentracion', 'presentacion', 'laboratorio', 'principio_activo', 'accion_terapeutica', 'condicion_venta', 'registro_sanitario']
+    : []
+  const restHeaders = [
+    'costo', 'precio', 'precio2', 'precio3', 'precio4',
+    'stock', 'trackStock', 'permitir_decimales',
+    'control_vencimiento', 'fecha_vencimiento', 'control_series',
+    'mostrar_en_catalogo', 'precio_comparacion', 'imagen_url',
+    'peso', 'ubicacion', 'afectacion_igv', 'tasa_igv',
+    'presentacion1_nombre', 'presentacion1_cantidad', 'presentacion1_precio',
+    'presentacion2_nombre', 'presentacion2_cantidad', 'presentacion2_precio',
+    'presentacion3_nombre', 'presentacion3_cantidad', 'presentacion3_precio',
+    'variante_atributo', 'variante_valor', 'variante_sku', 'variante_precio', 'variante_stock',
+  ]
+  const headers = [...baseHeaders, ...pharmacyHeaders, ...restHeaders]
+  const totalCols = headers.length
 
-  // Sanitiza números (evita NaN/undefined en celdas)
-  const safeNum = (val) => {
-    if (val === undefined || val === null || val === '') return '';
-    const n = Number(val);
-    return isNaN(n) ? '' : n;
-  };
-
-  // Convierte fechas (Firestore Timestamp / Date / string) a YYYY-MM-DD
-  const formatDate = (val) => {
-    if (!val) return '';
-    let d;
-    if (val?.toDate) d = val.toDate();
-    else if (val instanceof Date) d = val;
-    else d = new Date(val);
-    if (isNaN(d.getTime())) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  // Yes/No en formato del importador
-  const yn = (v) => v ? 'SI' : 'NO';
-
-  /**
-   * Construye las filas de un producto: una si no tiene variantes,
-   * múltiples (una por variante) si las tiene.
-   */
+  // Construye las filas de un producto (1 si no tiene variantes, N si las tiene).
   const buildRowsForProduct = (product) => {
-    const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
-    const presentations = Array.isArray(product.presentations) ? product.presentations : [];
-    const p1 = presentations[0] || {};
-    const p2 = presentations[1] || {};
-    const p3 = presentations[2] || {};
+    const { categoria, subcategoria } = getCategoryAndSubcategory(product.category)
+    const presentations = Array.isArray(product.presentations) ? product.presentations : []
+    const p1 = presentations[0] || {}
+    const p2 = presentations[1] || {}
+    const p3 = presentations[2] || {}
 
-    // Campos farmacia (solo se llenan en modo pharmacy)
-    const pharmacyFields = businessMode === 'pharmacy' ? {
-      nombre_generico: product.genericName || '',
-      concentracion: product.concentration || '',
-      presentacion: product.presentation || '',
-      laboratorio: product.laboratoryName || '',
-      principio_activo: product.activeIngredient || '',
-      accion_terapeutica: product.therapeuticAction || '',
-      condicion_venta: product.saleCondition || '',
-      registro_sanitario: product.sanitaryRegistry || '',
-    } : {};
+    const pharmacyValues = businessMode === 'pharmacy' ? [
+      product.genericName || '',
+      product.concentration || '',
+      product.presentation || '',
+      product.laboratoryName || '',
+      product.activeIngredient || '',
+      product.therapeuticAction || '',
+      product.saleCondition || '',
+      product.sanitaryRegistry || '',
+    ] : []
 
-    // Producto SIN variantes — fila única
+    // SIN variantes: una fila completa
     if (!product.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) {
-      return [{
-        sku: product.sku || '',
-        codigo_barras: product.code || '',
-        nombre: product.name || '',
-        descripcion: product.description || '',
-        marca: product.marca || '',
+      return [[
+        product.sku || '',
+        product.code || '',
+        product.name || '',
+        product.description || '',
+        product.marca || '',
         categoria,
         subcategoria,
-        unidad: product.unit || 'UNIDAD',
-        ...pharmacyFields,
-        costo: safeNum(product.cost),
-        precio: safeNum(product.price),
-        precio2: safeNum(product.price2),
-        precio3: safeNum(product.price3),
-        precio4: safeNum(product.price4),
-        stock: safeNum(product.stock),
-        trackStock: product.trackStock === false ? 'NO' : 'SI',
-        permitir_decimales: yn(product.allowDecimalQuantity),
-        control_vencimiento: yn(product.trackExpiration),
-        fecha_vencimiento: formatDate(product.expirationDate),
-        control_series: yn(product.trackSerials),
-        mostrar_en_catalogo: product.catalogVisible === false ? 'NO' : 'SI',
-        precio_comparacion: safeNum(product.catalogComparePrice),
-        imagen_url: product.imageUrl || '',
-        peso: safeNum(product.weight),
-        ubicacion: product.location || '',
-        afectacion_igv: getTaxAffectationText(product.taxAffectation),
-        tasa_igv: safeNum(product.igvRate),
-        presentacion1_nombre: p1.name || '',
-        presentacion1_cantidad: safeNum(p1.factor),
-        presentacion1_precio: safeNum(p1.price),
-        presentacion2_nombre: p2.name || '',
-        presentacion2_cantidad: safeNum(p2.factor),
-        presentacion2_precio: safeNum(p2.price),
-        presentacion3_nombre: p3.name || '',
-        presentacion3_cantidad: safeNum(p3.factor),
-        presentacion3_precio: safeNum(p3.price),
-        variante_atributo: '',
-        variante_valor: '',
-        variante_sku: '',
-        variante_precio: '',
-        variante_stock: '',
-      }];
+        product.unit || 'UNIDAD',
+        ...pharmacyValues,
+        safeNum(product.cost),
+        safeNum(product.price),
+        safeNum(product.price2),
+        safeNum(product.price3),
+        safeNum(product.price4),
+        safeNum(product.stock),
+        product.trackStock === false ? 'NO' : 'SI',
+        yn(product.allowDecimalQuantity),
+        yn(product.trackExpiration),
+        formatYmd(product.expirationDate),
+        yn(product.trackSerials),
+        product.catalogVisible === false ? 'NO' : 'SI',
+        safeNum(product.catalogComparePrice),
+        product.imageUrl || '',
+        safeNum(product.weight),
+        product.location || '',
+        getTaxAffectationText(product.taxAffectation),
+        safeNum(product.igvRate),
+        p1.name || '', safeNum(p1.factor), safeNum(p1.price),
+        p2.name || '', safeNum(p2.factor), safeNum(p2.price),
+        p3.name || '', safeNum(p3.factor), safeNum(p3.price),
+        '', '', '', '', '',
+      ]]
     }
 
-    // Producto CON variantes — una fila por variante.
-    // El padre NO lleva sku/code/precio/stock (eso va en cada variante).
-    // Los demás campos solo se repiten en la primera fila para mantener limpio.
+    // CON variantes: una fila por variante
     return product.variants.map((variant, idx) => {
-      const isFirst = idx === 0;
-      const attrs = variant.attributes || {};
-      const attrKeys = Object.keys(attrs);
-      const attrNames = attrKeys.join(',');
-      const attrValues = attrKeys.map(k => attrs[k]).join(',');
+      const isFirst = idx === 0
+      const attrs = variant.attributes || {}
+      const attrKeys = Object.keys(attrs)
+      const attrNames = attrKeys.join(',')
+      const attrValues = attrKeys.map(k => attrs[k]).join(',')
 
-      return {
-        sku: '',                      // padre sin SKU
-        codigo_barras: '',            // padre sin barcode
-        nombre: product.name || '',   // siempre el mismo nombre — agrupa al reimportar
-        descripcion: isFirst ? (product.description || '') : '',
-        marca: isFirst ? (product.marca || '') : '',
-        categoria: isFirst ? categoria : '',
-        subcategoria: isFirst ? subcategoria : '',
-        unidad: isFirst ? (product.unit || 'UNIDAD') : '',
-        ...(isFirst ? pharmacyFields : Object.fromEntries(Object.keys(pharmacyFields).map(k => [k, '']))),
-        costo: isFirst ? safeNum(product.cost) : '',
-        precio: '',                   // sin precio padre
-        precio2: '', precio3: '', precio4: '',
-        stock: '',                    // sin stock padre
-        trackStock: isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
-        permitir_decimales: isFirst ? yn(product.allowDecimalQuantity) : '',
-        control_vencimiento: isFirst ? yn(product.trackExpiration) : '',
-        fecha_vencimiento: isFirst ? formatDate(product.expirationDate) : '',
-        control_series: isFirst ? yn(product.trackSerials) : '',
-        mostrar_en_catalogo: isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
-        precio_comparacion: isFirst ? safeNum(product.catalogComparePrice) : '',
-        imagen_url: isFirst ? (product.imageUrl || '') : '',
-        peso: isFirst ? safeNum(product.weight) : '',
-        ubicacion: isFirst ? (product.location || '') : '',
-        afectacion_igv: isFirst ? getTaxAffectationText(product.taxAffectation) : '',
-        tasa_igv: isFirst ? safeNum(product.igvRate) : '',
-        presentacion1_nombre: isFirst ? (p1.name || '') : '',
-        presentacion1_cantidad: isFirst ? safeNum(p1.factor) : '',
-        presentacion1_precio: isFirst ? safeNum(p1.price) : '',
-        presentacion2_nombre: isFirst ? (p2.name || '') : '',
-        presentacion2_cantidad: isFirst ? safeNum(p2.factor) : '',
-        presentacion2_precio: isFirst ? safeNum(p2.price) : '',
-        presentacion3_nombre: isFirst ? (p3.name || '') : '',
-        presentacion3_cantidad: isFirst ? safeNum(p3.factor) : '',
-        presentacion3_precio: isFirst ? safeNum(p3.price) : '',
-        variante_atributo: attrNames,
-        variante_valor: attrValues,
-        variante_sku: variant.sku || '',
-        variante_precio: safeNum(variant.price),
-        variante_stock: safeNum(variant.stock),
-      };
-    });
-  };
+      const emptyOrPharma = isFirst ? pharmacyValues : pharmacyValues.map(() => '')
 
-  // Construir todas las filas (puede haber más filas que productos por las variantes)
-  const productData = products.flatMap(p => buildRowsForProduct(p));
-
-  // Crear hoja de cálculo
-  const worksheet = XLSX.utils.json_to_sheet(productData);
-
-  // Anchos de columna razonables para legibilidad
-  const baseCols = [
-    { wch: 18 }, // sku
-    { wch: 16 }, // codigo_barras
-    { wch: 35 }, // nombre
-    { wch: 40 }, // descripcion
-    { wch: 15 }, // marca
-    { wch: 20 }, // categoria
-    { wch: 20 }, // subcategoria
-    { wch: 10 }, // unidad
-  ];
-  const pharmaCols = businessMode === 'pharmacy' ? [
-    { wch: 18 }, // nombre_generico
-    { wch: 14 }, // concentracion
-    { wch: 14 }, // presentacion
-    { wch: 18 }, // laboratorio
-    { wch: 22 }, // principio_activo
-    { wch: 18 }, // accion_terapeutica
-    { wch: 14 }, // condicion_venta
-    { wch: 16 }, // registro_sanitario
-  ] : [];
-  const restCols = [
-    { wch: 10 }, // costo
-    { wch: 10 }, // precio
-    { wch: 10 }, // precio2
-    { wch: 10 }, // precio3
-    { wch: 10 }, // precio4
-    { wch: 10 }, // stock
-    { wch: 12 }, // trackStock
-    { wch: 18 }, // permitir_decimales
-    { wch: 18 }, // control_vencimiento
-    { wch: 16 }, // fecha_vencimiento
-    { wch: 14 }, // control_series
-    { wch: 18 }, // mostrar_en_catalogo
-    { wch: 16 }, // precio_comparacion
-    { wch: 30 }, // imagen_url
-    { wch: 8 },  // peso
-    { wch: 14 }, // ubicacion
-    { wch: 14 }, // afectacion_igv
-    { wch: 10 }, // tasa_igv
-    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion1
-    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion2
-    { wch: 18 }, { wch: 16 }, { wch: 12 }, // presentacion3
-    { wch: 18 }, // variante_atributo
-    { wch: 16 }, // variante_valor
-    { wch: 18 }, // variante_sku
-    { wch: 12 }, // variante_precio
-    { wch: 12 }, // variante_stock
-  ];
-  worksheet['!cols'] = [...baseCols, ...pharmaCols, ...restCols];
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos');
-
-  // Generar nombre de archivo
-  const fileName = `Productos_Exportados_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
-
-  // Descargar/compartir archivo
-  const isNativePlatform = Capacitor.isNativePlatform();
-
-  if (isNativePlatform) {
-    try {
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-
-      const result = await Filesystem.writeFile({
-        path: fileName,
-        data: excelBuffer,
-        directory: Directory.Documents,
-        recursive: true
-      });
-
-      await Share.share({
-        title: fileName,
-        text: 'Productos exportados (compatible con importación)',
-        url: result.uri,
-        dialogTitle: 'Compartir productos'
-      });
-
-      return { success: true, uri: result.uri };
-    } catch (error) {
-      console.error('Error al exportar Excel en móvil:', error);
-      throw error;
-    }
-  } else {
-    XLSX.writeFile(workbook, fileName);
-    return { success: true };
+      return [
+        '', '', product.name || '', // padre sin SKU/code, nombre siempre
+        isFirst ? (product.description || '') : '',
+        isFirst ? (product.marca || '') : '',
+        isFirst ? categoria : '',
+        isFirst ? subcategoria : '',
+        isFirst ? (product.unit || 'UNIDAD') : '',
+        ...emptyOrPharma,
+        isFirst ? safeNum(product.cost) : '',
+        '', '', '', '', // precio* no van en padre con variantes
+        '', // stock padre vacío
+        isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
+        isFirst ? yn(product.allowDecimalQuantity) : '',
+        isFirst ? yn(product.trackExpiration) : '',
+        isFirst ? formatYmd(product.expirationDate) : '',
+        isFirst ? yn(product.trackSerials) : '',
+        isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
+        isFirst ? safeNum(product.catalogComparePrice) : '',
+        isFirst ? (product.imageUrl || '') : '',
+        isFirst ? safeNum(product.weight) : '',
+        isFirst ? (product.location || '') : '',
+        isFirst ? getTaxAffectationText(product.taxAffectation) : '',
+        isFirst ? safeNum(product.igvRate) : '',
+        isFirst ? (p1.name || '') : '', isFirst ? safeNum(p1.factor) : '', isFirst ? safeNum(p1.price) : '',
+        isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
+        isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
+        attrNames, attrValues, variant.sku || '', safeNum(variant.price), safeNum(variant.stock),
+      ]
+    })
   }
-};
 
-/**
- * Generar reporte de productos en Excel (formato detallado con estadísticas)
- */
+  const dataRows = products.flatMap(buildRowsForProduct)
+
+  // Construir aoa
+  const aoa = []
+  aoa.push([businessMode === 'pharmacy' ? 'PLANTILLA DE MEDICAMENTOS' : 'PLANTILLA DE PRODUCTOS'])
+  aoa.push([])
+
+  const metaStart = aoa.length
+  aoa.push(['Fecha de generación:', formatDateLocale(new Date(), 'dd/MM/yyyy HH:mm')])
+  aoa.push(['Modo:', businessMode === 'pharmacy' ? 'Farmacia' : 'Retail'])
+  aoa.push(['Total filas:', dataRows.length])
+  aoa.push(['Total productos:', products.length])
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+
+  const headerRow = aoa.length
+  aoa.push(headers)
+
+  const dataStart = aoa.length
+  for (const row of dataRows) aoa.push(row)
+
+  // Worksheet
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+  // Anchos de columna (orden: base + pharmacy si aplica + rest)
+  const baseWidths = [18, 16, 35, 40, 15, 20, 20, 10]
+  const pharmacyWidths = businessMode === 'pharmacy' ? [18, 14, 14, 18, 22, 18, 14, 16] : []
+  const restWidths = [
+    10, 10, 10, 10, 10, // costo + precio1..4
+    10, 12, 18, // stock + trackStock + permitir_decimales
+    18, 16, 14, // control_vencimiento + fecha_vencimiento + control_series
+    18, 16, 30, 8, 14, 14, 10, // catálogo + comparación + imagen + peso + ubicación + igv
+    18, 16, 12, 18, 16, 12, 18, 16, 12, // 3 presentaciones
+    18, 16, 18, 12, 12, // variantes
+  ]
+  applyColumnWidths(ws, [...baseWidths, ...pharmacyWidths, ...restWidths])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+
+  // Filas de datos (estilo plano sin colores fuertes — es una plantilla editable)
+  // Columnas numéricas: costo (idx según modo), precios, stock, peso, igv, presentaciones, variantes.
+  const numericKeyTokens = [
+    'costo', 'precio', 'precio2', 'precio3', 'precio4', 'stock', 'precio_comparacion',
+    'peso', 'tasa_igv',
+    'presentacion1_cantidad', 'presentacion1_precio',
+    'presentacion2_cantidad', 'presentacion2_precio',
+    'presentacion3_cantidad', 'presentacion3_precio',
+    'variante_precio', 'variante_stock',
+  ]
+  const numericCols = headers.reduce((acc, h, idx) => {
+    if (numericKeyTokens.includes(h)) acc.push(idx)
+    return acc
+  }, [])
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const r = dataStart + i
+    for (let c = 0; c < totalCols; c++) {
+      if (numericCols.includes(c)) setStyle(ws, r, c, numberStyle(i))
+      else setStyle(ws, r, c, cellStyle(i))
+    }
+  }
+  applyFreezeBelow(ws, headerRow)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos')
+
+  const fileName = buildExcelFileName(
+    businessMode === 'pharmacy' ? 'Medicamentos_Exportados' : 'Productos_Exportados'
+  )
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: 'Productos exportados (compatible con importación)',
+  })
+}
+
+// =================== 2. REPORTE DETALLADO ===================
+
+const UNIT_LABELS = {
+  UNIDAD: 'Unidad', CAJA: 'Caja', KG: 'Kilogramo',
+  LITRO: 'Litro', METRO: 'Metro', HORA: 'Hora', SERVICIO: 'Servicio',
+}
+
+/** Reporte de productos con detalle + árbol de categorías + estadísticas. */
 export const generateProductsExcel = async (products, categories, businessData, branchLabel = null, warehouseLabel = null) => {
-  const workbook = XLSX.utils.book_new();
+  const wb = XLSX.utils.book_new()
 
-  // Helper para obtener nombre de categoría por ID
-  const getCategoryName = (categoryId) => {
-    if (!categoryId) return 'Sin categoría';
-    const category = categories.find(cat => cat.id === categoryId);
-    return category ? category.name : 'Sin categoría';
-  };
-
-  // Helper para obtener la jerarquía completa de la categoría
   const getCategoryHierarchy = (categoryId) => {
-    if (!categoryId) return 'Sin categoría';
-
-    const hierarchy = [];
-    let currentId = categoryId;
-
+    if (!categoryId) return 'Sin categoría'
+    const hierarchy = []
+    let currentId = categoryId
     while (currentId) {
-      const category = categories.find(cat => cat.id === currentId);
-      if (!category) break;
-      hierarchy.unshift(category.name);
-      currentId = category.parentId;
+      const category = categories.find(cat => cat.id === currentId)
+      if (!category) break
+      hierarchy.unshift(category.name)
+      currentId = category.parentId
     }
+    return hierarchy.length > 0 ? hierarchy.join(' > ') : 'Sin categoría'
+  }
 
-    return hierarchy.length > 0 ? hierarchy.join(' > ') : 'Sin categoría';
-  };
+  // ============== HOJA 1: PRODUCTOS ==============
+  {
+    const headers = [
+      'SKU', 'Código Barras', 'Nombre', 'Categoría', 'Descripción',
+      'Unidad', 'Precio', 'Stock', 'Stock Mín.', 'Estado', 'Creado',
+    ]
+    const totalCols = headers.length
 
-  // Preparar datos de los productos
-  const productData = [
-    ['LISTADO DE PRODUCTOS'],
-    [''],
-    ['Negocio:', businessData?.name || 'N/A'],
-    ['RUC:', businessData?.ruc || 'N/A'],
-    ['Sucursal:', branchLabel || 'Todas'],
-    ['Almacén:', warehouseLabel || 'Todos'],
-    ['Fecha de Generación:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
-    ['Total de Productos:', products.length],
-    [''],
-    ['INVENTARIO DE PRODUCTOS'],
-    [''],
-  ];
+    const aoa = [['LISTADO DE PRODUCTOS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      branchLabel: branchLabel || 'Todas',
+      warehouseLabel: warehouseLabel || 'Todos',
+      totalLabel: 'Total productos',
+      totalItems: products.length,
+    }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
 
-  // Encabezados de la tabla
-  productData.push([
-    'SKU',
-    'Código de Barras',
-    'Nombre',
-    'Categoría',
-    'Descripción',
-    'Unidad',
-    'Precio Unitario',
-    'Stock',
-    'Stock Mínimo',
-    'Estado Stock',
-    'Fecha de Creación'
-  ]);
+    // Estadísticas
+    let totalStock = 0
+    let totalValue = 0
+    let lowStockCount = 0
+    let outOfStockCount = 0
 
-  // Agregar datos de cada producto
-  products.forEach(product => {
-    const unitLabels = {
-      'UNIDAD': 'Unidad',
-      'CAJA': 'Caja',
-      'KG': 'Kilogramo',
-      'LITRO': 'Litro',
-      'METRO': 'Metro',
-      'HORA': 'Hora',
-      'SERVICIO': 'Servicio'
-    };
+    products.forEach(product => {
+      const stock = Number(product.stock) || 0
+      const price = product.hasVariants && product.variants?.length > 0
+        ? (Number(product.variants[0].price) || 0)
+        : (Number(product.price) || 0)
 
-    // Determinar estado del stock
-    let stockStatus = 'Normal';
-    if (product.stock === 0) {
-      stockStatus = 'Sin stock';
-    } else if (product.minStock && product.stock <= product.minStock) {
-      stockStatus = 'Stock bajo';
+      let stockStatus = 'Normal'
+      if (stock === 0) {
+        stockStatus = 'Sin stock'
+        outOfStockCount++
+      } else if (product.minStock && stock <= product.minStock) {
+        stockStatus = 'Stock bajo'
+        lowStockCount++
+      }
+      totalStock += stock
+      totalValue += stock * price
+
+      aoa.push([
+        product.sku || '',
+        product.code || '',
+        product.name || 'N/A',
+        getCategoryHierarchy(product.category),
+        product.description || '',
+        UNIT_LABELS[product.unit] || product.unit || 'Unidad',
+        price,
+        stock,
+        Number(product.minStock) || 0,
+        stockStatus,
+        product.createdAt?.toDate
+          ? formatDateLocale(product.createdAt.toDate(), 'dd/MM/yyyy')
+          : 'N/A',
+      ])
+    })
+
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', '', '', '', '', 'TOTALES:',
+      Number(totalValue.toFixed(2)),
+      totalStock,
+      '', '', '',
+    ])
+
+    aoa.push([])
+    const statsStart = aoa.length
+    aoa.push(['ESTADÍSTICAS'])
+    aoa.push(['Total de productos', products.length])
+    aoa.push(['Productos sin stock', outOfStockCount])
+    aoa.push(['Productos con stock bajo', lowStockCount])
+    aoa.push(['Unidades en stock', totalStock])
+    aoa.push(['Valor total del inventario', Number(totalValue.toFixed(2))])
+    const statsEnd = aoa.length - 1
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [16, 18, 32, 26, 36, 12, 14, 10, 12, 14, 14])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+
+    for (let i = 0; i < products.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, cellStyle(i))
+      setStyle(ws, r, 3, cellStyle(i))
+      setStyle(ws, r, 4, cellStyle(i))
+      setStyle(ws, r, 5, centerStyle(i))
+      setStyle(ws, r, 6, numberStyle(i))
+      setStyle(ws, r, 7, intStyle(i))
+      setStyle(ws, r, 8, intStyle(i))
+      setStyle(ws, r, 9, centerStyle(i))
+      setStyle(ws, r, 10, centerStyle(i))
     }
+    // Fila de totales
+    for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 6, totalNumberStyle)
+    setStyle(ws, totalRowIdx, 7, { ...totalNumberStyle, numFmt: '#,##0' })
+    for (let c = 8; c <= 10; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
 
-    productData.push([
-      product.sku || '',
-      product.code || '',
-      product.name || 'N/A',
-      getCategoryHierarchy(product.category),
-      product.description || '',
-      unitLabels[product.unit] || product.unit || 'Unidad',
-      product.hasVariants && product.variants?.length > 0 ? (Number(product.variants[0].price) || 0) : (Number(product.price) || 0),
-      Number(product.stock) || 0,
-      Number(product.minStock) || 0,
-      stockStatus,
-      product.createdAt?.toDate ? format(product.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
-    ]);
-  });
+    // Bloque de estadísticas (subtitle + filas tipo metadata)
+    applySubtitleRow(ws, statsStart, totalCols)
+    applyMetadataRows(ws, statsStart + 1, statsEnd)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+  }
 
-  // Agregar estadísticas al final
-  const totalStock = products.reduce((sum, product) => sum + (Number(product.stock) || 0), 0);
-  const totalValue = products.reduce((sum, product) => {
-    const price = product.hasVariants && product.variants?.length > 0 ? (Number(product.variants[0].price) || 0) : (Number(product.price) || 0);
-    return sum + (price * (Number(product.stock) || 0));
-  }, 0);
-  const lowStockProducts = products.filter(p => p.minStock && p.stock <= p.minStock).length;
-  const outOfStockProducts = products.filter(p => p.stock === 0).length;
-
-  productData.push(['']);
-  productData.push(['ESTADÍSTICAS DE INVENTARIO']);
-  productData.push(['Total de Productos:', products.length]);
-  productData.push(['Productos sin Stock:', outOfStockProducts]);
-  productData.push(['Productos con Stock Bajo:', lowStockProducts]);
-  productData.push(['Total de Unidades en Stock:', totalStock]);
-  productData.push(['Valor Total del Inventario:', totalValue]);
-
-  // Crear hoja de cálculo
-  const worksheet = XLSX.utils.aoa_to_sheet(productData);
-
-  // Configurar anchos de columna
-  worksheet['!cols'] = [
-    { width: 15 },  // SKU
-    { width: 18 },  // Código de Barras
-    { width: 30 },  // Nombre
-    { width: 25 },  // Categoría
-    { width: 35 },  // Descripción
-    { width: 12 },  // Unidad
-    { width: 15 },  // Precio Unitario
-    { width: 10 },  // Stock
-    { width: 12 },  // Stock Mínimo
-    { width: 15 },  // Estado Stock
-    { width: 15 },  // Fecha de Creación
-  ];
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
-
-  // Si hay categorías, crear una hoja adicional con el árbol de categorías
+  // ============== HOJA 2: CATEGORÍAS ==============
   if (categories && categories.length > 0) {
-    const categoryData = [
-      ['ESTRUCTURA DE CATEGORÍAS'],
-      [''],
-      ['Categoría', 'Tipo', 'Productos en Categoría'],
-      [''],
-    ];
+    const headers = ['Categoría', 'Tipo', 'Productos en Categoría']
+    const totalCols = headers.length
 
-    // Función para contar productos en una categoría (incluyendo subcategorías)
     const countProductsInCategory = (categoryId) => {
-      let count = products.filter(p => p.category === categoryId).length;
-
-      // Contar productos en subcategorías
-      const subcategories = categories.filter(cat => cat.parentId === categoryId);
-      subcategories.forEach(subcat => {
-        count += countProductsInCategory(subcat.id);
-      });
-
-      return count;
-    };
-
-    // Agregar categorías raíz y sus subcategorías
-    const rootCategories = categories.filter(cat => !cat.parentId);
-
-    rootCategories.forEach(rootCat => {
-      const productCount = countProductsInCategory(rootCat.id);
-      categoryData.push([rootCat.name, 'Categoría Principal', productCount]);
-
-      // Agregar subcategorías
-      const subcategories = categories.filter(cat => cat.parentId === rootCat.id);
-      subcategories.forEach(subcat => {
-        const subProductCount = countProductsInCategory(subcat.id);
-        categoryData.push([`  └─ ${subcat.name}`, 'Subcategoría', subProductCount]);
-      });
-    });
-
-    const categorySheet = XLSX.utils.aoa_to_sheet(categoryData);
-    categorySheet['!cols'] = [
-      { width: 35 },  // Categoría
-      { width: 20 },  // Tipo
-      { width: 20 },  // Productos en Categoría
-    ];
-
-    XLSX.utils.book_append_sheet(workbook, categorySheet, 'Categorías');
-  }
-
-  // Generar nombre de archivo
-  const fileName = `Productos_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
-
-  // Descargar/compartir archivo
-  const isNativePlatform = Capacitor.isNativePlatform();
-
-  if (isNativePlatform) {
-    try {
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-
-      const result = await Filesystem.writeFile({
-        path: fileName,
-        data: excelBuffer,
-        directory: Directory.Documents,
-        recursive: true
-      });
-
-      console.log('Excel guardado en:', result.uri);
-
-      await Share.share({
-        title: fileName,
-        text: 'Listado de productos',
-        url: result.uri,
-        dialogTitle: 'Compartir listado de productos'
-      });
-
-      return { success: true, uri: result.uri };
-    } catch (error) {
-      console.error('Error al exportar Excel en móvil:', error);
-      throw error;
+      let count = products.filter(p => p.category === categoryId).length
+      const subcategories = categories.filter(cat => cat.parentId === categoryId)
+      subcategories.forEach(sub => {
+        count += countProductsInCategory(sub.id)
+      })
+      return count
     }
-  } else {
-    XLSX.writeFile(workbook, fileName);
-    return { success: true };
+
+    const aoa = [['ESTRUCTURA DE CATEGORÍAS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      branchLabel: branchLabel || 'Todas',
+      totalLabel: 'Total categorías',
+      totalItems: categories.length,
+    }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+
+    const rootCategories = categories.filter(cat => !cat.parentId)
+    const rowKinds = [] // 'root' | 'sub' por fila — para distinguir estilo
+    rootCategories.forEach(rootCat => {
+      const productCount = countProductsInCategory(rootCat.id)
+      aoa.push([rootCat.name, 'Categoría principal', productCount])
+      rowKinds.push('root')
+      const subcategories = categories.filter(cat => cat.parentId === rootCat.id)
+      subcategories.forEach(sub => {
+        const subCount = countProductsInCategory(sub.id)
+        aoa.push([`  └─ ${sub.name}`, 'Subcategoría', subCount])
+        rowKinds.push('sub')
+      })
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [36, 20, 22])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < rowKinds.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, cellStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, intStyle(i))
+    }
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Categorías')
   }
-};
+
+  const fileName = buildExcelFileName('Productos')
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: 'Listado de productos',
+    subDirectory: 'Productos',
+  })
+}
+
+// =================== 3. EXPORT PARA SELF MAPPING DE RAPPI ===================
 
 /**
- * Exporta productos en formato simple para Self Mapping de Rappi.
- *
- * El merchant usa este Excel para copiar los SKUs de Cobrify al Portal Partners
- * de Rappi (asignándolos manualmente a cada producto Rappi). Solo incluye los
- * campos que necesita ver el merchant para hacer el mapeo: SKU, nombre, precio,
- * descripción y categoría.
+ * Archivo simple con SKUs, nombres y precios para Self Mapping en Rappi.
+ * Estructura mínima — el merchant copia/pega valores al Portal Partners.
  */
 export const exportProductsForRappi = async (products, categories) => {
-  const workbook = XLSX.utils.book_new();
-
   const getCategoryName = (categoryId) => {
-    if (!categoryId) return '';
-    const category = categories.find(c => c.id === categoryId);
-    if (!category) return '';
+    if (!categoryId) return ''
+    const category = categories.find(c => c.id === categoryId)
+    if (!category) return ''
     if (category.parentId) {
-      const parent = categories.find(c => c.id === category.parentId);
-      return parent ? `${parent.name} > ${category.name}` : category.name;
+      const parent = categories.find(c => c.id === category.parentId)
+      return parent ? `${parent.name} > ${category.name}` : category.name
     }
-    return category.name;
-  };
+    return category.name
+  }
 
-  const headers = ['SKU', 'Nombre', 'Precio', 'Descripción', 'Categoría'];
-  const rows = [headers];
+  const headers = ['SKU', 'Nombre', 'Precio', 'Descripción', 'Categoría']
+  const totalCols = headers.length
 
+  const aoa = [['PRODUCTOS PARA SELF MAPPING EN RAPPI'], []]
+  const metaStart = aoa.length
+  aoa.push(['Fecha de generación:', formatDateLocale(new Date(), 'dd/MM/yyyy HH:mm')])
+  aoa.push(['Total productos:', products.length])
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  // Aplanar productos (variantes en filas separadas)
+  let totalRows = 0
   for (const product of products) {
     if (product.variants && product.variants.length > 0) {
       product.variants.forEach((variant, idx) => {
-        rows.push([
+        aoa.push([
           variant.sku || '',
           idx === 0
             ? `${product.name}${variant.attributes ? ' - ' + Object.values(variant.attributes).join(' / ') : ''}`
             : `${product.name} - ${Object.values(variant.attributes || {}).join(' / ')}`,
-          variant.price ?? product.price ?? 0,
+          Number(variant.price ?? product.price ?? 0),
           product.description || '',
           getCategoryName(product.categoryId || product.category),
-        ]);
-      });
+        ])
+        totalRows++
+      })
     } else {
-      rows.push([
+      aoa.push([
         product.sku || product.code || '',
         product.name || '',
-        product.price ?? 0,
+        Number(product.price ?? 0),
         product.description || '',
         getCategoryName(product.categoryId || product.category),
-      ]);
+      ])
+      totalRows++
     }
   }
 
-  const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet['!cols'] = [
-    { width: 18 },
-    { width: 40 },
-    { width: 12 },
-    { width: 50 },
-    { width: 25 },
-  ];
-
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Productos para Rappi');
-
-  const fileName = `Productos_Rappi_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
-  const isNativePlatform = Capacitor.isNativePlatform();
-
-  if (isNativePlatform) {
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-    const result = await Filesystem.writeFile({
-      path: fileName,
-      data: excelBuffer,
-      directory: Directory.Documents,
-      recursive: true,
-    });
-    await Share.share({
-      title: fileName,
-      text: 'Productos para Self Mapping en Rappi',
-      url: result.uri,
-      dialogTitle: 'Compartir listado de SKUs',
-    });
-    return { success: true, uri: result.uri };
-  } else {
-    XLSX.writeFile(workbook, fileName);
-    return { success: true };
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [18, 42, 14, 50, 26])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < totalRows; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    setStyle(ws, r, 2, numberStyle(i))
+    setStyle(ws, r, 3, cellStyle(i))
+    setStyle(ws, r, 4, cellStyle(i))
   }
-};
+  applyFreezeBelow(ws, headerRow)
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Productos para Rappi')
+
+  const fileName = buildExcelFileName('Productos_Rappi')
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: 'Productos para Self Mapping en Rappi',
+  })
+}
