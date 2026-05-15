@@ -1,10 +1,3 @@
-import * as XLSX from 'xlsx-js-style'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
-import { Capacitor } from '@capacitor/core'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import { Share } from '@capacitor/share'
-
 /**
  * Exportación avanzada del inventario con estilos.
  *
@@ -12,116 +5,33 @@ import { Share } from '@capacitor/share'
  *   {
  *     includeProducts: boolean,
  *     includeIngredients: boolean,
- *     warehouseIds: string[],   // array de IDs de almacenes a incluir
+ *     warehouseIds: string[],
  *     includeNoStockTracking: boolean,
  *     format: 'columns' | 'rows',
  *   }
+ *
+ * Toda la presentación se delega a excelStyles para mantener el look unificado.
  */
+import {
+  XLSX,
+  cellStyle, centerStyle, numberStyle, intStyle,
+  badgeStyle, statusStyle, COLORS,
+  totalLabelStyle, totalNumberStyle,
+  setStyle,
+  applyTitleRow, applySubtitleRow, applyMetadataRows, applyHeaderRow,
+  applyFreezeBelow, applyColumnWidths,
+  buildBusinessMetadataRows,
+  buildExcelFileName,
+  saveAndShareExcel,
+} from './excelStyles'
 
-// =================== PALETA DE ESTILOS ===================
-const COLORS = {
-  titleBg: '1E3A8A',        // Azul oscuro
-  titleFg: 'FFFFFF',
-  subtitleBg: 'E0E7FF',     // Azul muy claro
-  headerBg: '3730A3',       // Indigo
-  headerFg: 'FFFFFF',
-  zebraBg: 'F9FAFB',        // Gris muy suave
-  totalBg: 'FEF3C7',        // Amarillo suave
-  productTag: 'D1FAE5',     // Verde claro
-  productText: '065F46',    // Verde oscuro
-  ingredientTag: 'FED7AA',  // Naranja claro
-  ingredientText: '9A3412', // Naranja oscuro
-  stockOk: '065F46',
-  stockLow: 'B45309',       // Ámbar oscuro
-  stockOut: 'B91C1C',       // Rojo oscuro
-  border: 'CBD5E1',
-}
+// =================== HELPERS LOCALES ===================
 
-const BORDER_ALL = {
-  top: { style: 'thin', color: { rgb: COLORS.border } },
-  bottom: { style: 'thin', color: { rgb: COLORS.border } },
-  left: { style: 'thin', color: { rgb: COLORS.border } },
-  right: { style: 'thin', color: { rgb: COLORS.border } },
-}
-
-const titleStyle = {
-  font: { bold: true, sz: 14, color: { rgb: COLORS.titleFg } },
-  fill: { fgColor: { rgb: COLORS.titleBg } },
-  alignment: { horizontal: 'center', vertical: 'center' },
-}
-
-const metaLabelStyle = {
-  font: { bold: true, sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.subtitleBg } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const metaValueStyle = {
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const headerStyle = {
-  font: { bold: true, sz: 10, color: { rgb: COLORS.headerFg } },
-  fill: { fgColor: { rgb: COLORS.headerBg } },
-  alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-  border: BORDER_ALL,
-}
-
-const cellStyle = (rowIdx) => ({
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
+/** Badge verde (producto) o naranja (insumo). */
+const itemTypeBadgeStyle = (isProduct) => badgeStyle({
+  bg: isProduct ? COLORS.successTag : COLORS.warningTag,
+  fg: isProduct ? COLORS.successText : COLORS.warningText,
 })
-
-const numberStyle = (rowIdx) => ({
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-  alignment: { horizontal: 'right', vertical: 'center' },
-  border: BORDER_ALL,
-  numFmt: '#,##0.00',
-})
-
-const intStyle = (rowIdx) => ({
-  ...numberStyle(rowIdx),
-  numFmt: '#,##0',
-})
-
-const typeTagStyle = (rowIdx, isProduct) => ({
-  font: { bold: true, sz: 9, color: { rgb: isProduct ? COLORS.productText : COLORS.ingredientText } },
-  fill: { fgColor: { rgb: isProduct ? COLORS.productTag : COLORS.ingredientTag } },
-  alignment: { horizontal: 'center', vertical: 'center' },
-  border: BORDER_ALL,
-})
-
-const statusStyle = (rowIdx, status) => {
-  const color = status === 'Sin stock' ? COLORS.stockOut
-    : status === 'Stock bajo' ? COLORS.stockLow
-    : COLORS.stockOk
-  return {
-    font: { bold: true, sz: 10, color: { rgb: color } },
-    fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-    alignment: { horizontal: 'center', vertical: 'center' },
-    border: BORDER_ALL,
-  }
-}
-
-const totalRowStyle = {
-  font: { bold: true, sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.totalBg } },
-  alignment: { horizontal: 'right', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const totalLabelStyle = {
-  ...totalRowStyle,
-  alignment: { horizontal: 'left', vertical: 'center' },
-}
-
-// =================== HELPERS ===================
 
 // Stock de un item en un almacén específico
 const getStockAtWarehouse = (item, warehouseId) => {
@@ -143,13 +53,11 @@ const getTotalStock = (item) => {
   if (item.hasVariants && item.variants?.length > 0) {
     return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
   }
-  if (item.itemType === 'ingredient') {
-    return item.currentStock || 0
-  }
+  if (item.itemType === 'ingredient') return item.currentStock || 0
   return item.stock || 0
 }
 
-// Obtener jerarquía de categoría
+// Jerarquía de categoría (con padre > hijo)
 const getCategoryLabel = (categoryId, categories = []) => {
   if (!categoryId) return 'Sin categoría'
   const hierarchy = []
@@ -190,13 +98,12 @@ export const exportInventoryWithOptions = async ({
     format: exportFormat = 'columns',
   } = options
 
-  // Filtrar almacenes
   const selectedWarehouses = warehouses.filter(w => warehouseIds.includes(w.id))
   if (selectedWarehouses.length === 0) {
     throw new Error('Debes seleccionar al menos un almacén')
   }
 
-  // Construir lista unificada
+  // Lista unificada de items (productos + ingredientes)
   let items = []
   if (includeProducts) {
     const mapped = products
@@ -221,45 +128,38 @@ export const exportInventoryWithOptions = async ({
     throw new Error('No hay items para exportar con los filtros seleccionados')
   }
 
-  // Generar workbook
   const wb = XLSX.utils.book_new()
   const sheet = exportFormat === 'rows'
     ? buildSheetRows(items, selectedWarehouses, categories, businessData)
     : buildSheetColumns(items, selectedWarehouses, categories, businessData)
   XLSX.utils.book_append_sheet(wb, sheet, 'Inventario')
 
-  // Hoja adicional con almacenes (info)
   const warehouseSheet = buildWarehouseInfoSheet(selectedWarehouses, items)
   XLSX.utils.book_append_sheet(wb, warehouseSheet, 'Almacenes')
 
-  // Guardar/compartir
-  const fileName = `Inventario_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`
-  await saveAndShare(wb, fileName)
+  const fileName = buildExcelFileName('Inventario')
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: 'Reporte de inventario',
+    subDirectory: 'Inventario',
+  })
   return { success: true, itemCount: items.length }
 }
 
-// =================== FORMATO A: COLUMNAS POR ALMACÉN ===================
+// =================== FORMATO A: UNA COLUMNA POR ALMACÉN ===================
 
 function buildSheetColumns(items, selectedWarehouses, categories, businessData) {
   const headers = [
-    'Tipo',
-    'SKU',
-    'Código',
-    'Nombre',
-    'Categoría',
-    'Unidad',
-    'Precio',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Unidad', 'Precio',
     ...selectedWarehouses.map(w => `Stock\n${w.name}`),
-    'Stock Total',
-    'Stock Mín.',
-    'Estado',
+    'Stock Total', 'Stock Mín.', 'Estado',
   ]
+  const totalCols = headers.length
 
-  // Preparar filas (con variantes expandidas)
+  // Expandir variantes y filas
   const rows = []
   items.forEach(item => {
     if (item.itemType === 'product' && item.hasVariants && item.variants?.length > 0) {
-      // Una fila por variante
       item.variants.forEach(v => {
         const variantLabel = Object.values(v.attributes || {}).join(' / ')
         const name = variantLabel ? `${item.name} — ${variantLabel}` : item.name
@@ -304,157 +204,86 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData) 
     }
   })
 
-  // Construir AOA (array of arrays) con metadata + header + data + totales
-  const aoa = []
-
-  // Título
-  aoa.push(['REPORTE DE INVENTARIO'])
-  aoa.push([])
-  // Metadata
-  aoa.push(['Negocio:', businessData?.name || '—'])
-  aoa.push(['RUC:', businessData?.ruc || '—'])
-  aoa.push(['Almacenes incluidos:', selectedWarehouses.map(w => w.name).join(', ')])
-  aoa.push(['Fecha de generación:', format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })])
-  aoa.push(['Total de items:', rows.length])
+  // AOA: título / metadata / header / data / resumen
+  const aoa = [['REPORTE DE INVENTARIO'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    warehouseLabel: selectedWarehouses.map(w => w.name).join(', '),
+    totalLabel: 'Total items',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
   aoa.push([])
 
-  // Header
-  const headerRowIdx = aoa.length // 0-indexed
+  const headerRow = aoa.length
   aoa.push(headers)
-
-  // Data
-  const dataStartRow = aoa.length
+  const dataStart = aoa.length
   rows.forEach(r => {
     aoa.push([
-      r.tipo,
-      r.sku,
-      r.codigo,
-      r.nombre,
-      r.categoria,
-      r.unidad,
-      r.precio,
+      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.unidad, r.precio,
       ...r.stockPerWh,
-      r.stockTotal,
-      r.stockMin,
-      r.status,
+      r.stockTotal, r.stockMin, r.status,
     ])
   })
-  const dataEndRow = aoa.length - 1 // inclusive
 
-  // Totales
+  // Resumen
   aoa.push([])
+  const summaryStart = aoa.length
   aoa.push(['RESUMEN'])
-  aoa.push(['Total items:', rows.length])
-  aoa.push(['Items con stock:', rows.filter(r => r.stockTotal > 0).length])
-  aoa.push(['Items sin stock:', rows.filter(r => r.stockTotal === 0).length])
-  aoa.push(['Items con stock bajo:', rows.filter(r => r.status === 'Stock bajo').length])
+  aoa.push(['Total items', rows.length])
+  aoa.push(['Items con stock', rows.filter(r => r.stockTotal > 0).length])
+  aoa.push(['Items sin stock', rows.filter(r => r.stockTotal === 0).length])
+  aoa.push(['Items con stock bajo', rows.filter(r => r.status === 'Stock bajo').length])
   const totalValue = rows.reduce((s, r) => s + r.precio * r.stockTotal, 0)
-  aoa.push(['Valor total del inventario:', totalValue])
+  aoa.push(['Valor total del inventario', Number(totalValue.toFixed(2))])
+  const summaryEnd = aoa.length - 1
 
-  // Crear worksheet
   const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [
+    11, 12, 14, 35, 22, 10, 10,
+    ...selectedWarehouses.map(() => 14),
+    12, 11, 12,
+  ])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
 
-  // Anchos de columna
-  const cols = [
-    { wch: 11 }, // Tipo
-    { wch: 12 }, // SKU
-    { wch: 14 }, // Código
-    { wch: 35 }, // Nombre
-    { wch: 22 }, // Categoría
-    { wch: 10 }, // Unidad
-    { wch: 10 }, // Precio
-    ...selectedWarehouses.map(() => ({ wch: 14 })), // Stock por almacén
-    { wch: 12 }, // Stock Total
-    { wch: 11 }, // Stock Min
-    { wch: 12 }, // Estado
-  ]
-  ws['!cols'] = cols
-
-  // Altura del header
-  ws['!rows'] = []
-  ws['!rows'][headerRowIdx] = { hpt: 32 }
-
-  // Merge del título
-  ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
-  ]
-
-  // Estilos
-  const range = XLSX.utils.decode_range(ws['!ref'])
-
-  // Título
-  setStyle(ws, 0, 0, titleStyle)
-  for (let c = 1; c < headers.length; c++) setStyle(ws, 0, c, titleStyle)
-  ws['!rows'][0] = { hpt: 26 }
-
-  // Metadata (filas 2-6, columnas 0 y 1)
-  for (let r = 2; r <= 6; r++) {
-    setStyle(ws, r, 0, metaLabelStyle)
-    setStyle(ws, r, 1, metaValueStyle)
-  }
-
-  // Header (fila headerRowIdx)
-  for (let c = 0; c < headers.length; c++) {
-    setStyle(ws, headerRowIdx, c, headerStyle)
-  }
-
-  // Datos
+  // Filas de datos
   for (let i = 0; i < rows.length; i++) {
-    const r = dataStartRow + i
+    const r = dataStart + i
     const row = rows[i]
-    // Tipo
-    setStyle(ws, r, 0, typeTagStyle(i, row.isProduct))
-    // SKU, Código, Nombre, Categoría, Unidad
-    setStyle(ws, r, 1, cellStyle(i))
-    setStyle(ws, r, 2, cellStyle(i))
-    setStyle(ws, r, 3, cellStyle(i))
-    setStyle(ws, r, 4, cellStyle(i))
-    setStyle(ws, r, 5, { ...cellStyle(i), alignment: { horizontal: 'center', vertical: 'center' } })
-    // Precio
-    setStyle(ws, r, 6, numberStyle(i))
-    // Stock por almacén
+    setStyle(ws, r, 0, itemTypeBadgeStyle(row.isProduct))    // Tipo
+    setStyle(ws, r, 1, cellStyle(i))                         // SKU
+    setStyle(ws, r, 2, cellStyle(i))                         // Código
+    setStyle(ws, r, 3, cellStyle(i))                         // Nombre
+    setStyle(ws, r, 4, cellStyle(i))                         // Categoría
+    setStyle(ws, r, 5, centerStyle(i))                       // Unidad
+    setStyle(ws, r, 6, numberStyle(i))                       // Precio
     selectedWarehouses.forEach((_, wIdx) => {
       setStyle(ws, r, 7 + wIdx, intStyle(i))
     })
-    // Total, Min
     const totalCol = 7 + selectedWarehouses.length
     setStyle(ws, r, totalCol, { ...intStyle(i), font: { ...intStyle(i).font, bold: true } })
     setStyle(ws, r, totalCol + 1, intStyle(i))
-    // Estado
     setStyle(ws, r, totalCol + 2, statusStyle(i, row.status))
   }
 
-  // Totales
-  const summaryStartRow = dataEndRow + 3
-  setStyle(ws, summaryStartRow, 0, { ...titleStyle, fill: { fgColor: { rgb: COLORS.subtitleBg } }, font: { ...titleStyle.font, color: { rgb: '1F2937' }, sz: 11 } })
-  ws['!merges'].push({ s: { r: summaryStartRow, c: 0 }, e: { r: summaryStartRow, c: 3 } })
-  for (let i = 1; i <= 5; i++) {
-    setStyle(ws, summaryStartRow + i, 0, totalLabelStyle)
-    setStyle(ws, summaryStartRow + i, 1, totalRowStyle)
-  }
-
-  // Freeze panes en la fila del header+1
-  ws['!freeze'] = { xSplit: 0, ySplit: headerRowIdx + 1 }
+  // Bloque de resumen (subtitle + filas tipo metadata)
+  applySubtitleRow(ws, summaryStart, totalCols)
+  applyMetadataRows(ws, summaryStart + 1, summaryEnd)
+  applyFreezeBelow(ws, headerRow)
 
   return ws
 }
 
-// =================== FORMATO B: FILAS POR ALMACÉN ===================
+// =================== FORMATO B: UNA FILA POR (ITEM, ALMACÉN) ===================
 
 function buildSheetRows(items, selectedWarehouses, categories, businessData) {
   const headers = [
-    'Tipo',
-    'SKU',
-    'Código',
-    'Nombre',
-    'Categoría',
-    'Unidad',
-    'Precio',
-    'Almacén',
-    'Stock',
-    'Stock Mín.',
-    'Estado',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Unidad', 'Precio',
+    'Almacén', 'Stock', 'Stock Mín.', 'Estado',
   ]
+  const totalCols = headers.length
 
   const rows = []
   items.forEach(item => {
@@ -503,76 +332,61 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData) {
     }
   })
 
-  const aoa = []
-  aoa.push(['REPORTE DE INVENTARIO (formato extendido)'])
+  const aoa = [['REPORTE DE INVENTARIO (formato extendido)'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    warehouseLabel: selectedWarehouses.map(w => w.name).join(', '),
+    totalLabel: 'Total filas',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
   aoa.push([])
-  aoa.push(['Negocio:', businessData?.name || '—'])
-  aoa.push(['RUC:', businessData?.ruc || '—'])
-  aoa.push(['Almacenes incluidos:', selectedWarehouses.map(w => w.name).join(', ')])
-  aoa.push(['Fecha de generación:', format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })])
-  aoa.push(['Total de filas:', rows.length])
-  aoa.push([])
-
-  const headerRowIdx = aoa.length
+  const headerRow = aoa.length
   aoa.push(headers)
-  const dataStartRow = aoa.length
+  const dataStart = aoa.length
   rows.forEach(r => {
     aoa.push([
       r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.unidad,
       r.precio, r.almacen, r.stock, r.stockMin, r.status,
     ])
   })
-  const dataEndRow = aoa.length - 1
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!cols'] = [
-    { wch: 11 }, { wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 22 },
-    { wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 11 }, { wch: 11 }, { wch: 12 },
-  ]
-  ws['!rows'] = []
-  ws['!rows'][0] = { hpt: 26 }
-  ws['!rows'][headerRowIdx] = { hpt: 28 }
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }]
+  applyColumnWidths(ws, [11, 12, 14, 32, 22, 10, 10, 22, 11, 11, 12])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
 
-  // Título
-  for (let c = 0; c < headers.length; c++) setStyle(ws, 0, c, titleStyle)
-  // Metadata
-  for (let r = 2; r <= 6; r++) {
-    setStyle(ws, r, 0, metaLabelStyle)
-    setStyle(ws, r, 1, metaValueStyle)
-  }
-  // Header
-  for (let c = 0; c < headers.length; c++) setStyle(ws, headerRowIdx, c, headerStyle)
-
-  // Datos
   for (let i = 0; i < rows.length; i++) {
-    const r = dataStartRow + i
+    const r = dataStart + i
     const row = rows[i]
-    setStyle(ws, r, 0, typeTagStyle(i, row.isProduct))
+    setStyle(ws, r, 0, itemTypeBadgeStyle(row.isProduct))
     setStyle(ws, r, 1, cellStyle(i))
     setStyle(ws, r, 2, cellStyle(i))
     setStyle(ws, r, 3, cellStyle(i))
     setStyle(ws, r, 4, cellStyle(i))
-    setStyle(ws, r, 5, { ...cellStyle(i), alignment: { horizontal: 'center', vertical: 'center' } })
+    setStyle(ws, r, 5, centerStyle(i))
     setStyle(ws, r, 6, numberStyle(i))
     setStyle(ws, r, 7, cellStyle(i))
     setStyle(ws, r, 8, intStyle(i))
     setStyle(ws, r, 9, intStyle(i))
     setStyle(ws, r, 10, statusStyle(i, row.status))
   }
-
-  ws['!freeze'] = { xSplit: 0, ySplit: headerRowIdx + 1 }
+  applyFreezeBelow(ws, headerRow)
   return ws
 }
 
 // =================== HOJA DE ALMACENES ===================
 
 function buildWarehouseInfoSheet(selectedWarehouses, items) {
-  const aoa = [
-    ['INFORMACIÓN DE ALMACENES'],
-    [],
-    ['Almacén', 'Principal', 'Items con stock', 'Total unidades'],
-  ]
+  const headers = ['Almacén', 'Principal', 'Items con stock', 'Total unidades']
+  const totalCols = headers.length
+
+  const aoa = [['INFORMACIÓN DE ALMACENES'], []]
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
   selectedWarehouses.forEach(w => {
     let withStock = 0
     let totalUnits = 0
@@ -586,60 +400,33 @@ function buildWarehouseInfoSheet(selectedWarehouses, items) {
     aoa.push([w.name, w.isDefault ? 'Sí' : '', withStock, totalUnits])
   })
 
+  // Totales
+  const totalWithStock = selectedWarehouses.reduce((sum, w) => {
+    return sum + items.filter(it => getStockAtWarehouse(it, w.id) > 0).length
+  }, 0)
+  const totalUnitsAll = selectedWarehouses.reduce((sum, w) => {
+    return sum + items.reduce((s, it) => s + getStockAtWarehouse(it, w.id), 0)
+  }, 0)
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['TOTALES', '', totalWithStock, totalUnitsAll])
+
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 16 }]
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }]
-
-  setStyle(ws, 0, 0, titleStyle)
-  for (let c = 1; c < 4; c++) setStyle(ws, 0, c, titleStyle)
-
-  for (let c = 0; c < 4; c++) setStyle(ws, 2, c, headerStyle)
-
+  applyColumnWidths(ws, [30, 12, 18, 16])
+  applyTitleRow(ws, 0, totalCols)
+  applyHeaderRow(ws, headerRow, totalCols)
   for (let i = 0; i < selectedWarehouses.length; i++) {
-    const r = 3 + i
+    const r = dataStart + i
     setStyle(ws, r, 0, cellStyle(i))
-    setStyle(ws, r, 1, { ...cellStyle(i), alignment: { horizontal: 'center', vertical: 'center' } })
+    setStyle(ws, r, 1, centerStyle(i))
     setStyle(ws, r, 2, intStyle(i))
     setStyle(ws, r, 3, intStyle(i))
   }
-  ws['!rows'] = [{ hpt: 26 }]
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 3, { ...totalNumberStyle, numFmt: '#,##0' })
+  applyFreezeBelow(ws, headerRow)
 
   return ws
-}
-
-// =================== UTIL: aplicar estilo a celda ===================
-
-function setStyle(ws, row, col, style) {
-  const addr = XLSX.utils.encode_cell({ r: row, c: col })
-  if (!ws[addr]) {
-    ws[addr] = { t: 's', v: '' }
-  }
-  ws[addr].s = style
-}
-
-// =================== GUARDAR / COMPARTIR ===================
-
-async function saveAndShare(wb, fileName) {
-  const isNative = Capacitor.isNativePlatform()
-  if (isNative) {
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' })
-    const result = await Filesystem.writeFile({
-      path: fileName,
-      data: excelBuffer,
-      directory: Directory.Documents,
-      recursive: true,
-    })
-    try {
-      await Share.share({
-        title: fileName,
-        text: 'Reporte de inventario',
-        url: result.uri,
-        dialogTitle: 'Compartir inventario',
-      })
-    } catch { /* usuario canceló */ }
-    return { uri: result.uri }
-  } else {
-    XLSX.writeFile(wb, fileName)
-    return {}
-  }
 }
