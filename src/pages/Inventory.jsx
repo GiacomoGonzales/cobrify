@@ -513,6 +513,7 @@ export default function Inventory() {
         products,
         ingredients,
         categories: productCategories,
+        brands,
         warehouses: filteredWarehouses,
         businessData,
         options,

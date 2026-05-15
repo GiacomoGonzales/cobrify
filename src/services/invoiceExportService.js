@@ -330,6 +330,11 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   applyFreezeBelow(ws2, header2Row)
   XLSX.utils.book_append_sheet(workbook, ws2, 'Registro de Ventas')
 
+  // ============== HOJAS EXTRA DE ANALÍTICA ==============
+  appendItemsDetailSheet(workbook, invoices, businessData, branchLabel)
+  appendTopProductsSheet(workbook, invoices, businessData, branchLabel)
+  appendPaymentMethodsSheet(workbook, invoices, businessData, branchLabel)
+
   // Nombre del archivo
   const filterInfo = filters?.type && filters.type !== 'all' ? filters.type : ''
   const dateInfo = (filters?.startDate || filters?.endDate) ? 'filtrado' : ''
@@ -340,4 +345,259 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     shareText: `Reporte de comprobantes: ${fileName}`,
     subDirectory: 'Comprobantes',
   })
+}
+
+// =================== HOJAS EXTRA DE ANALÍTICA ===================
+
+/** Items detallados: una fila por línea de cada comprobante. */
+function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
+  if (!invoices || invoices.length === 0) return
+
+  const headers = [
+    'N° Comprobante', 'Fecha', 'Tipo', 'Cliente',
+    'Producto', 'SKU', 'Cantidad', 'Precio Unit.',
+    'Descuento', 'Subtotal Item', 'Afectación IGV',
+  ]
+  const totalCols = headers.length
+
+  const aoa = [['ITEMS DETALLADOS'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    branchLabel: branchLabel || 'Todas',
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  let totalQty = 0, totalAmount = 0
+  let rowCount = 0
+  const typeNames = {
+    factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta',
+    nota_credito: 'Nota de Crédito', nota_debito: 'Nota de Débito',
+    'nota-credito': 'Nota de Crédito', 'nota-debito': 'Nota de Débito',
+  }
+
+  for (const inv of invoices) {
+    if (!Array.isArray(inv.items)) continue
+    const invDate = inv.createdAt?.toDate ? format(inv.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
+    const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
+    const tipo = typeNames[inv.documentType] || 'Boleta'
+    for (const item of inv.items) {
+      const qty = item.quantity || 1
+      const price = item.unitPrice || item.price || 0
+      const disc = item.discount || 0
+      const sub = qty * price - disc
+      const afect = item.taxAffectation === '20' ? 'EXONERADO' : item.taxAffectation === '30' ? 'INAFECTO' : 'GRAVADO'
+      totalQty += qty
+      totalAmount += sub
+      aoa.push([
+        inv.number || 'N/A', invDate, tipo, customerName,
+        item.name || item.description || 'Producto', item.sku || item.code || '',
+        Number(qty), Number(price.toFixed(2)),
+        Number(disc.toFixed(2)), Number(sub.toFixed(2)), afect,
+      ])
+      rowCount++
+    }
+  }
+
+  if (rowCount === 0) return
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['', '', '', '', '', 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [14, 12, 14, 28, 36, 14, 10, 12, 12, 14, 14])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rowCount; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, centerStyle(i))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, cellStyle(i))
+    setStyle(ws, r, 4, cellStyle(i))
+    setStyle(ws, r, 5, centerStyle(i))
+    setStyle(ws, r, 6, numberStyle(i))
+    setStyle(ws, r, 7, numberStyle(i))
+    setStyle(ws, r, 8, numberStyle(i))
+    setStyle(ws, r, 9, numberStyle(i))
+    setStyle(ws, r, 10, centerStyle(i))
+  }
+  for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 6, totalNumberStyle)
+  for (let c = 7; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 9, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 10, totalLabelStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Items Detallados')
+}
+
+/** Top productos: agregación por nombre de producto (con sku). */
+function appendTopProductsSheet(wb, invoices, businessData, branchLabel) {
+  if (!invoices || invoices.length === 0) return
+
+  // Agregar por nombre+sku
+  const agg = new Map()
+  for (const inv of invoices) {
+    for (const item of inv.items || []) {
+      const name = item.name || item.description || 'Producto'
+      const sku = item.sku || item.code || ''
+      const key = `${name}|${sku}`
+      if (!agg.has(key)) agg.set(key, { name, sku, qty: 0, count: 0, revenue: 0 })
+      const e = agg.get(key)
+      const qty = item.quantity || 1
+      const price = item.unitPrice || item.price || 0
+      const disc = item.discount || 0
+      e.qty += qty
+      e.count += 1
+      e.revenue += qty * price - disc
+    }
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => b.revenue - a.revenue)
+
+  const headers = ['#', 'Producto', 'SKU', 'Cantidad Vendida', '# Ventas', 'Ingresos', 'Precio Promedio', '% del Total']
+  const totalCols = headers.length
+
+  const aoa = [['TOP PRODUCTOS DEL PERÍODO'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    branchLabel: branchLabel || 'Todas',
+    totalLabel: 'Total productos únicos',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0)
+  let totalQty = 0, totalCount = 0
+  rows.forEach((p, idx) => {
+    const avgPrice = p.qty > 0 ? p.revenue / p.qty : 0
+    const pct = totalRevenue > 0 ? (p.revenue / totalRevenue) * 100 : 0
+    totalQty += p.qty
+    totalCount += p.count
+    aoa.push([
+      idx + 1, p.name, p.sku,
+      Number(p.qty), p.count,
+      Number(p.revenue.toFixed(2)),
+      Number(avgPrice.toFixed(2)),
+      Number(pct.toFixed(1)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['', 'TOTALES', '', Number(totalQty), totalCount, Number(totalRevenue.toFixed(2)), '', 100])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [6, 38, 16, 14, 12, 14, 14, 12])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+    setStyle(ws, r, 5, numberStyle(i))
+    setStyle(ws, r, 6, numberStyle(i))
+    setStyle(ws, r, 7, numberStyle(i))
+  }
+  for (let c = 0; c <= 2; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 5, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 6, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 7, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Top Productos')
+}
+
+/** Por método de pago: agregación con monto total y % del total. */
+function appendPaymentMethodsSheet(wb, invoices, businessData, branchLabel) {
+  if (!invoices || invoices.length === 0) return
+
+  const agg = new Map()
+  for (const inv of invoices) {
+    if (inv.payments && Array.isArray(inv.payments) && inv.payments.length > 0) {
+      // Pagos múltiples: cada uno con su monto
+      for (const p of inv.payments) {
+        const method = p.method || 'Efectivo'
+        if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
+        const e = agg.get(method)
+        e.amount += p.amount || 0
+        e.count += 1
+      }
+    } else {
+      const method = inv.paymentMethod || 'Efectivo'
+      if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
+      const e = agg.get(method)
+      e.amount += inv.total || 0
+      e.count += 1
+    }
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => b.amount - a.amount)
+  const headers = ['Método de Pago', '# Transacciones', 'Monto Total', '% del Total', 'Ticket Promedio']
+  const totalCols = headers.length
+
+  const aoa = [['VENTAS POR MÉTODO DE PAGO'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    branchLabel: branchLabel || 'Todas',
+    totalLabel: 'Total métodos usados',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const totalAmount = rows.reduce((s, r) => s + r.amount, 0)
+  let totalCount = 0
+  rows.forEach(p => {
+    const pct = totalAmount > 0 ? (p.amount / totalAmount) * 100 : 0
+    const ticket = p.count > 0 ? p.amount / p.count : 0
+    totalCount += p.count
+    aoa.push([
+      p.method, p.count,
+      Number(p.amount.toFixed(2)),
+      Number(pct.toFixed(1)),
+      Number(ticket.toFixed(2)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['TOTALES', totalCount, Number(totalAmount.toFixed(2)), 100, ''])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [24, 16, 16, 14, 16])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, numberStyle(i))
+    setStyle(ws, r, 2, numberStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, totalLabelStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Por Método de Pago')
 }
