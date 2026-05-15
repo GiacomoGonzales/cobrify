@@ -1,200 +1,31 @@
-import * as XLSX from 'xlsx-js-style'
+/**
+ * Servicio de exportación a Excel para la página de Comprobantes.
+ * Genera dos hojas:
+ *   1) Listado de comprobantes con desglose tributario + estado SUNAT
+ *   2) Registro de Ventas e Ingresos (formato SUNAT 14.1)
+ *
+ * Toda la presentación (estilos, layout, descarga) está delegada a excelStyles.
+ */
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Capacitor } from '@capacitor/core'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import { Share } from '@capacitor/share'
+import {
+  XLSX,
+  cellStyle, centerStyle, numberStyle,
+  docTypeBadgeStyle, statusStyle,
+  totalLabelStyle, totalNumberStyle,
+  setStyle,
+  applyTitleRow, applySubtitleRow, applyMetadataRows, applyHeaderRow,
+  applyFreezeBelow, applyColumnWidths,
+  buildBusinessMetadataRows,
+  buildExcelFileName,
+  saveAndShareExcel,
+} from './excelStyles'
 
-// =================== PALETA DE ESTILOS (mismo look que inventario) ===================
-const COLORS = {
-  titleBg: '1E3A8A',        // Azul oscuro
-  titleFg: 'FFFFFF',
-  subtitleBg: 'E0E7FF',     // Azul muy claro
-  headerBg: '3730A3',       // Indigo
-  headerFg: 'FFFFFF',
-  zebraBg: 'F9FAFB',        // Gris muy suave
-  totalBg: 'FEF3C7',        // Amarillo suave
-  // Badges tipo de comprobante
-  facturaTag: 'DBEAFE',     // Azul claro
-  facturaText: '1E40AF',
-  boletaTag: 'DCFCE7',      // Verde claro
-  boletaText: '15803D',
-  notaVentaTag: 'F3F4F6',   // Gris
-  notaVentaText: '374151',
-  notaCreditoTag: 'FED7AA', // Naranja claro
-  notaCreditoText: '9A3412',
-  notaDebitoTag: 'FCE7F3',  // Rosa claro
-  notaDebitoText: '9D174D',
-  // Estados
-  statusOk: '065F46',
-  statusWarn: 'B45309',
-  statusError: 'B91C1C',
-  border: 'CBD5E1',
-}
-
-const BORDER_ALL = {
-  top: { style: 'thin', color: { rgb: COLORS.border } },
-  bottom: { style: 'thin', color: { rgb: COLORS.border } },
-  left: { style: 'thin', color: { rgb: COLORS.border } },
-  right: { style: 'thin', color: { rgb: COLORS.border } },
-}
-
-const titleStyle = {
-  font: { bold: true, sz: 14, color: { rgb: COLORS.titleFg } },
-  fill: { fgColor: { rgb: COLORS.titleBg } },
-  alignment: { horizontal: 'center', vertical: 'center' },
-}
-
-const subtitleStyle = {
-  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.subtitleBg } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const metaLabelStyle = {
-  font: { bold: true, sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.subtitleBg } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const metaValueStyle = {
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  alignment: { horizontal: 'left', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const headerStyle = {
-  font: { bold: true, sz: 10, color: { rgb: COLORS.headerFg } },
-  fill: { fgColor: { rgb: COLORS.headerBg } },
-  alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-  border: BORDER_ALL,
-}
-
-const cellStyle = (rowIdx) => ({
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-  alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-  border: BORDER_ALL,
-})
-
-const numberStyle = (rowIdx) => ({
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-  alignment: { horizontal: 'right', vertical: 'center' },
-  border: BORDER_ALL,
-  numFmt: '#,##0.00',
-})
-
-const centerStyle = (rowIdx) => ({
-  font: { sz: 10, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-  alignment: { horizontal: 'center', vertical: 'center' },
-  border: BORDER_ALL,
-})
-
-// Badge de tipo de comprobante (Factura azul, Boleta verde, etc.)
-const typeTagStyle = (rowIdx, docType) => {
-  let bg = COLORS.notaVentaTag, fg = COLORS.notaVentaText
-  if (docType === 'factura') { bg = COLORS.facturaTag; fg = COLORS.facturaText }
-  else if (docType === 'boleta') { bg = COLORS.boletaTag; fg = COLORS.boletaText }
-  else if (docType === 'nota_credito' || docType === 'nota-credito') { bg = COLORS.notaCreditoTag; fg = COLORS.notaCreditoText }
-  else if (docType === 'nota_debito' || docType === 'nota-debito') { bg = COLORS.notaDebitoTag; fg = COLORS.notaDebitoText }
-  return {
-    font: { bold: true, sz: 9, color: { rgb: fg } },
-    fill: { fgColor: { rgb: bg } },
-    alignment: { horizontal: 'center', vertical: 'center' },
-    border: BORDER_ALL,
-  }
-}
-
-// Estilo para columna de estado (coloreado según valor)
-const statusStyle = (rowIdx, statusText) => {
-  const lower = (statusText || '').toLowerCase()
-  let color = COLORS.statusOk
-  if (lower.includes('rechaz') || lower.includes('anul')) color = COLORS.statusError
-  else if (lower.includes('pend') || lower.includes('envi') || lower.includes('borrad')) color = COLORS.statusWarn
-  return {
-    font: { bold: true, sz: 10, color: { rgb: color } },
-    fill: { fgColor: { rgb: rowIdx % 2 === 0 ? 'FFFFFF' : COLORS.zebraBg } },
-    alignment: { horizontal: 'center', vertical: 'center' },
-    border: BORDER_ALL,
-  }
-}
-
-const totalLabelStyle = {
-  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.totalBg } },
-  alignment: { horizontal: 'right', vertical: 'center' },
-  border: BORDER_ALL,
-}
-
-const totalNumberStyle = {
-  font: { bold: true, sz: 11, color: { rgb: '1F2937' } },
-  fill: { fgColor: { rgb: COLORS.totalBg } },
-  alignment: { horizontal: 'right', vertical: 'center' },
-  border: BORDER_ALL,
-  numFmt: '#,##0.00',
-}
-
-// Aplica estilo a una celda (creándola si no existe)
-function setStyle(ws, row, col, style) {
-  const addr = XLSX.utils.encode_cell({ r: row, c: col })
-  if (!ws[addr]) ws[addr] = { t: 's', v: '' }
-  ws[addr].s = style
-}
-
-// =================== HELPER SAVE/SHARE ===================
-const saveAndShareExcel = async (workbook, fileName) => {
-  const isNativePlatform = Capacitor.isNativePlatform()
-
-  if (isNativePlatform) {
-    try {
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
-      const excelDir = 'Comprobantes'
-      try {
-        await Filesystem.mkdir({ path: excelDir, directory: Directory.Documents, recursive: true })
-      } catch { /* existe */ }
-
-      const result = await Filesystem.writeFile({
-        path: `${excelDir}/${fileName}`,
-        data: excelBuffer,
-        directory: Directory.Documents,
-        recursive: true,
-      })
-
-      try {
-        await Share.share({
-          title: fileName,
-          text: `Reporte de comprobantes: ${fileName}`,
-          url: result.uri,
-          dialogTitle: 'Compartir Reporte de Comprobantes',
-        })
-      } catch { /* canceló */ }
-
-      return { success: true, uri: result.uri }
-    } catch (error) {
-      console.error('Error al exportar Excel en móvil:', error)
-      throw error
-    }
-  } else {
-    XLSX.writeFile(workbook, fileName)
-    return { success: true }
-  }
-}
-
-/**
- * Formatea los métodos de pago de una factura.
- */
+/** Formatea los métodos de pago de una factura. */
 const formatPaymentMethods = (invoice) => {
   if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-    if (invoice.payments.length === 1) {
-      return invoice.payments[0].method || 'Efectivo'
-    }
-    return invoice.payments
-      .map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`)
-      .join(' + ')
+    if (invoice.payments.length === 1) return invoice.payments[0].method || 'Efectivo'
+    return invoice.payments.map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`).join(' + ')
   }
   return invoice.paymentMethod || 'Efectivo'
 }
@@ -205,7 +36,7 @@ const formatPaymentMethods = (invoice) => {
 export const generateInvoicesExcel = async (invoices, filters, businessData, branchLabel = null) => {
   const workbook = XLSX.utils.book_new()
 
-  // =================== HOJA 1: COMPROBANTES ===================
+  // ============== HOJA 1: COMPROBANTES ==============
   const headers1 = [
     'Fecha', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'Descuento',
@@ -216,22 +47,25 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const aoa1 = []
   aoa1.push(['REPORTE DE COMPROBANTES EMITIDOS'])
   aoa1.push([])
-  aoa1.push(['Negocio:', businessData?.name || 'N/A'])
-  aoa1.push(['RUC:', businessData?.ruc || 'N/A'])
-  aoa1.push(['Sucursal:', branchLabel || 'Todas'])
-  aoa1.push(['Fecha de generación:', format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })])
 
-  // Filtros aplicados
-  if (filters.type && filters.type !== 'all') {
-    const typeNames = {
+  // Metadata del negocio + filtros aplicados como "extra"
+  const extra = []
+  if (filters?.type && filters.type !== 'all') {
+    const typeLabels = {
       factura: 'Facturas', boleta: 'Boletas',
       'nota-credito': 'Notas de Crédito', 'nota-debito': 'Notas de Débito',
     }
-    aoa1.push(['Tipo de Comprobante:', typeNames[filters.type] || filters.type])
+    extra.push(['Tipo de Comprobante:', typeLabels[filters.type] || filters.type])
   }
-  if (filters.startDate) aoa1.push(['Fecha Desde:', format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })])
-  if (filters.endDate) aoa1.push(['Fecha Hasta:', format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })])
+  if (filters?.startDate) extra.push(['Fecha Desde:', format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })])
+  if (filters?.endDate) extra.push(['Fecha Hasta:', format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })])
 
+  const metaStart = aoa1.length
+  const metadataRows = buildBusinessMetadataRows(businessData, {
+    branchLabel: branchLabel || 'Todas',
+    extra,
+  })
+  aoa1.push(...metadataRows)
   const metaEndRow = aoa1.length - 1
   aoa1.push([])
 
@@ -242,7 +76,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const header1Row = aoa1.length
   aoa1.push(headers1)
 
-  // Preparar datos
+  // Diccionarios de mapeo
   const typeNames = {
     factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta',
     nota_credito: 'Nota de Crédito', nota_debito: 'Nota de Débito',
@@ -259,7 +93,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   }
 
   const dataStart1 = aoa1.length
-  const invoiceDocTypes = [] // Lo guardo para estilizar el badge
+  const invoiceDocTypes = [] // Para estilizar el badge
 
   invoices.forEach(invoice => {
     const docType = invoice.documentType || invoice.type || 'N/A'
@@ -311,45 +145,29 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       formatPaymentMethods(invoice),
     ])
   })
-  const dataEnd1 = aoa1.length - 1
 
-  // Totales
+  // Totales (gravada, exonerada, inafecta calculados desde items)
   const subtotalSum = invoices.reduce((s, i) => s + (i.subtotal || 0), 0)
   const discountSum = invoices.reduce((s, i) => s + (i.discount || 0), 0)
   const taxSum = invoices.reduce((s, i) => s + (i.igv || i.tax || 0), 0)
   const totalSum = invoices.reduce((s, i) => s + (i.total || 0), 0)
-  const gravadaSum = invoices.reduce((s, i) => {
-    let g = 0
-    i.items?.forEach(item => {
+  const taxBuckets = invoices.reduce((acc, inv) => {
+    inv.items?.forEach(item => {
       const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation !== '20' && item.taxAffectation !== '30') g += t
+      if (item.taxAffectation === '20') acc.e += t
+      else if (item.taxAffectation === '30') acc.i += t
+      else acc.g += t
     })
-    return s + g
-  }, 0)
-  const exoneradaSum = invoices.reduce((s, i) => {
-    let e = 0
-    i.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation === '20') e += t
-    })
-    return s + e
-  }, 0)
-  const inafectaSum = invoices.reduce((s, i) => {
-    let ia = 0
-    i.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation === '30') ia += t
-    })
-    return s + ia
-  }, 0)
+    return acc
+  }, { g: 0, e: 0, i: 0 })
 
   aoa1.push([])
   const totalRow = aoa1.length
   aoa1.push([
     '', '', '', '', '', '', 'TOTALES:',
-    Number(gravadaSum.toFixed(2)),
-    Number(exoneradaSum.toFixed(2)),
-    Number(inafectaSum.toFixed(2)),
+    Number(taxBuckets.g.toFixed(2)),
+    Number(taxBuckets.e.toFixed(2)),
+    Number(taxBuckets.i.toFixed(2)),
     Number(subtotalSum.toFixed(2)),
     Number(discountSum.toFixed(2)),
     Number(taxSum.toFixed(2)),
@@ -360,88 +178,44 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   // Crear worksheet
   const ws1 = XLSX.utils.aoa_to_sheet(aoa1)
 
-  // Anchos
-  ws1['!cols'] = [
-    { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 14 },
-    { wch: 22 }, { wch: 45 }, { wch: 13 }, { wch: 14 }, { wch: 13 },
-    { wch: 12 }, { wch: 11 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
-    { wch: 14 }, { wch: 30 },
-  ]
+  applyColumnWidths(ws1, [
+    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 12, 14, 30,
+  ])
 
-  // Alturas
-  ws1['!rows'] = []
-  ws1['!rows'][0] = { hpt: 28 }
-  ws1['!rows'][subtitleRow] = { hpt: 22 }
-  ws1['!rows'][header1Row] = { hpt: 32 }
+  // Layout: título / metadata / subtítulo / header
+  applyTitleRow(ws1, 0, totalCols1)
+  applyMetadataRows(ws1, metaStart, metaEndRow)
+  applySubtitleRow(ws1, subtitleRow, totalCols1)
+  applyHeaderRow(ws1, header1Row, totalCols1)
 
-  // Merges
-  ws1['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols1 - 1 } },                 // Título
-    { s: { r: subtitleRow, c: 0 }, e: { r: subtitleRow, c: totalCols1 - 1 } }, // Subtítulo
-  ]
-
-  // Estilos título
-  for (let c = 0; c < totalCols1; c++) setStyle(ws1, 0, c, titleStyle)
-
-  // Estilos metadata
-  for (let r = 2; r <= metaEndRow; r++) {
-    setStyle(ws1, r, 0, metaLabelStyle)
-    setStyle(ws1, r, 1, metaValueStyle)
-  }
-
-  // Subtitle
-  for (let c = 0; c < totalCols1; c++) setStyle(ws1, subtitleRow, c, subtitleStyle)
-
-  // Header
-  for (let c = 0; c < totalCols1; c++) setStyle(ws1, header1Row, c, headerStyle)
-
-  // Data rows
+  // Filas de datos
   for (let i = 0; i < invoices.length; i++) {
     const r = dataStart1 + i
     const docType = invoiceDocTypes[i]
-    // 0: Fecha (centrado)
-    setStyle(ws1, r, 0, centerStyle(i))
-    // 1: Tipo (badge)
-    setStyle(ws1, r, 1, typeTagStyle(i, docType))
-    // 2: Número (centrado mono-like)
-    setStyle(ws1, r, 2, centerStyle(i))
-    // 3: Cliente
-    setStyle(ws1, r, 3, cellStyle(i))
-    // 4: RUC/DNI
-    setStyle(ws1, r, 4, centerStyle(i))
-    // 5: Alumno
-    setStyle(ws1, r, 5, cellStyle(i))
-    // 6: Productos
-    setStyle(ws1, r, 6, cellStyle(i))
-    // 7-13: Números
+    setStyle(ws1, r, 0, centerStyle(i))       // Fecha
+    setStyle(ws1, r, 1, docTypeBadgeStyle(docType)) // Tipo (badge)
+    setStyle(ws1, r, 2, centerStyle(i))       // Número
+    setStyle(ws1, r, 3, cellStyle(i))         // Cliente
+    setStyle(ws1, r, 4, centerStyle(i))       // RUC/DNI
+    setStyle(ws1, r, 5, cellStyle(i))         // Alumno
+    setStyle(ws1, r, 6, cellStyle(i))         // Productos
     for (let c = 7; c <= 13; c++) setStyle(ws1, r, c, numberStyle(i))
-    // 14: Estado
-    const statusText = aoa1[r][14]
-    setStyle(ws1, r, 14, statusStyle(i, statusText))
-    // 15: Estado SUNAT
-    const sunatText = aoa1[r][15]
-    setStyle(ws1, r, 15, statusStyle(i, sunatText))
-    // 16: Método de pago
+    setStyle(ws1, r, 14, statusStyle(i, aoa1[r][14]))
+    setStyle(ws1, r, 15, statusStyle(i, aoa1[r][15]))
     setStyle(ws1, r, 16, cellStyle(i))
   }
 
   // Fila de totales
   for (let c = 0; c < totalCols1; c++) {
-    if (c === 6) {
-      setStyle(ws1, totalRow, c, totalLabelStyle)
-    } else if (c >= 7 && c <= 13) {
-      setStyle(ws1, totalRow, c, totalNumberStyle)
-    } else {
-      setStyle(ws1, totalRow, c, { ...totalNumberStyle, alignment: { horizontal: 'left', vertical: 'center' } })
-    }
+    if (c === 6) setStyle(ws1, totalRow, c, totalLabelStyle)
+    else if (c >= 7 && c <= 13) setStyle(ws1, totalRow, c, totalNumberStyle)
+    else setStyle(ws1, totalRow, c, { ...totalNumberStyle, alignment: { horizontal: 'left', vertical: 'center' } })
   }
 
-  // Freeze panes en el header de datos
-  ws1['!freeze'] = { xSplit: 0, ySplit: header1Row + 1 }
-
+  applyFreezeBelow(ws1, header1Row)
   XLSX.utils.book_append_sheet(workbook, ws1, 'Comprobantes')
 
-  // =================== HOJA 2: REGISTRO DE VENTAS (SUNAT 14.1) ===================
+  // ============== HOJA 2: REGISTRO DE VENTAS (SUNAT 14.1) ==============
   const headers2 = [
     'CUO', 'Fecha Emisión', 'Fecha Vencimiento', 'Tipo Comprobante', 'Serie', 'Número',
     'Tipo Doc. Cliente', 'Nro Doc. Cliente', 'Razón Social / Nombre',
@@ -454,9 +228,11 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const aoa2 = []
   aoa2.push(['REGISTRO DE VENTAS E INGRESOS'])
   aoa2.push([])
+
+  const meta2Start = aoa2.length
   aoa2.push(['RUC:', businessData?.ruc || 'N/A'])
   aoa2.push(['Razón Social:', businessData?.name || 'N/A'])
-  aoa2.push(['Período:', filters.startDate && filters.endDate
+  aoa2.push(['Período:', filters?.startDate && filters?.endDate
     ? `${format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })} - ${format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })}`
     : format(new Date(), 'MM/yyyy', { locale: es })])
   const meta2End = aoa2.length - 1
@@ -472,7 +248,6 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   }
   const sunatIdTypeCodes = { '1': '1', '6': '6', '0': '0', '4': '4', '7': '7', A: 'A' }
 
-  // Ordenar por fecha
   const sorted = [...invoices].sort((a, b) => {
     const dA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
     const dB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
@@ -528,40 +303,23 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       refDocType, refSerie, refNumero, estado,
     ])
   })
-  const dataEnd2 = aoa2.length - 1
 
   const ws2 = XLSX.utils.aoa_to_sheet(aoa2)
-  ws2['!cols'] = [
-    { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 12 },
-    { wch: 10 }, { wch: 15 }, { wch: 35 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-    { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
-    { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 8 },
-  ]
-  ws2['!rows'] = []
-  ws2['!rows'][0] = { hpt: 28 }
-  ws2['!rows'][header2Row] = { hpt: 32 }
-  ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalCols2 - 1 } }]
+  applyColumnWidths(ws2, [
+    6, 12, 12, 10, 8, 12, 10, 15, 35, 14, 12, 12, 14, 14, 8, 12, 14, 10, 10, 8, 12, 8,
+  ])
+  applyTitleRow(ws2, 0, totalCols2)
+  applyMetadataRows(ws2, meta2Start, meta2End)
+  applyHeaderRow(ws2, header2Row, totalCols2)
 
-  // Título
-  for (let c = 0; c < totalCols2; c++) setStyle(ws2, 0, c, titleStyle)
-  // Metadata
-  for (let r = 2; r <= meta2End; r++) {
-    setStyle(ws2, r, 0, metaLabelStyle)
-    setStyle(ws2, r, 1, metaValueStyle)
-  }
-  // Header
-  for (let c = 0; c < totalCols2; c++) setStyle(ws2, header2Row, c, headerStyle)
-
-  // Data rows - columnas numéricas (SUNAT format, sin colores fuertes, solo zebra)
-  const numericCols2 = [9, 10, 11, 12, 13, 14, 15, 16, 17] // Base, Desc, IGV, Exo, Ina, ISC, Otros, Total, TC
+  // Data rows (SUNAT format)
+  const numericCols2 = [9, 10, 11, 12, 13, 14, 15, 16, 17]
   for (let i = 0; i < sorted.length; i++) {
     const r = dataStart2 + i
     for (let c = 0; c < totalCols2; c++) {
       if (numericCols2.includes(c)) {
         setStyle(ws2, r, c, numberStyle(i))
-      } else if (c === 0 || (c >= 3 && c <= 7) || c === 18 || c === 19 || c === 21) {
-        setStyle(ws2, r, c, centerStyle(i))
-      } else if (c === 1 || c === 2) {
+      } else if (c === 0 || c === 1 || c === 2 || (c >= 3 && c <= 7) || c === 18 || c === 19 || c === 21) {
         setStyle(ws2, r, c, centerStyle(i))
       } else {
         setStyle(ws2, r, c, cellStyle(i))
@@ -569,13 +327,17 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     }
   }
 
-  ws2['!freeze'] = { xSplit: 0, ySplit: header2Row + 1 }
+  applyFreezeBelow(ws2, header2Row)
   XLSX.utils.book_append_sheet(workbook, ws2, 'Registro de Ventas')
 
-  // Generar nombre de archivo
-  const filterInfo = filters.type && filters.type !== 'all' ? `_${filters.type}` : ''
-  const dateInfo = filters.startDate || filters.endDate ? '_filtrado' : ''
-  const fileName = `Comprobantes${filterInfo}${dateInfo}_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`
+  // Nombre del archivo
+  const filterInfo = filters?.type && filters.type !== 'all' ? filters.type : ''
+  const dateInfo = (filters?.startDate || filters?.endDate) ? 'filtrado' : ''
+  const fileName = buildExcelFileName('Comprobantes', [filterInfo, dateInfo])
 
-  await saveAndShareExcel(workbook, fileName)
+  await saveAndShareExcel(workbook, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de comprobantes: ${fileName}`,
+    subDirectory: 'Comprobantes',
+  })
 }
