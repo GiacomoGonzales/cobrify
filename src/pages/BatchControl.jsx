@@ -100,77 +100,124 @@ function BatchControl() {
   }
 
   // Sincronizar stock de productos con sus lotes
+  // Sincroniza cantidades de lotes contra el stock, pero SOLO en casos sin ambigüedad.
+  //
+  // Versión segura: nunca consolida múltiples lotes ni "inventa" distribuciones.
+  // - Si hay un único lote en un almacén y está descuadrado contra el stock de ese
+  //   almacén, se ajusta ese lote (no hay ambigüedad).
+  // - Si hay varios lotes en un almacén con descuadre, NO se toca nada — se reporta
+  //   para revisión manual.
+  // - Productos con variantes no se tocan (cada variante puede tener su propio stock).
+  // - El cuadre se hace por almacén, no globalmente.
   const handleSyncBatchStock = async () => {
     if (isDemoMode) {
       toast.info('No disponible en modo demo')
       return
     }
-    if (!confirm('Esto asignará el stock disponible del producto a sus lotes existentes cuando estén desincronizados. ¿Continuar?')) return
+    if (!confirm('Solo se cuadrarán automáticamente los lotes en casos sin ambigüedad (un único lote por almacén). Los descuadres con múltiples lotes se reportarán para revisión manual. ¿Continuar?')) return
 
     setSyncingBatches(true)
     try {
       let syncCount = 0
+      const flagged = [] // descuadres que requieren revisión manual
 
       for (const product of products) {
         const batches = product.batches || []
         if (batches.length === 0) continue
 
+        // Productos con variantes: no tocar — cada variante puede tener su propio stock/lotes.
+        if (Array.isArray(product.variants) && product.variants.length > 0) {
+          flagged.push({
+            name: product.name || product.id,
+            reason: 'producto con variantes (no soportado por la sync)',
+          })
+          continue
+        }
+
         const whStocks = product.warehouseStocks || []
-        const totalStock = whStocks.length > 0
-          ? whStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-          : (product.stock || 0)
-        const batchesTotal = batches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+        const hasMultiWarehouse = whStocks.length > 0
 
-        // Solo sincronizar si hay desincronización: producto tiene stock pero lotes suman diferente
-        if (totalStock > 0 && batchesTotal !== totalStock) {
-          let updatedBatches
-          const activeBatches = batches.filter(b => !b.isExpired)
+        // Lista de almacenes a cuadrar. Para productos sin multi-almacén, un único
+        // "almacén virtual" (id=null) con el stock total del producto.
+        const warehouses = hasMultiWarehouse
+          ? whStocks.map(ws => ({ id: ws.warehouseId || null, stock: ws.stock || 0 }))
+          : [{ id: null, stock: product.stock || 0 }]
 
-          if (activeBatches.length === 1) {
-            // Un solo lote activo: asignarle todo el stock
-            updatedBatches = batches.map(b =>
-              b === activeBatches[0] ? { ...b, quantity: totalStock } : b
-            )
-          } else if (activeBatches.length > 1) {
-            // Varios lotes: repartir proporcionalmente o equitativamente
-            if (batchesTotal > 0) {
-              // Proporcionalmente al ratio actual
-              let assigned = 0
-              updatedBatches = batches.map((b, idx) => {
-                if (b.isExpired) return b
-                const isLast = idx === batches.length - 1 || activeBatches[activeBatches.length - 1] === b
-                if (isLast) {
-                  return { ...b, quantity: totalStock - assigned }
-                }
-                const ratio = (b.quantity || 0) / batchesTotal
-                const qty = Math.round(totalStock * ratio)
-                assigned += qty
-                return { ...b, quantity: qty }
-              })
-            } else {
-              // Todos en 0: asignar todo al primer lote activo
-              let assignedFirst = false
-              updatedBatches = batches.map(b => {
-                if (!b.isExpired && !assignedFirst) {
-                  assignedFirst = true
-                  return { ...b, quantity: totalStock }
-                }
-                return b
+        const updatedBatches = [...batches]
+        let modified = false
+
+        for (const wh of warehouses) {
+          // Filtrar lotes de este almacén. Sin multi-almacén, todos los lotes cuentan.
+          const batchesInWh = hasMultiWarehouse
+            ? updatedBatches.filter(b => (b.warehouseId || null) === wh.id)
+            : updatedBatches
+
+          if (batchesInWh.length === 0) {
+            if (wh.stock > 0) {
+              flagged.push({
+                name: product.name || product.id,
+                warehouseId: wh.id,
+                stock: wh.stock,
+                reason: 'almacén con stock pero sin lotes registrados',
               })
             }
-          } else {
-            continue // Solo lotes expirados, no sincronizar
+            continue
           }
 
+          const activeInWh = batchesInWh.filter(b => !b.isExpired)
+          const activeQtySum = activeInWh.reduce((sum, b) => sum + (b.quantity || 0), 0)
+
+          if (activeQtySum === wh.stock) continue // ya cuadrado
+
+          // CASO SEGURO: un único lote en este almacén → no hay ambigüedad.
+          if (batchesInWh.length === 1) {
+            const target = batchesInWh[0]
+            if (target.isExpired) {
+              flagged.push({
+                name: product.name || product.id,
+                warehouseId: wh.id,
+                stock: wh.stock,
+                lotsSum: activeQtySum,
+                reason: 'único lote del almacén está expirado',
+              })
+              continue
+            }
+            const idx = updatedBatches.findIndex(b => b === target)
+            updatedBatches[idx] = { ...target, quantity: wh.stock }
+            modified = true
+          } else {
+            // AMBIGUO: varios lotes en el mismo almacén con descuadre → no adivinar.
+            flagged.push({
+              name: product.name || product.id,
+              warehouseId: wh.id,
+              stock: wh.stock,
+              lotsSum: activeQtySum,
+              lotCount: batchesInWh.length,
+              activeCount: activeInWh.length,
+              reason: 'múltiples lotes en el almacén con descuadre — revisar manualmente',
+            })
+          }
+        }
+
+        if (modified) {
           const productRef = doc(db, 'businesses', businessId, 'products', product.id)
           await updateDoc(productRef, { batches: updatedBatches })
           syncCount++
         }
       }
 
-      if (syncCount > 0) {
+      if (flagged.length > 0) {
+        console.warn('[BatchControl] Productos con descuadre que requieren revisión manual:', flagged)
+      }
+
+      if (syncCount > 0 && flagged.length === 0) {
         toast.success(`${syncCount} producto(s) sincronizado(s)`)
         loadProducts()
+      } else if (syncCount > 0 && flagged.length > 0) {
+        toast.info(`${syncCount} sincronizado(s) · ${flagged.length} requieren revisión manual (ver consola)`)
+        loadProducts()
+      } else if (syncCount === 0 && flagged.length > 0) {
+        toast.info(`${flagged.length} producto(s) con descuadre ambiguo (ver consola para detalles)`)
       } else {
         toast.info('Todos los lotes ya están sincronizados con el stock')
       }
