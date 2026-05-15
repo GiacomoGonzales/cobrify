@@ -2574,7 +2574,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />

@@ -1,667 +1,41 @@
-import * as XLSX from 'xlsx'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { Capacitor } from '@capacitor/core'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import { Share } from '@capacitor/share'
-
 /**
- * Servicio para exportar reportes a Excel
+ * Servicio de exportación a Excel para la página de Reportes.
+ *
+ * Genera 4 reportes distintos (General, Ventas, Productos, Clientes), cada
+ * uno con sus respectivas hojas. Toda la presentación está delegada a
+ * excelStyles para mantener el look unificado con accounting/inventory/invoices.
  */
+import {
+  XLSX,
+  cellStyle, centerStyle, numberStyle, intStyle,
+  totalLabelStyle, totalNumberStyle,
+  setStyle,
+  applyTitleRow, applySubtitleRow, applyMetadataRows, applyHeaderRow,
+  applyFreezeBelow, applyColumnWidths,
+  buildBusinessMetadataRows,
+  buildExcelFileName,
+  saveAndShareExcel,
+  formatDate as formatDateLocale,
+} from './excelStyles'
 
-/**
- * Helper para exportar Excel que funciona en iOS/Android
- */
-const saveAndShareExcel = async (workbook, fileName) => {
-  const isNativePlatform = Capacitor.isNativePlatform()
+// =================== HELPERS LOCALES ===================
 
-  if (isNativePlatform) {
-    try {
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
-
-      const excelDir = 'Reportes'
-      try {
-        await Filesystem.mkdir({
-          path: excelDir,
-          directory: Directory.Documents,
-          recursive: true
-        })
-      } catch (mkdirError) {
-        // Directorio ya existe
-      }
-
-      const result = await Filesystem.writeFile({
-        path: `${excelDir}/${fileName}`,
-        data: excelBuffer,
-        directory: Directory.Documents,
-        recursive: true
-      })
-
-      console.log('Excel guardado en:', result.uri)
-
-      await Share.share({
-        title: fileName,
-        text: `Reporte: ${fileName}`,
-        url: result.uri,
-        dialogTitle: 'Compartir Reporte'
-      })
-
-      return { success: true, uri: result.uri }
-    } catch (error) {
-      console.error('Error al exportar Excel en móvil:', error)
-      throw error
-    }
-  } else {
-    XLSX.writeFile(workbook, fileName)
-    return { success: true }
+/** Etiqueta amigable del rango de fechas para el título. */
+const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
+  switch (dateRange) {
+    case 'week': return 'Última semana'
+    case 'month': return 'Este mes'
+    case 'quarter': return 'Último trimestre'
+    case 'year': return 'Este año'
+    case 'all': return 'Todo el período'
+    case 'custom':
+      if (customStartDate && customEndDate) return `${customStartDate} al ${customEndDate}`
+      return 'Personalizado'
+    default: return dateRange
   }
 }
 
-/**
- * Exportar reporte general a Excel
- */
-export const exportGeneralReport = async (data) => {
-  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel } = data
-
-  // Crear un nuevo workbook
-  const wb = XLSX.utils.book_new()
-
-  // Hoja 1: Resumen General
-  const summaryData = [
-    ['REPORTE GENERAL DE VENTAS'],
-    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
-    ['Sucursal:', branchLabel || 'Todas'],
-    ['Fecha de generación:', new Date().toLocaleString('es-PE')],
-    [],
-    ['KPIs PRINCIPALES'],
-    ['Indicador', 'Valor'],
-    ['Ingresos Totales', formatCurrency(stats.totalRevenue)],
-    ['Costo Total', formatCurrency(stats.totalCost || 0)],
-    ['Utilidad Total', formatCurrency(stats.totalProfit || 0)],
-    ['Margen de Utilidad', `${(stats.profitMargin || 0).toFixed(2)}%`],
-    [],
-    ['DESGLOSE DE INGRESOS'],
-    ['Ingresos Pagados', formatCurrency(stats.paidRevenue)],
-    ['Ingresos Pendientes', formatCurrency(stats.pendingRevenue)],
-    [],
-    ['DOCUMENTOS'],
-    ['Total Comprobantes', stats.totalInvoices],
-    ['Facturas', stats.facturas],
-    ['Boletas', stats.boletas],
-    ['Notas de Venta', stats.notasVenta || 0],
-    ['Ticket Promedio', formatCurrency(stats.avgTicket)],
-    ['Crecimiento vs Período Anterior', `${stats.revenueGrowth.toFixed(2)}%`],
-  ]
-
-  // Agregar resumen de métodos de pago si está disponible
-  if (paymentMethodStats && paymentMethodStats.length > 0) {
-    summaryData.push([])
-    summaryData.push(['MÉTODOS DE PAGO'])
-    summaryData.push(['Método', 'Monto Total', 'Transacciones'])
-    paymentMethodStats.forEach(method => {
-      summaryData.push([
-        method.method,
-        formatCurrency(method.total),
-        method.count
-      ])
-    })
-  }
-
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
-
-  // Ajustar ancho de columnas
-  ws1['!cols'] = [
-    { wch: 30 },
-    { wch: 20 },
-    { wch: 15 }
-  ]
-
-  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
-
-  // Hoja 2: Ventas por Período
-  const salesHeader = [['Período', 'Cantidad de Ventas', 'Ingresos']]
-  const salesData = salesByMonth.map(item => [
-    item.period,
-    item.count,
-    Number((item.revenue || 0).toFixed(2))
-  ])
-
-  const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
-  ws2['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }]
-  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas por Período')
-
-  // Hoja 3: Top Productos
-  if (topProducts && topProducts.length > 0) {
-    const productsHeader = [['Posición', 'Producto', 'Cantidad Vendida', 'Ingresos Generados']]
-    const productsData = topProducts.map((product, index) => [
-      index + 1,
-      product.name,
-      Number((product.quantity || 0).toFixed(2)),
-      Number((product.revenue || 0).toFixed(2))
-    ])
-
-    const ws3 = XLSX.utils.aoa_to_sheet([...productsHeader, ...productsData])
-    ws3['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 20 }, { wch: 20 }]
-    XLSX.utils.book_append_sheet(wb, ws3, 'Top Productos')
-  }
-
-  // Hoja 4: Top Clientes
-  if (topCustomers && topCustomers.length > 0) {
-    const customersHeader = [['Posición', 'Cliente', 'Tipo Doc', 'Documento', 'Pedidos', 'Total Gastado']]
-    const customersData = topCustomers.map((customer, index) => [
-      index + 1,
-      customer.name,
-      customer.documentType === '6' ? 'RUC' : 'DNI',
-      customer.documentNumber,
-      customer.ordersCount || 0,
-      Number((customer.totalSpent || 0).toFixed(2))
-    ])
-
-    const ws4 = XLSX.utils.aoa_to_sheet([...customersHeader, ...customersData])
-    ws4['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 12 }, { wch: 15 }, { wch: 10 }, { wch: 20 }]
-    XLSX.utils.book_append_sheet(wb, ws4, 'Top Clientes')
-  }
-
-  // Hoja 5: Detalle de Ventas
-  if (filteredInvoices && filteredInvoices.length > 0) {
-    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Estado SUNAT', 'Método Pago', 'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %']]
-    const sunatStatusNames = {
-      'accepted': 'Aceptado', 'pending': 'Pendiente', 'sending': 'Enviando',
-      'rejected': 'Rechazado', 'voided': 'Anulado', 'voiding': 'Anulando',
-      'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
-    }
-    const invoicesData = [...filteredInvoices].sort((a, b) => {
-      const dateA = getInvoiceDate(a) || new Date(0)
-      const dateB = getInvoiceDate(b) || new Date(0)
-      return dateB - dateA
-    }).slice(0, 1000).map(invoice => {
-      // Obtener método(s) de pago
-      let paymentMethods = 'Efectivo'
-      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-        if (invoice.payments.length === 1) {
-          paymentMethods = invoice.payments[0].method || 'Efectivo'
-        } else {
-          paymentMethods = invoice.payments.map(p => `${p.method || 'Efectivo'} (${formatCurrency(p.amount || 0)})`).join(', ')
-        }
-      } else if (invoice.paymentMethod) {
-        paymentMethods = invoice.paymentMethod
-      }
-
-      // Calcular montos por tipo de afectación
-      let opGravada = 0, opExonerada = 0, opInafecta = 0
-      if (invoice.items && Array.isArray(invoice.items)) {
-        invoice.items.forEach(item => {
-          const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-          if (item.taxAffectation === '20') opExonerada += itemTotal
-          else if (item.taxAffectation === '30') opInafecta += itemTotal
-          else opGravada += itemTotal
-        })
-      }
-
-      const sunatStatus = invoice.documentType === 'nota_venta'
-        ? 'N/A'
-        : sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
-
-      const invoiceDate = getInvoiceDate(invoice)
-      return [
-        invoice.number,
-        invoiceDate ? formatDate(invoiceDate) : '-',
-        invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
-        invoice.customer?.name || 'Cliente General',
-        invoice.customer?.documentNumber || '-',
-        invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
-        sunatStatus,
-        paymentMethods,
-        Number((invoice.discount || 0).toFixed(2)),
-        Number(opGravada.toFixed(2)),
-        Number(opExonerada.toFixed(2)),
-        Number(opInafecta.toFixed(2)),
-        Number((invoice.subtotal || 0).toFixed(2)),
-        Number((invoice.igv || 0).toFixed(2)),
-        Number((invoice.total || 0).toFixed(2)),
-        Number((invoice.totalCost || 0).toFixed(2)),
-        Number((invoice.profit || 0).toFixed(2)),
-        Number((invoice.profitMargin || 0).toFixed(2))
-      ]
-    })
-
-    const ws5 = XLSX.utils.aoa_to_sheet([...invoicesHeader, ...invoicesData])
-    ws5['!cols'] = [
-      { wch: 15 },  // Número
-      { wch: 12 },  // Fecha
-      { wch: 14 },  // Tipo
-      { wch: 30 },  // Cliente
-      { wch: 15 },  // Documento
-      { wch: 12 },  // Estado
-      { wch: 15 },  // Estado SUNAT
-      { wch: 25 },  // Método Pago
-      { wch: 12 },  // Descuento
-      { wch: 14 },  // Op. Gravada
-      { wch: 14 },  // Op. Exonerada
-      { wch: 14 },  // Op. Inafecta
-      { wch: 12 },  // Subtotal
-      { wch: 10 },  // IGV
-      { wch: 12 },  // Total
-      { wch: 12 },  // Costo
-      { wch: 12 },  // Utilidad
-      { wch: 10 }   // Margen %
-    ]
-    XLSX.utils.book_append_sheet(wb, ws5, 'Detalle de Ventas')
-  }
-
-  // Generar archivo con nombre atractivo
-  const today = new Date()
-  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
-  const fileName = `Reporte_General_${rangeLabel}_${dateStr}.xlsx`
-  await saveAndShareExcel(wb, fileName)
-}
-
-/**
- * Exportar reporte de ventas a Excel
- */
-export const exportSalesReport = async (data) => {
-  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel } = data
-
-  const wb = XLSX.utils.book_new()
-
-  // Hoja 1: Resumen de Ventas
-  const summaryData = [
-    ['REPORTE DE VENTAS'],
-    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
-    ['Sucursal:', branchLabel || 'Todas'],
-    ['Fecha de generación:', new Date().toLocaleString('es-PE')],
-    [],
-    ['RESUMEN FINANCIERO'],
-    ['Concepto', 'Valor'],
-    ['Total Ventas', formatCurrency(stats.totalRevenue)],
-    ['Costo Total', formatCurrency(stats.totalCost || 0)],
-    ['Utilidad Total', formatCurrency(stats.totalProfit || 0)],
-    ['Margen de Utilidad', `${(stats.profitMargin || 0).toFixed(2)}%`],
-    [],
-    ['ESTADO DE COBRO'],
-    ['Ventas Pagadas', formatCurrency(stats.paidRevenue)],
-    ['Ventas Pendientes', formatCurrency(stats.pendingRevenue)],
-    [],
-    ['OTROS INDICADORES'],
-    ['Total Comprobantes', stats.totalInvoices],
-    ['Crecimiento', `${stats.revenueGrowth.toFixed(2)}%`],
-  ]
-
-  // Agregar resumen de métodos de pago si está disponible
-  if (paymentMethodStats && paymentMethodStats.length > 0) {
-    summaryData.push([])
-    summaryData.push(['MÉTODOS DE PAGO'])
-    summaryData.push(['Método', 'Monto Total', 'Transacciones', '% del Total'])
-    const totalAmount = paymentMethodStats.reduce((sum, m) => sum + (m.total || 0), 0)
-    paymentMethodStats.forEach(method => {
-      const percentage = totalAmount > 0 ? ((method.total / totalAmount) * 100).toFixed(1) : 0
-      summaryData.push([
-        method.method,
-        formatCurrency(method.total),
-        method.count,
-        `${percentage}%`
-      ])
-    })
-  }
-
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
-  ws1['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 12 }]
-  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
-
-  // Hoja 2: Ventas por Período
-  const salesHeader = [['Período', 'Cantidad', 'Ingresos']]
-  const salesData = salesByMonth.map(item => [
-    item.period,
-    item.count,
-    Number((item.revenue || 0).toFixed(2))
-  ])
-
-  const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
-  ws2['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 20 }]
-  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas por Período')
-
-  // Hoja 3: Detalle Completo
-  const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Estado SUNAT', 'Método Pago', 'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %', 'Notas']]
-  const sunatLabels = {
-    'accepted': 'Aceptado', 'pending': 'Pendiente', 'sending': 'Enviando',
-    'rejected': 'Rechazado', 'voided': 'Anulado', 'voiding': 'Anulando',
-    'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
-  }
-  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
-    const dateA = getInvoiceDate(a) || new Date(0)
-    const dateB = getInvoiceDate(b) || new Date(0)
-    return dateB - dateA
-  })
-  const detailData = sortedInvoices.map(invoice => {
-    // Obtener método(s) de pago
-    let paymentMethods = 'Efectivo'
-    if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-      if (invoice.payments.length === 1) {
-        paymentMethods = invoice.payments[0].method || 'Efectivo'
-      } else {
-        paymentMethods = invoice.payments.map(p => `${p.method || 'Efectivo'} (${formatCurrency(p.amount || 0)})`).join(', ')
-      }
-    } else if (invoice.paymentMethod) {
-      paymentMethods = invoice.paymentMethod
-    }
-
-    // Calcular montos por tipo de afectación
-    let opGravada = 0, opExonerada = 0, opInafecta = 0
-    if (invoice.items && Array.isArray(invoice.items)) {
-      invoice.items.forEach(item => {
-        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-        if (item.taxAffectation === '20') opExonerada += itemTotal
-        else if (item.taxAffectation === '30') opInafecta += itemTotal
-        else opGravada += itemTotal
-      })
-    }
-
-    const sunatStatus = invoice.documentType === 'nota_venta'
-      ? 'N/A'
-      : sunatLabels[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
-
-    const invoiceDate = getInvoiceDate(invoice)
-    return [
-      invoice.number,
-      invoiceDate ? formatDate(invoiceDate) : '-',
-      invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
-      invoice.customer?.name || 'Cliente General',
-      `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
-      invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
-      sunatStatus,
-      paymentMethods,
-      Number((invoice.discount || 0).toFixed(2)),
-      Number(opGravada.toFixed(2)),
-      Number(opExonerada.toFixed(2)),
-      Number(opInafecta.toFixed(2)),
-      Number((invoice.subtotal || 0).toFixed(2)),
-      Number((invoice.igv || 0).toFixed(2)),
-      Number((invoice.total || 0).toFixed(2)),
-      Number((invoice.totalCost || 0).toFixed(2)),
-      Number((invoice.profit || 0).toFixed(2)),
-      Number((invoice.profitMargin || 0).toFixed(2)),
-      invoice.notes || ''
-    ]
-  })
-
-  const ws3 = XLSX.utils.aoa_to_sheet([...detailHeader, ...detailData])
-  ws3['!cols'] = [
-    { wch: 15 },  // Número
-    { wch: 12 },  // Fecha
-    { wch: 14 },  // Tipo
-    { wch: 30 },  // Cliente
-    { wch: 18 },  // Doc Cliente
-    { wch: 12 },  // Estado
-    { wch: 15 },  // Estado SUNAT
-    { wch: 25 },  // Método Pago
-    { wch: 12 },  // Descuento
-    { wch: 14 },  // Op. Gravada
-    { wch: 14 },  // Op. Exonerada
-    { wch: 14 },  // Op. Inafecta
-    { wch: 12 },  // Subtotal
-    { wch: 10 },  // IGV
-    { wch: 12 },  // Total
-    { wch: 12 },  // Costo
-    { wch: 12 },  // Utilidad
-    { wch: 10 },  // Margen %
-    { wch: 30 }   // Notas
-  ]
-  XLSX.utils.book_append_sheet(wb, ws3, 'Detalle Completo')
-
-  // Generar archivo con nombre atractivo
-  const today = new Date()
-  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
-  const fileName = `Reporte_Ventas_${rangeLabel}_${dateStr}.xlsx`
-  await saveAndShareExcel(wb, fileName)
-}
-
-/**
- * Exportar reporte de productos a Excel
- */
-export const exportProductsReport = async (data) => {
-  const { topProducts, salesByCategory, dateRange, customStartDate, customEndDate, branchLabel } = data
-
-  const wb = XLSX.utils.book_new()
-  const periodo = getRangeLabel(dateRange, customStartDate, customEndDate)
-
-  // ========== HOJA 1: RESUMEN EJECUTIVO ==========
-  const totalProductos = topProducts.length
-  const totalCategorias = salesByCategory?.length || 0
-  const totalUnidades = topProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
-  const totalIngresos = topProducts.reduce((sum, p) => sum + (p.revenue || 0), 0)
-  const totalCostos = topProducts.reduce((sum, p) => sum + (p.cost || 0), 0)
-  const totalUtilidad = totalIngresos - totalCostos
-  const margenPromedio = totalIngresos > 0 ? (totalUtilidad / totalIngresos) * 100 : 0
-
-  const resumenData = [
-    ['REPORTE DE PRODUCTOS Y CATEGORÍAS'],
-    [],
-    ['Período:', periodo],
-    ['Sucursal:', branchLabel || 'Todas'],
-    ['Fecha de generación:', new Date().toLocaleString('es-PE')],
-    [],
-    ['═══════════════════════════════════════════════════════'],
-    ['RESUMEN EJECUTIVO'],
-    ['═══════════════════════════════════════════════════════'],
-    [],
-    ['INDICADOR', 'VALOR'],
-    ['Total de productos vendidos', totalProductos],
-    ['Total de categorías', totalCategorias],
-    ['Unidades vendidas', Number(totalUnidades.toFixed(0))],
-    ['Ingresos totales', `S/ ${totalIngresos.toFixed(2)}`],
-    ['Costos totales', `S/ ${totalCostos.toFixed(2)}`],
-    ['Utilidad bruta', `S/ ${totalUtilidad.toFixed(2)}`],
-    ['Margen promedio', `${margenPromedio.toFixed(1)}%`],
-    [],
-    ['═══════════════════════════════════════════════════════'],
-    ['TOP 5 PRODUCTOS'],
-    ['═══════════════════════════════════════════════════════'],
-  ]
-
-  topProducts.slice(0, 5).forEach((product, index) => {
-    resumenData.push([`${index + 1}. ${product.name}`, `S/ ${(product.revenue || 0).toFixed(2)}`])
-  })
-
-  resumenData.push([])
-  resumenData.push(['═══════════════════════════════════════════════════════'])
-  resumenData.push(['TOP 5 CATEGORÍAS'])
-  resumenData.push(['═══════════════════════════════════════════════════════'])
-
-  if (salesByCategory && salesByCategory.length > 0) {
-    salesByCategory.slice(0, 5).forEach((cat, index) => {
-      resumenData.push([`${index + 1}. ${cat.name}`, `S/ ${(cat.revenue || 0).toFixed(2)}`])
-    })
-  }
-
-  const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
-  wsResumen['!cols'] = [{ wch: 45 }, { wch: 25 }]
-  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
-
-  // ========== HOJA 2: DETALLE DE PRODUCTOS ==========
-  const productsData = [
-    ['DETALLE DE PRODUCTOS VENDIDOS'],
-    ['Período:', periodo],
-    [],
-    ['#', 'SKU', 'Producto', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', 'Precio Prom.'],
-  ]
-
-  topProducts.forEach((product, index) => {
-    const margen = product.revenue > 0 ? ((product.profit || 0) / product.revenue) * 100 : 0
-    const precioPromedio = product.quantity > 0 ? product.revenue / product.quantity : 0
-    productsData.push([
-      index + 1,
-      product.sku || '',
-      product.name,
-      Number((product.quantity || 0).toFixed(0)),
-      Number((product.revenue || 0).toFixed(2)),
-      Number((product.cost || 0).toFixed(2)),
-      Number((product.profit || 0).toFixed(2)),
-      Number(margen.toFixed(1)),
-      Number(precioPromedio.toFixed(2))
-    ])
-  })
-
-  productsData.push([])
-  productsData.push([
-    'TOTALES',
-    '',
-    '',
-    Number(totalUnidades.toFixed(0)),
-    Number(totalIngresos.toFixed(2)),
-    Number(totalCostos.toFixed(2)),
-    Number(totalUtilidad.toFixed(2)),
-    Number(margenPromedio.toFixed(1)),
-    ''
-  ])
-
-  const wsProducts = XLSX.utils.aoa_to_sheet(productsData)
-  wsProducts['!cols'] = [
-    { wch: 6 },
-    { wch: 15 },
-    { wch: 40 },
-    { wch: 12 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 14 }
-  ]
-  XLSX.utils.book_append_sheet(wb, wsProducts, 'Productos')
-
-  // ========== HOJA 3: DETALLE DE CATEGORÍAS ==========
-  if (salesByCategory && salesByCategory.length > 0) {
-    const totalCatIngresos = salesByCategory.reduce((sum, c) => sum + (c.revenue || 0), 0)
-    const totalCatCostos = salesByCategory.reduce((sum, c) => sum + (c.cost || 0), 0)
-    const totalCatUtilidad = totalCatIngresos - totalCatCostos
-    const totalCatUnidades = salesByCategory.reduce((sum, c) => sum + (c.quantity || 0), 0)
-
-    const categoriesData = [
-      ['VENTAS POR CATEGORÍA'],
-      ['Período:', periodo],
-      [],
-      ['#', 'Categoría', 'Ventas', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', '% del Total'],
-    ]
-
-    salesByCategory.forEach((cat, index) => {
-      const margen = cat.revenue > 0 ? ((cat.profit || 0) / cat.revenue) * 100 : 0
-      const porcentaje = totalCatIngresos > 0 ? (cat.revenue / totalCatIngresos) * 100 : 0
-      categoriesData.push([
-        index + 1,
-        cat.name,
-        cat.itemCount || 0,
-        Number((cat.quantity || 0).toFixed(0)),
-        Number((cat.revenue || 0).toFixed(2)),
-        Number((cat.cost || 0).toFixed(2)),
-        Number((cat.profit || 0).toFixed(2)),
-        Number(margen.toFixed(1)),
-        Number(porcentaje.toFixed(1))
-      ])
-    })
-
-    const margenTotalCat = totalCatIngresos > 0 ? (totalCatUtilidad / totalCatIngresos) * 100 : 0
-    categoriesData.push([])
-    categoriesData.push([
-      'TOTALES',
-      '',
-      salesByCategory.reduce((sum, c) => sum + (c.itemCount || 0), 0),
-      Number(totalCatUnidades.toFixed(0)),
-      Number(totalCatIngresos.toFixed(2)),
-      Number(totalCatCostos.toFixed(2)),
-      Number(totalCatUtilidad.toFixed(2)),
-      Number(margenTotalCat.toFixed(1)),
-      '100.0'
-    ])
-
-    const wsCategories = XLSX.utils.aoa_to_sheet(categoriesData)
-    wsCategories['!cols'] = [
-      { wch: 6 },
-      { wch: 25 },
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 15 },
-      { wch: 12 },
-      { wch: 14 },
-      { wch: 10 },
-      { wch: 12 }
-    ]
-    XLSX.utils.book_append_sheet(wb, wsCategories, 'Categorías')
-  }
-
-  // Generar archivo con nombre atractivo
-  const today = new Date()
-  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = periodo.replace(/\s+/g, '_')
-  const fileName = `Reporte_Productos_Categorias_${rangeLabel}_${dateStr}.xlsx`
-  await saveAndShareExcel(wb, fileName)
-}
-
-/**
- * Exportar reporte de clientes a Excel
- */
-export const exportCustomersReport = async (data) => {
-  const { topCustomers, dateRange, customStartDate, customEndDate, branchLabel } = data
-
-  const wb = XLSX.utils.book_new()
-
-  // Hoja: Clientes
-  const customersData = [
-    ['REPORTE DE CLIENTES TOP'],
-    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
-    ['Sucursal:', branchLabel || 'Todas'],
-    ['Fecha de generación:', new Date().toLocaleString('es-PE')],
-    [],
-    ['Posición', 'Cliente', 'Tipo Doc', 'Número Documento', 'Email', 'Teléfono', 'Cantidad Pedidos', 'Total Gastado', 'Ticket Promedio'],
-  ]
-
-  topCustomers.forEach((customer, index) => {
-    customersData.push([
-      index + 1,
-      customer.name,
-      customer.documentType === '6' ? 'RUC' : customer.documentType === '1' ? 'DNI' : customer.documentType,
-      customer.documentNumber,
-      customer.email || '-',
-      customer.phone || '-',
-      customer.ordersCount || 0,
-      Number((customer.totalSpent || 0).toFixed(2)),
-      customer.ordersCount > 0 ? Number(((customer.totalSpent || 0) / customer.ordersCount).toFixed(2)) : 0
-    ])
-  })
-
-  // Agregar totales
-  const totalOrders = topCustomers.reduce((sum, c) => sum + (c.ordersCount || 0), 0)
-  const totalSpent = topCustomers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)
-
-  customersData.push([])
-  customersData.push(['TOTALES', '', '', '', '', '', totalOrders, Number(totalSpent.toFixed(2)), totalOrders > 0 ? Number((totalSpent / totalOrders).toFixed(2)) : 0])
-
-  const ws = XLSX.utils.aoa_to_sheet(customersData)
-  ws['!cols'] = [
-    { wch: 12 },
-    { wch: 35 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 30 },
-    { wch: 15 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 18 }
-  ]
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
-
-  // Generar archivo con nombre atractivo
-  const today = new Date()
-  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
-  const fileName = `Reporte_Clientes_${rangeLabel}_${dateStr}.xlsx`
-  await saveAndShareExcel(wb, fileName)
-}
-
-/**
- * Helper para obtener la fecha de emisión de un comprobante
- * Prioriza emissionDate sobre createdAt
- */
+/** Fecha de emisión de un comprobante (con fallback a createdAt). */
 const getInvoiceDate = (invoice) => {
   if (invoice?.emissionDate) {
     if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
@@ -681,27 +55,996 @@ const getInvoiceDate = (invoice) => {
   return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
 }
 
-/**
- * Helper para obtener etiqueta del rango de fecha
- */
-const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
-  switch (dateRange) {
-    case 'week':
-      return 'Última semana'
-    case 'month':
-      return 'Este mes'
-    case 'quarter':
-      return 'Último trimestre'
-    case 'year':
-      return 'Este año'
-    case 'all':
-      return 'Todo el período'
-    case 'custom':
-      if (customStartDate && customEndDate) {
-        return `${customStartDate}_al_${customEndDate}`
-      }
-      return 'Personalizado'
-    default:
-      return dateRange
+/** Diccionarios de mapeo (compartidos por varias hojas). */
+const SUNAT_STATUS_LABELS = {
+  accepted: 'Aceptado', pending: 'Pendiente', sending: 'Enviando',
+  rejected: 'Rechazado', voided: 'Anulado', voiding: 'Anulando',
+  SIGNED: 'Firmado', signed: 'Firmado', not_applicable: 'N/A',
+}
+
+const DOC_TYPE_LABELS = {
+  factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta',
+  nota_credito: 'Nota de Crédito', nota_debito: 'Nota de Débito',
+  'nota-credito': 'Nota de Crédito', 'nota-debito': 'Nota de Débito',
+}
+
+/** Texto consolidado de métodos de pago de una factura. */
+const formatPayments = (invoice) => {
+  if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+    if (invoice.payments.length === 1) return invoice.payments[0].method || 'Efectivo'
+    return invoice.payments
+      .map(p => `${p.method || 'Efectivo'} (S/ ${(p.amount || 0).toFixed(2)})`)
+      .join(', ')
   }
+  return invoice.paymentMethod || 'Efectivo'
+}
+
+/** Desglose Op. Gravada/Exonerada/Inafecta a partir de items. */
+const computeTaxBuckets = (invoice) => {
+  let opGravada = 0, opExonerada = 0, opInafecta = 0
+  if (invoice.items && Array.isArray(invoice.items)) {
+    invoice.items.forEach(item => {
+      const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+      if (item.taxAffectation === '20') opExonerada += itemTotal
+      else if (item.taxAffectation === '30') opInafecta += itemTotal
+      else opGravada += itemTotal
+    })
+  }
+  return { opGravada, opExonerada, opInafecta }
+}
+
+/**
+ * Helper para construir una "sección" dentro de una hoja: subtitle mergeado +
+ * fila de header + filas de datos + (opcional) fila de total. Retorna el rango
+ * de filas que se afectaron para que el caller siga construyendo el aoa.
+ *
+ * Esta función SOLO arma el aoa (el caller hace push). Los estilos los aplica
+ * un helper aparte (applySection) después de crear el worksheet.
+ */
+const buildSection = (aoa, { subtitle, header, rows, totalRow }) => {
+  aoa.push([])
+  const subtitleRow = aoa.length
+  aoa.push([subtitle])
+  const headerRow = aoa.length
+  aoa.push(header)
+  const dataStart = aoa.length
+  for (const row of rows) aoa.push(row)
+  const dataEnd = aoa.length - 1
+  let totalRowIdx = null
+  if (totalRow) {
+    totalRowIdx = aoa.length
+    aoa.push(totalRow)
+  }
+  return { subtitleRow, headerRow, dataStart, dataEnd, totalRowIdx }
+}
+
+/** Aplica los estilos de una sección creada con buildSection. */
+const applySection = (ws, totalCols, section, { numericCols = [], totalNumericCols = [] } = {}) => {
+  const { subtitleRow, headerRow, dataStart, dataEnd, totalRowIdx } = section
+  applySubtitleRow(ws, subtitleRow, totalCols)
+  applyHeaderRow(ws, headerRow, totalCols)
+  // Filas de datos
+  for (let r = dataStart; r <= dataEnd; r++) {
+    const i = r - dataStart
+    for (let c = 0; c < totalCols; c++) {
+      if (numericCols.includes(c)) setStyle(ws, r, c, numberStyle(i))
+      else if (c === 0) setStyle(ws, r, c, c === 0 && numericCols.includes(0) ? numberStyle(i) : cellStyle(i))
+      else setStyle(ws, r, c, cellStyle(i))
+    }
+  }
+  // Fila de total
+  if (totalRowIdx !== null) {
+    for (let c = 0; c < totalCols; c++) {
+      if (totalNumericCols.includes(c)) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+      else setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    }
+  }
+}
+
+// =================== REPORTE GENERAL ===================
+
+export const exportGeneralReport = async (data) => {
+  const {
+    stats, salesByMonth, topProducts, topCustomers, filteredInvoices,
+    dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel,
+    businessData,
+  } = data
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+
+  // ============== HOJA 1: RESUMEN ==============
+  // Estructurado como varias "secciones" — cada una con subtitle, header y datos
+  // numéricos con formato real de moneda.
+  {
+    const aoa = []
+    aoa.push(['REPORTE GENERAL DE VENTAS'])
+    aoa.push([])
+
+    const metaStart = aoa.length
+    const metadataRows = buildBusinessMetadataRows(businessData, {
+      periodLabel,
+      branchLabel: branchLabel || 'Todas',
+      totalLabel: 'Total comprobantes',
+      totalItems: stats.totalInvoices,
+    })
+    aoa.push(...metadataRows)
+    const metaEnd = aoa.length - 1
+
+    // Sección: KPIs principales
+    const kpiSection = buildSection(aoa, {
+      subtitle: 'KPIs PRINCIPALES',
+      header: ['Indicador', 'Valor'],
+      rows: [
+        ['Ingresos Totales', Number((stats.totalRevenue || 0).toFixed(2))],
+        ['Costo Total', Number((stats.totalCost || 0).toFixed(2))],
+        ['Utilidad Total', Number((stats.totalProfit || 0).toFixed(2))],
+        ['Margen de Utilidad %', Number((stats.profitMargin || 0).toFixed(2))],
+        ['Crecimiento vs Período Anterior %', Number((stats.revenueGrowth || 0).toFixed(2))],
+      ],
+    })
+
+    // Sección: Estado de cobro
+    const cobroSection = buildSection(aoa, {
+      subtitle: 'ESTADO DE COBRO',
+      header: ['Concepto', 'Monto'],
+      rows: [
+        ['Ingresos Pagados', Number((stats.paidRevenue || 0).toFixed(2))],
+        ['Ingresos Pendientes', Number((stats.pendingRevenue || 0).toFixed(2))],
+      ],
+    })
+
+    // Sección: Documentos
+    const docsSection = buildSection(aoa, {
+      subtitle: 'DOCUMENTOS',
+      header: ['Tipo', 'Cantidad'],
+      rows: [
+        ['Total Comprobantes', stats.totalInvoices || 0],
+        ['Facturas', stats.facturas || 0],
+        ['Boletas', stats.boletas || 0],
+        ['Notas de Venta', stats.notasVenta || 0],
+        ['Ticket Promedio', Number((stats.avgTicket || 0).toFixed(2))],
+      ],
+    })
+
+    // Sección: Métodos de pago (opcional)
+    let paySection = null
+    if (paymentMethodStats && paymentMethodStats.length > 0) {
+      paySection = buildSection(aoa, {
+        subtitle: 'MÉTODOS DE PAGO',
+        header: ['Método', 'Monto Total', 'Transacciones'],
+        rows: paymentMethodStats.map(m => [
+          m.method,
+          Number((m.total || 0).toFixed(2)),
+          m.count || 0,
+        ]),
+      })
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [38, 22, 18])
+    applyTitleRow(ws, 0, 3)
+    applyMetadataRows(ws, metaStart, metaEnd)
+
+    // Aplicar secciones (valor en columna 1 = numérico, columna 2 = texto/int si aplica)
+    applySection(ws, 3, kpiSection, { numericCols: [1] })
+    applySection(ws, 3, cobroSection, { numericCols: [1] })
+    applySection(ws, 3, docsSection, { numericCols: [1] })
+    if (paySection) {
+      applySection(ws, 3, paySection, { numericCols: [1, 2] })
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumen')
+  }
+
+  // ============== HOJA 2: VENTAS POR PERÍODO ==============
+  {
+    const headers = ['Período', 'Cantidad de Ventas', 'Ingresos']
+    const aoa = [['VENTAS POR PERÍODO'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    let totalCount = 0, totalRev = 0
+    salesByMonth.forEach(item => {
+      const cnt = item.count || 0
+      const rev = item.revenue || 0
+      totalCount += cnt
+      totalRev += rev
+      aoa.push([item.period, cnt, Number(rev.toFixed(2))])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push(['TOTALES', totalCount, Number(totalRev.toFixed(2))])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [22, 18, 18])
+    applyTitleRow(ws, 0, 3)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, 3)
+    for (let i = 0; i < salesByMonth.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, cellStyle(i))
+      setStyle(ws, r, 1, intStyle(i))
+      setStyle(ws, r, 2, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+    setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Ventas por Período')
+  }
+
+  // ============== HOJA 3: TOP PRODUCTOS ==============
+  if (topProducts && topProducts.length > 0) {
+    const headers = ['#', 'Producto', 'Cantidad Vendida', 'Ingresos Generados']
+    const aoa = [['TOP PRODUCTOS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    let totalQty = 0, totalRev = 0
+    topProducts.forEach((p, idx) => {
+      const qty = Number((p.quantity || 0).toFixed(2))
+      const rev = Number((p.revenue || 0).toFixed(2))
+      totalQty += qty
+      totalRev += rev
+      aoa.push([idx + 1, p.name, qty, rev])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push(['', 'TOTALES', Number(totalQty.toFixed(2)), Number(totalRev.toFixed(2))])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 42, 18, 20])
+    applyTitleRow(ws, 0, 4)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, 4)
+    for (let i = 0; i < topProducts.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, numberStyle(i))
+      setStyle(ws, r, 3, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+    setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Top Productos')
+  }
+
+  // ============== HOJA 4: TOP CLIENTES ==============
+  if (topCustomers && topCustomers.length > 0) {
+    const headers = ['#', 'Cliente', 'Tipo Doc', 'Documento', 'Pedidos', 'Total Gastado']
+    const aoa = [['TOP CLIENTES'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    let totalOrders = 0, totalSpent = 0
+    topCustomers.forEach((c, idx) => {
+      const orders = c.ordersCount || 0
+      const spent = Number((c.totalSpent || 0).toFixed(2))
+      totalOrders += orders
+      totalSpent += spent
+      aoa.push([
+        idx + 1,
+        c.name,
+        c.documentType === '6' ? 'RUC' : 'DNI',
+        c.documentNumber || '-',
+        orders,
+        spent,
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push(['', '', '', 'TOTALES', totalOrders, Number(totalSpent.toFixed(2))])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 32, 10, 16, 12, 18])
+    applyTitleRow(ws, 0, 6)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, 6)
+    for (let i = 0; i < topCustomers.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, centerStyle(i))
+      setStyle(ws, r, 3, centerStyle(i))
+      setStyle(ws, r, 4, intStyle(i))
+      setStyle(ws, r, 5, numberStyle(i))
+    }
+    for (let c = 0; c < 4; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 4, { ...totalNumberStyle, numFmt: '#,##0' })
+    setStyle(ws, totalRowIdx, 5, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Top Clientes')
+  }
+
+  // ============== HOJA 5: DETALLE DE VENTAS ==============
+  if (filteredInvoices && filteredInvoices.length > 0) {
+    const headers = [
+      'Número', 'Fecha', 'Tipo', 'Cliente', 'Documento',
+      'Estado', 'Estado SUNAT', 'Método Pago',
+      'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
+      'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %',
+    ]
+    const totalCols = headers.length
+
+    const aoa = [['DETALLE DE VENTAS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+
+    const sorted = [...filteredInvoices].sort((a, b) => {
+      const dA = getInvoiceDate(a) || new Date(0)
+      const dB = getInvoiceDate(b) || new Date(0)
+      return dB - dA
+    }).slice(0, 1000)
+
+    const dataStart = aoa.length
+    sorted.forEach(inv => {
+      const buckets = computeTaxBuckets(inv)
+      const invDate = getInvoiceDate(inv)
+      const sunatStatus = inv.documentType === 'nota_venta'
+        ? 'N/A'
+        : (SUNAT_STATUS_LABELS[inv.sunatStatus] || inv.sunatStatus || 'Pendiente')
+      aoa.push([
+        inv.number,
+        invDate ? formatDateLocale(invDate) : '-',
+        DOC_TYPE_LABELS[inv.documentType] || 'Boleta',
+        inv.customer?.name || 'Cliente General',
+        inv.customer?.documentNumber || '-',
+        inv.status === 'paid' ? 'Pagada' : 'Pendiente',
+        sunatStatus,
+        formatPayments(inv),
+        Number((inv.discount || 0).toFixed(2)),
+        Number(buckets.opGravada.toFixed(2)),
+        Number(buckets.opExonerada.toFixed(2)),
+        Number(buckets.opInafecta.toFixed(2)),
+        Number((inv.subtotal || 0).toFixed(2)),
+        Number((inv.igv || 0).toFixed(2)),
+        Number((inv.total || 0).toFixed(2)),
+        Number((inv.totalCost || 0).toFixed(2)),
+        Number((inv.profit || 0).toFixed(2)),
+        Number((inv.profitMargin || 0).toFixed(2)),
+      ])
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [
+      15, 12, 14, 30, 15, 12, 14, 25, 12, 14, 14, 14, 12, 10, 12, 12, 12, 10,
+    ])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+
+    // Filas de datos
+    for (let i = 0; i < sorted.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, centerStyle(i))
+      setStyle(ws, r, 3, cellStyle(i))
+      setStyle(ws, r, 4, centerStyle(i))
+      setStyle(ws, r, 5, centerStyle(i))
+      setStyle(ws, r, 6, centerStyle(i))
+      setStyle(ws, r, 7, cellStyle(i))
+      for (let c = 8; c < totalCols; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle de Ventas')
+  }
+
+  const fileName = buildExcelFileName('Reporte_General', [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte General: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
+}
+
+// =================== REPORTE DE VENTAS ===================
+
+export const exportSalesReport = async (data) => {
+  const {
+    stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats,
+    customStartDate, customEndDate, branchLabel, businessData,
+  } = data
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+
+  // ============== HOJA 1: RESUMEN ==============
+  {
+    const aoa = []
+    aoa.push(['REPORTE DE VENTAS'])
+    aoa.push([])
+
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      periodLabel,
+      branchLabel: branchLabel || 'Todas',
+      totalLabel: 'Total comprobantes',
+      totalItems: stats.totalInvoices,
+    }))
+    const metaEnd = aoa.length - 1
+
+    const financeSection = buildSection(aoa, {
+      subtitle: 'RESUMEN FINANCIERO',
+      header: ['Concepto', 'Valor'],
+      rows: [
+        ['Total Ventas', Number((stats.totalRevenue || 0).toFixed(2))],
+        ['Costo Total', Number((stats.totalCost || 0).toFixed(2))],
+        ['Utilidad Total', Number((stats.totalProfit || 0).toFixed(2))],
+        ['Margen de Utilidad %', Number((stats.profitMargin || 0).toFixed(2))],
+      ],
+    })
+
+    const cobroSection = buildSection(aoa, {
+      subtitle: 'ESTADO DE COBRO',
+      header: ['Concepto', 'Monto'],
+      rows: [
+        ['Ventas Pagadas', Number((stats.paidRevenue || 0).toFixed(2))],
+        ['Ventas Pendientes', Number((stats.pendingRevenue || 0).toFixed(2))],
+      ],
+    })
+
+    const otrosSection = buildSection(aoa, {
+      subtitle: 'OTROS INDICADORES',
+      header: ['Indicador', 'Valor'],
+      rows: [
+        ['Total Comprobantes', stats.totalInvoices || 0],
+        ['Crecimiento %', Number((stats.revenueGrowth || 0).toFixed(2))],
+      ],
+    })
+
+    let paySection = null
+    if (paymentMethodStats && paymentMethodStats.length > 0) {
+      const totalAmount = paymentMethodStats.reduce((s, m) => s + (m.total || 0), 0)
+      paySection = buildSection(aoa, {
+        subtitle: 'MÉTODOS DE PAGO',
+        header: ['Método', 'Monto', 'Transacciones', '% del Total'],
+        rows: paymentMethodStats.map(m => [
+          m.method,
+          Number((m.total || 0).toFixed(2)),
+          m.count || 0,
+          totalAmount > 0 ? Number(((m.total / totalAmount) * 100).toFixed(1)) : 0,
+        ]),
+      })
+    }
+
+    const totalCols = paySection ? 4 : 2
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, paySection ? [38, 22, 18, 14] : [38, 22])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applySection(ws, totalCols, financeSection, { numericCols: [1] })
+    applySection(ws, totalCols, cobroSection, { numericCols: [1] })
+    applySection(ws, totalCols, otrosSection, { numericCols: [1] })
+    if (paySection) {
+      applySection(ws, totalCols, paySection, { numericCols: [1, 2, 3] })
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumen')
+  }
+
+  // ============== HOJA 2: VENTAS POR PERÍODO ==============
+  {
+    const aoa = [['VENTAS POR PERÍODO'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(['Período', 'Cantidad', 'Ingresos'])
+    const dataStart = aoa.length
+    let totalCount = 0, totalRev = 0
+    salesByMonth.forEach(item => {
+      const cnt = item.count || 0
+      const rev = item.revenue || 0
+      totalCount += cnt
+      totalRev += rev
+      aoa.push([item.period, cnt, Number(rev.toFixed(2))])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push(['TOTALES', totalCount, Number(totalRev.toFixed(2))])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [22, 14, 18])
+    applyTitleRow(ws, 0, 3)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, 3)
+    for (let i = 0; i < salesByMonth.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, cellStyle(i))
+      setStyle(ws, r, 1, intStyle(i))
+      setStyle(ws, r, 2, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+    setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Ventas por Período')
+  }
+
+  // ============== HOJA 3: DETALLE COMPLETO ==============
+  {
+    const headers = [
+      'Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente',
+      'Estado', 'Estado SUNAT', 'Método Pago',
+      'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
+      'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %', 'Notas',
+    ]
+    const totalCols = headers.length
+
+    const aoa = [['DETALLE COMPLETO DE VENTAS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+
+    const sorted = [...filteredInvoices].sort((a, b) => {
+      const dA = getInvoiceDate(a) || new Date(0)
+      const dB = getInvoiceDate(b) || new Date(0)
+      return dB - dA
+    })
+
+    const dataStart = aoa.length
+    sorted.forEach(inv => {
+      const buckets = computeTaxBuckets(inv)
+      const invDate = getInvoiceDate(inv)
+      const sunatStatus = inv.documentType === 'nota_venta'
+        ? 'N/A'
+        : (SUNAT_STATUS_LABELS[inv.sunatStatus] || inv.sunatStatus || 'Pendiente')
+      aoa.push([
+        inv.number,
+        invDate ? formatDateLocale(invDate) : '-',
+        DOC_TYPE_LABELS[inv.documentType] || 'Boleta',
+        inv.customer?.name || 'Cliente General',
+        `${inv.customer?.documentType || ''} ${inv.customer?.documentNumber || ''}`.trim() || '-',
+        inv.status === 'paid' ? 'Pagada' : 'Pendiente',
+        sunatStatus,
+        formatPayments(inv),
+        Number((inv.discount || 0).toFixed(2)),
+        Number(buckets.opGravada.toFixed(2)),
+        Number(buckets.opExonerada.toFixed(2)),
+        Number(buckets.opInafecta.toFixed(2)),
+        Number((inv.subtotal || 0).toFixed(2)),
+        Number((inv.igv || 0).toFixed(2)),
+        Number((inv.total || 0).toFixed(2)),
+        Number((inv.totalCost || 0).toFixed(2)),
+        Number((inv.profit || 0).toFixed(2)),
+        Number((inv.profitMargin || 0).toFixed(2)),
+        inv.notes || '',
+      ])
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [
+      15, 12, 14, 30, 18, 12, 14, 25, 12, 14, 14, 14, 12, 10, 12, 12, 12, 10, 28,
+    ])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+
+    for (let i = 0; i < sorted.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, centerStyle(i))
+      setStyle(ws, r, 3, cellStyle(i))
+      setStyle(ws, r, 4, centerStyle(i))
+      setStyle(ws, r, 5, centerStyle(i))
+      setStyle(ws, r, 6, centerStyle(i))
+      setStyle(ws, r, 7, cellStyle(i))
+      for (let c = 8; c <= 17; c++) setStyle(ws, r, c, numberStyle(i))
+      setStyle(ws, r, 18, cellStyle(i))
+    }
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle Completo')
+  }
+
+  const fileName = buildExcelFileName('Reporte_Ventas', [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de Ventas: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
+}
+
+// =================== REPORTE DE PRODUCTOS ===================
+
+export const exportProductsReport = async (data) => {
+  const {
+    topProducts, salesByCategory, salesByBrand,
+    dateRange, customStartDate, customEndDate, branchLabel, businessData,
+  } = data
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+
+  // Totales generales (compartidos entre hojas)
+  const totalUnidades = topProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
+  const totalIngresos = topProducts.reduce((sum, p) => sum + (p.revenue || 0), 0)
+  const totalCostos = topProducts.reduce((sum, p) => sum + (p.cost || 0), 0)
+  const totalUtilidad = totalIngresos - totalCostos
+  const margenPromedio = totalIngresos > 0 ? (totalUtilidad / totalIngresos) * 100 : 0
+
+  // ============== HOJA 1: RESUMEN EJECUTIVO ==============
+  {
+    const aoa = [['REPORTE DE PRODUCTOS Y CATEGORÍAS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      periodLabel,
+      branchLabel: branchLabel || 'Todas',
+    }))
+    const metaEnd = aoa.length - 1
+
+    const kpis = buildSection(aoa, {
+      subtitle: 'RESUMEN EJECUTIVO',
+      header: ['Indicador', 'Valor'],
+      rows: [
+        ['Total de productos vendidos', topProducts.length],
+        ['Total de categorías', salesByCategory?.length || 0],
+        ['Total de marcas', salesByBrand?.length || 0],
+        ['Unidades vendidas', Number(totalUnidades.toFixed(2))],
+        ['Ingresos totales', Number(totalIngresos.toFixed(2))],
+        ['Costos totales', Number(totalCostos.toFixed(2))],
+        ['Utilidad bruta', Number(totalUtilidad.toFixed(2))],
+        ['Margen promedio %', Number(margenPromedio.toFixed(1))],
+      ],
+    })
+
+    const top5Products = topProducts.slice(0, 5).map((p, i) => [
+      `${i + 1}. ${p.name}`,
+      Number((p.revenue || 0).toFixed(2)),
+    ])
+    const topProductsSection = top5Products.length > 0 ? buildSection(aoa, {
+      subtitle: 'TOP 5 PRODUCTOS',
+      header: ['Producto', 'Ingresos'],
+      rows: top5Products,
+    }) : null
+
+    const top5Cats = (salesByCategory || []).slice(0, 5).map((c, i) => [
+      `${i + 1}. ${c.name}`,
+      Number((c.revenue || 0).toFixed(2)),
+    ])
+    const topCatsSection = top5Cats.length > 0 ? buildSection(aoa, {
+      subtitle: 'TOP 5 CATEGORÍAS',
+      header: ['Categoría', 'Ingresos'],
+      rows: top5Cats,
+    }) : null
+
+    const top5Brands = (salesByBrand || []).slice(0, 5).map((b, i) => [
+      `${i + 1}. ${b.name}`,
+      Number((b.revenue || 0).toFixed(2)),
+    ])
+    const topBrandsSection = top5Brands.length > 0 ? buildSection(aoa, {
+      subtitle: 'TOP 5 MARCAS',
+      header: ['Marca', 'Ingresos'],
+      rows: top5Brands,
+    }) : null
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [44, 22])
+    applyTitleRow(ws, 0, 2)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applySection(ws, 2, kpis, { numericCols: [1] })
+    if (topProductsSection) applySection(ws, 2, topProductsSection, { numericCols: [1] })
+    if (topCatsSection) applySection(ws, 2, topCatsSection, { numericCols: [1] })
+    if (topBrandsSection) applySection(ws, 2, topBrandsSection, { numericCols: [1] })
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumen')
+  }
+
+  // ============== HOJA 2: DETALLE DE PRODUCTOS ==============
+  {
+    const headers = ['#', 'SKU', 'Producto', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', 'Precio Prom.']
+    const totalCols = headers.length
+
+    const aoa = [['DETALLE DE PRODUCTOS VENDIDOS'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    topProducts.forEach((p, idx) => {
+      const margen = p.revenue > 0 ? ((p.profit || 0) / p.revenue) * 100 : 0
+      const precioProm = p.quantity > 0 ? p.revenue / p.quantity : 0
+      aoa.push([
+        idx + 1,
+        p.sku || '',
+        p.name,
+        Number((p.quantity || 0).toFixed(2)),
+        Number((p.revenue || 0).toFixed(2)),
+        Number((p.cost || 0).toFixed(2)),
+        Number((p.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(precioProm.toFixed(2)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', '', 'TOTALES',
+      Number(totalUnidades.toFixed(2)),
+      Number(totalIngresos.toFixed(2)),
+      Number(totalCostos.toFixed(2)),
+      Number(totalUtilidad.toFixed(2)),
+      Number(margenPromedio.toFixed(1)),
+      '',
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 16, 42, 14, 16, 14, 14, 12, 14])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < topProducts.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, cellStyle(i))
+      for (let c = 3; c <= 8; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    for (let c = 0; c <= 2; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    for (let c = 3; c <= 7; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    setStyle(ws, totalRowIdx, 8, totalLabelStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+  }
+
+  // ============== HOJA 3: VENTAS POR CATEGORÍA ==============
+  if (salesByCategory && salesByCategory.length > 0) {
+    const headers = ['#', 'Categoría', 'Ventas', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', '% del Total']
+    const totalCols = headers.length
+
+    const totalCatIngresos = salesByCategory.reduce((s, c) => s + (c.revenue || 0), 0)
+    const totalCatCostos = salesByCategory.reduce((s, c) => s + (c.cost || 0), 0)
+    const totalCatUtilidad = totalCatIngresos - totalCatCostos
+    const totalCatUnidades = salesByCategory.reduce((s, c) => s + (c.quantity || 0), 0)
+    const totalCatVentas = salesByCategory.reduce((s, c) => s + (c.itemCount || 0), 0)
+    const margenCat = totalCatIngresos > 0 ? (totalCatUtilidad / totalCatIngresos) * 100 : 0
+
+    const aoa = [['VENTAS POR CATEGORÍA'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    salesByCategory.forEach((cat, idx) => {
+      const margen = cat.revenue > 0 ? ((cat.profit || 0) / cat.revenue) * 100 : 0
+      const porcentaje = totalCatIngresos > 0 ? (cat.revenue / totalCatIngresos) * 100 : 0
+      aoa.push([
+        idx + 1,
+        cat.name,
+        cat.itemCount || 0,
+        Number((cat.quantity || 0).toFixed(2)),
+        Number((cat.revenue || 0).toFixed(2)),
+        Number((cat.cost || 0).toFixed(2)),
+        Number((cat.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(porcentaje.toFixed(1)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', 'TOTALES', totalCatVentas,
+      Number(totalCatUnidades.toFixed(2)),
+      Number(totalCatIngresos.toFixed(2)),
+      Number(totalCatCostos.toFixed(2)),
+      Number(totalCatUtilidad.toFixed(2)),
+      Number(margenCat.toFixed(1)),
+      100.0,
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 26, 10, 12, 14, 12, 14, 12, 12])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < salesByCategory.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, intStyle(i))
+      for (let c = 3; c <= 8; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+    for (let c = 3; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Categorías')
+  }
+
+  // ============== HOJA 4: VENTAS POR MARCA ==============
+  if (salesByBrand && salesByBrand.length > 0) {
+    const headers = ['#', 'Marca', 'Ventas', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', '% del Total']
+    const totalCols = headers.length
+
+    const totalBrandIngresos = salesByBrand.reduce((s, b) => s + (b.revenue || 0), 0)
+    const totalBrandCostos = salesByBrand.reduce((s, b) => s + (b.cost || 0), 0)
+    const totalBrandUtilidad = totalBrandIngresos - totalBrandCostos
+    const totalBrandUnidades = salesByBrand.reduce((s, b) => s + (b.quantity || 0), 0)
+    const totalBrandVentas = salesByBrand.reduce((s, b) => s + (b.itemCount || 0), 0)
+    const margenBrand = totalBrandIngresos > 0 ? (totalBrandUtilidad / totalBrandIngresos) * 100 : 0
+
+    const aoa = [['VENTAS POR MARCA'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    salesByBrand.forEach((brand, idx) => {
+      const margen = brand.revenue > 0 ? ((brand.profit || 0) / brand.revenue) * 100 : 0
+      const porcentaje = totalBrandIngresos > 0 ? (brand.revenue / totalBrandIngresos) * 100 : 0
+      aoa.push([
+        idx + 1,
+        brand.name,
+        brand.itemCount || 0,
+        Number((brand.quantity || 0).toFixed(2)),
+        Number((brand.revenue || 0).toFixed(2)),
+        Number((brand.cost || 0).toFixed(2)),
+        Number((brand.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(porcentaje.toFixed(1)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', 'TOTALES', totalBrandVentas,
+      Number(totalBrandUnidades.toFixed(2)),
+      Number(totalBrandIngresos.toFixed(2)),
+      Number(totalBrandCostos.toFixed(2)),
+      Number(totalBrandUtilidad.toFixed(2)),
+      Number(margenBrand.toFixed(1)),
+      100.0,
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 26, 10, 12, 14, 12, 14, 12, 12])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < salesByBrand.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, intStyle(i))
+      for (let c = 3; c <= 8; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+    for (let c = 3; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Marcas')
+  }
+
+  const fileName = buildExcelFileName('Reporte_Productos_Categorias', [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de Productos: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
+}
+
+// =================== REPORTE DE CLIENTES ===================
+
+export const exportCustomersReport = async (data) => {
+  const {
+    topCustomers, dateRange, customStartDate, customEndDate,
+    branchLabel, businessData,
+  } = data
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+
+  const headers = [
+    'Posición', 'Cliente', 'Tipo Doc', 'Número Documento',
+    'Email', 'Teléfono', 'Cantidad Pedidos', 'Total Gastado', 'Ticket Promedio',
+  ]
+  const totalCols = headers.length
+
+  const aoa = [['REPORTE DE CLIENTES TOP'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    periodLabel,
+    branchLabel: branchLabel || 'Todas',
+    totalLabel: 'Total clientes',
+    totalItems: topCustomers.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  let totalOrders = 0, totalSpent = 0
+  topCustomers.forEach((customer, idx) => {
+    const orders = customer.ordersCount || 0
+    const spent = Number((customer.totalSpent || 0).toFixed(2))
+    const ticket = orders > 0 ? Number((spent / orders).toFixed(2)) : 0
+    totalOrders += orders
+    totalSpent += spent
+    aoa.push([
+      idx + 1,
+      customer.name,
+      customer.documentType === '6' ? 'RUC' : (customer.documentType === '1' ? 'DNI' : customer.documentType || '-'),
+      customer.documentNumber || '-',
+      customer.email || '-',
+      customer.phone || '-',
+      orders,
+      spent,
+      ticket,
+    ])
+  })
+
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push([
+    '', '', '', '', '', 'TOTALES',
+    totalOrders,
+    Number(totalSpent.toFixed(2)),
+    totalOrders > 0 ? Number((totalSpent / totalOrders).toFixed(2)) : 0,
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [10, 32, 10, 18, 26, 16, 14, 18, 18])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+
+  for (let i = 0; i < topCustomers.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, centerStyle(i))
+    setStyle(ws, r, 1, cellStyle(i))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, centerStyle(i))
+    setStyle(ws, r, 4, cellStyle(i))
+    setStyle(ws, r, 5, centerStyle(i))
+    setStyle(ws, r, 6, intStyle(i))
+    setStyle(ws, r, 7, numberStyle(i))
+    setStyle(ws, r, 8, numberStyle(i))
+  }
+  for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 6, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 7, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 8, totalNumberStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
+
+  const fileName = buildExcelFileName('Reporte_Clientes', [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de Clientes: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
 }
