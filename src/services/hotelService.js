@@ -26,7 +26,14 @@ export const createRoom = async (businessId, roomData) => {
       name: roomData.name || '',
       type: roomData.type || 'simple', // simple, doble, matrimonial, suite, familiar
       floor: roomData.floor || '',
+      // Tarifas: la habitación puede tener AMBAS configuradas. El modo de cobro
+      // se decide al crear cada reserva. Si ratePerHour es 0, la habitación
+      // solo soporta reservas por noche.
       rate: roomData.rate || 0,
+      ratePerHour: Number(roomData.ratePerHour) || 0,
+      // Modo predeterminado: sugerido al crear una nueva reserva. Si la
+      // habitación tiene ambas tarifas, el operador puede cambiarlo en el form.
+      pricingMode: roomData.pricingMode === 'hourly' ? 'hourly' : 'nightly',
       status: 'available', // available, occupied, cleaning, maintenance
       capacity: roomData.capacity || 1,
       amenities: roomData.amenities || '',
@@ -104,6 +111,14 @@ export const createReservation = async (businessId, reservationData) => {
     const checkOut = reservationData.checkOut || reservationData.checkOutDate || ''
     const totalAmount = reservationData.totalAmount || reservationData.total || 0
 
+    // Modo de tarificación: snapshot al momento de crear la reserva. Las reservas
+    // existentes sin este campo se interpretan como 'nightly' (compat).
+    const pricingMode = reservationData.pricingMode === 'hourly' ? 'hourly' : 'nightly'
+    const checkInTime = reservationData.checkInTime || ''
+    const checkOutTime = reservationData.checkOutTime || ''
+    const hours = Number(reservationData.hours) || 0
+    const ratePerHour = Number(reservationData.ratePerHour) || 0
+
     const newReservation = {
       guestName: reservationData.guestName || '',
       // Canónico
@@ -120,6 +135,12 @@ export const createReservation = async (businessId, reservationData) => {
       email: guestEmail,
       checkInDate: checkIn,
       checkOutDate: checkOut,
+      // Tarificación por hora (solo si pricingMode === 'hourly')
+      pricingMode,
+      checkInTime,
+      checkOutTime,
+      hours,
+      ratePerHour,
       // Resto
       roomId: reservationData.roomId || '',
       roomNumber: reservationData.roomNumber || '',
@@ -212,43 +233,74 @@ const getNightDateRange = (checkInStr, checkOutStr) => {
 
 export const checkIn = async (businessId, reservationId, roomId) => {
   try {
-    // Obtener datos de la reserva para generar cargos de noche
+    // Obtener datos de la reserva para generar cargos (por noche o por hora)
     const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
     const reservationSnap = await getDoc(reservationRef)
     if (reservationSnap.exists()) {
       const reservation = reservationSnap.data()
       const checkInDate = reservation.checkIn || reservation.checkInDate
       const checkOutDate = reservation.checkOut || reservation.checkOutDate
-      const baseRate = Number(reservation.ratePerNight || 0)
       const guestName = reservation.guestName || ''
       const roomNumber = reservation.roomNumber || ''
+      const pricingMode = reservation.pricingMode === 'hourly' ? 'hourly' : 'nightly'
 
-      if (checkInDate && checkOutDate && baseRate > 0) {
-        // Revisar cargos existentes para no duplicar
-        const existingResult = await getChargesByReservation(businessId, reservationId)
-        const existingDates = new Set(
-          (existingResult.data || [])
-            .filter(c => c.chargeType === 'room_night')
-            .map(c => c.date)
-        )
+      const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
 
-        const dates = getNightDateRange(checkInDate, checkOutDate)
-        const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
-        for (const date of dates) {
-          if (existingDates.has(date)) continue
-          const rate = await getEffectiveRate(businessId, roomId, date, baseRate)
-          await addDoc(chargesRef, {
-            reservationId,
-            roomId,
-            roomNumber,
-            guestName,
-            chargeType: 'room_night',
-            description: `Noche ${date}`,
-            amount: rate,
-            date,
-            createdBy: 'checkin',
-            createdAt: serverTimestamp(),
-          })
+      if (pricingMode === 'hourly') {
+        // Tarificación por hora: un único cargo por la duración total de la estadía.
+        const hours = Number(reservation.hours || 0)
+        const ratePerHour = Number(reservation.ratePerHour || 0)
+        const totalAmount = Number(reservation.totalAmount || reservation.total || hours * ratePerHour)
+        if (hours > 0 && totalAmount > 0) {
+          // Evitar duplicados si ya hay un cargo room_hourly para esta reserva.
+          const existingResult = await getChargesByReservation(businessId, reservationId)
+          const hasHourlyCharge = (existingResult.data || []).some(c => c.chargeType === 'room_hourly')
+          if (!hasHourlyCharge) {
+            const ciTime = reservation.checkInTime || ''
+            const coTime = reservation.checkOutTime || ''
+            const timeRange = ciTime && coTime ? ` (${ciTime} - ${coTime})` : ''
+            await addDoc(chargesRef, {
+              reservationId,
+              roomId,
+              roomNumber,
+              guestName,
+              chargeType: 'room_hourly',
+              description: `Estadía ${hours} hora${hours !== 1 ? 's' : ''}${timeRange}`,
+              amount: totalAmount,
+              date: checkInDate || new Date().toISOString().split('T')[0],
+              createdBy: 'checkin',
+              createdAt: serverTimestamp(),
+            })
+          }
+        }
+      } else {
+        // Tarificación por noche: un cargo por cada noche (comportamiento original).
+        const baseRate = Number(reservation.ratePerNight || 0)
+        if (checkInDate && checkOutDate && baseRate > 0) {
+          const existingResult = await getChargesByReservation(businessId, reservationId)
+          const existingDates = new Set(
+            (existingResult.data || [])
+              .filter(c => c.chargeType === 'room_night')
+              .map(c => c.date)
+          )
+
+          const dates = getNightDateRange(checkInDate, checkOutDate)
+          for (const date of dates) {
+            if (existingDates.has(date)) continue
+            const rate = await getEffectiveRate(businessId, roomId, date, baseRate)
+            await addDoc(chargesRef, {
+              reservationId,
+              roomId,
+              roomNumber,
+              guestName,
+              chargeType: 'room_night',
+              description: `Noche ${date}`,
+              amount: rate,
+              date,
+              createdBy: 'checkin',
+              createdAt: serverTimestamp(),
+            })
+          }
         }
       }
     }
@@ -489,6 +541,9 @@ export const runNightAudit = async (businessId, auditDate, performedBy) => {
 
     const charges = []
     for (const res of activeReservations) {
+      // Las reservas por hora se cobran una sola vez en check-in, no por noche.
+      if (res.pricingMode === 'hourly') continue
+
       // Calcular tarifa (aplicar temporada si existe)
       const rate = await getEffectiveRate(businessId, res.roomId, today, res.ratePerNight || 0)
 

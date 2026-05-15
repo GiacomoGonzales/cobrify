@@ -34,9 +34,23 @@ const INITIAL_FORM = {
   type: 'simple',
   floor: '',
   rate: '',
+  // Modo de tarificación: 'nightly' (por noche) o 'hourly' (por hora).
+  pricingMode: 'nightly',
+  ratePerHour: '',
   capacity: '1',
   amenities: '',
   notes: '',
+}
+
+// Calcula horas exactas (redondeo hacia arriba) entre dos pares fecha+hora.
+const calculateHoursDiff = (checkInDate, checkInTime, checkOutDate, checkOutTime) => {
+  if (!checkInDate || !checkInTime || !checkOutDate || !checkOutTime) return 0
+  const inMs = new Date(`${checkInDate}T${checkInTime}:00`).getTime()
+  const outMs = new Date(`${checkOutDate}T${checkOutTime}:00`).getTime()
+  if (!Number.isFinite(inMs) || !Number.isFinite(outMs)) return 0
+  const diffMs = outMs - inMs
+  if (diffMs <= 0) return 0
+  return Math.ceil(diffMs / (1000 * 60 * 60))
 }
 
 // Transiciones de estado válidas para operación diaria
@@ -74,9 +88,16 @@ export default function HotelRooms() {
     email: '',
     checkInDate: '',
     checkOutDate: '',
+    // Solo se usan si la reserva es hourly:
+    checkInTime: '',
+    checkOutTime: '',
     ratePerNight: 0,
+    ratePerHour: 0,
     notes: '',
   })
+  // Modo de cobro elegido para esta reserva (toggle).
+  // Por defecto toma el modo predeterminado de la habitación.
+  const [quickReservationMode, setQuickReservationMode] = useState('nightly')
   const [isSavingQuickCheckIn, setIsSavingQuickCheckIn] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
   // Modal de configuración (crear/editar)
@@ -196,6 +217,14 @@ export default function HotelRooms() {
   const openQuickCheckIn = () => {
     if (!selectedRoom) return
     const today = new Date().toISOString().split('T')[0]
+    const roomSupportsHourly = (selectedRoom.ratePerHour || 0) > 0
+    // Default del toggle: modo predeterminado de la habitación, pero solo si la
+    // habitación realmente lo soporta. Si no, siempre 'nightly'.
+    const defaultMode = (selectedRoom.pricingMode === 'hourly' && roomSupportsHourly) ? 'hourly' : 'nightly'
+    setQuickReservationMode(defaultMode)
+    // Para hourly, default: misma fecha; hora actual.
+    const now = new Date()
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     setQuickForm({
       documentType: 'DNI',
       documentNumber: '',
@@ -203,8 +232,11 @@ export default function HotelRooms() {
       phone: '',
       email: '',
       checkInDate: today,
-      checkOutDate: '',
+      checkOutDate: defaultMode === 'hourly' ? today : '',
+      checkInTime: defaultMode === 'hourly' ? currentTime : '',
+      checkOutTime: '',
       ratePerNight: Number(selectedRoom.rate ?? selectedRoom.ratePerNight ?? 0),
+      ratePerHour: Number(selectedRoom.ratePerHour ?? 0),
       notes: '',
     })
     setIsQuickCheckInOpen(true)
@@ -284,15 +316,29 @@ export default function HotelRooms() {
   // Guardar check-in rápido: crear reserva + check-in + sync huésped
   const handleQuickCheckInSave = async () => {
     if (!selectedRoom) return
-    const { documentNumber, guestName, checkInDate, checkOutDate, ratePerNight } = quickForm
+    // El modo se toma del toggle, no de la habitación.
+    const isHourly = quickReservationMode === 'hourly'
+    const { documentNumber, guestName, checkInDate, checkOutDate, ratePerNight, ratePerHour, checkInTime, checkOutTime } = quickForm
     if (!documentNumber?.trim()) { toast.error('Ingrese el número de documento'); return }
     if (!guestName?.trim()) { toast.error('Ingrese el nombre del huésped'); return }
     if (!checkInDate) { toast.error('Seleccione fecha de check-in'); return }
     if (!checkOutDate) { toast.error('Seleccione fecha de check-out'); return }
-    if (new Date(checkOutDate) <= new Date(checkInDate)) { toast.error('Check-out debe ser posterior al check-in'); return }
 
-    const nights = Math.max(Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)), 1)
-    const totalAmount = nights * Number(ratePerNight || 0)
+    // Validaciones específicas según modo
+    let nights = 0
+    let hours = 0
+    let totalAmount = 0
+    if (isHourly) {
+      if (!checkInTime) { toast.error('Seleccione hora de check-in'); return }
+      if (!checkOutTime) { toast.error('Seleccione hora de check-out'); return }
+      hours = calculateHoursDiff(checkInDate, checkInTime, checkOutDate, checkOutTime)
+      if (hours <= 0) { toast.error('La hora de check-out debe ser posterior al check-in'); return }
+      totalAmount = hours * Number(ratePerHour || 0)
+    } else {
+      if (new Date(checkOutDate) <= new Date(checkInDate)) { toast.error('Check-out debe ser posterior al check-in'); return }
+      nights = Math.max(Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)), 1)
+      totalAmount = nights * Number(ratePerNight || 0)
+    }
 
     setIsSavingQuickCheckIn(true)
     try {
@@ -320,6 +366,14 @@ export default function HotelRooms() {
         checkOut: checkOutDate,
         checkInDate,
         checkOutDate,
+        // Campos según modo
+        pricingMode: isHourly ? 'hourly' : 'nightly',
+        ...(isHourly && {
+          checkInTime,
+          checkOutTime,
+          hours,
+          ratePerHour: Number(ratePerHour || 0),
+        }),
         nights,
         ratePerNight: Number(ratePerNight || 0),
         totalAmount,
@@ -525,6 +579,8 @@ export default function HotelRooms() {
       type: selectedRoom.type || 'simple',
       floor: selectedRoom.floor?.toString() || '',
       rate: (selectedRoom.rate || selectedRoom.ratePerNight)?.toString() || '',
+      pricingMode: selectedRoom.pricingMode === 'hourly' ? 'hourly' : 'nightly',
+      ratePerHour: selectedRoom.ratePerHour?.toString() || '',
       capacity: selectedRoom.capacity?.toString() || '1',
       amenities: Array.isArray(selectedRoom.amenities) ? selectedRoom.amenities.join(', ') : (selectedRoom.amenities || ''),
       notes: selectedRoom.notes || '',
@@ -551,7 +607,12 @@ export default function HotelRooms() {
       return
     }
     if (!formData.rate || parseFloat(formData.rate) <= 0) {
-      toast.error('La tarifa debe ser mayor a 0')
+      toast.error('La tarifa por noche debe ser mayor a 0')
+      return
+    }
+    // ratePerHour es opcional: si está en 0, la habitación solo soporta reservas por noche.
+    if (formData.pricingMode === 'hourly' && (!formData.ratePerHour || parseFloat(formData.ratePerHour) <= 0)) {
+      toast.error('Si el modo predeterminado es "Por hora", la tarifa por hora debe ser mayor a 0')
       return
     }
 
@@ -564,6 +625,9 @@ export default function HotelRooms() {
         type: formData.type,
         floor: formData.floor.trim(),
         rate: parseFloat(formData.rate) || 0,
+        // Ambas tarifas se guardan siempre. El modo se elige al crear la reserva.
+        ratePerHour: parseFloat(formData.ratePerHour) || 0,
+        pricingMode: formData.pricingMode === 'hourly' ? 'hourly' : 'nightly',
         capacity: parseInt(formData.capacity) || 1,
         amenities: formData.amenities.trim(),
         notes: formData.notes.trim(),
@@ -755,11 +819,34 @@ export default function HotelRooms() {
                   </div>
                 )}
 
-                {/* Tarifa */}
-                <p className="text-xs font-semibold text-gray-700 mt-2">
-                  S/ {(room.rate || room.ratePerNight || 0).toFixed(0)}
-                  <span className="font-normal text-gray-400"> /noche</span>
-                </p>
+                {/* Tarifa(s): muestra la del modo predeterminado primero, y la otra abajo si existe */}
+                <div className="text-xs font-semibold text-gray-700 mt-2 space-y-0.5">
+                  {room.pricingMode === 'hourly' && (room.ratePerHour || 0) > 0 ? (
+                    <>
+                      <p>
+                        S/ {(room.ratePerHour || 0).toFixed(0)}
+                        <span className="font-normal text-gray-400"> /hora</span>
+                      </p>
+                      {(room.rate || room.ratePerNight || 0) > 0 && (
+                        <p className="text-[10px] text-gray-400 font-normal">
+                          S/ {(room.rate || room.ratePerNight || 0).toFixed(0)} /noche
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        S/ {(room.rate || room.ratePerNight || 0).toFixed(0)}
+                        <span className="font-normal text-gray-400"> /noche</span>
+                      </p>
+                      {(room.ratePerHour || 0) > 0 && (
+                        <p className="text-[10px] text-gray-400 font-normal">
+                          S/ {(room.ratePerHour || 0).toFixed(0)} /hora
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 {/* Status badge */}
                 <div className={`mt-2 text-center text-[10px] font-semibold py-0.5 rounded-full ${statusCfg.color} text-white`}>
@@ -789,10 +876,18 @@ export default function HotelRooms() {
                   <p className={`text-sm font-bold ${statusCfg.text}`}>{statusCfg.label}</p>
                   <p className="text-xs text-gray-500">{typeLabel} · Piso {selectedRoom.floor || '-'} · Cap. {selectedRoom.capacity || 1}</p>
                 </div>
-                <p className="text-lg font-bold text-gray-800">
-                  S/ {(selectedRoom.rate || selectedRoom.ratePerNight || 0).toFixed(2)}
-                  <span className="text-xs font-normal text-gray-400"> /noche</span>
-                </p>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-gray-800 leading-tight">
+                    S/ {(selectedRoom.rate || selectedRoom.ratePerNight || 0).toFixed(2)}
+                    <span className="text-xs font-normal text-gray-400"> /noche</span>
+                  </p>
+                  {(selectedRoom.ratePerHour || 0) > 0 && (
+                    <p className="text-xs text-gray-600 leading-tight">
+                      S/ {selectedRoom.ratePerHour.toFixed(2)}
+                      <span className="text-gray-400"> /hora</span>
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Check-in rápido (solo si la habitación está disponible) */}
@@ -836,7 +931,11 @@ export default function HotelRooms() {
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-gray-400" />
-                      <span>{guest.nights} noches</span>
+                      <span>
+                        {guest.pricingMode === 'hourly'
+                          ? `${guest.hours || 0} hora${(guest.hours || 0) !== 1 ? 's' : ''}`
+                          : `${guest.nights || 0} noches`}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 ml-auto font-semibold">
                       <DollarSign className="w-3.5 h-3.5 text-gray-400" />
@@ -1053,6 +1152,57 @@ export default function HotelRooms() {
             />
           </div>
 
+          {/* Tarifa por hora (opcional) */}
+          <div className="space-y-2 pt-2 border-t">
+            <Input
+              label="Tarifa por hora (S/) — opcional"
+              name="ratePerHour"
+              type="number"
+              step="0.01"
+              value={formData.ratePerHour}
+              onChange={handleChange}
+              placeholder="0.00"
+            />
+            <p className="text-xs text-gray-500">
+              Dejá en 0 si esta habitación se cobra solo por noche.
+              Si la llenás, podrás elegir el modo (por noche o por hora) al crear cada reserva.
+            </p>
+          </div>
+
+          {/* Modo predeterminado (solo si hay tarifa por hora) */}
+          {parseFloat(formData.ratePerHour) > 0 && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Modo predeterminado para nuevas reservas</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, pricingMode: 'nightly' }))}
+                  className={`flex flex-col items-center justify-center gap-1 p-3 rounded-lg border-2 transition-colors text-sm ${
+                    formData.pricingMode !== 'hourly'
+                      ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  Por noche
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, pricingMode: 'hourly' }))}
+                  className={`flex flex-col items-center justify-center gap-1 p-3 rounded-lg border-2 transition-colors text-sm ${
+                    formData.pricingMode === 'hourly'
+                      ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  Por hora
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">Se puede cambiar en cada reserva.</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amenidades</label>
             <textarea
@@ -1172,30 +1322,117 @@ export default function HotelRooms() {
             />
           </div>
 
-          {/* Fechas */}
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Check-in *"
-              type="date"
-              value={quickForm.checkInDate}
-              onChange={e => setQuickForm(prev => ({ ...prev, checkInDate: e.target.value }))}
-            />
-            <Input
-              label="Check-out *"
-              type="date"
-              value={quickForm.checkOutDate}
-              onChange={e => setQuickForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
-            />
-          </div>
+          {/* Toggle de modo: solo se muestra si la habitación tiene tarifa por hora */}
+          {(selectedRoom?.ratePerHour || 0) > 0 && (
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">¿Cómo se cobra?</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuickReservationMode('nightly')}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border-2 transition-colors text-sm ${
+                    quickReservationMode === 'nightly'
+                      ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  Por noche
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickReservationMode('hourly')}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border-2 transition-colors text-sm ${
+                    quickReservationMode === 'hourly'
+                      ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  Por hora
+                </button>
+              </div>
+            </div>
+          )}
 
-          {/* Tarifa */}
-          <Input
-            label="Tarifa por noche (S/)"
-            type="number"
-            step="0.01"
-            value={quickForm.ratePerNight}
-            onChange={e => setQuickForm(prev => ({ ...prev, ratePerNight: e.target.value }))}
-          />
+          {/* Fechas (y horas si la reserva es por hora) */}
+          {quickReservationMode === 'hourly' ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Fecha check-in *"
+                  type="date"
+                  value={quickForm.checkInDate}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkInDate: e.target.value }))}
+                />
+                <Input
+                  label="Hora check-in *"
+                  type="time"
+                  value={quickForm.checkInTime}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkInTime: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Fecha check-out *"
+                  type="date"
+                  value={quickForm.checkOutDate}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
+                />
+                <Input
+                  label="Hora check-out *"
+                  type="time"
+                  value={quickForm.checkOutTime}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkOutTime: e.target.value }))}
+                />
+              </div>
+              {/* Tarifa por hora + preview de horas/total */}
+              <div className="grid grid-cols-2 gap-3 items-end">
+                <Input
+                  label="Tarifa por hora (S/)"
+                  type="number"
+                  step="0.01"
+                  value={quickForm.ratePerHour}
+                  onChange={e => setQuickForm(prev => ({ ...prev, ratePerHour: e.target.value }))}
+                />
+                {(() => {
+                  const h = calculateHoursDiff(quickForm.checkInDate, quickForm.checkInTime, quickForm.checkOutDate, quickForm.checkOutTime)
+                  const total = h * Number(quickForm.ratePerHour || 0)
+                  if (h <= 0) return <p className="text-xs text-gray-400">Define fechas y horas</p>
+                  return (
+                    <div className="text-sm text-right">
+                      <p className="text-gray-500">{h} hora{h !== 1 ? 's' : ''} (redondeado)</p>
+                      <p className="text-lg font-bold text-gray-900">Total: {formatCurrency(total)}</p>
+                    </div>
+                  )
+                })()}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Check-in *"
+                  type="date"
+                  value={quickForm.checkInDate}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkInDate: e.target.value }))}
+                />
+                <Input
+                  label="Check-out *"
+                  type="date"
+                  value={quickForm.checkOutDate}
+                  onChange={e => setQuickForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
+                />
+              </div>
+              <Input
+                label="Tarifa por noche (S/)"
+                type="number"
+                step="0.01"
+                value={quickForm.ratePerNight}
+                onChange={e => setQuickForm(prev => ({ ...prev, ratePerNight: e.target.value }))}
+              />
+            </>
+          )}
 
           {/* Notas */}
           <div>

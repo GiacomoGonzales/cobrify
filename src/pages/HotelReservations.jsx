@@ -58,7 +58,11 @@ const reservationSchema = z.object({
   roomId: z.string().min(1, 'Seleccione una habitación'),
   checkInDate: z.string().min(1, 'Fecha de check-in es requerida'),
   checkOutDate: z.string().min(1, 'Fecha de check-out es requerida'),
+  // Para modo hourly. Opcional en el schema porque el modo se detecta dinámicamente.
+  checkInTime: z.string().optional(),
+  checkOutTime: z.string().optional(),
   ratePerNight: z.coerce.number().min(0, 'Tarifa inválida'),
+  ratePerHour: z.coerce.number().min(0, 'Tarifa inválida').optional(),
   notes: z.string().optional(),
 })
 
@@ -82,6 +86,17 @@ function calculateNights(checkIn, checkOut) {
   if (!checkIn || !checkOut) return 0
   const diff = new Date(checkOut) - new Date(checkIn)
   return Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0)
+}
+
+// Horas exactas entre dos pares fecha+hora, redondeo hacia arriba (Math.ceil).
+function calculateHoursDiff(checkInDate, checkInTime, checkOutDate, checkOutTime) {
+  if (!checkInDate || !checkInTime || !checkOutDate || !checkOutTime) return 0
+  const inMs = new Date(`${checkInDate}T${checkInTime}:00`).getTime()
+  const outMs = new Date(`${checkOutDate}T${checkOutTime}:00`).getTime()
+  if (!Number.isFinite(inMs) || !Number.isFinite(outMs)) return 0
+  const diffMs = outMs - inMs
+  if (diffMs <= 0) return 0
+  return Math.ceil(diffMs / (1000 * 60 * 60))
 }
 
 function formatDate(date) {
@@ -160,27 +175,63 @@ export default function HotelReservations() {
       roomId: '',
       checkInDate: '',
       checkOutDate: '',
+      checkInTime: '',
+      checkOutTime: '',
       ratePerNight: 0,
+      ratePerHour: 0,
       notes: '',
     },
   })
 
   const watchCheckIn = watch('checkInDate')
   const watchCheckOut = watch('checkOutDate')
+  const watchCheckInTime = watch('checkInTime')
+  const watchCheckOutTime = watch('checkOutTime')
   const watchRate = watch('ratePerNight')
+  const watchRateHour = watch('ratePerHour')
   const watchRoomId = watch('roomId')
   const watchDocType = watch('documentType')
   const watchDocNumber = watch('documentNumber')
-  const nights = calculateNights(watchCheckIn, watchCheckOut)
-  const estimatedTotal = nights * (watchRate || 0)
 
-  // Auto-cargar tarifa al seleccionar habitación (se puede editar después para aplicar descuentos/promos)
+  // Detectar habitación seleccionada y modos soportados.
+  // - "Por noche" siempre está soportado (rate > 0 es obligatorio en config de habitación).
+  // - "Por hora" está soportado si la habitación tiene ratePerHour > 0.
+  // El operador puede elegir el modo en este toggle (default: el modo predeterminado del cuarto).
+  const selectedRoom = useMemo(() => rooms.find(r => r.id === watchRoomId), [rooms, watchRoomId])
+  const roomSupportsHourly = (selectedRoom?.ratePerHour || 0) > 0
+  const [reservationPricingMode, setReservationPricingMode] = useState('nightly')
+  const isHourlyMode = reservationPricingMode === 'hourly'
+
+  // Cuando cambia la habitación, resetear el toggle al modo predeterminado de la habitación
+  // (solo si la habitación soporta el modo; si no, forzar 'nightly').
+  useEffect(() => {
+    if (!selectedRoom) {
+      setReservationPricingMode('nightly')
+      return
+    }
+    if (selectedRoom.pricingMode === 'hourly' && roomSupportsHourly) {
+      setReservationPricingMode('hourly')
+    } else {
+      setReservationPricingMode('nightly')
+    }
+  }, [selectedRoom?.id, roomSupportsHourly]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nights = calculateNights(watchCheckIn, watchCheckOut)
+  const hours = calculateHoursDiff(watchCheckIn, watchCheckInTime, watchCheckOut, watchCheckOutTime)
+  const estimatedTotal = isHourlyMode
+    ? hours * (watchRateHour || 0)
+    : nights * (watchRate || 0)
+
+  // Auto-cargar tarifa al seleccionar habitación. Cargamos ambos campos (rate per night/hour)
+  // pero solo se usa el del modo activo. Editable para descuentos/promos.
   useEffect(() => {
     if (!watchRoomId) return
     const room = rooms.find(r => r.id === watchRoomId)
     if (!room) return
     const roomRate = Number(room.rate ?? room.ratePerNight ?? 0)
+    const roomRateHour = Number(room.ratePerHour ?? 0)
     setValue('ratePerNight', roomRate, { shouldValidate: true })
+    setValue('ratePerHour', roomRateHour, { shouldValidate: true })
   }, [watchRoomId, rooms, setValue])
 
   // Búsqueda de cliente: primero en Clientes registrados, luego RENIEC/SUNAT
@@ -356,7 +407,10 @@ export default function HotelReservations() {
       roomId: '',
       checkInDate: new Date().toISOString().split('T')[0],
       checkOutDate: '',
+      checkInTime: '',
+      checkOutTime: '',
       ratePerNight: 0,
+      ratePerHour: 0,
       notes: '',
     })
     setIsModalOpen(true)
@@ -379,9 +433,14 @@ export default function HotelReservations() {
       roomId: reservation.roomId || '',
       checkInDate: ciDate || '',
       checkOutDate: coDate || '',
+      checkInTime: reservation.checkInTime || '',
+      checkOutTime: reservation.checkOutTime || '',
       ratePerNight: reservation.ratePerNight || 0,
+      ratePerHour: reservation.ratePerHour || 0,
       notes: reservation.notes || '',
     })
+    // Sincronizar el toggle de modo con lo guardado en la reserva.
+    setReservationPricingMode(reservation.pricingMode === 'hourly' ? 'hourly' : 'nightly')
     setIsModalOpen(true)
   }
 
@@ -389,12 +448,33 @@ export default function HotelReservations() {
   const onSubmit = async (data) => {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     if (!user?.uid) return
+
+    const room = rooms.find(r => r.id === data.roomId)
+    // El modo se decide en el toggle del form, no en la habitación.
+    const isHourly = reservationPricingMode === 'hourly'
+
+    // Validaciones específicas del modo hourly
+    if (isHourly) {
+      if (!data.checkInTime) { toast.error('Seleccione la hora de check-in'); return }
+      if (!data.checkOutTime) { toast.error('Seleccione la hora de check-out'); return }
+    }
+
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
-      const room = rooms.find(r => r.id === data.roomId)
-      const nightsCount = calculateNights(data.checkInDate, data.checkOutDate)
-      const totalAmount = nightsCount * data.ratePerNight
+      const nightsCount = isHourly ? 0 : calculateNights(data.checkInDate, data.checkOutDate)
+      const hoursCount = isHourly
+        ? calculateHoursDiff(data.checkInDate, data.checkInTime, data.checkOutDate, data.checkOutTime)
+        : 0
+      if (isHourly && hoursCount <= 0) {
+        toast.error('La hora de check-out debe ser posterior al check-in')
+        setIsSaving(false)
+        return
+      }
+      const totalAmount = isHourly
+        ? hoursCount * Number(data.ratePerHour || 0)
+        : nightsCount * Number(data.ratePerNight || 0)
+
       // Mapear al formato que espera el service (guestDocument, checkIn, ...) manteniendo también los nombres del form
       const payload = {
         // Form-friendly (para display/edit sin re-mapear)
@@ -416,9 +496,17 @@ export default function HotelReservations() {
         roomId: data.roomId,
         roomName: room?.name || '',
         roomNumber: room?.number || '',
+        // Modo de tarificación (snapshot tomado de la habitación al momento de la reserva)
+        pricingMode: isHourly ? 'hourly' : 'nightly',
+        ...(isHourly && {
+          checkInTime: data.checkInTime,
+          checkOutTime: data.checkOutTime,
+          hours: hoursCount,
+          ratePerHour: Number(data.ratePerHour || 0),
+        }),
         // Totals
         nights: nightsCount,
-        ratePerNight: data.ratePerNight,
+        ratePerNight: Number(data.ratePerNight || 0),
         totalAmount,
         total: totalAmount,
         notes: data.notes || '',
@@ -946,11 +1034,20 @@ export default function HotelReservations() {
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                       <span>Hab. {reservation.roomName || reservation.roomNumber}</span>
                       <span className="text-gray-300">|</span>
-                      <span>{formatDate(reservation.checkInDate)} - {formatDate(reservation.checkOutDate)}</span>
+                      {reservation.pricingMode === 'hourly' ? (
+                        <span>
+                          {formatDate(reservation.checkInDate)} {reservation.checkInTime || ''} → {reservation.checkOutTime || ''}
+                        </span>
+                      ) : (
+                        <span>{formatDate(reservation.checkInDate)} - {formatDate(reservation.checkOutDate)}</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-sm font-medium text-gray-900">
-                        {reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)} noches - {formatCurrency(reservation.total || 0)}
+                        {reservation.pricingMode === 'hourly'
+                          ? `${reservation.hours || 0} hora${(reservation.hours || 0) !== 1 ? 's' : ''}`
+                          : `${reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)} noches`}
+                        {' - '}{formatCurrency(reservation.total || 0)}
                       </span>
                       <div className="flex items-center gap-1.5">
                         {reservation.status === 'confirmed' && (
@@ -997,14 +1094,16 @@ export default function HotelReservations() {
                       <TableHead>Habitación</TableHead>
                       <TableHead>Check-in</TableHead>
                       <TableHead>Check-out</TableHead>
-                      <TableHead className="text-right">Noches</TableHead>
+                      <TableHead className="text-right">Duración</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredReservations.map((reservation) => (
+                    {filteredReservations.map((reservation) => {
+                      const isHourly = reservation.pricingMode === 'hourly'
+                      return (
                       <TableRow key={reservation.id}>
                         <TableCell className="font-medium">
                           <div>
@@ -1013,10 +1112,22 @@ export default function HotelReservations() {
                           </div>
                         </TableCell>
                         <TableCell>{reservation.roomName || reservation.roomNumber || '-'}</TableCell>
-                        <TableCell className="text-sm">{formatDate(reservation.checkInDate)}</TableCell>
-                        <TableCell className="text-sm">{formatDate(reservation.checkOutDate)}</TableCell>
+                        <TableCell className="text-sm">
+                          {formatDate(reservation.checkInDate)}
+                          {isHourly && reservation.checkInTime && (
+                            <span className="text-xs text-gray-500 ml-1">{reservation.checkInTime}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDate(reservation.checkOutDate)}
+                          {isHourly && reservation.checkOutTime && (
+                            <span className="text-xs text-gray-500 ml-1">{reservation.checkOutTime}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
-                          {reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)}
+                          {isHourly
+                            ? `${reservation.hours || 0} hora${(reservation.hours || 0) !== 1 ? 's' : ''}`
+                            : `${reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)} noches`}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCurrency(reservation.total || 0)}
@@ -1069,7 +1180,8 @@ export default function HotelReservations() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1166,8 +1278,12 @@ export default function HotelReservations() {
                 </option>
               )}
               {availableRooms.map(room => {
-                const roomRate = room.rate ?? room.ratePerNight ?? 0
-                const label = `Hab. ${room.number || '-'}${room.name ? ` - ${room.name}` : ''} · ${room.type || 'Estándar'} · ${formatCurrency(roomRate)}/noche`
+                const roomRateNight = room.rate ?? room.ratePerNight ?? 0
+                const roomRateHour = room.ratePerHour ?? 0
+                const rateLabel = roomRateHour > 0
+                  ? `${formatCurrency(roomRateNight)}/noche · ${formatCurrency(roomRateHour)}/hora`
+                  : `${formatCurrency(roomRateNight)}/noche`
+                const label = `Hab. ${room.number || '-'}${room.name ? ` - ${room.name}` : ''} · ${room.type || 'Estándar'} · ${rateLabel}`
                 return (
                   <option key={room.id} value={room.id}>
                     {label}
@@ -1175,45 +1291,145 @@ export default function HotelReservations() {
                 )
               })}
             </Select>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Check-in"
-                type="date"
-                required
-                {...register('checkInDate')}
-                error={errors.checkInDate?.message}
-              />
-              <Input
-                label="Check-out"
-                type="date"
-                required
-                {...register('checkOutDate')}
-                error={errors.checkOutDate?.message}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Input
-                  label="Tarifa por noche"
-                  type="number"
-                  step="0.01"
-                  required
-                  {...register('ratePerNight')}
-                  error={errors.ratePerNight?.message}
-                />
-                <p className="text-xs text-gray-400 mt-1">Se carga de la habitación. Editá para aplicar descuento o promo.</p>
+            {/* Toggle modo de cobro: visible solo si la habitación soporta por hora */}
+            {selectedRoom && roomSupportsHourly && (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-gray-700">¿Cómo se cobra esta reserva?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReservationPricingMode('nightly')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border-2 transition-colors text-sm ${
+                      reservationPricingMode === 'nightly'
+                        ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    <CalendarDays className="w-4 h-4" />
+                    Por noche
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReservationPricingMode('hourly')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border-2 transition-colors text-sm ${
+                      reservationPricingMode === 'hourly'
+                        ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
+                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    <Hotel className="w-4 h-4" />
+                    Por hora
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-col justify-end">
-                <p className="text-sm text-gray-500">
-                  {nights > 0 ? `${nights} noche${nights > 1 ? 's' : ''}` : 'Seleccione fechas'}
-                </p>
-                {nights > 0 && watchRate > 0 && (
-                  <p className="text-lg font-bold text-gray-900">
-                    Total: {formatCurrency(estimatedTotal)}
-                  </p>
-                )}
-              </div>
-            </div>
+            )}
+
+            {isHourlyMode ? (
+              <>
+                {/* Modo por horas: 4 inputs separados (fecha + hora x 2) */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  Cobro <strong>por hora</strong>. Las horas se redondean hacia arriba.
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Fecha check-in"
+                    type="date"
+                    required
+                    {...register('checkInDate')}
+                    error={errors.checkInDate?.message}
+                  />
+                  <Input
+                    label="Hora check-in"
+                    type="time"
+                    required
+                    {...register('checkInTime')}
+                    error={errors.checkInTime?.message}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Fecha check-out"
+                    type="date"
+                    required
+                    {...register('checkOutDate')}
+                    error={errors.checkOutDate?.message}
+                  />
+                  <Input
+                    label="Hora check-out"
+                    type="time"
+                    required
+                    {...register('checkOutTime')}
+                    error={errors.checkOutTime?.message}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      label="Tarifa por hora"
+                      type="number"
+                      step="0.01"
+                      required
+                      {...register('ratePerHour')}
+                      error={errors.ratePerHour?.message}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Se carga de la habitación. Editá para aplicar descuento.</p>
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <p className="text-sm text-gray-500">
+                      {hours > 0 ? `${hours} hora${hours !== 1 ? 's' : ''} (redondeado)` : 'Define fechas y horas'}
+                    </p>
+                    {hours > 0 && watchRateHour > 0 && (
+                      <p className="text-lg font-bold text-gray-900">
+                        Total: {formatCurrency(estimatedTotal)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Modo por noches: comportamiento original */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Check-in"
+                    type="date"
+                    required
+                    {...register('checkInDate')}
+                    error={errors.checkInDate?.message}
+                  />
+                  <Input
+                    label="Check-out"
+                    type="date"
+                    required
+                    {...register('checkOutDate')}
+                    error={errors.checkOutDate?.message}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      label="Tarifa por noche"
+                      type="number"
+                      step="0.01"
+                      required
+                      {...register('ratePerNight')}
+                      error={errors.ratePerNight?.message}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Se carga de la habitación. Editá para aplicar descuento o promo.</p>
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <p className="text-sm text-gray-500">
+                      {nights > 0 ? `${nights} noche${nights > 1 ? 's' : ''}` : 'Seleccione fechas'}
+                    </p>
+                    {nights > 0 && watchRate > 0 && (
+                      <p className="text-lg font-bold text-gray-900">
+                        Total: {formatCurrency(estimatedTotal)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
               <textarea
