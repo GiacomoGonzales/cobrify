@@ -428,7 +428,7 @@ function appendVoidedRejectedSheet(wb, invoices, businessData, periodLabel) {
   setStyle(ws, totalRowIdx, 6, totalLabelStyle)
   setStyle(ws, totalRowIdx, 7, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
-  XLSX.utils.book_append_sheet(wb, ws, 'Anulados/Rechazados')
+  XLSX.utils.book_append_sheet(wb, ws, 'Anulados-Rechazados')
 }
 
 /** Items facturados con su afectación tributaria (Gravado/Exonerado/Inafecto). */

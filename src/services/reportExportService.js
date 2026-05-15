@@ -384,7 +384,7 @@ const appendCreditNotesSheet = (wb, { businessData, periodLabel, branchLabel, in
   for (let c = 7; c <= 9; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
   setStyle(ws, totalRowIdx, 10, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
-  XLSX.utils.book_append_sheet(wb, ws, 'Notas Crédito/Débito')
+  XLSX.utils.book_append_sheet(wb, ws, 'Notas Crédito-Débito')
 }
 
 /** Agrega hoja "RFM" — segmentación de clientes por Recency/Frequency/Monetary. */
