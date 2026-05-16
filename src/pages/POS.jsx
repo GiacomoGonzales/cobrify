@@ -5922,8 +5922,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
 
-          {/* Search */}
-          <div className={`flex gap-2 ${saleCompleted ? 'opacity-50' : ''}`}>
+          {/* Search — sticky en desktop para que quede pegado al header al scrollear */}
+          <div className={`flex gap-2 lg:sticky lg:top-0 lg:z-20 lg:bg-gray-50 lg:py-2 ${saleCompleted ? 'opacity-50' : ''}`}>
             <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
