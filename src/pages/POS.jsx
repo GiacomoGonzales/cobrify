@@ -5854,7 +5854,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 lg:flex-1 lg:min-h-0">
         {/* Products Panel */}
-        <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} min-w-0 space-y-4 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 custom-scrollbar`}>
+        <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} min-w-0 space-y-4 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 lg:pb-4 custom-scrollbar`}>
           {/* Header */}
           <div className={`flex flex-col mt-3 lg:mt-4 ${expandedCart ? 'gap-2' : 'sm:flex-row sm:items-center sm:justify-between'} gap-4`}>
             <div>
@@ -6441,7 +6441,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         </div>
 
         {/* Cart Panel */}
-        <div className={`${expandedCart ? 'lg:col-span-2' : ''} min-w-0 lg:overflow-y-auto lg:overscroll-contain custom-scrollbar`}>
+        <div className={`${expandedCart ? 'lg:col-span-2' : ''} min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-4 custom-scrollbar`}>
           {/* min-h-full + flex permite que la Card crezca con su contenido
               cuando hay muchos campos (datos del cliente + carrito + métodos
               de pago). Con h-full el fondo blanco se cortaba a la mitad y
