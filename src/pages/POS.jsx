@@ -35,6 +35,8 @@ import {
   BedDouble,
   Pause,
   Play,
+  LayoutGrid,
+  List,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -332,6 +334,19 @@ export default function POS() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
+  // Modo de visualización del catálogo: 'grid' (cards con foto) o 'list' (filas densas).
+  // Persistido en localStorage para que la preferencia sobreviva entre sesiones.
+  const [productViewMode, setProductViewMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pos:productViewMode')
+      return saved === 'list' ? 'list' : 'grid'
+    } catch (_) {
+      return 'grid'
+    }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('pos:productViewMode', productViewMode) } catch (_) {}
+  }, [productViewMode])
   // Ref del botón "Procesar Venta". Cuando el usuario selecciona un método de pago,
   // movemos el focus aquí para que pueda apretar Enter y procesar sin usar el mouse.
   const checkoutButtonRef = useRef(null)
@@ -5927,6 +5942,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <ScanBarcode className="w-6 h-6" />
               )}
             </button>
+            {/* Toggle vista cards / lista */}
+            <div className="inline-flex items-center bg-white border border-gray-300 rounded-lg p-0.5 shadow-sm">
+              <button
+                onClick={() => setProductViewMode('grid')}
+                disabled={saleCompleted}
+                title="Vista en cuadrícula"
+                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${productViewMode === 'grid' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setProductViewMode('list')}
+                disabled={saleCompleted}
+                title="Vista en lista"
+                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${productViewMode === 'list' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                <List className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Barra unificada de filtros (categorías + marcas) — un solo contenedor
@@ -6111,6 +6145,115 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </p>
               </CardContent>
             </Card>
+          ) : productViewMode === 'list' ? (
+            <>
+              <div key={selectedCategoryFilter} className={`flex flex-col divide-y divide-gray-100 bg-white rounded-lg border border-gray-200 overflow-hidden ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+                {displayedProducts.map(product => {
+                  const warehouseStock = getCurrentWarehouseStock(product)
+                  const isOutOfStock = !product.hasVariants &&
+                    product.stock !== null &&
+                    warehouseStock <= 0 &&
+                    !companySettings?.allowNegativeStock
+                  const expirationStatus = getProductExpirationStatus(product)
+                  const isExpired = expirationStatus && !expirationStatus.canSell
+                  const isDisabled = isOutOfStock || isExpired
+                  const quantityInCart = cart
+                    .filter(item => item.id === product.id)
+                    .reduce((sum, item) => sum + item.quantity, 0)
+
+                  return (
+                    <button
+                      key={product.id}
+                      onClick={() => addToCart(product)}
+                      disabled={isDisabled}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors touch-no-hover ${
+                        isExpired
+                          ? 'bg-red-50 opacity-60 cursor-not-allowed'
+                          : isOutOfStock
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-primary-50 active:bg-primary-100'
+                      }`}
+                    >
+                      {/* Badge cantidad en carrito */}
+                      {quantityInCart > 0 && (
+                        <div className="flex-shrink-0 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow">
+                          {quantityInCart}
+                        </div>
+                      )}
+                      {/* Imagen pequeña */}
+                      {product.imageUrl ? (
+                        <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded bg-gray-100 overflow-hidden">
+                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                      ) : (
+                        <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded bg-gray-100 flex items-center justify-center text-gray-300">
+                          <ShoppingCart className="w-5 h-5" />
+                        </div>
+                      )}
+                      {/* Info principal */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium text-sm sm:text-base truncate ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                            {product.name}
+                          </p>
+                          {product.hasVariants && (
+                            <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">
+                              {product.variants?.length || 0} var.
+                            </span>
+                          )}
+                          {expirationStatus && expirationStatus.status !== 'ok' && (
+                            <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              isExpired
+                                ? 'bg-red-600 text-white'
+                                : expirationStatus.status === 'critical' || expirationStatus.status === 'today'
+                                  ? 'bg-red-500 text-white'
+                                  : expirationStatus.status === 'warning'
+                                    ? 'bg-orange-500 text-white'
+                                    : 'bg-yellow-500 text-white'
+                            }`}>
+                              {isExpired ? 'VENC' : `${expirationStatus.days}d`}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] sm:text-xs text-gray-500 mt-0.5 truncate">
+                          {(product.sku || product.code || product.barcode) && (
+                            <span className="truncate">{product.sku || product.code || product.barcode}</span>
+                          )}
+                          {product.marca && <span className="text-purple-600 font-medium truncate">· {product.marca}</span>}
+                          {product.location && <span className="font-mono text-blue-600">· {product.location}</span>}
+                        </div>
+                      </div>
+                      {/* Precio + stock a la derecha */}
+                      <div className="flex-shrink-0 text-right">
+                        <p className={`text-sm sm:text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                          {formatCatalogPrice(product)}
+                        </p>
+                        {!hideStockInPOS && (
+                          <div className="text-[11px] sm:text-xs mt-0.5">
+                            {!product.hasVariants
+                              ? getStockBadge(product)
+                              : <span className="text-gray-500">Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span></span>
+                            }
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Load More Button - lista */}
+              {hasMoreProducts && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={loadMoreProducts}
+                    className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+                  >
+                    Ver más productos ({filteredProducts.length - visibleProductsCount} restantes)
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div key={selectedCategoryFilter} className={`columns-2 sm:columns-3 ${expandedCart ? 'xl:columns-2' : 'xl:columns-4'} gap-3 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
