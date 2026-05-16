@@ -668,10 +668,20 @@ export default function MainLayout() {
             </div>
           )}
 
-          {/* Page Content - Solo esta área hace scroll */}
-          <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-            <Outlet />
-          </main>
+          {/* Page Content - Solo esta área hace scroll.
+              Para /app/pos eliminamos la padding inner del <main> porque el
+              POS llena el área completa con su propio layout flex y la
+              padding se veía como un marco gris alrededor que "tapaba" el
+              contenido al hacer scroll en las columnas. */}
+          {location.pathname === '/app/pos' ? (
+            <main className="flex-1 overflow-y-auto overscroll-none custom-scrollbar">
+              <Outlet />
+            </main>
+          ) : (
+            <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+              <Outlet />
+            </main>
+          )}
         </div>
       </div>
 
