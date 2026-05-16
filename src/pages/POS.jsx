@@ -334,6 +334,12 @@ export default function POS() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
+  // Detecta si estamos en la app nativa (móvil/tablet vía Capacitor). En web/desktop
+  // no se muestran botones que solo funcionan en la app — como el escáner de
+  // código de barras que usa la cámara nativa.
+  const isNativeApp = React.useMemo(() => {
+    try { return Capacitor?.isNativePlatform?.() === true } catch (_) { return false }
+  }, [])
   // Modo de visualización del catálogo: 'grid' (cards con foto) o 'list' (filas densas).
   // Persistido en localStorage para que la preferencia sobreviva entre sesiones.
   const [productViewMode, setProductViewMode] = useState(() => {
@@ -5930,18 +5936,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 className="flex-1 text-base sm:text-lg border-none bg-transparent focus:ring-0 focus:outline-none disabled:cursor-not-allowed"
               />
             </div>
-            <button
-              onClick={handleScanBarcode}
-              disabled={saleCompleted || isScanning}
-              className="flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg px-4 py-2 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-              title="Escanear código de barras"
-            >
-              {isScanning ? (
-                <Loader2 className="w-6 h-6 animate-spin" />
-              ) : (
-                <ScanBarcode className="w-6 h-6" />
-              )}
-            </button>
+            {isNativeApp && (
+              <button
+                onClick={handleScanBarcode}
+                disabled={saleCompleted || isScanning}
+                className="flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg px-4 py-2 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                title="Escanear código de barras"
+              >
+                {isScanning ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <ScanBarcode className="w-6 h-6" />
+                )}
+              </button>
+            )}
             {/* Toggle vista cards / lista */}
             <div className="inline-flex items-center bg-white border border-gray-300 rounded-lg p-0.5 shadow-sm">
               <button
