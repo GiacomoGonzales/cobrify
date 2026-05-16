@@ -176,6 +176,9 @@ export default function InvoiceList() {
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
+  // Estado separado para impresión de ticket desde la fila: evita abrir el modal
+  // de detalle y no rompe el render del contenedor bulk de impresión masiva.
+  const [rowPrintInvoice, setRowPrintInvoice] = useState(null)
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
@@ -309,14 +312,18 @@ export default function InvoiceList() {
     }
 
     // Fallback: impresión estándar (web o si falla la térmica).
-    // El componente InvoiceTicket oculto está bindeado a viewingInvoice,
-    // así que para que window.print() saque la factura correcta cuando
-    // se llama desde la fila, sincronizamos viewingInvoice primero.
+    // Si viene desde la fila usamos rowPrintInvoice (estado dedicado) para
+    // no abrir el modal de detalle ni interferir con la impresión masiva.
+    // Si viene del modal, viewingInvoice ya está seteado y se imprime
+    // directamente.
     if (invoiceArg && viewingInvoice?.id !== invoice.id) {
-      setViewingInvoice(invoice)
+      setRowPrintInvoice(invoice)
       await new Promise((r) => setTimeout(r, 120))
+      window.print()
+      setRowPrintInvoice(null)
+    } else {
+      window.print()
     }
-    window.print()
   }
 
   // === Helpers de selección masiva ===
@@ -4692,15 +4699,15 @@ Gracias por tu preferencia.`
         </div>
       </Modal>
 
-      {/* Hidden Ticket Component for Printing - Individual */}
-      {viewingInvoice && (
+      {/* Hidden Ticket Component for Printing - Individual (modal o fila) */}
+      {(viewingInvoice || rowPrintInvoice) && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} />
         </div>
       )}
 
       {/* Hidden Ticket Container for Bulk Printing */}
-      {!viewingInvoice && selectedInvoiceIds.size > 0 && (
+      {!viewingInvoice && !rowPrintInvoice && selectedInvoiceIds.size > 0 && (
         <div className="hidden print:block bulk-print-container">
           <style>{`
             @media print {
