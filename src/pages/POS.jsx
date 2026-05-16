@@ -5842,7 +5842,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
   }
 
   return (
-    <div className="animate-fade-in p-2 sm:p-4 lg:h-full lg:flex lg:flex-col lg:overflow-hidden pb-6 lg:pb-4">
+    <div className="animate-fade-in px-2 sm:px-4 pb-6 lg:pb-4 lg:h-full lg:flex lg:flex-col lg:overflow-hidden">
       {companySettings?.requireOpenCashRegister && !cashRegisterOpen && (
         <div className="mb-4 flex items-center gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-800">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
