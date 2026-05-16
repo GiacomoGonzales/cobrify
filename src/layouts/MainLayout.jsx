@@ -668,10 +668,19 @@ export default function MainLayout() {
             </div>
           )}
 
-          {/* Page Content - Solo esta área hace scroll */}
-          <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-            <Outlet />
-          </main>
+          {/* Page Content - Solo esta área hace scroll.
+              Excepción: en /app/pos, el POS controla su propio sizing/zoom,
+              así que evitamos imponer flex-1+overflow para no romper su
+              minHeight:vh (mismo patrón que AdminLayout). */}
+          {location.pathname === '/app/pos' ? (
+            <main className="flex-1 min-h-0 overflow-y-auto overscroll-none custom-scrollbar">
+              <Outlet />
+            </main>
+          ) : (
+            <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+              <Outlet />
+            </main>
+          )}
         </div>
       </div>
 
