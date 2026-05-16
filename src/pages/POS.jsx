@@ -5842,7 +5842,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
   }
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] animate-fade-in pb-6">
+    <div className="animate-fade-in lg:h-full lg:flex lg:flex-col lg:overflow-hidden pb-6 lg:pb-0">
       {companySettings?.requireOpenCashRegister && !cashRegisterOpen && (
         <div className="mb-4 flex items-center gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-800">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -5852,7 +5852,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 lg:h-[calc(100vh-6rem)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 lg:flex-1 lg:min-h-0">
         {/* Products Panel */}
         <div className={`${expandedCart ? 'lg:col-span-1' : 'lg:col-span-2'} min-w-0 space-y-4 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 custom-scrollbar`}>
           {/* Header */}
