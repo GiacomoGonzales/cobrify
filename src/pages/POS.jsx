@@ -5950,25 +5950,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </button>
             )}
-            {/* Toggle vista cards / lista */}
-            <div className="inline-flex items-center bg-white border border-gray-300 rounded-lg p-0.5 shadow-sm">
-              <button
-                onClick={() => setProductViewMode('grid')}
-                disabled={saleCompleted}
-                title="Vista en cuadrícula"
-                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${productViewMode === 'grid' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                <LayoutGrid className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setProductViewMode('list')}
-                disabled={saleCompleted}
-                title="Vista en lista"
-                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${productViewMode === 'list' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                <List className="w-5 h-5" />
-              </button>
-            </div>
+            {/* Toggle vista cards / lista (sin contenedor, botones sueltos) */}
+            <button
+              onClick={() => setProductViewMode('grid')}
+              disabled={saleCompleted}
+              title="Vista en cuadrícula"
+              className={`flex items-center justify-center rounded-lg p-2 transition-colors disabled:opacity-50 ${productViewMode === 'grid' ? 'bg-primary-600 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+            >
+              <LayoutGrid className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setProductViewMode('list')}
+              disabled={saleCompleted}
+              title="Vista en lista"
+              className={`flex items-center justify-center rounded-lg p-2 transition-colors disabled:opacity-50 ${productViewMode === 'list' ? 'bg-primary-600 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+            >
+              <List className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Barra unificada de filtros (categorías + marcas) — un solo contenedor
