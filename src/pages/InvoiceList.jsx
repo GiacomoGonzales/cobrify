@@ -268,8 +268,11 @@ export default function InvoiceList() {
   }, [user])
 
   // Función para imprimir ticket
-  const handlePrintTicket = async () => {
-    if (!viewingInvoice || !companySettings) return
+  const handlePrintTicket = async (invoiceArg) => {
+    // Permite llamarlo desde el modal (sin args, usa viewingInvoice) o
+    // desde la fila de Ventas pasando la factura directamente.
+    const invoice = invoiceArg || viewingInvoice
+    if (!invoice || !companySettings) return
 
     const isNative = Capacitor.isNativePlatform()
 
@@ -288,7 +291,7 @@ export default function InvoiceList() {
             toast.info('Usando impresión estándar...')
           } else {
             // Imprimir en impresora térmica (80mm por defecto)
-            const result = await printInvoiceTicket(viewingInvoice, companySettings, printerConfigResult.config.paperWidth || 80)
+            const result = await printInvoiceTicket(invoice, companySettings, printerConfigResult.config.paperWidth || 80)
 
             if (result.success) {
               toast.success('Comprobante impreso en ticketera')
@@ -305,7 +308,14 @@ export default function InvoiceList() {
       }
     }
 
-    // Fallback: impresión estándar (web o si falla la térmica)
+    // Fallback: impresión estándar (web o si falla la térmica).
+    // El componente InvoiceTicket oculto está bindeado a viewingInvoice,
+    // así que para que window.print() saque la factura correcta cuando
+    // se llama desde la fila, sincronizamos viewingInvoice primero.
+    if (invoiceArg && viewingInvoice?.id !== invoice.id) {
+      setViewingInvoice(invoice)
+      await new Promise((r) => setTimeout(r, 120))
+    }
     window.print()
   }
 
@@ -3146,21 +3156,20 @@ Gracias por tu preferencia.`
                     <span>Ver detalles</span>
                   </button>
 
-                  {/* Vista previa PDF */}
+                  {/* Imprimir ticket */}
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       setOpenMenuId(null)
-                      try {
-                        await previewInvoicePDF(invoice, companySettings, branding, branches)
-                      } catch (error) {
-                        console.error('Error al generar vista previa:', error)
-                        toast.error(`Error al generar vista previa: ${error.message}`)
+                      if (!companySettings?.ruc) {
+                        toast.error('Configura los datos de tu empresa primero')
+                        return
                       }
+                      handlePrintTicket(invoice)
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
                     <Printer className="w-4 h-4 text-purple-600" />
-                    <span>Vista previa / Imprimir</span>
+                    <span>Imprimir ticket</span>
                   </button>
 
                   {/* Descargar PDF */}
