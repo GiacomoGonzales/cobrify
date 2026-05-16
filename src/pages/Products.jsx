@@ -171,6 +171,15 @@ const getRealStockValue = (product) => {
   return product.stock || 0
 }
 
+// Formatea un valor de stock para mostrar: enteros como tal, decimales redondeados a 2.
+// Evita basura tipo "2.629999999999999" en pantalla.
+const formatStock = (value) => {
+  if (value === null || value === undefined || value === '') return value
+  const n = Number(value)
+  if (!Number.isFinite(n)) return value
+  return Number.isInteger(n) ? n : parseFloat(n.toFixed(2))
+}
+
 // Get all descendant category IDs (children, grandchildren, etc.)
 const getAllDescendantCategoryIds = (categories, parentId) => {
   const descendants = []
@@ -4319,7 +4328,7 @@ export default function Products() {
                                   <span className={`font-medium text-sm ${
                                     variantStock > (product?.minStock ?? 3) ? 'text-green-600' : variantStock > 0 ? 'text-yellow-600' : 'text-red-600'
                                   }`}>
-                                    {variantStock}
+                                    {formatStock(variantStock)}
                                   </span>
                                 )
                               })() : (() => {
@@ -4334,7 +4343,7 @@ export default function Products() {
                                         : 'text-red-600'
                                     }`}
                                   >
-                                    {realStock}
+                                    {formatStock(realStock)}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400 text-xs">N/A</span>
@@ -4638,7 +4647,7 @@ export default function Products() {
                                                       : 'text-red-600'
                                                   }`}
                                                 >
-                                                  {stock}
+                                                  {formatStock(stock)}
                                                 </span>
                                               </div>
                                             )
@@ -4663,7 +4672,7 @@ export default function Products() {
                                               {branch?.name || 'Sucursal sin nombre'}
                                             </span>
                                             <Badge variant="secondary" className="text-xs ml-2">
-                                              {branchTotal} total
+                                              {formatStock(branchTotal)} total
                                             </Badge>
                                           </div>
                                           <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -4696,7 +4705,7 @@ export default function Products() {
                                                         : 'text-red-600'
                                                     }`}
                                                   >
-                                                    {stock}
+                                                    {formatStock(stock)}
                                                   </span>
                                                 </div>
                                               )
@@ -6223,7 +6232,7 @@ export default function Products() {
                                       <td className="px-2 py-2 text-gray-600">{variant.price4 ? formatCurrency(variant.price4) : '-'}</td>
                                     </>
                                   )}
-                                  <td className="px-2 py-2">{variant.stock ?? 'N/A'}</td>
+                                  <td className="px-2 py-2">{variant.stock !== null && variant.stock !== undefined ? formatStock(variant.stock) : 'N/A'}</td>
                                   <td className="px-2 py-2">
                                     <div className="flex gap-1">
                                       <button
@@ -6501,7 +6510,7 @@ export default function Products() {
                                 ws.stock > 0 ? 'text-yellow-600' :
                                 'text-red-600'
                               }`}>
-                                {ws.stock}
+                                {formatStock(ws.stock)}
                               </span>
                             </div>
                           )
@@ -6717,7 +6726,7 @@ export default function Products() {
                         {variant.stock !== undefined && (
                           <div>
                             <span className="text-xs text-gray-500">Stock:</span>
-                            <p className="font-medium">{variant.stock}</p>
+                            <p className="font-medium">{formatStock(variant.stock)}</p>
                           </div>
                         )}
                       </div>
