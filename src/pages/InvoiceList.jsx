@@ -167,6 +167,8 @@ export default function InvoiceList() {
   // Cuando true: se muestran SOLO los archivados (para revisarlos o desarchivarlos).
   const [showArchived, setShowArchived] = useState(false)
   const [isBulkArchiving, setIsBulkArchiving] = useState(false)
+  const [isBulkSendingSunat, setIsBulkSendingSunat] = useState(false)
+  const [bulkSunatProgress, setBulkSunatProgress] = useState({ current: 0, total: 0 })
   const [filterSeller, setFilterSeller] = useState('all')
   const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
@@ -1446,6 +1448,70 @@ Gracias por tu preferencia.`
     } finally {
       setIsBulkArchiving(false)
     }
+  }
+
+  // Estados SUNAT que se consideran "reenviables" (el comprobante no llegó a aceptarse).
+  const REENVIABLE_SUNAT_STATUSES = ['pending', 'rejected', 'signed', 'SIGNED']
+  // Solo factura/boleta/nota_credito se envían a SUNAT. Nota de venta no aplica.
+  const SUNAT_DOC_TYPES = ['factura', 'boleta', 'nota_credito']
+
+  const isReenviableASunat = (inv) =>
+    SUNAT_DOC_TYPES.includes(inv.documentType) &&
+    REENVIABLE_SUNAT_STATUSES.includes(inv.sunatStatus)
+
+  // === Reenvío masivo a SUNAT ===
+  const handleBulkSendToSunat = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    if (!user?.uid || selectedInvoiceIds.size === 0) return
+
+    const selectedInvs = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
+    const reenviables = selectedInvs.filter(isReenviableASunat)
+
+    if (reenviables.length === 0) {
+      toast.error('Ninguno de los comprobantes seleccionados puede reenviarse a SUNAT')
+      return
+    }
+
+    const omitidos = selectedInvs.length - reenviables.length
+    setIsBulkSendingSunat(true)
+    setBulkSunatProgress({ current: 0, total: reenviables.length })
+
+    const businessId = getBusinessId()
+    let sent = 0
+    let errors = 0
+
+    for (let i = 0; i < reenviables.length; i++) {
+      setBulkSunatProgress({ current: i + 1, total: reenviables.length })
+      const inv = reenviables[i]
+      try {
+        const result = inv.documentType === 'nota_credito'
+          ? await sendCreditNoteToSunat(businessId, inv.id)
+          : await sendInvoiceToSunat(businessId, inv.id)
+
+        if (result?.success) sent++
+        else errors++
+      } catch (e) {
+        console.error(`Error reenviando ${inv.number || inv.id} a SUNAT:`, e)
+        errors++
+      }
+    }
+
+    const omitidosMsg = omitidos > 0 ? ` (${omitidos} omitidos)` : ''
+    if (errors === 0) {
+      toast.success(`${sent} comprobante(s) reenviado(s) a SUNAT${omitidosMsg}`, 5000)
+    } else if (sent === 0) {
+      toast.error(`No se pudo reenviar ningún comprobante (${errors} con error)`, 5000)
+    } else {
+      toast.error(`${sent} reenviado(s), ${errors} con error${omitidosMsg}`, 5000)
+    }
+
+    setIsBulkSendingSunat(false)
+    setBulkSunatProgress({ current: 0, total: 0 })
+    clearSelection()
+    loadInvoices()
   }
 
   const handleBulkConvertNotasVenta = () => {
@@ -2843,6 +2909,7 @@ Gracias por tu preferencia.`
         const allAreConvertibleNotas = selectedInvs.length > 0 && selectedInvs.every(
           inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
         )
+        const reenviablesCount = selectedInvs.filter(isReenviableASunat).length
         return (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-gray-900 text-white rounded-xl shadow-2xl px-3 py-2 sm:px-5 sm:py-3 flex items-center gap-2 sm:gap-4 max-w-[calc(100vw-2rem)] print:hidden">
           <span className="text-xs sm:text-sm font-medium whitespace-nowrap">
@@ -2859,9 +2926,31 @@ Gracias por tu preferencia.`
               <span className="sm:hidden">Convertir</span>
             </Button>
           )}
+          {reenviablesCount > 0 && (
+            <Button
+              onClick={handleBulkSendToSunat}
+              disabled={isBulkSendingSunat || isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving}
+              className="bg-purple-500 text-white hover:bg-purple-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
+              title={`Reenviar ${reenviablesCount} comprobante(s) pendiente(s)/rechazado(s) a SUNAT`}
+            >
+              {isBulkSendingSunat ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="hidden sm:inline">Reenviando {bulkSunatProgress.current}/{bulkSunatProgress.total}...</span>
+                  <span className="sm:hidden">{bulkSunatProgress.current}/{bulkSunatProgress.total}</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span className="hidden sm:inline">Reenviar a SUNAT ({reenviablesCount})</span>
+                  <span className="sm:hidden">SUNAT ({reenviablesCount})</span>
+                </>
+              )}
+            </Button>
+          )}
           <Button
             onClick={handleBulkPrintTickets}
-            disabled={isBulkPrinting || isBulkDownloadingPDF}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
             className="bg-white text-gray-900 hover:bg-gray-100 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
           >
             {isBulkPrinting ? (
@@ -2880,7 +2969,7 @@ Gracias por tu preferencia.`
           </Button>
           <Button
             onClick={handleBulkDownloadPDFs}
-            disabled={isBulkPrinting || isBulkDownloadingPDF}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
             className="bg-blue-500 text-white hover:bg-blue-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
           >
             {isBulkDownloadingPDF ? (
@@ -2899,7 +2988,7 @@ Gracias por tu preferencia.`
           </Button>
           <Button
             onClick={() => handleBulkArchive(!showArchived)}
-            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving || isBulkSendingSunat}
             className="bg-amber-500 text-white hover:bg-amber-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
             title={showArchived ? 'Desarchivar seleccionados' : 'Archivar seleccionados (se ocultan y no suman al total)'}
           >
@@ -2914,7 +3003,7 @@ Gracias por tu preferencia.`
           </Button>
           <button
             onClick={clearSelection}
-            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving}
+            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving || isBulkSendingSunat}
             className="text-gray-400 hover:text-white transition-colors p-1"
             title="Cancelar selección"
           >
