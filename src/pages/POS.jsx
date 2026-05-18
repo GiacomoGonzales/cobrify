@@ -4288,7 +4288,10 @@ export default function POS() {
     // Validar que se haya cubierto el monto a pagar (total o parcial)
     // EXCEPCIÓN: Si es venta al crédito, no requiere pago inmediato
     // EXCEPCIÓN: Si hidePaymentMethods está activo, se asume pago completo en efectivo
-    if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay) {
+    // Tolerancia de medio centavo para evitar falsos negativos por imprecisión de
+    // punto flotante (p.ej. 27.9 + 46.80 = 74.69999... < 74.70 en JS).
+    const PAYMENT_EPSILON = 0.005
+    if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay - PAYMENT_EPSILON) {
       abortCheckout(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
@@ -8597,7 +8600,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <span className="text-gray-600">Total pagado:</span>
                         <span className="font-semibold text-gray-900">{formatCurrency(totalPaid, currency)}</span>
                       </div>
-                      {remaining !== 0 && (
+                      {Math.abs(remaining) >= 0.005 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">{remaining > 0 ? 'Falta:' : 'Cambio:'}</span>
                           <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
