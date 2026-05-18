@@ -1018,6 +1018,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             )
           }
         })()}
+        {/* Vuelto: cuando el cliente pagó más que el total */}
+        {Number(invoice.change) > 0 && (
+          <div className="info-row" style={{ marginTop: '4px' }}>
+            <span className="info-label">Vuelto:</span>
+            <span style={{ fontWeight: 'bold' }}>{formatCurrency(Number(invoice.change))}</span>
+          </div>
+        )}
       </div>
 
       {/* Condiciones de Pago para Facturas al Crédito */}

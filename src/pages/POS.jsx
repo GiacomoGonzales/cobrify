@@ -4507,6 +4507,10 @@ export default function POS() {
           recargoConsumoRate: amounts.recargoConsumoRate || 0,
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+          // Vuelto (cambio que se devuelve al cliente). Solo aplica a pagos al contado.
+          change: (!isCreditSaleDemo && totalPaid > amounts.total)
+            ? Math.round((totalPaid - amounts.total) * 100) / 100
+            : 0,
           status: isCreditSaleDemo ? 'pending' : 'paid',
           notes: generalNotes || '',
           sunatStatus: 'not_applicable',
@@ -4628,6 +4632,13 @@ export default function POS() {
       const balance = isCreditSaleForInvoice ? amounts.total : (isPartialPayment ? amounts.total - amountPaid : 0)
       const paymentStatus = isCreditSaleForInvoice ? 'pending' : (isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed')
 
+      // Vuelto: solo aplica a pagos al contado (no crédito, no parcial) cuando el cliente
+      // pagó más que el total. totalPaid viene del state del POS y refleja exactamente lo
+      // que ingresó el cajero (NO el monto recortado a allPayments por effectiveAmount).
+      const change = (!isCreditSaleForInvoice && !isPartialPayment && totalPaid > amounts.total)
+        ? Math.round((totalPaid - amounts.total) * 100) / 100
+        : 0
+
       console.log('🧾 [POS] Datos de pago parcial calculados:', {
         documentType,
         enablePartialPayment,
@@ -4733,6 +4744,8 @@ export default function POS() {
         payments: allPayments,
         // Guardar el primer método como principal para compatibilidad
         paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+        // Vuelto (cambio que se devuelve al cliente, si pagó más que el total)
+        change,
         status: isCreditSaleForInvoice ? 'pending' : 'paid',
         // Datos de pago parcial (notas de venta y facturas al crédito)
         ...((documentType === 'nota_venta' || isCreditSaleForFactura) && {

@@ -3855,6 +3855,16 @@ Gracias por tu preferencia.`
               </div>
             )}
 
+            {/* ========== VUELTO ========== */}
+            {Number(viewingInvoice.change) > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+                <p className="text-sm font-semibold text-blue-800">Vuelto entregado al cliente</p>
+                <p className="text-base font-bold text-blue-900">
+                  {formatCurrency(Number(viewingInvoice.change), viewingInvoice.currency)}
+                </p>
+              </div>
+            )}
+
             {/* ========== NOTAS ========== */}
             {viewingInvoice.notes && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">

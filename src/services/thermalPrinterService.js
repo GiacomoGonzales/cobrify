@@ -1165,6 +1165,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       } else if (invoice.paymentMethod) {
         printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: S/ ${(invoice.total || 0).toFixed(2)}\n`));
       }
+
+      // Vuelto: solo si el cliente pagó más que el total (pagos al contado, no crédito)
+      if (Number(invoice.change) > 0) {
+        printer = printer
+          .bold()
+          .text(convertSpanishText(`Vuelto: S/ ${Number(invoice.change).toFixed(2)}\n`))
+          .clearFormatting();
+      }
     }
 
     // ========== Estado de Pago para Notas de Venta (parcial/crédito) ==========

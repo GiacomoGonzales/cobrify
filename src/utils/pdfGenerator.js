@@ -1728,6 +1728,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += totalsRowHeight + 6
   }
 
+  // Fila: VUELTO (si el cliente pagó más que el total y se registró cambio)
+  if (Number(invoice.change) > 0) {
+    doc.setFillColor(250, 250, 250) // Mismo gris claro neutro que las otras filas
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setTextColor(...DARK_GRAY)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text('VUELTO', totalsX + 5, footerY + 10)
+    doc.text(CCY + ' ' + Number(invoice.change).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    footerY += totalsRowHeight
+  }
+
   // --- CUENTAS BANCARIAS (izquierda) con borde ---
   doc.setTextColor(...BLACK)
 
