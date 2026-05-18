@@ -362,6 +362,18 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
   }
 
+  // Observaciones libres del usuario (campo "Observaciones" del POS).
+  // SUNAT muestra este cbc:Note en su visualizador siempre y cuando:
+  //   1. Esté envuelto en CDATA (.dat() en xmlbuilder2)
+  //   2. Tenga máximo 100 caracteres alfanuméricos
+  //   3. Tenga atributo languageLocaleID con código del Catálogo 52
+  //      (2008 = DETALLE DE LA OPERACIÓN, usado para observaciones libres)
+  const userNotes = (invoiceData.notes || invoiceData.observaciones || '').toString().trim()
+  if (userNotes && !isNote) {
+    // Solo para facturas/boletas. Para NC/ND, el motivo va en cac:DiscrepancyResponse.
+    root.ele('cbc:Note', { 'languageLocaleID': '2008' }).dat(userNotes.slice(0, 100))
+  }
+
   // Moneda
   root.ele('cbc:DocumentCurrencyCode', {
     'listID': 'ISO 4217 Alpha',
@@ -625,23 +637,21 @@ export function generateInvoiceXML(invoiceData, businessData) {
     ? invoiceData.globalDiscount
     : Math.max(0, (invoiceData.discount || 0) - itemDiscountsSum)
 
-  // Calcular la suma total CON IGV para obtener el factor de descuento
-  // Usamos el total con IGV para que el factor funcione correctamente con tasas mixtas (18%/10%)
-  let sumTotalWithIGV = 0
-  invoiceData.items.forEach((item) => {
-    sumTotalWithIGV += item.quantity * item.unitPrice
-  })
-  sumTotalWithIGV = Math.round(sumTotalWithIGV * 100) / 100
+  // === DESCUENTO GLOBAL (código 02) ===
+  // Cambio importante (alineado con Greenter / SUNAT factura-descuento-global.php):
+  // El descuento global se declara como cac:AllowanceCharge a nivel documento con
+  // código 02 (afecta base imponible). Las líneas NO se "encogen" proporcionalmente
+  // por el global — mantienen su valor con itemDiscount aplicado, sin tocar global.
+  // El total del documento (LegalMonetaryTotal.LineExtensionAmount) = suma líneas - globalBase.
+  // De esa forma:
+  // 1. Cada descuento (línea y global) queda registrado explícitamente en el XML
+  // 2. PDF y XML cuadran exactamente (ya no hay pérdida por "doble distribución")
+  // 3. Un auditor/contador ve cada concepto por separado
+  //
+  // Antes existía un discountFactor que se aplicaba a cada lineTotalWithIGV; ahora
+  // es 0 siempre y la distribución del global ocurre solo a nivel documento.
 
-  // Factor de descuento (proporción del descuento sobre el total con IGV)
-  const discountFactor = discountWithIGV > 0 && sumTotalWithIGV > 0
-    ? discountWithIGV / sumTotalWithIGV
-    : 0
-
-  // Calcular LineExtensionAmount de cada item CON descuento proporcional aplicado
-  // Esto evita los errores 4309/4310 porque:
-  // - Suma de LineExtensionAmount de líneas = LineExtensionAmount global
-  // - Suma de IGV de líneas = IGV global
+  // Calcular LineExtensionAmount de cada item con itemDiscount aplicado (sin global)
   // También guardamos los precios ajustados para evitar errores 4287/4288
   const lineExtensions = []          // LineExtensionAmount por línea (base DESPUÉS de item discount; 0 para bonificación)
   const lineIGVs = []                // IGV por línea (sobre el LineExtensionAmount; 0 para bonificación)
@@ -718,28 +728,25 @@ export function generateInvoiceXML(invoiceData, businessData) {
       effectivePriceWithIGV = item.quantity > 0 ? taxableRef / item.quantity : 0
     } else {
       // Total CON IGV: restar descuento por ítem ANTES de dividir por tasa
+      // El descuento global NO se aplica a las líneas — va como AllowanceCharge a nivel documento.
       const lineTotalWithIGV = item.quantity * originalPriceWithIGV - itemDiscount
-
-      // Si hay descuento GLOBAL, aplicarlo proporcionalmente
-      const adjustedLineTotalWithIGV = lineTotalWithIGV * (1 - discountFactor)
 
       // Calcular subtotal sin IGV (base imponible) = LineExtensionAmount
       lineTotal = isGravadoOneroso
-        ? Math.round((adjustedLineTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
-        : Math.round(adjustedLineTotalWithIGV * 100) / 100
+        ? Math.round((lineTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
+        : Math.round(lineTotalWithIGV * 100) / 100
 
       // IGV = Total con IGV - Subtotal sin IGV (esto garantiza que cuadre)
       lineIGV = isGravadoOneroso
-        ? Math.round((adjustedLineTotalWithIGV - lineTotal) * 100) / 100
+        ? Math.round((lineTotalWithIGV - lineTotal) * 100) / 100
         : 0
 
       // Descuento por ítem convertido a BASE (sin IGV) para AllowanceCharge en XML
       itemDiscountBase = 0
       if (itemDiscount > 0) {
-        const itemDiscountAfterGlobal = itemDiscount * (1 - discountFactor)
         itemDiscountBase = isGravadoOneroso
-          ? Math.round(itemDiscountAfterGlobal / (1 + itemIgvMultiplier) * 100) / 100
-          : Math.round(itemDiscountAfterGlobal * 100) / 100
+          ? Math.round(itemDiscount / (1 + itemIgvMultiplier) * 100) / 100
+          : Math.round(itemDiscount * 100) / 100
       }
 
       // AlternativeConditionPrice: precio unitario CON IGV DESPUÉS del descuento por ítem
@@ -795,23 +802,47 @@ export function generateInvoiceXML(invoiceData, businessData) {
   sumBonificadas = Math.round(sumBonificadas * 100) / 100
   sumIGVBonificadas = Math.round(sumIGVBonificadas * 100) / 100
 
-  // Los valores globales ahora coinciden exactamente con la suma de líneas
-  const taxableAmount = sumLineExtension
-  const igvAmount = sumLineIGV
+  // === DESCUENTO GLOBAL (código 02) ===
+  // Convertir el descuento global (que viene del POS CON IGV) a base imponible (sin IGV).
+  // Aplica solo a operaciones gravadas onerosas. Después se declarará como
+  // cac:AllowanceCharge a nivel documento (después de PaymentTerms, antes de TaxTotal).
+  //
+  // Para tasas mixtas (10.5% y 18%): la regla SUNAT 3462 obliga a usar una sola tasa
+  // por documento, así que igvMultiplier es siempre la tasa global del negocio.
+  let globalDiscountBase = 0
+  let globalDiscountIGV = 0
+  if (discountWithIGV > 0 && sumGravadas > 0) {
+    globalDiscountBase = Math.round((discountWithIGV / (1 + igvMultiplier)) * 100) / 100
+    globalDiscountIGV = Math.round((discountWithIGV - globalDiscountBase) * 100) / 100
+    // Acotar al máximo de la base gravada disponible (defensivo)
+    if (globalDiscountBase > sumGravadas) globalDiscountBase = sumGravadas
+    if (globalDiscountIGV > sumIGVGravadas) globalDiscountIGV = sumIGVGravadas
+
+    // Reducir la base gravada y su IGV correspondiente para que el TaxSubtotal del
+    // documento refleje el efecto del descuento global.
+    sumGravadas = Math.round((sumGravadas - globalDiscountBase) * 100) / 100
+    sumIGVGravadas = Math.round((sumIGVGravadas - globalDiscountIGV) * 100) / 100
+  }
+
+  // Los valores globales ya incorporan el descuento por línea; el descuento global
+  // se resta a nivel documento.
+  const taxableAmount = Math.round((sumLineExtension - globalDiscountBase) * 100) / 100
+  const igvAmount = Math.round((sumLineIGV - globalDiscountIGV) * 100) / 100
   const totalAmount = Math.round((taxableAmount + igvAmount) * 100) / 100
 
   // DEBUG: Log de valores calculados
-  console.log('🧮 XML Generator - Cálculos SUNAT (descuento distribuido en líneas):')
+  console.log('🧮 XML Generator - Cálculos SUNAT:')
   console.log(`   Items count: ${invoiceData.items.length}`)
-  console.log(`   sumTotalWithIGV (suma ANTES de descuento): ${sumTotalWithIGV}`)
-  console.log(`   discountWithIGV (desde POS): ${discountWithIGV}`)
-  console.log(`   discountFactor aplicado: ${(discountFactor * 100).toFixed(2)}%`)
-  console.log(`   LineExtensions por item (YA con descuento): ${JSON.stringify(lineExtensions)}`)
+  console.log(`   discountWithIGV (global, con IGV): ${discountWithIGV}`)
+  console.log(`   globalDiscountBase (sin IGV, código 02): ${globalDiscountBase}`)
+  console.log(`   globalDiscountIGV: ${globalDiscountIGV}`)
+  console.log(`   LineExtensions por item (con item discount, SIN global): ${JSON.stringify(lineExtensions)}`)
   console.log(`   LineIGVs por item: ${JSON.stringify(lineIGVs)}`)
-  console.log(`   sumLineExtension (taxableAmount): ${sumLineExtension}`)
-  console.log(`   sumLineIGV (igvAmount): ${sumLineIGV}`)
+  console.log(`   sumLineExtension (suma líneas, antes de global): ${sumLineExtension}`)
+  console.log(`   taxableAmount (con global aplicado): ${taxableAmount}`)
+  console.log(`   igvAmount (con global aplicado): ${igvAmount}`)
   console.log(`   totalAmount: ${totalAmount}`)
-  console.log(`   📊 Por tipo de afectación:`)
+  console.log(`   📊 Por tipo de afectación (post descuento global):`)
   console.log(`      Gravadas (10): ${sumGravadas} | IGV: ${sumIGVGravadas}`)
   console.log(`      Exoneradas (20): ${sumExoneradas}`)
   console.log(`      Inafectas (30): ${sumInafectas}`)
@@ -823,6 +854,20 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const recargoConsumo = invoiceData.recargoConsumo || 0
   const recargoConsumoRate = invoiceData.recargoConsumoRate || 0
   const currency = invoiceData.currency || 'PEN'
+
+  // === DESCUENTO GLOBAL (Catálogo 53 código 02) ===
+  // Se declara como cac:AllowanceCharge a nivel documento con ChargeIndicator=false.
+  // Sigue el patrón Greenter factura-descuento-global.php: Factor=1, BaseAmount=Amount.
+  // SUNAT lo identifica como descuento que afecta la base imponible del IGV.
+  if (globalDiscountBase > 0) {
+    const allowanceChargeGlobal = root.ele('cac:AllowanceCharge')
+    allowanceChargeGlobal.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+    allowanceChargeGlobal.ele('cbc:AllowanceChargeReasonCode').txt('02') // 02 = Descuento global afecta base IGV
+    allowanceChargeGlobal.ele('cbc:MultiplierFactorNumeric').txt('1.00000')
+    allowanceChargeGlobal.ele('cbc:Amount', { 'currencyID': currency }).txt(globalDiscountBase.toFixed(2))
+    allowanceChargeGlobal.ele('cbc:BaseAmount', { 'currencyID': currency }).txt(globalDiscountBase.toFixed(2))
+    console.log(`✅ AllowanceCharge global (código 02) agregado: ${globalDiscountBase.toFixed(2)} (sin IGV)`)
+  }
 
   if (recargoConsumo > 0) {
     // === RECARGO AL CONSUMO según especificación SUNAT UBL 2.1 ===
@@ -911,27 +956,29 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // === TOTALES ===
   // IMPORTANTE: LegalMonetaryTotal DEBE ir DESPUÉS de TaxTotal y ANTES de InvoiceLine
-  // El orden de los elementos es CRÍTICO según el esquema XSD UBL 2.1 de SUNAT:
-  // LineExtensionAmount -> TaxExclusiveAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> ChargeTotalAmount -> PayableAmount
+  // Orden UBL 2.1 SUNAT:
+  // LineExtensionAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> ChargeTotalAmount -> PayableAmount
 
-  // El total final incluye: subtotal + IGV + Recargo al Consumo (si aplica)
+  // El total final incluye: base + IGV + Recargo al Consumo (si aplica)
   const finalTotal = totalAmount + recargoConsumo
 
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
 
-  // Con el nuevo enfoque (descuento distribuido en líneas):
-  // - LineExtensionAmount = suma de LineExtensionAmount de cada línea (YA con descuento aplicado)
-  // - TaxInclusiveAmount = LineExtensionAmount + IGV + ChargeTotalAmount
-  // - ChargeTotalAmount = Recargo al Consumo (si aplica) - VA DESPUÉS de TaxInclusiveAmount según UBL 2.1
-  // - PayableAmount = TaxInclusiveAmount
-
-  // 1. LineExtensionAmount = suma de líneas (ya tienen el descuento proporcional aplicado)
+  // 1. LineExtensionAmount = suma de líneas - descuento global (sin IGV)
+  //    Las líneas mantienen su valor original (con itemDiscount, sin global). El global
+  //    se resta a este nivel y se declara aparte como AllowanceCharge código 02.
+  const docLineExtensionAmount = Math.round((sumLineExtension - globalDiscountBase) * 100) / 100
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(sumLineExtension.toFixed(2))
+    .txt(docLineExtensionAmount.toFixed(2))
 
   // 2. TaxInclusiveAmount - Total impuestos incluidos (incluye RC si aplica)
   legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(finalTotal.toFixed(2))
+
+  // NOTA: Para descuentos código 02 (afectan base imponible) NO se debe declarar
+  // cbc:AllowanceTotalAmount aquí — el descuento ya está reflejado en LineExtensionAmount.
+  // SUNAT lo restaría doble del PayableAmount (warning 4307 / 4312).
+  // AllowanceTotalAmount se reserva para descuentos código 03 (no afectan base / no facturables).
 
   // 3. ChargeTotalAmount = Recargo al Consumo (solo si hay) - DEBE ir después de TaxInclusiveAmount
   if (recargoConsumo > 0) {
@@ -989,15 +1036,24 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt(isBonifLine ? '02' : '01') // 01=Precio unitario (con IGV), 02=Valor referencial en operación no onerosa
 
     // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
-    // AllowanceCharge.Amount debe estar SIN IGV (valor base)
+    // AllowanceCharge.Amount debe estar SIN IGV (valor base).
     // Fórmula validación 4288: LineExtensionAmount = (Qty × PriceAmount) - AllowanceCharge.Amount
-    // NO se incluye AllowanceCharge en bonificaciones (la bonificación NO es un descuento, es un regalo)
+    // SUNAT requiere MultiplierFactorNumeric y BaseAmount para mostrar el descuento en el
+    // visualizador (sin ellos solo cuadra matemáticamente pero "Descuento" aparece en 0.00).
+    // NO se incluye AllowanceCharge en bonificaciones (la bonificación NO es un descuento, es un regalo).
     if (itemDiscountBase > 0 && !isBonifLine) {
+      // BaseAmount = qty × precio_sin_IGV_original = LineExtensionAmount + AllowanceCharge.Amount
+      // (fórmula 4288 invertida: si LineExt = Qty×Price - Allow, entonces Qty×Price = LineExt + Allow)
+      const lineBaseAmount = Math.round((lineTotal + itemDiscountBase) * 100) / 100
+      const lineFactor = lineBaseAmount > 0 ? itemDiscountBase / lineBaseAmount : 0
       const lineAllowanceCharge = invoiceLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
       lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
+      lineAllowanceCharge.ele('cbc:MultiplierFactorNumeric').txt(lineFactor.toFixed(5))
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
         .txt(itemDiscountBase.toFixed(2))
+      lineAllowanceCharge.ele('cbc:BaseAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+        .txt(lineBaseAmount.toFixed(2))
     }
 
     // Impuesto de la línea
@@ -1193,6 +1249,15 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   // Fecha de emisión
   root.ele('cbc:IssueDate').txt(issueDate)
 
+  // Observaciones libres del usuario (cbc:Note a nivel documento).
+  // En NC, el motivo va aparte en cac:DiscrepancyResponse — esto es para notas
+  // adicionales (ej. observaciones del POS) que aparezcan en el visualizador SUNAT.
+  // Requiere languageLocaleID="2008" + CDATA + máx 100 chars para que SUNAT lo muestre.
+  const cnUserNotes = (creditNoteData.notes || creditNoteData.observaciones || '').toString().trim()
+  if (cnUserNotes && cnUserNotes !== (creditNoteData.discrepancyReason || '').toString().trim()) {
+    root.ele('cbc:Note', { 'languageLocaleID': '2008' }).dat(cnUserNotes.slice(0, 100))
+  }
+
   // Moneda
   root.ele('cbc:DocumentCurrencyCode', {
     'listID': 'ISO 4217 Alpha',
@@ -1284,18 +1349,20 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   // NOTA: Las notas de crédito NO llevan PaymentTerms según UBL 2.1
   // El nodo PaymentTerms es solo para facturas/boletas, no para documentos de ajuste
 
-  // === DESCUENTO GLOBAL ===
+  // === DESCUENTO GLOBAL (Catálogo 53 código 02) ===
+  // Patrón Greenter: AllowanceCharge a nivel documento con código 02
+  // (descuento global que afecta la base imponible del IGV).
+  // En NC, creditNoteData.discount ya viene SIN IGV (espacio de base imponible).
   const creditDiscount = creditNoteData.discount || 0
   if (creditDiscount > 0) {
-    const subtotalBeforeDiscount = creditNoteData.subtotalBeforeDiscount || (creditNoteData.subtotal + creditDiscount)
-
     const allowanceCharge = root.ele('cac:AllowanceCharge')
     allowanceCharge.ele('cbc:ChargeIndicator').txt('false')
-    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00')
+    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('02') // 02 = Descuento global afecta base IGV
+    allowanceCharge.ele('cbc:MultiplierFactorNumeric').txt('1.00000')
     allowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(creditDiscount.toFixed(2))
     allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(subtotalBeforeDiscount.toFixed(2))
+      .txt(creditDiscount.toFixed(2))
   }
 
   // === BONIFICACIÓN (Catálogo 07 código 15) ===
@@ -1456,10 +1523,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
     .txt(creditNoteData.total.toFixed(2))
 
-  if (creditDiscount > 0) {
-    legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(creditDiscount.toFixed(2))
-  }
+  // NOTA: Para descuentos código 02 (afectan base) NO se declara cbc:AllowanceTotalAmount
+  // — ya está reflejado en LineExtensionAmount. SUNAT lo restaría doble del PayableAmount.
 
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
     .txt(creditNoteData.total.toFixed(2))
@@ -1527,13 +1592,19 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt(isBonifLine ? '02' : '01')
 
     // === DESCUENTO POR ÍTEM (AllowanceCharge) ===
-    // No se incluye en bonificaciones (la bonificación NO es un descuento)
+    // SUNAT requiere MultiplierFactorNumeric y BaseAmount para mostrar el descuento en el visualizador.
+    // No se incluye en bonificaciones (la bonificación NO es un descuento).
     if (itemDiscount > 0 && !isBonifLine) {
+      const cnLineBaseAmount = Math.round((item.quantity * priceWithoutIGV) * 100) / 100
+      const cnLineFactor = cnLineBaseAmount > 0 ? parseFloat(itemDiscount) / cnLineBaseAmount : 0
       const lineAllowanceCharge = creditNoteLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
       lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible
+      lineAllowanceCharge.ele('cbc:MultiplierFactorNumeric').txt(cnLineFactor.toFixed(5))
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
         .txt(parseFloat(itemDiscount).toFixed(2))
+      lineAllowanceCharge.ele('cbc:BaseAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
+        .txt(cnLineBaseAmount.toFixed(2))
     }
 
     // Impuesto de la línea
