@@ -1775,6 +1775,15 @@ export default function CreatePurchase() {
           const product = products.find(p => p.id === productId)
           if (!product) continue
 
+          // Helper: convertir precio de venta de la moneda de la compra a base (PEN).
+          // product.price/price2/price3/price4 SIEMPRE se guarda en PEN (la moneda base);
+          // si la compra está en USD, hay que dividir por el TC antes de persistir.
+          const salePriceToBase = (raw) => {
+            const v = parseFloat(raw)
+            if (!Number.isFinite(v) || v <= 0) return null
+            return Math.round(convertToBase(v, currency, exchangeRate) * 100) / 100
+          }
+
           if (product.hasVariants && product.variants?.length > 0) {
             // Producto con variantes: leer datos frescos de Firestore para no sobreescribir el stock
             // que fue actualizado en el paso 3 por updateProductStockTransaction
@@ -1783,12 +1792,16 @@ export default function CreatePurchase() {
             const updatedVariants = freshVariants.map(v => {
               const matchingItem = items.find(i => i.variantSku === v.sku)
               if (matchingItem) {
+                const p1 = salePriceToBase(matchingItem.salePrice)
+                const p2 = salePriceToBase(matchingItem.salePrice2)
+                const p3 = salePriceToBase(matchingItem.salePrice3)
+                const p4 = salePriceToBase(matchingItem.salePrice4)
                 return {
                   ...v,
-                  price: matchingItem.salePrice ? parseFloat(matchingItem.salePrice) : v.price,
-                  price2: matchingItem.salePrice2 ? parseFloat(matchingItem.salePrice2) : v.price2,
-                  price3: matchingItem.salePrice3 ? parseFloat(matchingItem.salePrice3) : v.price3,
-                  price4: matchingItem.salePrice4 ? parseFloat(matchingItem.salePrice4) : v.price4,
+                  price: p1 != null ? p1 : v.price,
+                  price2: p2 != null ? p2 : v.price2,
+                  price3: p3 != null ? p3 : v.price3,
+                  price4: p4 != null ? p4 : v.price4,
                 }
               }
               return v
@@ -1802,10 +1815,14 @@ export default function CreatePurchase() {
             // Producto sin variantes
             const item = items[0]
             const updates = {}
-            if (item.salePrice) updates.price = parseFloat(item.salePrice)
-            if (item.salePrice2) updates.price2 = parseFloat(item.salePrice2)
-            if (item.salePrice3) updates.price3 = parseFloat(item.salePrice3)
-            if (item.salePrice4) updates.price4 = parseFloat(item.salePrice4)
+            const p1 = salePriceToBase(item.salePrice)
+            const p2 = salePriceToBase(item.salePrice2)
+            const p3 = salePriceToBase(item.salePrice3)
+            const p4 = salePriceToBase(item.salePrice4)
+            if (p1 != null) updates.price = p1
+            if (p2 != null) updates.price2 = p2
+            if (p3 != null) updates.price3 = p3
+            if (p4 != null) updates.price4 = p4
             if (Object.keys(updates).length > 0) {
               priceUpdates.push(updateProduct(businessId, productId, updates))
             }
@@ -2453,7 +2470,13 @@ export default function CreatePurchase() {
                     <tr className="bg-blue-50/40 border-b border-gray-200">
                       <td colSpan={99} className="px-4 py-1.5">
                         <div className="flex items-center flex-wrap gap-3">
-                          <span className="text-xs font-medium text-blue-600">Precios de venta:</span>
+                          <span className="text-xs font-medium text-blue-600">
+                            Precios de venta
+                            <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">{currency}</span>
+                            {currency !== 'PEN' && (
+                              <span className="ml-2 text-[10px] font-normal text-gray-500">(se guardará convertido a PEN con TC {Number(exchangeRate || 0).toFixed(2)})</span>
+                            )}:
+                          </span>
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</span>
                             <input
@@ -2761,6 +2784,14 @@ export default function CreatePurchase() {
 
                 {/* Precios de venta - móvil */}
                 {businessSettings?.posCustomFields?.showSalePriceInPurchase && (
+                  <>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                    <span>Precios de venta</span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">{currency}</span>
+                    {currency !== 'PEN' && (
+                      <span className="text-[10px] font-normal text-gray-500">→ PEN con TC {Number(exchangeRate || 0).toFixed(2)}</span>
+                    )}
+                  </div>
                   <div className={`grid gap-2 ${businessSettings?.multiplePricesEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     <div>
                       <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</label>
@@ -2815,6 +2846,7 @@ export default function CreatePurchase() {
                       </>
                     )}
                   </div>
+                  </>
                 )}
 
                 {/* Números de serie - móvil */}
