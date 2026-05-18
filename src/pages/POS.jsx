@@ -37,6 +37,7 @@ import {
   Play,
   LayoutGrid,
   List,
+  Gift,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -1747,19 +1748,32 @@ export default function POS() {
         usefulLoadValue: invoice.customer?.usefulLoadValue || '',
       })
 
-      // Cargar items al carrito
+      // Cargar items al carrito.
+      // IMPORTANTE: el campo se llama `itemDiscount` en Firestore (no `discount`).
+      // También hay que rehidratar taxAffectation/igvRate/code/sku para que los
+      // recálculos del POS (incluida la detección de bonificación) reflejen el original.
       const cartItems = (invoice.items || []).map((item, index) => ({
         id: item.productId || `edit-item-${index}`,
         productId: item.productId,
+        code: item.code || item.sku || '',
+        sku: item.sku || item.code || '',
         name: item.name || item.description,
         description: item.description,
         price: item.unitPrice || item.price,
         quantity: item.quantity,
-        discount: item.discount || 0,
-        discountType: item.discountType || 'percent',
+        itemDiscount: item.itemDiscount || item.descuento || 0,
+        itemDiscountType: item.itemDiscountType || 'amount',
         observations: item.observations || '',
         unit: item.unit || 'NIU',
+        taxAffectation: item.taxAffectation || '10',
+        igvRate: item.igvRate,
         igvType: item.igvType || 'gravado',
+        ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
+        ...(item.batchNumber && { batchNumber: item.batchNumber }),
+        ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+        ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
+        ...(item.modifiers && { modifiers: item.modifiers }),
         // Mantener referencia a datos originales
         originalItem: item,
       }))
@@ -1772,13 +1786,27 @@ export default function POS() {
         setDetractionBankAccount(invoice.detractionBankAccount || '')
       }
 
-      // Cargar forma de pago
+      // Cargar forma de pago (crédito/contado)
       if (invoice.paymentType) {
         setPaymentType(invoice.paymentType)
         if (invoice.paymentType === 'credito') {
           setPaymentDueDate(invoice.paymentDueDate || '')
           setPaymentInstallments(invoice.paymentInstallments || [])
         }
+      }
+
+      // Cargar métodos de pago del comprobante.
+      // El payment guardado tiene { method: 'Efectivo' (label traducido), methodKey: 'CASH', amount: number }
+      // El estado del POS espera { method: 'CASH' (key), amount: string }
+      if (invoice.payments && invoice.payments.length > 0) {
+        const formPayments = invoice.payments.map(p => ({
+          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          amount: p.amount != null ? p.amount.toString() : '',
+        }))
+        setPayments(formPayments)
+      } else if (invoice.paymentMethod) {
+        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === invoice.paymentMethod) || ''
+        setPayments([{ method: methodKey, amount: '' }])
       }
 
       // Cargar descuento global
@@ -1876,19 +1904,29 @@ export default function POS() {
         usefulLoadValue: invoice.customer?.usefulLoadValue || '',
       })
 
-      // Cargar items al carrito
+      // Cargar items al carrito (mismo mapeo que en loadInvoiceForEdit)
       const cartItems = (invoice.items || []).map((item, index) => ({
         id: item.productId || `dup-item-${index}`,
         productId: item.productId,
+        code: item.code || item.sku || '',
+        sku: item.sku || item.code || '',
         name: item.name || item.description,
         description: item.description,
         price: item.unitPrice || item.price,
         quantity: item.quantity,
-        discount: item.discount || 0,
-        discountType: item.discountType || 'percent',
+        itemDiscount: item.itemDiscount || item.descuento || 0,
+        itemDiscountType: item.itemDiscountType || 'amount',
         observations: item.observations || '',
         unit: item.unit || 'NIU',
+        taxAffectation: item.taxAffectation || '10',
+        igvRate: item.igvRate,
         igvType: item.igvType || 'gravado',
+        ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
+        ...(item.batchNumber && { batchNumber: item.batchNumber }),
+        ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+        ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
+        ...(item.modifiers && { modifiers: item.modifiers }),
       }))
       setCart(cartItems)
 
@@ -1899,13 +1937,25 @@ export default function POS() {
         setDetractionBankAccount(invoice.detractionBankAccount || '')
       }
 
-      // Cargar forma de pago
+      // Cargar forma de pago (crédito/contado)
       if (invoice.paymentType) {
         setPaymentType(invoice.paymentType)
         if (invoice.paymentType === 'credito') {
           setPaymentDueDate(invoice.paymentDueDate || '')
           setPaymentInstallments(invoice.paymentInstallments || [])
         }
+      }
+
+      // Cargar métodos de pago del comprobante original
+      if (invoice.payments && invoice.payments.length > 0) {
+        const formPayments = invoice.payments.map(p => ({
+          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          amount: p.amount != null ? p.amount.toString() : '',
+        }))
+        setPayments(formPayments)
+      } else if (invoice.paymentMethod) {
+        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === invoice.paymentMethod) || ''
+        setPayments([{ method: methodKey, amount: '' }])
       }
 
       // Cargar descuento global
@@ -7808,6 +7858,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       const displayDiscount = isSerialGroup
                         ? group.members.reduce((s, m) => s + (m.itemDiscount || 0), 0)
                         : (item.itemDiscount || 0)
+                      // Bonificación: descuento iguala el valor total del ítem.
+                      // En SUNAT se declara con afectación 15 (Catálogo 07), tributo 9996 (GRA),
+                      // PriceTypeCode 02. El IGV referencial lo asume el emisor a nivel contable.
+                      const lineTotalWithIGV = item.price * displayQty
+                      const isBonifLine = displayDiscount > 0 &&
+                        Math.abs(lineTotalWithIGV - displayDiscount) < 0.005
                       return (
                       <div key={group.key} className="p-2 sm:p-3 xl:p-4 bg-gray-50 rounded-xl space-y-2 xl:space-y-3 overflow-hidden min-w-0">
                         {/* Fila 1: Imagen + Nombre + Eliminar */}
@@ -7836,6 +7892,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 <p className="font-semibold text-sm xl:text-base text-gray-900 line-clamp-2">
                                   {item.name}
                                 </p>
+                              )}
+                              {isBonifLine && (
+                                <span
+                                  className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200"
+                                  title="Este ítem se envía a SUNAT como Bonificación (afectación 15, tributo 9996). El IGV referencial lo asume tu empresa."
+                                >
+                                  <Gift className="w-3 h-3" />
+                                  Bonificación
+                                </span>
                               )}
                               {item.isVariant && item.variantAttributes && (
                                 <p className="text-sm text-gray-600 mt-0.5">

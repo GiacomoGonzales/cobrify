@@ -599,12 +599,28 @@ export function generateInvoiceXML(invoiceData, businessData) {
     paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
   }
 
+  // === BONIFICACIÓN (Catálogo 07 código 15) ===
+  // Si el descuento por ítem iguala el valor total del ítem (≥ 100%), el ítem se
+  // entrega como bonificación gravada. SUNAT rechaza con error 3105 si se declara
+  // afectación 10 (gravado oneroso) con LineExtensionAmount=0 y TaxAmount=0.
+  // La bonificación se declara con afectación 15, PriceTypeCode 02 y tributo 9996 (GRA).
+  const isBonificacionItem = (item) => {
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount <= 0) return false
+    const lineTotalWithIGV = item.quantity * item.unitPrice
+    return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
+  }
+
   // === DESCUENTO GLOBAL ===
   // IMPORTANTE: Usar solo globalDiscount (descuento global, sin incluir descuentos por ítem).
   // Los descuentos por ítem se manejan como AllowanceCharge en cada línea.
   // Si no existe globalDiscount (facturas antiguas), usar discount como fallback.
   // Pero si hay items con itemDiscount, restar esos del discount total para no contar doble.
-  const itemDiscountsSum = (invoiceData.items || []).reduce((sum, item) => sum + (item.itemDiscount || item.descuento || 0), 0)
+  // Las bonificaciones tampoco cuentan como descuento global (no es un descuento, es un regalo).
+  const itemDiscountsSum = (invoiceData.items || []).reduce((sum, item) => {
+    if (isBonificacionItem(item)) return sum
+    return sum + (item.itemDiscount || item.descuento || 0)
+  }, 0)
   const discountWithIGV = invoiceData.globalDiscount != null
     ? invoiceData.globalDiscount
     : Math.max(0, (invoiceData.discount || 0) - itemDiscountsSum)
@@ -627,85 +643,139 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // - Suma de LineExtensionAmount de líneas = LineExtensionAmount global
   // - Suma de IGV de líneas = IGV global
   // También guardamos los precios ajustados para evitar errores 4287/4288
-  const lineExtensions = []          // LineExtensionAmount por línea (base DESPUÉS de item discount)
-  const lineIGVs = []                // IGV por línea (sobre el LineExtensionAmount)
+  const lineExtensions = []          // LineExtensionAmount por línea (base DESPUÉS de item discount; 0 para bonificación)
+  const lineIGVs = []                // IGV por línea (sobre el LineExtensionAmount; 0 para bonificación)
   const lineIgvRates = []            // IGV rate used per line (for XML Percent)
-  const lineTaxAffectations = []     // Tipo de afectación de cada línea
+  const lineTaxAffectations = []     // Tipo de afectación de cada línea (10, 15, 20, 30...)
   const linePricesWithIGV = []       // AlternativeConditionPrice: precio unitario CON IGV DESPUÉS de item discount
-  const lineItemDiscountBases = []   // Descuento por ítem SIN IGV (para AllowanceCharge)
+  const lineItemDiscountBases = []   // Descuento por ítem SIN IGV (para AllowanceCharge; 0 para bonificación)
+  const lineIsBonificacion = []      // True si la línea es bonificación (afectación 15)
+  const lineTaxableRef = []          // Valor referencial SIN IGV de bonificación (para TaxSubtotal); = lineTotal para no-bonificación
+  const lineIGVRef = []              // IGV referencial de bonificación (para TaxSubtotal); = lineIGV para no-bonificación
   let sumLineExtension = 0
   let sumLineIGV = 0
 
   // Totales por tipo de afectación (para múltiples TaxSubtotals)
-  let sumGravadas = 0      // Operaciones gravadas (taxAffectation = '10')
+  let sumGravadas = 0      // Operaciones gravadas onerosas (taxAffectation = '10')
   let sumExoneradas = 0    // Operaciones exoneradas (taxAffectation = '20')
   let sumInafectas = 0     // Operaciones inafectas (taxAffectation = '30')
-  let sumIGVGravadas = 0   // IGV solo de operaciones gravadas
+  let sumIGVGravadas = 0   // IGV solo de operaciones gravadas onerosas
+  let sumBonificadas = 0   // Valor referencial SIN IGV de bonificaciones (afectación = '15')
+  let sumIGVBonificadas = 0 // IGV referencial de bonificaciones (no se cobra al cliente)
 
   invoiceData.items.forEach((item) => {
+    const isBonifLine = isBonificacionItem(item)
+
     // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado
-    const taxAffectation = igvExempt ? '20' : (item.taxAffectation || '10')
-    const isGravado = taxAffectation === '10'
+    //        Si el ítem es bonificación (descuento del 100%) → FORZAR afectación 15 (gravado bonificación)
+    let taxAffectation
+    if (isBonifLine) {
+      taxAffectation = '15'  // Gravado - Bonificaciones (Catálogo 07)
+    } else if (igvExempt) {
+      taxAffectation = '20'
+    } else {
+      taxAffectation = item.taxAffectation || '10'
+    }
+    const isGravadoOneroso = taxAffectation === '10'  // Operación gravada onerosa (con cobro)
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
+    // isGravadoOrBonif: ambos casos calculan con IGV (gravado oneroso y bonificación)
+    const isGravadoOrBonif = isGravadoOneroso || isBonifLine
     const originalPriceWithIGV = item.unitPrice
 
-    // IGV rate: SIEMPRE usar la tasa global del negocio para TODOS los items gravados
+    // IGV rate: SIEMPRE usar la tasa global del negocio para items con IGV (gravado u bonificación)
     // SUNAT regla 3462: "La tasa del IGV debe ser la misma en todas las líneas"
-    // No se permite mezclar tasas (ej: 10% y 18%) en la misma factura/boleta
-    const itemIgvRate = isGravado ? igvRate : 0
+    const itemIgvRate = isGravadoOrBonif ? igvRate : 0
     const itemIgvMultiplier = itemIgvRate / 100
 
     // Descuento por ítem (viene CON IGV desde el POS)
     const itemDiscount = item.itemDiscount || item.descuento || 0
 
-    // Total CON IGV: restar descuento por ítem ANTES de dividir por tasa
-    // Esto es CRÍTICO: el itemDiscount está en el mismo espacio que unitPrice (con IGV)
-    const lineTotalWithIGV = item.quantity * originalPriceWithIGV - itemDiscount
+    let lineTotal, lineIGV, itemDiscountBase, effectivePriceWithIGV, taxableRef, igvRef
 
-    // Si hay descuento GLOBAL, aplicarlo proporcionalmente
-    const adjustedLineTotalWithIGV = lineTotalWithIGV * (1 - discountFactor)
+    if (isBonifLine) {
+      // === BONIFICACIÓN (operación no onerosa) ===
+      // Estructura SUNAT según ejemplo oficial Greenter (referencia técnica peruana):
+      // - cac:Price/cbc:PriceAmount = 0 (cliente NO paga)
+      // - cac:LineExtensionAmount = valor referencial SIN IGV
+      // - cac:TaxableAmount/TaxAmount = valor referencial / IGV referencial
+      // - cac:PricingReference/AlternativeConditionPrice/cbc:PriceAmount = valor unitario SIN IGV (mtoValorGratuito)
+      //   con PriceTypeCode '02' (Valor referencial unitario en operaciones no onerosas)
+      // - El LineExtensionAmount global del documento NO incluye bonificaciones
 
-    // Calcular subtotal sin IGV (base imponible) = LineExtensionAmount
-    // Este valor ya tiene el item discount incorporado correctamente
-    const lineTotal = isGravado
-      ? Math.round((adjustedLineTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
-      : Math.round(adjustedLineTotalWithIGV * 100) / 100
+      // Valor referencial = lo que hubiera valido sin descuento
+      const refTotalWithIGV = item.quantity * originalPriceWithIGV
+      taxableRef = Math.round((refTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
+      igvRef = Math.round((refTotalWithIGV - taxableRef) * 100) / 100
 
-    // IGV = Total con IGV - Subtotal sin IGV (esto garantiza que cuadre)
-    const lineIGV = isGravado
-      ? Math.round((adjustedLineTotalWithIGV - lineTotal) * 100) / 100
-      : 0
+      // LineExtensionAmount de la línea = valor referencial SIN IGV (Greenter: setMtoValorVenta)
+      lineTotal = taxableRef
+      // TaxAmount de la línea = IGV referencial (lo asume el emisor)
+      lineIGV = igvRef
+      itemDiscountBase = 0  // No hay AllowanceCharge en bonificación (no es un descuento)
 
-    // Descuento por ítem convertido a BASE (sin IGV) para AllowanceCharge en XML
-    // SUNAT requiere AllowanceCharge.Amount en valor base (sin impuestos)
-    let itemDiscountBase = 0
-    if (itemDiscount > 0) {
-      const itemDiscountAfterGlobal = itemDiscount * (1 - discountFactor)
-      itemDiscountBase = isGravado
-        ? Math.round(itemDiscountAfterGlobal / (1 + itemIgvMultiplier) * 100) / 100
-        : Math.round(itemDiscountAfterGlobal * 100) / 100
+      // AlternativeConditionPrice: precio unitario SIN IGV (Greenter: setMtoValorGratuito)
+      effectivePriceWithIGV = item.quantity > 0 ? taxableRef / item.quantity : 0
+    } else {
+      // Total CON IGV: restar descuento por ítem ANTES de dividir por tasa
+      const lineTotalWithIGV = item.quantity * originalPriceWithIGV - itemDiscount
+
+      // Si hay descuento GLOBAL, aplicarlo proporcionalmente
+      const adjustedLineTotalWithIGV = lineTotalWithIGV * (1 - discountFactor)
+
+      // Calcular subtotal sin IGV (base imponible) = LineExtensionAmount
+      lineTotal = isGravadoOneroso
+        ? Math.round((adjustedLineTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
+        : Math.round(adjustedLineTotalWithIGV * 100) / 100
+
+      // IGV = Total con IGV - Subtotal sin IGV (esto garantiza que cuadre)
+      lineIGV = isGravadoOneroso
+        ? Math.round((adjustedLineTotalWithIGV - lineTotal) * 100) / 100
+        : 0
+
+      // Descuento por ítem convertido a BASE (sin IGV) para AllowanceCharge en XML
+      itemDiscountBase = 0
+      if (itemDiscount > 0) {
+        const itemDiscountAfterGlobal = itemDiscount * (1 - discountFactor)
+        itemDiscountBase = isGravadoOneroso
+          ? Math.round(itemDiscountAfterGlobal / (1 + itemIgvMultiplier) * 100) / 100
+          : Math.round(itemDiscountAfterGlobal * 100) / 100
+      }
+
+      // AlternativeConditionPrice: precio unitario CON IGV DESPUÉS del descuento por ítem
+      effectivePriceWithIGV = isGravadoOneroso
+        ? (lineTotal + lineIGV) / item.quantity
+        : lineTotal / item.quantity
+
+      // Para items no-bonificación, los valores referenciales = los valores efectivos
+      taxableRef = lineTotal
+      igvRef = lineIGV
     }
-
-    // AlternativeConditionPrice: precio unitario CON IGV DESPUÉS del descuento por ítem
-    // Según SUNAT: "incluye los tributos y la deducción de descuentos por item"
-    // Fórmula 4287: AlternativeConditionPrice = (LineExtensionAmount + IGV) / Quantity
-    const effectivePriceWithIGV = isGravado
-      ? (lineTotal + lineIGV) / item.quantity
-      : lineTotal / item.quantity
 
     lineExtensions.push(lineTotal)
     lineIgvRates.push(itemIgvRate)
     lineTaxAffectations.push(taxAffectation)
     linePricesWithIGV.push(Math.round(effectivePriceWithIGV * 1000000) / 1000000)
     lineItemDiscountBases.push(itemDiscountBase)
-    sumLineExtension += lineTotal
-
+    lineIsBonificacion.push(isBonifLine)
+    lineTaxableRef.push(taxableRef)
+    lineIGVRef.push(igvRef)
     lineIGVs.push(lineIGV)
-    sumLineIGV += lineIGV
+
+    // sumLineExtension y sumLineIGV son para el LegalMonetaryTotal/TaxTotal del DOCUMENTO,
+    // que según Greenter (referencia oficial Perú) NO debe incluir bonificaciones (cliente no las paga).
+    // Las bonificaciones se acumulan aparte en sumBonificadas/sumIGVBonificadas y van como
+    // TaxSubtotal informativo (tributo 9996 GRA).
+    if (!isBonifLine) {
+      sumLineExtension += lineTotal
+      sumLineIGV += lineIGV
+    }
 
     // Acumular por tipo de afectación
-    if (isGravado) {
+    if (isBonifLine) {
+      sumBonificadas += taxableRef
+      sumIGVBonificadas += igvRef
+    } else if (isGravadoOneroso) {
       sumGravadas += lineTotal
       sumIGVGravadas += lineIGV
     } else if (isExonerado) {
@@ -722,6 +792,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
   sumExoneradas = Math.round(sumExoneradas * 100) / 100
   sumInafectas = Math.round(sumInafectas * 100) / 100
   sumIGVGravadas = Math.round(sumIGVGravadas * 100) / 100
+  sumBonificadas = Math.round(sumBonificadas * 100) / 100
+  sumIGVBonificadas = Math.round(sumIGVBonificadas * 100) / 100
 
   // Los valores globales ahora coinciden exactamente con la suma de líneas
   const taxableAmount = sumLineExtension
@@ -821,6 +893,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
     createTaxSubtotal(sumInafectas, 0, '0.00', 'O', '9998', 'INA', 'FRE')
   }
 
+  // Generar TaxSubtotal para BONIFICACIONES (si hay) — afectación 15, tributo 9996 (GRA)
+  // El IGV referencial de bonificaciones NO se incluye en el TaxTotal global del documento
+  // (el cliente no lo paga), pero SUNAT requiere el TaxSubtotal informativo.
+  if (sumBonificadas > 0) {
+    createTaxSubtotal(sumBonificadas, sumIGVBonificadas, gravadoPercent, 'S', '9996', 'GRA', 'FRE')
+  }
+
   // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
   if (sumGravadas === 0 && sumExoneradas === 0 && sumInafectas === 0) {
     if (igvExempt) {
@@ -868,18 +947,11 @@ export function generateInvoiceXML(invoiceData, businessData) {
   invoiceData.items.forEach((item, index) => {
     const invoiceLine = root.ele('cac:InvoiceLine')
 
-    // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
-    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado para TODOS
-    //        Si negocio normal → respetar config del producto, si no tiene = gravado
-    let taxAffectation
-    if (igvExempt) {
-      // Ley de la Selva u otra exoneración → TODOS los productos son exonerados
-      taxAffectation = '20'
-    } else {
-      // Negocio normal → respetar configuración del producto, default gravado
-      taxAffectation = item.taxAffectation || '10'
-    }
-    const isGravado = taxAffectation === '10'
+    // Recuperar la afectación calculada en el bloque anterior (toma en cuenta bonificación)
+    // Códigos: 10=Gravado oneroso, 15=Bonificación, 20=Exonerado, 30=Inafecto
+    const taxAffectation = lineTaxAffectations[index]
+    const isBonifLine = lineIsBonificacion[index]
+    const isGravado = taxAffectation === '10'  // Gravado oneroso (con cobro)
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
 
@@ -905,6 +977,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // === PricingReference: AlternativeConditionPrice ===
     // Según SUNAT guía UBL 2.1: "incluye los tributos y la deducción de descuentos por item"
     // Fórmula validación 4287: AlternativeConditionPrice = (LineExtensionAmount + IGV) / Quantity
+    // Para bonificación (código 15): el precio referencial es el original CON IGV, con PriceTypeCode 02
     const pricingReference = invoiceLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
@@ -913,12 +986,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'listName': 'Tipo de Precio',
       'listAgencyName': 'PE:SUNAT',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
-    }).txt('01') // 01 = Precio unitario (incluye el IGV)
+    }).txt(isBonifLine ? '02' : '01') // 01=Precio unitario (con IGV), 02=Valor referencial en operación no onerosa
 
     // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
     // AllowanceCharge.Amount debe estar SIN IGV (valor base)
     // Fórmula validación 4288: LineExtensionAmount = (Qty × PriceAmount) - AllowanceCharge.Amount
-    if (itemDiscountBase > 0) {
+    // NO se incluye AllowanceCharge en bonificaciones (la bonificación NO es un descuento, es un regalo)
+    if (itemDiscountBase > 0 && !isBonifLine) {
       const lineAllowanceCharge = invoiceLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
       lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
@@ -927,22 +1001,25 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }
 
     // Impuesto de la línea
+    // Para items normales: TaxableAmount = LineExtensionAmount, TaxAmount = IGV cobrado
+    // Para bonificaciones: TaxableAmount = valor referencial, TaxAmount = IGV referencial (que asume el emisor)
     const lineTaxTotal = invoiceLine.ele('cac:TaxTotal')
-    // USAR el IGV pre-calculado en lineIGVs para garantizar que la suma cuadre
     const lineIGV = lineIGVs[index]
+    const taxableForXml = isBonifLine ? lineTaxableRef[index] : lineTotal
+    const igvForXml = isBonifLine ? lineIGVRef[index] : lineIGV
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(lineIGV.toFixed(2))
+      .txt(igvForXml.toFixed(2))
 
     const lineTaxSubtotal = lineTaxTotal.ele('cac:TaxSubtotal')
     lineTaxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(lineTotal.toFixed(2))
+      .txt(taxableForXml.toFixed(2))
     lineTaxSubtotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(lineIGV.toFixed(2))
+      .txt(igvForXml.toFixed(2))
 
     const lineTaxCategory = lineTaxSubtotal.ele('cac:TaxCategory')
 
     // Tax Category ID según afectación:
-    // S = Standard rate (Gravado)
+    // S = Standard rate (Gravado, incluida bonificación gravada)
     // E = Exempt from tax (Exonerado)
     // O = Not subject to tax (Inafecto)
     let taxCategoryId = 'S'
@@ -955,8 +1032,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'schemeAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(taxCategoryId)
 
-    // Incluir porcentaje: tasa de IGV para gravados, 0 para exonerados/inafectos
-    if (isGravado) {
+    // Incluir porcentaje: tasa de IGV para gravados (oneroso o bonificación), 0 para exonerados/inafectos
+    if (isGravado || isBonifLine) {
       lineTaxCategory.ele('cbc:Percent').txt(lineIgvRates[index].toFixed(2))
     } else {
       // Para exonerados e inafectos, SUNAT requiere explícitamente Percent = 0
@@ -967,17 +1044,22 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'listAgencyName': 'PE:SUNAT',
       'listName': 'Afectacion del IGV',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07'
-    }).txt(taxAffectation) // 10=Gravado, 20=Exonerado, 30=Inafecto
+    }).txt(taxAffectation) // 10=Gravado, 15=Bonificación, 20=Exonerado, 30=Inafecto
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
-    // Código de tributo según tipo de afectación:
-    // - 1000 (IGV) para gravados
+    // Código de tributo según tipo de afectación (Catálogo 05):
+    // - 1000 (IGV) para gravados onerosos
+    // - 9996 (GRA) para bonificaciones (gratuitas)
     // - 9997 (EXO) para exonerados
     // - 9998 (INA) para inafectos
     let lineItemTaxSchemeCode = '1000'
     let lineItemTaxSchemeName = 'IGV'
-    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos
-    if (isExonerado) {
+    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos y bonificaciones
+    if (isBonifLine) {
+      lineItemTaxSchemeCode = '9996'
+      lineItemTaxSchemeName = 'GRA'
+      lineItemTaxTypeCode = 'FRE'
+    } else if (isExonerado) {
       lineItemTaxSchemeCode = '9997'
       lineItemTaxSchemeName = 'EXO'
       lineItemTaxTypeCode = 'VAT'
@@ -1008,22 +1090,26 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
-    // cac:Price/PriceAmount = valor unitario SIN IGV, ANTES del descuento por ítem
-    // Fórmula SUNAT 4288: LineExtensionAmount = (Qty × PriceAmount) - AllowanceCharge.Amount
-    // Por lo tanto: PriceAmount = (LineExtensionAmount + AllowanceCharge.Amount) / Qty
-    const exactUnitPrice = (lineTotal + itemDiscountBase) / item.quantity
+    // cac:Price/PriceAmount = valor unitario SIN IGV efectivamente cobrado al cliente
+    // Items normales: PriceAmount = (LineExtensionAmount + AllowanceCharge) / Qty (fórmula SUNAT 4288)
+    // Bonificaciones: PriceAmount = 0 (cliente NO paga). SUNAT error 2640 si se pone valor > 0
+    //   con PriceTypeCode 02 (Greenter setMtoValorUnitario(0) para gratuitas)
+    let unitPriceForXML
+    if (isBonifLine) {
+      unitPriceForXML = 0
+    } else {
+      const exactUnitPrice = (lineTotal + itemDiscountBase) / item.quantity
+      let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
+      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
 
-    // SUNAT acepta hasta 10 decimales. Usar más decimales para cantidades grandes
-    let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
-    let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
-
-    // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
-    const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscountBase) * 100) / 100
-    if (Math.abs(calculatedLineTotal - lineTotal) > 0.01) {
-      unitPriceDecimals = 10
-      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
-      console.log(`⚠️ Item ${index + 1}: Precio ajustado a 10 decimales para cuadrar con SUNAT`)
-      console.log(`   quantity=${item.quantity}, lineTotal=${lineTotal}, itemDiscountBase=${itemDiscountBase}, priceAmount=${unitPriceForXML}`)
+      // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
+      const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscountBase) * 100) / 100
+      if (Math.abs(calculatedLineTotal - lineTotal) > 0.01) {
+        unitPriceDecimals = 10
+        unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+        console.log(`⚠️ Item ${index + 1}: Precio ajustado a 10 decimales para cuadrar con SUNAT`)
+        console.log(`   quantity=${item.quantity}, lineTotal=${lineTotal}, itemDiscountBase=${itemDiscountBase}, priceAmount=${unitPriceForXML}`)
+      }
     }
 
     const price = invoiceLine.ele('cac:Price')
@@ -1212,18 +1298,37 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
 
+  // === BONIFICACIÓN (Catálogo 07 código 15) ===
+  // Si un item viene con itemDiscount que iguala su valor total, se trata como bonificación.
+  // Mismo helper que generateInvoiceXML para consistencia.
+  const isBonificacionItem = (item) => {
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount <= 0) return false
+    const lineTotalWithIGV = item.quantity * item.unitPrice
+    return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
+  }
+
   // === CALCULAR TOTALES POR TIPO DE AFECTACIÓN ===
   // Necesario para generar múltiples TaxSubtotals
   let cnSumGravadas = 0
   let cnSumExoneradas = 0
   let cnSumInafectas = 0
   let cnSumIGVGravadas = 0
+  let cnSumBonificadas = 0      // Valor referencial sin IGV de bonificaciones
+  let cnSumIGVBonificadas = 0   // IGV referencial de bonificaciones (no se cobra)
   const cnLineIgvRates = []
   const cnLineTaxAffectations = []
+  const cnLineIsBonificacion = []
+  const cnLineTaxableRef = []   // Valor referencial sin IGV por línea
+  const cnLineIGVRef = []       // IGV referencial por línea
 
   creditNoteData.items.forEach((item) => {
+    const isBonifLine = isBonificacionItem(item)
+
     let taxAffectation
-    if (igvExempt) {
+    if (isBonifLine) {
+      taxAffectation = '15'  // Gravado - Bonificaciones
+    } else if (igvExempt) {
       taxAffectation = '20'
     } else {
       taxAffectation = item.taxAffectation || '10'
@@ -1231,18 +1336,30 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
+    const isGravadoOrBonif = isGravado || isBonifLine
 
-    const itemIgvRate = isGravado ? igvRate : 0
+    const itemIgvRate = isGravadoOrBonif ? igvRate : 0
     const itemIgvMultiplier = itemIgvRate / 100
     cnLineIgvRates.push(itemIgvRate)
     cnLineTaxAffectations.push(taxAffectation)
+    cnLineIsBonificacion.push(isBonifLine)
 
     const priceWithIGV = item.unitPrice
-    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + itemIgvMultiplier) : priceWithIGV
-    const lineTotal = Math.round(item.quantity * priceWithoutIGV * 100) / 100
-    const lineIGV = isGravado ? Math.round((item.quantity * priceWithIGV - lineTotal) * 100) / 100 : 0
+    const priceWithoutIGV = isGravadoOrBonif ? priceWithIGV / (1 + itemIgvMultiplier) : priceWithIGV
+    const refTaxable = Math.round(item.quantity * priceWithoutIGV * 100) / 100
+    const refIGV = isGravadoOrBonif ? Math.round((item.quantity * priceWithIGV - refTaxable) * 100) / 100 : 0
 
-    if (isGravado) {
+    // Para items normales: lineTotal = valor referencial; para bonificación: lineTotal = 0
+    const lineTotal = isBonifLine ? 0 : refTaxable
+    const lineIGV = isBonifLine ? 0 : refIGV
+
+    cnLineTaxableRef.push(refTaxable)
+    cnLineIGVRef.push(refIGV)
+
+    if (isBonifLine) {
+      cnSumBonificadas += refTaxable
+      cnSumIGVBonificadas += refIGV
+    } else if (isGravado) {
       cnSumGravadas += lineTotal
       cnSumIGVGravadas += lineIGV
     } else if (isExonerado) {
@@ -1257,6 +1374,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   cnSumExoneradas = Math.round(cnSumExoneradas * 100) / 100
   cnSumInafectas = Math.round(cnSumInafectas * 100) / 100
   cnSumIGVGravadas = Math.round(cnSumIGVGravadas * 100) / 100
+  cnSumBonificadas = Math.round(cnSumBonificadas * 100) / 100
+  cnSumIGVBonificadas = Math.round(cnSumIGVBonificadas * 100) / 100
 
   // === IMPUESTOS (IGV) ===
   // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
@@ -1312,6 +1431,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     createTaxSubtotalCN(cnSumInafectas, 0, '0.00', 'O', '9998', 'INA', 'FRE')
   }
 
+  // Generar TaxSubtotal para BONIFICACIONES (si hay) — afectación 15, tributo 9996 (GRA)
+  // El IGV referencial de bonificaciones NO se cobra al cliente (lo asume el emisor)
+  if (cnSumBonificadas > 0) {
+    createTaxSubtotalCN(cnSumBonificadas, cnSumIGVBonificadas, cnGravadoPercent, 'S', '9996', 'GRA', 'FRE')
+  }
+
   // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
   if (cnSumGravadas === 0 && cnSumExoneradas === 0 && cnSumInafectas === 0) {
     if (igvExempt) {
@@ -1343,15 +1468,9 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   creditNoteData.items.forEach((item, index) => {
     const creditNoteLine = root.ele('cac:CreditNoteLine')
 
-    // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
-    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado para TODOS
-    //        Si negocio normal → respetar config del producto, si no tiene = gravado
-    let taxAffectation
-    if (igvExempt) {
-      taxAffectation = '20'
-    } else {
-      taxAffectation = item.taxAffectation || '10'
-    }
+    // Recuperar la afectación calculada en el bloque anterior (toma en cuenta bonificación)
+    const taxAffectation = cnLineTaxAffectations[index]
+    const isBonifLine = cnLineIsBonificacion[index]
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
@@ -1368,63 +1487,74 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
     const priceWithIGV = item.unitPrice
-    // Per-item IGV rate
-    const itemIgvRate = isGravado ? igvRate : 0
+    const itemIgvRate = cnLineIgvRates[index]
     const itemIgvMultiplier = itemIgvRate / 100
-    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + itemIgvMultiplier) : priceWithIGV
+    const priceWithoutIGV = (isGravado || isBonifLine) ? priceWithIGV / (1 + itemIgvMultiplier) : priceWithIGV
 
-    // === DESCUENTO POR ÍTEM - declarar antes porque afecta los cálculos ===
+    // === DESCUENTO POR ÍTEM ===
     const itemDiscount = item.itemDiscount || item.descuento || 0
 
-    // Total línea SIN IGV (base imponible)
-    const lineTotal = item.quantity * priceWithoutIGV
+    // Total línea SIN IGV (base imponible).
+    // Para bonificación: LineExtensionAmount = valor referencial SIN IGV (Greenter setMtoValorVenta)
+    // Para items normales: LineExtensionAmount = base imponible
+    const lineTotal = isBonifLine ? cnLineTaxableRef[index] : item.quantity * priceWithoutIGV
     creditNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario CON IGV (PricingReference)
-    // IMPORTANTE: Cuando hay descuento por ítem, el PricingReference debe ser el precio BASE (antes del descuento)
-    // Fórmula SUNAT: LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
-    const basePriceWithoutIGV = itemDiscount > 0
-      ? (lineTotal + itemDiscount) / item.quantity
-      : priceWithoutIGV
-    const basePriceWithIGV = isGravado
-      ? basePriceWithoutIGV * (1 + itemIgvMultiplier)
-      : basePriceWithoutIGV
+    // PricingReference/AlternativeConditionPrice:
+    // - Para bonificación: PriceAmount = valor unitario SIN IGV (Greenter setMtoValorGratuito), PriceTypeCode 02
+    // - Para item normal: PriceAmount = precio BASE CON IGV (antes del descuento, fórmula SUNAT 4288), PriceTypeCode 01
+    let alternativePriceAmount
+    if (isBonifLine) {
+      alternativePriceAmount = item.quantity > 0 ? cnLineTaxableRef[index] / item.quantity : 0
+    } else {
+      const basePriceWithoutIGV = itemDiscount > 0
+        ? (lineTotal + itemDiscount) / item.quantity
+        : priceWithoutIGV
+      alternativePriceAmount = isGravado
+        ? basePriceWithoutIGV * (1 + itemIgvMultiplier)
+        : basePriceWithoutIGV
+    }
 
     const pricingReference = creditNoteLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(basePriceWithIGV.toFixed(2))
+      .txt(alternativePriceAmount.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
       'listName': 'Tipo de Precio',
       'listAgencyName': 'PE:SUNAT',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
-    }).txt('01')
+    }).txt(isBonifLine ? '02' : '01')
 
-    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
-    if (itemDiscount > 0) {
+    // === DESCUENTO POR ÍTEM (AllowanceCharge) ===
+    // No se incluye en bonificaciones (la bonificación NO es un descuento)
+    if (itemDiscount > 0 && !isBonifLine) {
       const lineAllowanceCharge = creditNoteLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
-      lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
+      lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
         .txt(parseFloat(itemDiscount).toFixed(2))
     }
 
     // Impuesto de la línea
+    // Para bonificación: TaxableAmount/TaxAmount = valor referencial
+    // Para items normales: TaxableAmount = LineExtensionAmount, TaxAmount = IGV efectivo
     const lineTaxTotal = creditNoteLine.ele('cac:TaxTotal')
-    const lineIGV = isGravado ? lineTotal * itemIgvMultiplier : 0
+    const lineIGV = isBonifLine ? 0 : (isGravado ? lineTotal * itemIgvMultiplier : 0)
+    const taxableForXml = isBonifLine ? cnLineTaxableRef[index] : lineTotal
+    const igvForXml = isBonifLine ? cnLineIGVRef[index] : lineIGV
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(lineIGV.toFixed(2))
+      .txt(igvForXml.toFixed(2))
 
     const lineTaxSubtotal = lineTaxTotal.ele('cac:TaxSubtotal')
     lineTaxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(lineTotal.toFixed(2))
+      .txt(taxableForXml.toFixed(2))
     lineTaxSubtotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(lineIGV.toFixed(2))
+      .txt(igvForXml.toFixed(2))
 
     const lineTaxCategory = lineTaxSubtotal.ele('cac:TaxCategory')
 
-    // Tax Category ID
+    // Tax Category ID — bonificación usa S (gravado standard)
     let taxCategoryId = 'S'
     if (isExonerado) taxCategoryId = 'E'
     if (isInafecto) taxCategoryId = 'O'
@@ -1435,11 +1565,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'schemeAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(taxCategoryId)
 
-    // Incluir porcentaje: tasa de IGV para gravados, 0 para exonerados/inafectos
-    if (isGravado) {
+    // Porcentaje: tasa IGV para gravados (oneroso o bonificación), 0 para exonerados/inafectos
+    if (isGravado || isBonifLine) {
       lineTaxCategory.ele('cbc:Percent').txt(itemIgvRate.toFixed(2))
     } else {
-      // Para exonerados e inafectos, SUNAT requiere explícitamente Percent = 0
       lineTaxCategory.ele('cbc:Percent').txt('0')
     }
 
@@ -1450,21 +1579,26 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt(taxAffectation)
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
-    // Código de tributo según tipo de afectación:
-    // - 1000 (IGV) para gravados
+    // Código de tributo según tipo de afectación (Catálogo 05):
+    // - 1000 (IGV) para gravados onerosos
+    // - 9996 (GRA) para bonificaciones
     // - 9997 (EXO) para exonerados
     // - 9998 (INA) para inafectos
     let lineItemTaxSchemeCode = '1000'
     let lineItemTaxSchemeName = 'IGV'
-    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos
-    if (isExonerado) {
+    let lineItemTaxTypeCode = 'VAT'
+    if (isBonifLine) {
+      lineItemTaxSchemeCode = '9996'
+      lineItemTaxSchemeName = 'GRA'
+      lineItemTaxTypeCode = 'FRE'
+    } else if (isExonerado) {
       lineItemTaxSchemeCode = '9997'
       lineItemTaxSchemeName = 'EXO'
       lineItemTaxTypeCode = 'VAT'
     } else if (isInafecto) {
       lineItemTaxSchemeCode = '9998'
       lineItemTaxSchemeName = 'INA'
-      lineItemTaxTypeCode = 'FRE' // Inafectos usan FRE según catálogo 05 SUNAT
+      lineItemTaxTypeCode = 'FRE'
     }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
@@ -1488,22 +1622,24 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
-    // Precio unitario SIN IGV (valor base para SUNAT)
-    // IMPORTANTE: Cuando hay descuento por ítem (AllowanceCharge), la fórmula SUNAT es:
-    //   LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
-    // Por lo tanto: PriceAmount = (LineExtensionAmount + AllowanceCharge) / Cantidad
-    // SUNAT acepta hasta 10 decimales en el precio unitario
-    const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
-    const exactUnitPrice = (roundedLineTotal + itemDiscount) / item.quantity
+    // cac:Price/PriceAmount = valor unitario SIN IGV efectivamente cobrado al cliente
+    // Items normales: PriceAmount = (LineExtensionAmount + AllowanceCharge) / Cantidad (fórmula 4288)
+    // Bonificaciones: PriceAmount = 0 (cliente NO paga, Greenter setMtoValorUnitario(0))
+    let unitPriceForXML
+    if (isBonifLine) {
+      unitPriceForXML = 0
+    } else {
+      const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
+      const exactUnitPrice = (roundedLineTotal + itemDiscount) / item.quantity
+      let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
+      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
 
-    let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
-    let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
-
-    // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
-    const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscount) * 100) / 100
-    if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
-      unitPriceDecimals = 10
-      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+      // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
+      const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscount) * 100) / 100
+      if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
+        unitPriceDecimals = 10
+        unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+      }
     }
 
     const price = creditNoteLine.ele('cac:Price')
