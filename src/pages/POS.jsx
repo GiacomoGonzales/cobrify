@@ -4511,6 +4511,10 @@ export default function POS() {
           change: (!isCreditSaleDemo && totalPaid > amounts.total)
             ? Math.round((totalPaid - amounts.total) * 100) / 100
             : 0,
+          // Monto entregado por el cliente (solo cuando hay vuelto)
+          amountReceived: (!isCreditSaleDemo && totalPaid > amounts.total)
+            ? Math.round(totalPaid * 100) / 100
+            : 0,
           status: isCreditSaleDemo ? 'pending' : 'paid',
           notes: generalNotes || '',
           sunatStatus: 'not_applicable',
@@ -4638,6 +4642,10 @@ export default function POS() {
       const change = (!isCreditSaleForInvoice && !isPartialPayment && totalPaid > amounts.total)
         ? Math.round((totalPaid - amounts.total) * 100) / 100
         : 0
+      // Monto entregado por el cliente (incluye el excedente que se devuelve como vuelto).
+      // Para tickets: se muestra como "Pago con" cuando hay vuelto, para que el cliente vea
+      // claro cuánto entregó vs. cuánto cubre el total.
+      const amountReceived = change > 0 ? Math.round(totalPaid * 100) / 100 : 0
 
       console.log('🧾 [POS] Datos de pago parcial calculados:', {
         documentType,
@@ -4746,6 +4754,9 @@ export default function POS() {
         paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
         // Vuelto (cambio que se devuelve al cliente, si pagó más que el total)
         change,
+        // Monto entregado por el cliente (solo guardamos cuando hay vuelto, para mostrar
+        // "Pago con" en el ticket. Si el pago fue exacto, no aporta info y se omite).
+        amountReceived,
         status: isCreditSaleForInvoice ? 'pending' : 'paid',
         // Datos de pago parcial (notas de venta y facturas al crédito)
         ...((documentType === 'nota_venta' || isCreditSaleForFactura) && {

@@ -1166,6 +1166,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: S/ ${(invoice.total || 0).toFixed(2)}\n`));
       }
 
+      // Pago con: monto entregado por el cliente (solo si hay vuelto)
+      if (Number(invoice.change) > 0 && Number(invoice.amountReceived) > 0) {
+        printer = printer.text(convertSpanishText(`Pago con: S/ ${Number(invoice.amountReceived).toFixed(2)}\n`));
+      }
       // Vuelto: solo si el cliente pagó más que el total (pagos al contado, no crédito)
       if (Number(invoice.change) > 0) {
         printer = printer

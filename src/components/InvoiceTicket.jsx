@@ -1018,9 +1018,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             )
           }
         })()}
+        {/* Pago con: monto entregado por el cliente (cuando hay vuelto) */}
+        {Number(invoice.change) > 0 && Number(invoice.amountReceived) > 0 && (
+          <div className="info-row" style={{ marginTop: '4px' }}>
+            <span className="info-label">Pago con:</span>
+            <span>{formatCurrency(Number(invoice.amountReceived))}</span>
+          </div>
+        )}
         {/* Vuelto: cuando el cliente pagó más que el total */}
         {Number(invoice.change) > 0 && (
-          <div className="info-row" style={{ marginTop: '4px' }}>
+          <div className="info-row">
             <span className="info-label">Vuelto:</span>
             <span style={{ fontWeight: 'bold' }}>{formatCurrency(Number(invoice.change))}</span>
           </div>
