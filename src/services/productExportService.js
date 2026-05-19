@@ -85,8 +85,8 @@ export const exportProductsForImport = async (products, categories, businessMode
     : []
   const restHeaders = [
     'costo', 'precio', 'precio2', 'precio3', 'precio4',
-    'stock', 'trackStock', 'permitir_decimales',
-    'control_vencimiento', 'fecha_vencimiento', 'control_series',
+    'stock', 'stock_minimo', 'trackStock', 'permitir_decimales',
+    'control_vencimiento', 'fecha_vencimiento', 'numero_lote', 'control_series',
     'mostrar_en_catalogo', 'precio_comparacion', 'imagen_url',
     'peso', 'ubicacion', 'afectacion_igv', 'tasa_igv',
     'presentacion1_nombre', 'presentacion1_cantidad', 'presentacion1_precio',
@@ -97,7 +97,11 @@ export const exportProductsForImport = async (products, categories, businessMode
   const headers = [...baseHeaders, ...pharmacyHeaders, ...restHeaders]
   const totalCols = headers.length
 
-  // Construye las filas de un producto (1 si no tiene variantes, N si las tiene).
+  // Construye las filas de un producto.
+  //   - Sin variantes y sin lotes (o 1 solo lote): 1 fila
+  //   - Sin variantes y con N lotes en batches[]: N filas (1 por lote, compatible
+  //     con la agrupación por lotes del importador)
+  //   - Con variantes: N filas (1 por variante), lotes se mantienen a nivel raíz
   const buildRowsForProduct = (product) => {
     const { categoria, subcategoria } = getCategoryAndSubcategory(product.category)
     const presentations = Array.isArray(product.presentations) ? product.presentations : []
@@ -116,8 +120,65 @@ export const exportProductsForImport = async (products, categories, businessMode
       product.sanitaryRegistry || '',
     ] : []
 
-    // SIN variantes: una fila completa
+    // SIN variantes
     if (!product.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) {
+      const batches = Array.isArray(product.batches) ? product.batches.filter(b => b) : []
+
+      // Caso A: múltiples lotes → una fila por lote
+      // Las filas adicionales solo llenan sku/nombre/stock/lote/fecha; los demás
+      // campos compartidos quedan vacíos. Al reimportar, ImportProductsModal los
+      // fusiona por SKU y reconstruye batches[].
+      if (batches.length > 1) {
+        return batches.map((batch, idx) => {
+          const isFirst = idx === 0
+          const batchQty = safeNum(batch.quantity ?? batch.stock)
+          const batchLote = batch.batchNumber || ''
+          const batchExp = formatYmd(batch.expirationDate)
+          const emptyPharma = isFirst ? pharmacyValues : pharmacyValues.map(() => '')
+
+          return [
+            product.sku || '',
+            isFirst ? (product.code || '') : '',
+            product.name || '',
+            isFirst ? (product.description || '') : '',
+            isFirst ? (product.marca || '') : '',
+            isFirst ? categoria : '',
+            isFirst ? subcategoria : '',
+            isFirst ? (product.unit || 'UNIDAD') : '',
+            ...emptyPharma,
+            isFirst ? safeNum(product.cost) : '',
+            isFirst ? safeNum(product.price) : '',
+            isFirst ? safeNum(product.price2) : '',
+            isFirst ? safeNum(product.price3) : '',
+            isFirst ? safeNum(product.price4) : '',
+            batchQty,
+            isFirst ? safeNum(product.minStock) : '',
+            isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
+            isFirst ? yn(product.allowDecimalQuantity) : '',
+            isFirst ? 'SI' : '', // control_vencimiento siempre SI cuando hay lotes
+            batchExp,
+            batchLote,
+            isFirst ? yn(product.trackSerials) : '',
+            isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
+            isFirst ? safeNum(product.catalogComparePrice) : '',
+            isFirst ? (product.imageUrl || '') : '',
+            isFirst ? safeNum(product.weight) : '',
+            isFirst ? (product.location || '') : '',
+            isFirst ? getTaxAffectationText(product.taxAffectation) : '',
+            isFirst ? safeNum(product.igvRate) : '',
+            isFirst ? (p1.name || '') : '', isFirst ? safeNum(p1.factor) : '', isFirst ? safeNum(p1.price) : '',
+            isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
+            isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
+            '', '', '', '', '',
+          ]
+        })
+      }
+
+      // Caso B: 0 o 1 lote → una fila
+      const singleBatch = batches[0] || {}
+      const loteFinal = singleBatch.batchNumber || product.batchNumber || ''
+      const expFinal = formatYmd(singleBatch.expirationDate || product.expirationDate)
+
       return [[
         product.sku || '',
         product.code || '',
@@ -134,10 +195,12 @@ export const exportProductsForImport = async (products, categories, businessMode
         safeNum(product.price3),
         safeNum(product.price4),
         safeNum(product.stock),
+        safeNum(product.minStock),
         product.trackStock === false ? 'NO' : 'SI',
         yn(product.allowDecimalQuantity),
         yn(product.trackExpiration),
-        formatYmd(product.expirationDate),
+        expFinal,
+        loteFinal,
         yn(product.trackSerials),
         product.catalogVisible === false ? 'NO' : 'SI',
         safeNum(product.catalogComparePrice),
@@ -153,7 +216,7 @@ export const exportProductsForImport = async (products, categories, businessMode
       ]]
     }
 
-    // CON variantes: una fila por variante
+    // CON variantes: una fila por variante (los lotes solo en el raíz, fila 1)
     return product.variants.map((variant, idx) => {
       const isFirst = idx === 0
       const attrs = variant.attributes || {}
@@ -174,10 +237,12 @@ export const exportProductsForImport = async (products, categories, businessMode
         isFirst ? safeNum(product.cost) : '',
         '', '', '', '', // precio* no van en padre con variantes
         '', // stock padre vacío
+        isFirst ? safeNum(product.minStock) : '', // stock_minimo
         isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
         isFirst ? yn(product.allowDecimalQuantity) : '',
         isFirst ? yn(product.trackExpiration) : '',
         isFirst ? formatYmd(product.expirationDate) : '',
+        isFirst ? (product.batchNumber || '') : '', // numero_lote
         isFirst ? yn(product.trackSerials) : '',
         isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
         isFirst ? safeNum(product.catalogComparePrice) : '',
@@ -223,8 +288,8 @@ export const exportProductsForImport = async (products, categories, businessMode
   const pharmacyWidths = businessMode === 'pharmacy' ? [18, 14, 14, 18, 22, 18, 14, 16] : []
   const restWidths = [
     10, 10, 10, 10, 10, // costo + precio1..4
-    10, 12, 18, // stock + trackStock + permitir_decimales
-    18, 16, 14, // control_vencimiento + fecha_vencimiento + control_series
+    10, 12, 12, 18, // stock + stock_minimo + trackStock + permitir_decimales
+    18, 16, 14, 14, // control_vencimiento + fecha_vencimiento + numero_lote + control_series
     18, 16, 30, 8, 14, 14, 10, // catálogo + comparación + imagen + peso + ubicación + igv
     18, 16, 12, 18, 16, 12, 18, 16, 12, // 3 presentaciones
     18, 16, 18, 12, 12, // variantes
@@ -237,7 +302,7 @@ export const exportProductsForImport = async (products, categories, businessMode
   // Filas de datos (estilo plano sin colores fuertes — es una plantilla editable)
   // Columnas numéricas: costo (idx según modo), precios, stock, peso, igv, presentaciones, variantes.
   const numericKeyTokens = [
-    'costo', 'precio', 'precio2', 'precio3', 'precio4', 'stock', 'precio_comparacion',
+    'costo', 'precio', 'precio2', 'precio3', 'precio4', 'stock', 'stock_minimo', 'precio_comparacion',
     'peso', 'tasa_igv',
     'presentacion1_cantidad', 'presentacion1_precio',
     'presentacion2_cantidad', 'presentacion2_precio',

@@ -59,6 +59,7 @@ import {
   deleteAllStockMovements,
   deleteAllDispatchGuides,
   deleteAllQuotations,
+  resetAllStock,
   countDocuments
 } from '@/services/bulkDeleteService'
 
@@ -2389,6 +2390,7 @@ export default function Settings() {
     stockMovements: { name: 'Movimientos de Stock', collection: 'stockMovements' },
     dispatchGuides: { name: 'Guías de Remisión', collection: 'dispatchGuides' },
     quotations: { name: 'Cotizaciones', collection: 'quotations' },
+    resetStock: { name: 'Stock e Inventario', collection: 'products', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} productos y movimientos eliminados' },
   }
 
   const loadBulkDeleteCounts = async () => {
@@ -2452,12 +2454,34 @@ export default function Settings() {
         case 'quotations':
           result = await deleteAllQuotations(businessId, onProgress)
           break
+        case 'resetStock': {
+          // Paso 1: Resetear stock, lotes y vencimientos en todos los productos
+          const resetResult = await resetAllStock(businessId, onProgress)
+          if (!resetResult.success) {
+            result = resetResult
+            break
+          }
+          // Paso 2: Eliminar todos los movimientos de stock
+          const movementsResult = await deleteAllStockMovements(businessId, onProgress)
+          result = {
+            success: movementsResult.success,
+            deleted: resetResult.deleted,
+            error: movementsResult.error,
+            movementsDeleted: movementsResult.deleted,
+          }
+          break
+        }
         default:
           throw new Error('Tipo de eliminación no válido')
       }
 
       if (result.success) {
-        toast.success(`${result.deleted} ${bulkDeleteLabels[bulkDeleteType].name.toLowerCase()} eliminados correctamente`)
+        const label = bulkDeleteLabels[bulkDeleteType]
+        if (label.successMessage) {
+          toast.success(label.successMessage.replace('{count}', result.deleted))
+        } else {
+          toast.success(`${result.deleted} ${label.name.toLowerCase()} eliminados correctamente`)
+        }
         setShowBulkDeleteModal(false)
         loadBulkDeleteCounts() // Recargar conteos
       } else {
@@ -9865,6 +9889,45 @@ export default function Settings() {
                     Limpiar
                   </Button>
                 </div>
+
+                {/* Separador */}
+                <div className="pt-2 pb-1">
+                  <div className="border-t border-gray-300"></div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mt-3">
+                    Reinicio de Inventario
+                  </p>
+                </div>
+
+                {/* Limpiar Stock e Inventario (sin eliminar productos) */}
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="pr-3">
+                    <h4 className="font-medium text-gray-900">Limpiar Stock e Inventario</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Resetea a <strong>cero</strong> el stock, los lotes y los vencimientos de todos los productos, y elimina el historial de movimientos.
+                      <span className="block text-amber-700 font-medium mt-1">
+                        Los productos NO se eliminan. Ideal antes de re-importar stock desde Excel.
+                      </span>
+                      {bulkDeleteCounts.products > 0 && (
+                        <span className="block mt-1 text-gray-700">
+                          Afectará a <strong>{bulkDeleteCounts.products}</strong> productos
+                          {bulkDeleteCounts.stockMovements > 0 && (
+                            <> y eliminará <strong>{bulkDeleteCounts.stockMovements}</strong> movimientos</>
+                          )}.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('resetStock')}
+                    disabled={bulkDeleteCounts.products === 0}
+                    className="bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -9889,7 +9952,7 @@ export default function Settings() {
       <Modal
         isOpen={showBulkDeleteModal}
         onClose={() => !isBulkDeleting && setShowBulkDeleteModal(false)}
-        title={`Eliminar ${bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name : ''}`}
+        title={`${bulkDeleteType && bulkDeleteLabels[bulkDeleteType]?.actionVerb === 'limpiar' ? 'Limpiar' : 'Eliminar'} ${bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name : ''}`}
         maxWidth="md"
       >
         <div className="space-y-4">
@@ -9899,10 +9962,20 @@ export default function Settings() {
               <AlertTriangle className="w-6 h-6 text-red-600 mr-3 flex-shrink-0" />
               <div>
                 <h4 className="font-bold text-red-900">Esta acción es IRREVERSIBLE</h4>
-                <p className="text-sm text-red-800 mt-1">
-                  Estás a punto de eliminar <strong>TODOS</strong> los {bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name.toLowerCase() : ''}.
-                  Esta acción no se puede deshacer.
-                </p>
+                {bulkDeleteType === 'resetStock' ? (
+                  <p className="text-sm text-red-800 mt-1">
+                    Vas a <strong>RESETEAR a CERO</strong> el stock, los lotes y los vencimientos de <strong>TODOS</strong> los productos,
+                    y <strong>ELIMINAR</strong> todo el historial de movimientos de stock.
+                    <br /><br />
+                    <strong>Los productos NO se eliminarán</strong> — solo se limpia su inventario.
+                    Úsalo antes de re-importar stock desde Excel.
+                  </p>
+                ) : (
+                  <p className="text-sm text-red-800 mt-1">
+                    Estás a punto de eliminar <strong>TODOS</strong> los {bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name.toLowerCase() : ''}.
+                    Esta acción no se puede deshacer.
+                  </p>
+                )}
               </div>
             </div>
           </div>

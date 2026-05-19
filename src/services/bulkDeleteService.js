@@ -158,6 +158,89 @@ export async function deleteAllStockMovements(businessId, onProgress = null) {
 }
 
 /**
+ * Resetear el stock de todos los productos a cero (sin eliminar los productos)
+ * - Pone stock = 0
+ * - Resetea warehouseStocks[].stock = 0 (mantiene minStock y warehouseId)
+ * - Vacía batches = []
+ * - Limpia batchNumber y expirationDate raíz
+ *
+ * Útil para reinicializar inventario antes de re-importar desde Excel.
+ */
+export async function resetAllStock(businessId, onProgress = null) {
+  try {
+    const productsRef = collection(db, 'businesses', businessId, 'products')
+    const snapshot = await getDocs(productsRef)
+
+    if (snapshot.empty) {
+      return { success: true, deleted: 0 }
+    }
+
+    const total = snapshot.docs.length
+    let updated = 0
+
+    const batchSize = 400
+    let currentBatch = writeBatch(db)
+    let operationsInBatch = 0
+    const batches = []
+
+    for (const docSnapshot of snapshot.docs) {
+      const data = docSnapshot.data()
+
+      // Resetear warehouseStocks manteniendo warehouseId y minStock
+      const resetWarehouseStocks = Array.isArray(data.warehouseStocks)
+        ? data.warehouseStocks.map(ws => ({
+            ...ws,
+            stock: 0,
+          }))
+        : []
+
+      const updates = {
+        stock: 0,
+        warehouseStocks: resetWarehouseStocks,
+        batches: [],
+        batchNumber: null,
+        expirationDate: null,
+        updatedAt: new Date(),
+      }
+
+      currentBatch.update(
+        doc(db, 'businesses', businessId, 'products', docSnapshot.id),
+        updates
+      )
+      operationsInBatch++
+
+      if (operationsInBatch >= batchSize) {
+        batches.push({ batch: currentBatch, ops: operationsInBatch })
+        currentBatch = writeBatch(db)
+        operationsInBatch = 0
+      }
+    }
+
+    if (operationsInBatch > 0) {
+      batches.push({ batch: currentBatch, ops: operationsInBatch })
+    }
+
+    for (let i = 0; i < batches.length; i++) {
+      await batches[i].batch.commit()
+      updated += batches[i].ops
+
+      if (onProgress) {
+        onProgress({
+          deleted: updated,
+          total,
+          percentage: Math.round((updated / total) * 100),
+        })
+      }
+    }
+
+    return { success: true, deleted: updated }
+  } catch (error) {
+    console.error('Error resetting stock:', error)
+    return { success: false, deleted: 0, error: error.message }
+  }
+}
+
+/**
  * Eliminar todas las guías de remisión
  */
 export async function deleteAllDispatchGuides(businessId, onProgress = null) {
