@@ -1388,7 +1388,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 </Select>
                 <Input
                   label="N° Doc. de identidad *"
-                  placeholder="12345678"
+                  placeholder={
+                    driver.documentType === '1' ? '12345678'
+                    : driver.documentType === '4' ? '001234567'
+                    : 'ABC123456'
+                  }
+                  maxLength={driver.documentType === '1' ? 8 : 12}
                   required={index === 0}
                   value={driver.documentNumber}
                   onChange={(e) => updateDriver(index, 'documentNumber', e.target.value)}
@@ -1396,9 +1401,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 <Input
                   label="N° de licencia *"
                   placeholder="Q12345678"
+                  maxLength={10}
                   required={index === 0}
                   value={driver.license}
-                  onChange={(e) => updateDriver(index, 'license', e.target.value)}
+                  onChange={(e) => updateDriver(index, 'license', e.target.value.toUpperCase())}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

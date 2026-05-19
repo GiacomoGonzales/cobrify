@@ -3088,17 +3088,42 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   }
 
   // === LÍNEAS DE DESPACHO (DespatchLine) ===
-  // Para GRE Transportista (tipo 31), NO corresponde detallar bienes individuales (OBS 4434).
-  // Se envía una sola línea genérica con cantidad 1 y unitCode="ZZ".
+  // Regla SUNAT (OBS 4434): si la GRE-Transportista referencia una GRE-Remitente
+  // electrónica (serie que NO empieza con número, ej. "EG07"), NO corresponde
+  // consignar el detalle de bienes con cantidad. En su lugar se permite una
+  // "Anotación opcional sobre los bienes a transportar" usando cbc:ID="0" y
+  // cac:Item/cbc:Description (hasta 500 caracteres).
+  const relatedSeries = (guideData.relatedGuides || [])
+    .map(r => (r.number || '').trim().split('-')[0])
+    .filter(Boolean)
+  const referencesElectronicRemitente = relatedSeries.some(s => /^[A-Za-z]/.test(s))
+
+  const itemsArr = Array.isArray(guideData.items) ? guideData.items : []
+  const itemsDescription = itemsArr
+    .map(it => (it.description || it.name || '').toString().trim())
+    .filter(Boolean)
+    .join(' | ')
+  const fallbackDescription = itemsDescription || guideData.description || 'CARGA'
+  const annotationText = fallbackDescription.substring(0, 500)
+
   const despatchLine = root.ele('cac:DespatchLine')
-  despatchLine.ele('cbc:ID').txt('1')
-  despatchLine.ele('cbc:DeliveredQuantity', {
-    'unitCode': 'ZZ'
-  }).txt('1')
-  const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-  orderLineRef.ele('cbc:LineID').txt('1')
-  const itemEle = despatchLine.ele('cac:Item')
-  itemEle.ele('cbc:Description').txt('CARGA')
+
+  if (referencesElectronicRemitente) {
+    // Modo anotación opcional (evita OBS 4434)
+    despatchLine.ele('cbc:ID').txt('0')
+    const itemEle = despatchLine.ele('cac:Item')
+    itemEle.ele('cbc:Description').txt(annotationText)
+  } else {
+    // Modo detalle estándar
+    despatchLine.ele('cbc:ID').txt('1')
+    despatchLine.ele('cbc:DeliveredQuantity', {
+      'unitCode': 'ZZ'
+    }).txt('1')
+    const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+    orderLineRef.ele('cbc:LineID').txt('1')
+    const itemEle = despatchLine.ele('cac:Item')
+    itemEle.ele('cbc:Description').txt(annotationText)
+  }
 
   // Retornar XML como string
   return root.end({ prettyPrint: true })

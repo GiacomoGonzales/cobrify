@@ -1587,6 +1587,29 @@ export const printBLESplitPreBill = async (order, table, business, taxConfig = {
   }
 };
 
+export const printBLERawData = async (base64Data) => {
+  if (!connectedDeviceId) {
+    return { success: false, error: 'Impresora BLE no conectada' };
+  }
+
+  try {
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const result = await writeBLEData(bytes);
+    if (!result.success) {
+      return { success: false, error: result.error || 'Error escribiendo datos BLE' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error imprimiendo datos crudos BLE:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   initializeBLE,
   scanBLEDevices,
@@ -1600,5 +1623,6 @@ export default {
   printBLEKitchenOrder,
   printBLEPreBill,
   printBLESplitPreBill,
+  printBLERawData,
   ESCPOSCommands,
 };

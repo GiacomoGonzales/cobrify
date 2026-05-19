@@ -1877,7 +1877,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
                 <Input
                   label={isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
-                  placeholder="12345678"
+                  placeholder={
+                    driverDocType === '1' ? '12345678'
+                    : driverDocType === '4' ? '001234567'
+                    : 'ABC123456'
+                  }
+                  maxLength={driverDocType === '1' ? 8 : 12}
                   required={!isM1LVehicle}
                   value={driverDocNumber}
                   onChange={(e) => setDriverDocNumber(e.target.value)}
@@ -1886,6 +1891,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 <Input
                   label={isM1LVehicle ? "N° de licencia (opcional)" : "N° de licencia o brevete"}
                   placeholder="Q12345678"
+                  maxLength={10}
                   required={!isM1LVehicle}
                   value={driverLicense}
                   onChange={(e) => setDriverLicense(e.target.value.toUpperCase())}
