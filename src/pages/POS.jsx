@@ -7806,6 +7806,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     )}
 
                     <input
+                      type="text"
+                      value={customerData.address}
+                      onChange={e => setCustomerData({ ...customerData, address: e.target.value })}
+                      placeholder="Dirección (opcional)"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+
+                    <input
                       type="tel"
                       value={customerData.phone}
                       onChange={e => setCustomerData({ ...customerData, phone: e.target.value })}
