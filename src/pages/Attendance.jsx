@@ -5,6 +5,7 @@ import {
   UserCheck, Clock, MapPin, Scan, Loader2, QrCode, RefreshCw,
   CheckCircle2, AlertTriangle, Calendar, Filter, Download, Plus, X,
   ShieldCheck, XCircle, Briefcase, Phone, Mail, MapPinned, CreditCard, Search,
+  Store,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -123,7 +124,7 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
   const toast = useToast()
 
@@ -161,6 +162,29 @@ export default function Attendance() {
   const isNative = useMemo(() => Capacitor.isNativePlatform(), [])
   const businessId = getBusinessId?.()
   const scanningRef = useRef(false)
+
+  // ----- Selector de sucursal para el tab Horarios (header de la página) -----
+  // Sucursal seleccionada con persistencia en localStorage por business.
+  const [selectedScheduleBranch, setSelectedScheduleBranch] = useState(() => {
+    try { return localStorage.getItem(`attendance.scheduleBranch.${businessId || ''}`) || 'main' } catch { return 'main' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(`attendance.scheduleBranch.${businessId || ''}`, selectedScheduleBranch) } catch {}
+  }, [businessId, selectedScheduleBranch])
+  // Sucursales accesibles para el usuario (filtradas por permisos).
+  // IMPORTANTE: estos hooks tienen que estar ANTES de cualquier return temprano del
+  // componente, o React detecta "Rendered more hooks than during the previous render".
+  const accessibleScheduleBranches = useMemo(() => {
+    const filtered = filterBranchesByAccess ? filterBranchesByAccess(branches) : branches
+    return filtered.filter(b => b.isMain ? hasMainBranchAccess : true)
+  }, [branches, filterBranchesByAccess, hasMainBranchAccess])
+  // Si la sucursal guardada deja de ser accesible, caemos a la primera disponible.
+  useEffect(() => {
+    if (accessibleScheduleBranches.length === 0) return
+    if (!accessibleScheduleBranches.some(b => b.id === selectedScheduleBranch)) {
+      setSelectedScheduleBranch(accessibleScheduleBranches[0].id)
+    }
+  }, [accessibleScheduleBranches, selectedScheduleBranch])
 
   useEffect(() => {
     loadInitial()
@@ -648,6 +672,24 @@ export default function Attendance() {
           </h1>
           <p className="text-sm text-gray-600 mt-1">Registro de entradas y salidas del personal mediante QR por sucursal.</p>
         </div>
+        {/* Selector de sucursal — solo en tab Horarios y solo si hay 2+ sucursales accesibles.
+            Sigue el mismo patrón visual que el del Dashboard. */}
+        {activeTab === 'schedules' && accessibleScheduleBranches.length > 1 && (
+          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+            <Store className="w-4 h-4 text-gray-500" />
+            <select
+              value={selectedScheduleBranch}
+              onChange={(e) => setSelectedScheduleBranch(e.target.value)}
+              className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+            >
+              {accessibleScheduleBranches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.isMain ? 'Sucursal Principal' : b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue={isNative ? 'mark' : (canManage ? 'records' : 'myhistory')}>
@@ -1044,6 +1086,7 @@ export default function Attendance() {
                     employees={employees}
                     currentUserUid={user?.uid}
                     businessInfo={{ businessName: branches?.[0]?.name || '' }}
+                    selectedBranchId={selectedScheduleBranch}
                   />
                 </TabsContent>
               )}
