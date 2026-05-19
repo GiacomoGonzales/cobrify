@@ -23,6 +23,12 @@ import {
   DAY_LABELS,
 } from '@/services/scheduleService'
 
+// id sentinel para la sucursal "Principal" (mismo string que usa el resto del sistema).
+const MAIN_BRANCH_ID = 'main'
+// Resuelve el branchId efectivo de una celda. Celdas viejas (sin branchId)
+// se asumen como Principal — coherente con el comportamiento previo al feature.
+const cellBranchId = (cell) => cell?.branchId || MAIN_BRANCH_ID
+
 const PALETTE = ['#fbbf24', '#60a5fa', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#22d3ee', '#f472b6']
 
 const formatDayShort = (d) =>
@@ -31,7 +37,7 @@ const formatDayShort = (d) =>
 const formatRange = (mon, sun) =>
   `${mon.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} – ${sun.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`.replace(/\./g, '')
 
-export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {} }) {
+export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID }) {
   const toast = useToast()
 
   // Semana ISO seleccionada (default: hoy)
@@ -140,7 +146,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
 
   const assignTemplate = (userId, dayKey, template) => {
     if (template.isRest) {
-      setCell(userId, dayKey, { rest: true })
+      setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
     } else {
       setCell(userId, dayKey, {
         templateId: template.id || null,
@@ -148,22 +154,63 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
         end: template.endTime,
         breakMinutes: template.breakMinutes || 0,
         color: template.color || '#fbbf24',
+        branchId: selectedBranchId,
       })
     }
     setEditingCell(null)
   }
 
   const setRest = (userId, dayKey) => {
-    setCell(userId, dayKey, { rest: true })
+    setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
     setEditingCell(null)
   }
   const clearCell = (userId, dayKey) => {
     setCell(userId, dayKey, null)
     setEditingCell(null)
   }
-  const setCustom = (userId, dayKey, start, end) => {
-    setCell(userId, dayKey, { start, end, breakMinutes: 0, color: '#94a3b8' })
+  const setCustom = (userId, dayKey, start, end, breakMin = 0) => {
+    setSchedules((prev) => {
+      const userSch = prev[userId] || { days: {}, totalHours: 0, publishedAt: null }
+      const existing = userSch.days?.[dayKey] || {}
+      // Si la celda existente está en OTRA sucursal (filtrada/oculta), tratarla como nueva
+      // y no preservar nada. Evita sobrescribir datos de otra sucursal por accidente.
+      const sameBranch = !existing.branchId || existing.branchId === selectedBranchId
+      const base = sameBranch ? existing : {}
+      const newDays = { ...userSch.days, [dayKey]: {
+        ...base,
+        start,
+        end,
+        breakMinutes: breakMin,
+        color: base.color || '#94a3b8',
+        branchId: selectedBranchId,
+      } }
+      return {
+        ...prev,
+        [userId]: { ...userSch, days: newDays, totalHours: calculateWeekHours(newDays) },
+      }
+    })
+    setDirtyUsers((prev) => new Set(prev).add(userId))
     setEditingCell(null)
+  }
+  // Reemplaza solo start/end de una celda existente. Preserva templateId, color,
+  // breakMinutes y branchId — pensado para drag (mover/redimensionar la barra).
+  const updateCellTimes = (userId, dayKey, start, end) => {
+    setSchedules((prev) => {
+      const userSch = prev[userId] || { days: {}, totalHours: 0, publishedAt: null }
+      const existing = userSch.days?.[dayKey] || {}
+      const newDays = { ...userSch.days, [dayKey]: {
+        ...existing,
+        start,
+        end,
+        // Si la celda no tenía branchId (legacy), tagueamos con la activa al editar.
+        branchId: existing.branchId || selectedBranchId,
+      } }
+      return {
+        ...prev,
+        [userId]: { ...userSch, days: newDays, totalHours: calculateWeekHours(newDays) },
+      }
+    })
+    setDirtyUsers((prev) => new Set(prev).add(userId))
   }
 
   // ----- Acciones bulk -----
@@ -275,6 +322,19 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     } else {
       toast.error('Error eliminando plantilla')
     }
+  }
+
+  // Total de horas SOLO de la sucursal activa, para mostrar al lado de cada empleado.
+  // El campo sch.totalHours del doc sigue siendo el total real (todas las sucursales);
+  // este cálculo solo afecta el número visible en la UI según el filtro de sucursal.
+  const calculateBranchHours = (daysObj, branchId) => {
+    if (!daysObj) return 0
+    const filtered = {}
+    for (const key of DAY_KEYS) {
+      const d = daysObj[key]
+      if (d && cellBranchId(d) === branchId) filtered[key] = d
+    }
+    return calculateWeekHours(filtered)
   }
 
   // ----- Render -----
@@ -462,6 +522,8 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           setRest={setRest}
           clearCell={clearCell}
           setCustom={setCustom}
+          updateCellTimes={updateCellTimes}
+          selectedBranchId={selectedBranchId}
         />
       ) : (
         /* Grid semanal */
@@ -509,7 +571,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                         </div>
                       </td>
                       {DAY_KEYS.map((dk) => {
-                        const cell = sch.days?.[dk]
+                        const rawCell = sch.days?.[dk]
+                        // Solo se considera "asignada" si pertenece a la sucursal activa.
+                        // Si no coincide, la celda se renderiza como vacía (pero la data
+                        // sigue ahí — al cambiar de sucursal vuelve a aparecer).
+                        const cell = (rawCell && cellBranchId(rawCell) === selectedBranchId) ? rawCell : null
                         return (
                           <td key={dk} className="px-1.5 py-1.5 text-center align-middle relative">
                             <ScheduleCell
@@ -525,7 +591,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                                 onPickTemplate={(t) => assignTemplate(emp.id, dk, t)}
                                 onRest={() => setRest(emp.id, dk)}
                                 onClear={() => clearCell(emp.id, dk)}
-                                onCustom={(s, e) => setCustom(emp.id, dk, s, e)}
+                                onCustom={(s, e, b) => setCustom(emp.id, dk, s, e, b)}
                                 onClose={() => setEditingCell(null)}
                               />
                             )}
@@ -533,9 +599,14 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                         )
                       })}
                       <td className="px-4 py-2 text-right">
-                        <span className={`font-semibold ${sch.totalHours > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                          {sch.totalHours.toFixed(1)}h
-                        </span>
+                        {(() => {
+                          const branchHours = calculateBranchHours(sch.days, selectedBranchId)
+                          return (
+                            <span className={`font-semibold ${branchHours > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {branchHours.toFixed(1)}h
+                            </span>
+                          )
+                        })()}
                         {sch.publishedAt && (
                           <div className="text-[10px] text-emerald-600">Publicado</div>
                         )}
@@ -594,9 +665,29 @@ function ScheduleCell({ cell, onClick }) {
 }
 
 const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onClear, onCustom, onClose }, ref) => {
-  const [customMode, setCustomMode] = useState(false)
+  // Si ya hay un turno asignado (no descanso), abrimos directo en modo edición
+  // personalizado para que el usuario pueda ajustar tiempos y refrigerio en un click.
+  const hasExistingShift = !!(cell && cell.start && cell.end && !cell.rest)
+  const [customMode, setCustomMode] = useState(hasExistingShift)
   const [start, setStart] = useState(cell?.start || '08:00')
   const [end, setEnd] = useState(cell?.end || '17:00')
+  const [breakMin, setBreakMin] = useState(cell?.breakMinutes || 0)
+
+  // Atajo: tecla Supr / Delete con el popover abierto → eliminar el turno.
+  // Solo si hay celda asignada y el foco NO está en un input (para no interferir
+  // cuando el usuario está editando hora o minutos de refrigerio).
+  useEffect(() => {
+    if (!cell) return
+    const handleKey = (e) => {
+      if (e.key !== 'Delete') return
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      e.preventDefault()
+      onClear()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [cell, onClear])
 
   return (
     <div
@@ -633,6 +724,20 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               />
             </div>
           </div>
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase mb-0.5 flex items-center gap-1">
+              <Coffee className="w-3 h-3" /> Refrigerio (min)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="15"
+              value={breakMin}
+              onChange={(e) => setBreakMin(Math.max(0, Number(e.target.value) || 0))}
+              placeholder="0"
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+            />
+          </div>
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => setCustomMode(false)}
@@ -641,7 +746,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               Volver
             </button>
             <button
-              onClick={() => onCustom(start, end)}
+              onClick={() => onCustom(start, end, breakMin)}
               className="flex-1 px-3 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
             >
               Aplicar
@@ -683,7 +788,9 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
                 onClick={onClear}
                 className="w-full px-3 py-1.5 hover:bg-red-50 text-sm text-left flex items-center gap-2 text-red-600"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Quitar turno
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="flex-1">Quitar turno</span>
+                <kbd className="text-[10px] px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-500 font-mono">Supr</kbd>
               </button>
             )}
           </div>
@@ -793,7 +900,7 @@ function TemplateForm({ template, onSave, onCancel }) {
 function DailyTimeline({
   employees, schedules, dirtyUsers, weekDates, selectedDayKey, onSelectDay,
   templates, editingCell, setEditingCell, popoverRef,
-  assignTemplate, setRest, clearCell, setCustom,
+  assignTemplate, setRest, clearCell, setCustom, updateCellTimes, selectedBranchId,
 }) {
   // Rango horario fijo del timeline. Cubre desde 6 AM hasta 11 PM (configurable
   // a futuro). Si un turno cae fuera, se clampea visualmente.
@@ -801,6 +908,86 @@ function DailyTimeline({
   const MAX_HOUR = 23
   const HOURS = MAX_HOUR - MIN_HOUR
   const TOTAL_MIN = HOURS * 60
+
+  // ----- Drag & drop de la barra del turno -----
+  // dragState: { userId, dayKey, start, end } durante el arrastre activo.
+  // Mientras existe, la barra de ese empleado se renderiza con los tiempos del preview
+  // (no los de la celda guardada) para feedback visual en tiempo real.
+  const [dragState, setDragState] = useState(null)
+  const dragStateRef = useRef(null)
+  dragStateRef.current = dragState
+  // Marca puesta al final de un drag con movimiento real, para que el onClick
+  // posterior (que dispara el browser) no abra el popover por error.
+  const wasDraggedRef = useRef(false)
+
+  const SNAP_MIN = 30 // snap a 30 min al arrastrar
+  const HANDLE_PX = 8 // ancho de las "manijas" de redimensionado en cada borde
+
+  const minutesToTime = (mins) => {
+    const total = ((mins % (24 * 60)) + 24 * 60) % (24 * 60)
+    const h = Math.floor(total / 60)
+    const m = total % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
+  const beginDrag = (e, emp, cell, mode) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const trackEl = e.currentTarget.closest('[data-role="track"]')
+    if (!trackEl) return
+    const trackRect = trackEl.getBoundingClientRect()
+    const startX = e.clientX
+    const origStart = timeToMinutes(cell.start)
+    let origEnd = timeToMinutes(cell.end)
+    if (origEnd <= origStart) origEnd += 24 * 60
+    let didMove = false
+
+    const compute = (clientX) => {
+      const dxPx = clientX - startX
+      const dxMin = (dxPx / trackRect.width) * TOTAL_MIN
+      const dxSnap = Math.round(dxMin / SNAP_MIN) * SNAP_MIN
+      let newStart = origStart
+      let newEnd = origEnd
+      if (mode === 'move') { newStart = origStart + dxSnap; newEnd = origEnd + dxSnap }
+      else if (mode === 'resize-left') { newStart = Math.min(origStart + dxSnap, origEnd - SNAP_MIN) }
+      else if (mode === 'resize-right') { newEnd = Math.max(origEnd + dxSnap, origStart + SNAP_MIN) }
+      const minBound = MIN_HOUR * 60
+      const maxBound = (MAX_HOUR + 1) * 60
+      if (newStart < minBound) {
+        const shift = minBound - newStart
+        newStart += shift
+        if (mode === 'move') newEnd += shift
+      }
+      if (newEnd > maxBound) {
+        const shift = newEnd - maxBound
+        newEnd -= shift
+        if (mode === 'move') newStart -= shift
+      }
+      return { start: minutesToTime(newStart), end: minutesToTime(newEnd) }
+    }
+
+    const onMove = (mv) => {
+      if (!didMove && Math.abs(mv.clientX - startX) > 3) didMove = true
+      setDragState({ userId: emp.id, dayKey: selectedDayKey, ...compute(mv.clientX) })
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      const latest = dragStateRef.current
+      if (didMove && latest && updateCellTimes) {
+        updateCellTimes(emp.id, selectedDayKey, latest.start, latest.end)
+        wasDraggedRef.current = true
+        setTimeout(() => { wasDraggedRef.current = false }, 0)
+      }
+      setDragState(null)
+    }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = mode === 'move' ? 'grabbing' : 'ew-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   // Mapeo de dayKey al date correspondiente de la semana
   const dayDate = useMemo(() => {
@@ -887,8 +1074,15 @@ function DailyTimeline({
           {/* Filas de empleados */}
           {employees.map((emp) => {
             const sch = schedules[emp.id] || { days: {}, totalHours: 0 }
-            const cell = sch.days?.[selectedDayKey]
-            const geo = cellGeometry(cell)
+            const rawCell = sch.days?.[selectedDayKey]
+            // Filtrar por sucursal activa: si la celda no pertenece a la sucursal
+            // seleccionada, la mostramos como vacía. La data subyacente queda intacta.
+            const cell = (rawCell && cellBranchId(rawCell) === selectedBranchId) ? rawCell : null
+            // Durante un drag activo sobre esta misma celda, renderizamos con los
+            // tiempos del preview para que el usuario vea la barra moverse en vivo.
+            const isDragging = dragState && dragState.userId === emp.id && dragState.dayKey === selectedDayKey
+            const previewCell = isDragging ? { ...cell, start: dragState.start, end: dragState.end } : cell
+            const geo = cellGeometry(previewCell)
             const isDirty = dirtyUsers.has(emp.id)
             const initials = (emp.displayName || emp.email || '?')
               .split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
@@ -943,24 +1137,67 @@ function DailyTimeline({
                       Descanso
                     </div>
                   ) : geo ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditingCell({ userId: emp.id, dayKey: selectedDayKey }) }}
-                      className="absolute top-2 bottom-2 rounded-md border-2 flex items-center justify-center text-xs font-semibold transition-shadow hover:shadow-md"
-                      style={{
-                        left: `${geo.leftPct}%`,
-                        width: `${geo.widthPct}%`,
-                        background: (cell.color || '#fbbf24') + '40',
-                        borderColor: (cell.color || '#fbbf24'),
-                        color: '#1f2937',
-                      }}
-                    >
-                      <span className="px-2 truncate">
-                        {cell.start} – {cell.end}
-                        {cell.breakMinutes > 0 && (
-                          <span className="ml-1 text-[10px] opacity-70">−{cell.breakMinutes}m</span>
-                        )}
-                      </span>
-                    </button>
+                    (() => {
+                      // Franja del refrigerio: bloque dentro de la barra que indica visualmente
+                      // dónde (centrado) y por cuánto tiempo es el descanso. Solo si el modelo
+                      // tiene breakMinutes > 0 y entra dentro del turno.
+                      const cellStartMin = timeToMinutes(previewCell.start)
+                      let cellEndMin = timeToMinutes(previewCell.end)
+                      if (cellEndMin <= cellStartMin) cellEndMin += 24 * 60
+                      const shiftDuration = cellEndMin - cellStartMin
+                      const breakMin = cell.breakMinutes || 0
+                      const hasBreak = breakMin > 0 && breakMin < shiftDuration
+                      const breakLeftPct = hasBreak ? ((shiftDuration - breakMin) / 2) / shiftDuration * 100 : 0
+                      const breakWidthPct = hasBreak ? breakMin / shiftDuration * 100 : 0
+                      return (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (wasDraggedRef.current) return
+                            setEditingCell({ userId: emp.id, dayKey: selectedDayKey })
+                          }}
+                          onMouseDown={(e) => {
+                            const r = e.currentTarget.getBoundingClientRect()
+                            const rel = e.clientX - r.left
+                            let mode = 'move'
+                            if (rel < HANDLE_PX) mode = 'resize-left'
+                            else if (rel > r.width - HANDLE_PX) mode = 'resize-right'
+                            beginDrag(e, emp, previewCell, mode)
+                          }}
+                          onMouseMove={(e) => {
+                            if (dragStateRef.current) return
+                            const r = e.currentTarget.getBoundingClientRect()
+                            const rel = e.clientX - r.left
+                            e.currentTarget.style.cursor = (rel < HANDLE_PX || rel > r.width - HANDLE_PX) ? 'ew-resize' : 'grab'
+                          }}
+                          className="absolute top-2 bottom-2 rounded-md border-2 flex items-center text-xs font-semibold transition-shadow hover:shadow-md select-none overflow-hidden"
+                          style={{
+                            left: `${geo.leftPct}%`,
+                            width: `${geo.widthPct}%`,
+                            background: (cell.color || '#fbbf24') + '40',
+                            borderColor: (cell.color || '#fbbf24'),
+                            color: '#1f2937',
+                            cursor: 'grab',
+                          }}
+                        >
+                          <span className="px-2 truncate pointer-events-none">
+                            {previewCell.start} – {previewCell.end}
+                          </span>
+                          {hasBreak && (
+                            <div
+                              className="absolute top-0 bottom-0 bg-gray-900/25 border-l border-r border-gray-700/40 flex items-center justify-center text-[10px] text-gray-900 pointer-events-none overflow-hidden gap-0.5"
+                              style={{ left: `${breakLeftPct}%`, width: `${breakWidthPct}%` }}
+                              title={`Refrigerio: ${breakMin} min`}
+                            >
+                              <Coffee className="w-2.5 h-2.5 flex-shrink-0" />
+                              <span className="whitespace-nowrap font-medium">{breakMin}m</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
                   ) : (
                     !cell && (
                       <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-300 hover:text-primary-600 transition-colors" data-role="track">
@@ -979,7 +1216,7 @@ function DailyTimeline({
                         onPickTemplate={(t) => assignTemplate(emp.id, selectedDayKey, t)}
                         onRest={() => setRest(emp.id, selectedDayKey)}
                         onClear={() => clearCell(emp.id, selectedDayKey)}
-                        onCustom={(s, e) => setCustom(emp.id, selectedDayKey, s, e)}
+                        onCustom={(s, e, b) => setCustom(emp.id, selectedDayKey, s, e, b)}
                         onClose={() => setEditingCell(null)}
                       />
                     </div>
@@ -995,7 +1232,7 @@ function DailyTimeline({
       <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500 flex flex-wrap items-center gap-3">
         <span>Horario: {String(MIN_HOUR).padStart(2,'0')}:00 – {String(MAX_HOUR).padStart(2,'0')}:00</span>
         <span className="text-gray-300">·</span>
-        <span>Click en una barra para editar el turno · Click en el espacio vacío para asignar uno</span>
+        <span>Click en una barra para editar · Arrastra el centro para mover · Arrastra los bordes para redimensionar · Click en el espacio vacío para asignar</span>
       </div>
     </div>
   )
