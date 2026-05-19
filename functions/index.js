@@ -465,7 +465,8 @@ export const sendInvoiceToSunat = onRequest(
           }
 
           // Validar estado: permitir reenvío si está pendiente, rechazada, firmada o sending (con timeout)
-          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
+          // 'not_sent' permite el envío manual cuando autoSendToSunat estaba apagado al crear el documento.
+          const allowedStatuses = ['pending', 'not_sent', 'rejected', 'signed', 'SIGNED', 'sending']
           if (!allowedStatuses.includes(data.sunatStatus)) {
             throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
           }
@@ -1307,7 +1308,8 @@ export const sendCreditNoteToSunat = onRequest(
           }
 
           // Validar estado: permitir envío si está pendiente, rechazada, firmada o sending (con timeout)
-          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
+          // 'not_sent' permite el envío manual cuando autoSendToSunat estaba apagado al crear el documento.
+          const allowedStatuses = ['pending', 'not_sent', 'rejected', 'signed', 'SIGNED', 'sending']
           if (!allowedStatuses.includes(data.sunatStatus)) {
             throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
           }
@@ -1564,7 +1566,7 @@ export const sendCreditNoteToSunat = onRequest(
       if (isAlreadyRegistered) {
         // Si el documento está en estado pending, signed, rejected o sending,
         // significa que lo estamos reenviando desde nuestra app
-        const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
+        const allowedStatuses = ['pending', 'not_sent', 'signed', 'rejected', 'sending']
         const isOurDocument = allowedStatuses.includes(creditNoteData.sunatStatus)
 
         if (isOurDocument) {
@@ -1983,7 +1985,8 @@ export const sendDebitNoteToSunat = onRequest(
           }
 
           // Validar estado: permitir envío si está pendiente, rechazada, firmada o sending (con timeout)
-          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
+          // 'not_sent' permite el envío manual cuando autoSendToSunat estaba apagado al crear el documento.
+          const allowedStatuses = ['pending', 'not_sent', 'rejected', 'signed', 'SIGNED', 'sending']
           if (!allowedStatuses.includes(data.sunatStatus)) {
             throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
           }
@@ -2238,7 +2241,7 @@ export const sendDebitNoteToSunat = onRequest(
         ndDescLower.includes('ha sido aceptado'))
 
       if (isAlreadyRegistered) {
-        const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
+        const allowedStatuses = ['pending', 'not_sent', 'signed', 'rejected', 'sending']
         const isOurDocument = allowedStatuses.includes(debitNoteData.sunatStatus)
 
         if (isOurDocument) {
