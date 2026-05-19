@@ -230,6 +230,35 @@ export default function OnlineOrders() {
     })
   }
 
+  // Convertir pedido online en cotización: navega al formulario de Nueva Cotización
+  // con items y datos del cliente precargados (lectura por location.state). El usuario
+  // puede revisar/ajustar antes de guardar.
+  const handleConvertToQuotation = (order) => {
+    appNavigate('/cotizaciones/nueva', {
+      state: {
+        prefilledItems: (order.items || []).map(item => ({
+          productId: item.productId || '',
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          unit: 'UNIDAD',
+          ...(item.isVariant && {
+            isVariant: true,
+            variantSku: item.variantSku,
+            variantAttributes: item.variantAttributes,
+          }),
+        })),
+        prefilledCustomer: {
+          name: order.customerName || '',
+          email: order.customerEmail || '',
+          phone: order.customerPhone || '',
+          address: order.customerAddress || '',
+        },
+        prefilledNotes: order.notes || '',
+      },
+    })
+  }
+
   const handleDownloadPdf = async (order) => {
     setGeneratingPdfFor(order.id)
     try {
@@ -658,6 +687,7 @@ export default function OnlineOrders() {
               onPrintTicket={handlePrintTicket}
               onDownloadPdf={handleDownloadPdf}
               onLoadToPOS={handleLoadToPOS}
+              onConvertToQuotation={handleConvertToQuotation}
               onOpenDetail={() => setDetailOrderId(order.id)}
               isUpdating={updatingOrderId === order.id}
               isGeneratingPdf={generatingPdfFor === order.id}
@@ -680,6 +710,7 @@ export default function OnlineOrders() {
         onPrintTicket={handlePrintTicket}
         onDownloadPdf={handleDownloadPdf}
         onLoadToPOS={handleLoadToPOS}
+        onConvertToQuotation={handleConvertToQuotation}
         isUpdating={updatingOrderId === detailOrderId}
         isGeneratingPdf={generatingPdfFor === detailOrderId}
       />
@@ -724,7 +755,7 @@ function StatCard({ label, value, helper, color, icon: Icon, prominent = false }
   )
 }
 
-function OrderCard({ order, customerBadge, isExpanded, onToggleExpand, onChangeStatus, onWhatsApp, onPrintTicket, onDownloadPdf, onLoadToPOS, onOpenDetail, isUpdating, isGeneratingPdf }) {
+function OrderCard({ order, customerBadge, isExpanded, onToggleExpand, onChangeStatus, onWhatsApp, onPrintTicket, onDownloadPdf, onLoadToPOS, onConvertToQuotation, onOpenDetail, isUpdating, isGeneratingPdf }) {
   const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
   const StatusIcon = config.icon
   const hasAddress = !!order.customerAddress
@@ -912,16 +943,27 @@ function OrderCard({ order, customerBadge, isExpanded, onToggleExpand, onChangeS
             </button>
           )}
 
-          {/* Paso 3 — Listo: Cobrar en POS (auto-completa al facturar) */}
+          {/* Paso 3 — Listo: Cobrar en POS (2/3) + Convertir en cotización (1/3) */}
           {order.status === 'ready' && (
-            <button
-              onClick={() => onLoadToPOS(order)}
-              disabled={isUpdating}
-              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              Cobrar en POS
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onLoadToPOS(order)}
+                disabled={isUpdating}
+                className="basis-2/3 grow inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Cobrar en POS
+              </button>
+              <button
+                onClick={() => onConvertToQuotation?.(order)}
+                disabled={isUpdating || !onConvertToQuotation}
+                title="Crear una cotización a partir de este pedido"
+                className="basis-1/3 grow inline-flex items-center justify-center gap-1.5 px-2 py-2.5 bg-white hover:bg-gray-50 active:bg-gray-100 text-primary-700 border border-primary-300 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+              >
+                <FileText className="w-4 h-4" />
+                Cotización
+              </button>
+            </div>
           )}
 
           {/* Acciones secundarias cuando el pedido sigue activo */}
@@ -1091,7 +1133,7 @@ function OrderListRow({ order, customerBadge, onOpenDetail, onPrintTicket, onDow
   )
 }
 
-function OrderDetailModal({ isOpen, order, customerBadge, onClose, onChangeStatus, onWhatsApp, onPrintTicket, onDownloadPdf, onLoadToPOS, isUpdating, isGeneratingPdf }) {
+function OrderDetailModal({ isOpen, order, customerBadge, onClose, onChangeStatus, onWhatsApp, onPrintTicket, onDownloadPdf, onLoadToPOS, onConvertToQuotation, isUpdating, isGeneratingPdf }) {
   if (!order) return null
   const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
   const StatusIcon = config.icon
@@ -1289,14 +1331,25 @@ function OrderDetailModal({ isOpen, order, customerBadge, onClose, onChangeStatu
               </button>
             )}
             {order.status === 'ready' && (
-              <button
-                onClick={handleAction(() => onLoadToPOS(order))}
-                disabled={isUpdating}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                Cobrar en POS
-              </button>
+              <>
+                <button
+                  onClick={handleAction(() => onLoadToPOS(order))}
+                  disabled={isUpdating}
+                  className="basis-2/3 grow inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  Cobrar en POS
+                </button>
+                <button
+                  onClick={handleAction(() => onConvertToQuotation?.(order))}
+                  disabled={isUpdating || !onConvertToQuotation}
+                  title="Crear una cotización a partir de este pedido"
+                  className="basis-1/3 grow inline-flex items-center justify-center gap-1.5 px-2 py-2 bg-white hover:bg-gray-50 text-primary-700 border border-primary-300 text-xs font-semibold rounded-lg disabled:opacity-50"
+                >
+                  <FileText className="w-4 h-4" />
+                  Cotización
+                </button>
+              </>
             )}
             {order.customerPhone && (
               <button

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -108,6 +108,10 @@ export default function CreateQuotation() {
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
   const [searchParams] = useSearchParams()
   const cloneId = searchParams.get('clone') // Si hay clone, duplicar cotización
+  const location = useLocation()
+  // Datos prellenados al navegar desde otra pantalla (ej: convertir pedido online en cotización).
+  // Formato: { prefilledItems: [...], prefilledCustomer: { name, email, phone, address }, prefilledNotes }
+  const prefilledFromState = location.state || null
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -316,6 +320,51 @@ export default function CreateQuotation() {
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exchangeRate])
+
+  // Si venimos desde otra pantalla con datos prellenados (ej: "Convertir en cotización"
+  // desde un pedido online), precargamos items + cliente y saltamos la carga del draft.
+  // El state se consume una sola vez: limpiamos history.state para que un refresh no
+  // vuelva a aplicarlo encima de lo que el usuario haya editado.
+  useEffect(() => {
+    if (draftLoadedRef.current) return
+    if (quotationId || cloneId) return
+    const items = prefilledFromState?.prefilledItems
+    const cust = prefilledFromState?.prefilledCustomer
+    const notesIn = prefilledFromState?.prefilledNotes
+    if (!Array.isArray(items) || items.length === 0) return
+
+    setQuotationItems(items.map(it => ({
+      productId: it.productId || '',
+      name: it.name || '',
+      quantity: it.quantity != null ? String(it.quantity) : '',
+      unitPrice: Number(it.price ?? it.unitPrice ?? 0) || 0,
+      unit: it.unit || 'UNIDAD',
+      searchTerm: '',
+      ...(it.isVariant && {
+        isVariant: true,
+        variantSku: it.variantSku,
+        variantAttributes: it.variantAttributes,
+      }),
+    })))
+    if (cust && (cust.name || cust.email || cust.phone)) {
+      setCustomerMode('manual')
+      setManualCustomer((prev) => ({
+        ...prev,
+        name: cust.name || '',
+        email: cust.email || '',
+        phone: cust.phone || '',
+        address: cust.address || prev.address || '',
+      }))
+    }
+    if (notesIn) setNotes(notesIn)
+    // No tocamos el draft de localStorage: el effect de abajo no va a sobrescribir
+    // porque marcamos draftLoadedRef.current.
+    draftLoadedRef.current = true
+    // Limpiar state del history para evitar reaplicación en refresh
+    try { window.history.replaceState({}, '') } catch {}
+    toast.info('Cotización precargada desde pedido')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Cargar borrador al montar (solo en modo creación nueva, no edición ni clonación)
   useEffect(() => {
