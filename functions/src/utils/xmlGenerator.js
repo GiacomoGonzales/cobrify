@@ -3099,10 +3099,15 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const referencesElectronicRemitente = relatedSeries.some(s => /^[A-Za-z]/.test(s))
 
   const itemsArr = Array.isArray(guideData.items) ? guideData.items : []
-  const itemsDescription = itemsArr
-    .map(it => (it.description || it.name || '').toString().trim())
-    .filter(Boolean)
-    .join(' | ')
+  const formatItemLine = (it) => {
+    const desc = (it.description || it.name || '').toString().trim()
+    if (!desc) return ''
+    const qty = it.quantity != null && it.quantity !== '' ? String(it.quantity) : ''
+    const unit = (it.unit || '').toString().trim()
+    const prefix = [qty, unit].filter(Boolean).join(' ')
+    return prefix ? `${prefix} ${desc}` : desc
+  }
+  const itemsDescription = itemsArr.map(formatItemLine).filter(Boolean).join(' | ')
   const fallbackDescription = itemsDescription || guideData.description || 'CARGA'
   const annotationText = fallbackDescription.substring(0, 500)
 
