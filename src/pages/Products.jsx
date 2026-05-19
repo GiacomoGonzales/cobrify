@@ -1766,6 +1766,47 @@ export default function Products() {
         if (p.name) productByName.set(p.name.toLowerCase().trim(), p)
       })
 
+      // VALIDACIÓN PRE-IMPORT: rechazar si hay códigos de barras duplicados con SKUs
+      // distintos. Esto antes pasaba silencioso: el importer trataba todas las filas con
+      // el mismo código como "el mismo producto", sobrescribía el primero y duplicaba
+      // movimientos de stock (desincronizaba el balance). Mejor abortar y avisar.
+      const validationErrors = []
+
+      // (a) Duplicados dentro del mismo Excel
+      const codeOccurrences = new Map() // codeKey -> [{ rowIndex, sku, name }]
+      productsToImport.forEach((p, idx) => {
+        if (!p.code) return
+        const codeKey = String(p.code).trim().toLowerCase()
+        if (!codeOccurrences.has(codeKey)) codeOccurrences.set(codeKey, [])
+        codeOccurrences.get(codeKey).push({ rowIndex: idx + 2, sku: p.sku, name: p.name })
+      })
+      for (const [codeKey, occ] of codeOccurrences) {
+        if (occ.length < 2) continue
+        const distinctSkus = new Set(occ.map(o => String(o.sku || '').toLowerCase().trim()).filter(Boolean))
+        if (distinctSkus.size > 1) {
+          const rowList = occ.map(o => `fila ${o.rowIndex} (SKU "${o.sku}")`).join(', ')
+          validationErrors.push(`Código de barras "${occ[0].name ? codeKey : codeKey}" duplicado en el Excel con SKUs distintos: ${rowList}`)
+        }
+      }
+
+      // (b) Conflictos contra la base: código existe en DB con un SKU distinto al del Excel
+      productsToImport.forEach((p, idx) => {
+        if (!p.code || !p.sku) return
+        const codeKey = String(p.code).trim().toLowerCase()
+        const skuKey = String(p.sku).trim().toLowerCase()
+        const existingByCode = productByCode.get(codeKey)
+        if (!existingByCode) return
+        const existingSkuKey = String(existingByCode.sku || '').toLowerCase().trim()
+        if (existingSkuKey && existingSkuKey !== skuKey) {
+          validationErrors.push(`Fila ${idx + 2}: código de barras "${p.code}" ya está asignado al producto "${existingByCode.name}" (SKU "${existingByCode.sku}"). Si quieres actualizar ese producto, usa su SKU.`)
+        }
+      })
+
+      if (validationErrors.length > 0) {
+        toast.error('Importación cancelada: códigos de barras en conflicto')
+        return { success: 0, errors: validationErrors }
+      }
+
       // Importar productos
       let updatedCount = 0
       for (let i = 0; i < productsToImport.length; i++) {
@@ -1990,17 +2031,23 @@ export default function Products() {
                     }
                   } else if (updates.stock !== undefined) {
                     const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
-                    if (stockValue > 0) {
+                    // Calcular el delta real vs el stock previo en este almacén.
+                    // Sin esto, cada update creaba un movimiento por el valor total del Excel
+                    // (no por la diferencia), desincronizando el balance del histórico.
+                    const previousInWarehouse = (existingProduct.warehouseStocks || []).find(ws => ws.warehouseId === targetWarehouse.id)
+                    const previousStock = previousInWarehouse?.stock || 0
+                    const delta = stockValue - previousStock
+                    if (delta !== 0) {
                       await createStockMovement(getBusinessId(), {
                         productId: existingProduct.id,
                         warehouseId: targetWarehouse.id,
-                        type: 'entry',
-                        quantity: stockValue,
-                        reason: 'Stock inicial',
+                        type: delta > 0 ? 'entry' : 'exit',
+                        quantity: Math.abs(delta),
+                        reason: 'Ajuste por importación',
                         referenceType: 'initial_stock',
                         referenceId: existingProduct.id,
                         userId: user?.uid,
-                        notes: 'Ingreso de stock por importación masiva'
+                        notes: `Ajuste de stock por importación masiva (${previousStock} → ${stockValue})`
                       })
                     }
                   }
