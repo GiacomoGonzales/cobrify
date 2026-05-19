@@ -100,13 +100,38 @@ export const onNewOrder = onDocumentWritten(
       const ownerResult = await sendPushNotification(ownerId, title, body, data)
       console.log(`📤 Push to owner ${ownerId}:`, ownerResult)
 
-      // Enviar también a sub-usuarios del negocio
+      // Enviar a sub-usuarios — pero SOLO a los que tienen acceso a páginas de órdenes.
+      // Antes esto se enviaba a todos los sub-usuarios del negocio, incluyendo a empleados
+      // que solo marcan asistencia (mozos, cajeros restringidos, contabilidad), generando
+      // spam de notificaciones irrelevantes para ellos.
+      //
+      // Páginas relacionadas con órdenes/pedidos:
+      //   - 'orders'         (Órdenes — restaurante)
+      //   - 'tables'         (Mesas — restaurante)
+      //   - 'kitchen'        (Cocina — restaurante)
+      //   - 'waiters'        (Mozos — restaurante)
+      //   - 'online-orders'  (Pedidos Online — retail)
+      //   - 'pos'            (POS — cajero suele cobrar pedidos)
+      //
+      // Regla: si el sub-usuario tiene AL MENOS una de estas páginas en allowedPages,
+      // recibe la notificación. Si su allowedPages está vacío o no incluye ninguna,
+      // se le omite. (Sub-usuarios sin allowedPages no tienen acceso al sistema de todas
+      // formas, así que tampoco necesitan la notif.)
+      const ORDER_RELATED_PAGES = ['orders', 'tables', 'kitchen', 'waiters', 'online-orders', 'pos']
+
       const subUsersSnapshot = await db
         .collection('users')
         .where('ownerId', '==', ownerId)
         .get()
 
       for (const userDoc of subUsersSnapshot.docs) {
+        const userData = userDoc.data() || {}
+        const userPages = Array.isArray(userData.allowedPages) ? userData.allowedPages : []
+        const hasOrderAccess = ORDER_RELATED_PAGES.some(p => userPages.includes(p))
+        if (!hasOrderAccess) {
+          console.log(`🔕 Skipping sub-user ${userDoc.id} (no order page access)`)
+          continue
+        }
         const subResult = await sendPushNotification(userDoc.id, title, body, data)
         console.log(`📤 Push to sub-user ${userDoc.id}:`, subResult)
       }
