@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2 } from 'lucide-react'
+import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2, AlertTriangle, Layers, Boxes } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
@@ -149,6 +150,7 @@ const ProductFormModal = ({
   laboratories = [],
 }) => {
   const { user, businessSettings, hasFeature, getBusinessId } = useAppContext()
+  const appNavigate = useAppNavigate()
   const toast = useToast()
 
   // Default options
@@ -200,6 +202,13 @@ const ProductFormModal = ({
   const [trackSerials, setTrackSerials] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
   const [catalogComparePrice, setCatalogComparePrice] = useState('')
+
+  // ----- Edición manual de stock (modo edición, toggle businessSettings.enableManualStockEdit) -----
+  // stockEdits es un map plano `${warehouseId}|${variantSku || ''}` -> string del input.
+  // Se inicializa con los valores actuales del producto y se compara contra ellos en submit
+  // para calcular el delta y generar el movement correspondiente.
+  const [stockEdits, setStockEdits] = useState({})
+  const stockEditKey = (warehouseId, variantSku) => `${warehouseId}|${variantSku || ''}`
   // Auto-precio según cantidad (para POS y catálogo) — opt-in por producto.
   // Si está OFF: en POS aparece el modal de elegir precio como hoy.
   // Si está ON: se agrega directo y el precio se ajusta solo según la cantidad.
@@ -288,6 +297,26 @@ const ProductFormModal = ({
       setPresentations(initialData.presentations || [])
       setProductLocation(initialData.location || '')
       setProductImages(productToImageItems(initialData))
+
+      // Inicializar stockEdits con los valores actuales del producto, para que el editor
+      // muestre los valores reales y podamos calcular deltas exactos al guardar.
+      const initial = {}
+      const hasVar = initialData.hasVariants && Array.isArray(initialData.variants) && initialData.variants.length > 0
+      const whs = (warehouses || []).filter(w => w.isActive)
+      if (hasVar) {
+        for (const v of initialData.variants) {
+          for (const wh of whs) {
+            const ws = (v.warehouseStocks || []).find(x => x.warehouseId === wh.id)
+            initial[stockEditKey(wh.id, v.sku)] = String(ws?.stock ?? 0)
+          }
+        }
+      } else {
+        for (const wh of whs) {
+          const ws = (initialData.warehouseStocks || []).find(x => x.warehouseId === wh.id)
+          initial[stockEditKey(wh.id, null)] = String(ws?.stock ?? 0)
+        }
+      }
+      setStockEdits(initial)
     } else {
       // Create mode - reset to defaults
       reset({
@@ -315,6 +344,7 @@ const ProductFormModal = ({
       setTaxAffectation(isIgvExempt ? '20' : '10')
       setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
       setWarehouseInitialStocks({})
+      setStockEdits({})
       setPresentations([])
       setProductImages([])
       setPharmacyData({
@@ -475,6 +505,41 @@ const ProductFormModal = ({
         productData.imageUrl = null
       } finally {
         setUploadingImage(false)
+      }
+    }
+
+    // Si está habilitada la edición manual de stock y estamos editando un producto
+    // (no creando), calcular los deltas vs el estado actual y pasarlos al parent
+    // para que aplique los cambios + genere stockMovements de auditoría.
+    if (businessSettings?.enableManualStockEdit && initialData && !noStock) {
+      const hasVar = initialData.hasVariants && Array.isArray(initialData.variants) && initialData.variants.length > 0
+      const hasBat = !!initialData.trackExpiration || (Array.isArray(initialData.batches) && initialData.batches.length > 0)
+      // Productos con lotes: no producimos cambios desde acá (se gestiona en Control de Lotes)
+      if (!hasBat) {
+        const activeWhs = (warehouses || []).filter(w => w.isActive)
+        const stockChanges = []
+        if (hasVar) {
+          for (const v of initialData.variants) {
+            for (const wh of activeWhs) {
+              const newVal = parseFloat(stockEdits[stockEditKey(wh.id, v.sku)])
+              if (Number.isNaN(newVal)) continue
+              const oldVal = ((v.warehouseStocks || []).find(x => x.warehouseId === wh.id)?.stock) || 0
+              if (newVal === oldVal) continue
+              stockChanges.push({ warehouseId: wh.id, variantSku: v.sku, oldStock: oldVal, newStock: newVal })
+            }
+          }
+        } else {
+          for (const wh of activeWhs) {
+            const newVal = parseFloat(stockEdits[stockEditKey(wh.id, null)])
+            if (Number.isNaN(newVal)) continue
+            const oldVal = ((initialData.warehouseStocks || []).find(x => x.warehouseId === wh.id)?.stock) || 0
+            if (newVal === oldVal) continue
+            stockChanges.push({ warehouseId: wh.id, variantSku: null, oldStock: oldVal, newStock: newVal })
+          }
+        }
+        if (stockChanges.length > 0) {
+          productData._manualStockChanges = stockChanges
+        }
       }
     }
 
@@ -1316,6 +1381,162 @@ const ProductFormModal = ({
               )}
             </div>
           )}
+
+          {/* ============ EDICIÓN MANUAL DE STOCK (modo edición + toggle ON) ============
+              Se muestra solo cuando:
+              - businessSettings.enableManualStockEdit === true
+              - hay initialData (estamos editando, no creando)
+              - el producto controla stock (!noStock)
+              Tres ramas según el contexto del producto: lotes (bloqueado), variantes
+              (matriz), o simple (input por almacén). */}
+          {businessSettings?.enableManualStockEdit && initialData && !noStock && (() => {
+            const hasVar = initialData.hasVariants && Array.isArray(initialData.variants) && initialData.variants.length > 0
+            const hasBat = !!initialData.trackExpiration || (Array.isArray(initialData.batches) && initialData.batches.length > 0)
+            const activeWhs = (warehouses || []).filter(w => w.isActive)
+
+            // ===== Caso: producto con lotes/vencimiento → bloquear =====
+            if (hasBat) {
+              return (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-amber-900 mb-1">
+                      Producto con control de lotes
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed mb-2">
+                      El stock real proviene de la suma de los lotes activos. Modificarlo libremente desde acá rompería la trazabilidad de vencimientos. Ajustá las cantidades por lote desde Control de Lotes.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose()
+                        appNavigate('control-lotes', { state: { productId: initialData.id, productName: initialData.name } })
+                      }}
+                      className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Ir a Control de Lotes →
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+
+            // ===== Caso: producto con variantes (sin lotes) → matriz =====
+            if (hasVar) {
+              return (
+                <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers className="w-4 h-4 text-blue-700" />
+                    <span className="text-sm font-semibold text-blue-900">Editar stock por variante y almacén</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Cada cambio queda registrado como movimiento de ajuste auditable.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-blue-200">
+                          <th className="text-left py-2 px-2 font-medium text-gray-700">Variante</th>
+                          {activeWhs.map((wh) => (
+                            <th key={wh.id} className="text-right py-2 px-2 font-medium text-gray-700 whitespace-nowrap">
+                              {wh.name}
+                              {wh.isDefault && <span className="ml-1 text-[10px] text-primary-600">(Principal)</span>}
+                            </th>
+                          ))}
+                          <th className="text-right py-2 px-2 font-medium text-gray-700 whitespace-nowrap">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {initialData.variants.map((v) => {
+                          const variantTotal = activeWhs.reduce((sum, wh) => {
+                            const val = parseInt(stockEdits[stockEditKey(wh.id, v.sku)]) || 0
+                            return sum + val
+                          }, 0)
+                          return (
+                            <tr key={v.sku} className="border-b border-blue-100/60 last:border-0">
+                              <td className="py-2 px-2">
+                                <div className="font-medium text-gray-900 text-xs">{v.sku}</div>
+                                {v.attributes && (
+                                  <div className="text-[10px] text-gray-500">
+                                    {Object.entries(v.attributes).map(([k, val]) => `${k}: ${val}`).join(' · ')}
+                                  </div>
+                                )}
+                              </td>
+                              {activeWhs.map((wh) => (
+                                <td key={wh.id} className="py-2 px-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step={allowDecimalQuantity ? '0.01' : '1'}
+                                    value={stockEdits[stockEditKey(wh.id, v.sku)] ?? ''}
+                                    onChange={(e) => setStockEdits(prev => ({
+                                      ...prev,
+                                      [stockEditKey(wh.id, v.sku)]: e.target.value,
+                                    }))}
+                                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </td>
+                              ))}
+                              <td className="py-2 px-2 text-right font-semibold text-blue-700">
+                                {variantTotal}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            }
+
+            // ===== Caso: producto simple =====
+            return (
+              <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <Boxes className="w-4 h-4 text-emerald-700" />
+                  <span className="text-sm font-semibold text-emerald-900">Editar stock actual</span>
+                </div>
+                <p className="text-xs text-gray-600 mb-3">
+                  {activeWhs.length > 1
+                    ? 'Modificá las cantidades por almacén. Cada cambio queda registrado como movimiento de ajuste auditable.'
+                    : 'Modificá la cantidad actual. El cambio queda registrado como movimiento de ajuste auditable.'}
+                </p>
+                <div className="space-y-2">
+                  {activeWhs.map((wh) => (
+                    <div key={wh.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-700">{wh.name}</span>
+                        {wh.isDefault && <span className="ml-2 text-xs text-primary-600">(Principal)</span>}
+                      </div>
+                      <div className="w-28">
+                        <input
+                          type="number"
+                          min="0"
+                          step={allowDecimalQuantity ? '0.01' : '1'}
+                          value={stockEdits[stockEditKey(wh.id, null)] ?? ''}
+                          onChange={(e) => setStockEdits(prev => ({
+                            ...prev,
+                            [stockEditKey(wh.id, null)]: e.target.value,
+                          }))}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 w-12">uds.</span>
+                    </div>
+                  ))}
+                </div>
+                {activeWhs.length > 1 && (
+                  <div className="mt-2 pt-2 border-t border-emerald-200 flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Stock Total:</span>
+                    <span className="text-sm font-bold text-emerald-700">
+                      {activeWhs.reduce((sum, wh) => sum + (parseFloat(stockEdits[stockEditKey(wh.id, null)]) || 0), 0)} unidades
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Fecha de vencimiento fuera del bloque de stock si no controla stock pero sí vencimiento */}
           {noStock && showExpiration && trackExpiration && (

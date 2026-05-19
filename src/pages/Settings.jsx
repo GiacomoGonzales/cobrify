@@ -240,6 +240,7 @@ export default function Settings() {
   const [autoSku, setAutoSku] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [enableProductLocation, setEnableProductLocation] = useState(false)
+  const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
@@ -1022,6 +1023,7 @@ export default function Settings() {
         setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
+        setEnableManualStockEdit(businessData.enableManualStockEdit || false)
         setEnableCustomerDisplay(businessData.enableCustomerDisplay || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
         setExitNoteEnabled(businessData.exitNoteEnabled || false)
@@ -3080,6 +3082,26 @@ export default function Settings() {
                 </div>
               </label>
 
+              {/* Edición manual de stock desde el modal de productos */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={enableManualStockEdit}
+                  onChange={(e) => setEnableManualStockEdit(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Permitir editar stock manualmente desde productos
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {enableManualStockEdit
+                      ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
+                      : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
+                  </p>
+                </div>
+              </label>
+
               {/* Pantalla de cliente (segunda pantalla) */}
               <label className={`flex items-start space-x-3 cursor-pointer group p-3 border rounded-lg transition-colors ${
                 enableCustomerDisplay ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
@@ -3765,6 +3787,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
+                      enableManualStockEdit: enableManualStockEdit,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
                       metaAdsEnabled: metaAdsEnabled,

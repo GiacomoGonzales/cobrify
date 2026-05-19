@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer, Layers, Boxes } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -217,6 +218,7 @@ const getExpirationStatus = (expirationDate) => {
 
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings } = useAppContext()
+  const appNavigate = useAppNavigate()
   const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const [products, setProducts] = useState([])
@@ -250,6 +252,13 @@ export default function Products() {
   const [isFeatured, setIsFeatured] = useState(false) // Producto destacado en catálogo
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({}) // Stock inicial por almacén { warehouseId: quantity }
+
+  // Edición manual de stock desde el modal — toggle businessSettings.enableManualStockEdit.
+  // Map { `${warehouseId}|${variantSku||''}` -> stringValue } con los valores tipeados por el
+  // usuario. Se inicializa con los stocks actuales al abrir el modal en modo edición y se
+  // compara contra ellos en el submit para calcular deltas y generar stockMovements.
+  const [stockEdits, setStockEdits] = useState({})
+  const stockEditKey = (warehouseId, variantSku) => `${warehouseId}|${variantSku || ''}`
 
   // Paginación en cliente
   const [currentPage, setCurrentPage] = useState(1)
@@ -801,6 +810,26 @@ export default function Products() {
       expirationDate: formattedExpirationDate,
       minStock: product.minStock != null ? product.minStock.toString() : '',
     })
+
+    // Inicializar stockEdits con los valores actuales por almacén × variante.
+    // Esto alimenta el editor manual (toggle businessSettings.enableManualStockEdit).
+    const initStock = {}
+    const activeWhs = (warehouses || []).filter(w => w.isActive)
+    if (productHasVariants && Array.isArray(product.variants)) {
+      for (const v of product.variants) {
+        for (const wh of activeWhs) {
+          const ws = (v.warehouseStocks || []).find(x => x.warehouseId === wh.id)
+          initStock[stockEditKey(wh.id, v.sku)] = String(ws?.stock ?? 0)
+        }
+      }
+    } else {
+      for (const wh of activeWhs) {
+        const ws = (product.warehouseStocks || []).find(x => x.warehouseId === wh.id)
+        initStock[stockEditKey(wh.id, null)] = String(ws?.stock ?? 0)
+      }
+    }
+    setStockEdits(initStock)
+
     setIsModalOpen(true)
   }
 
@@ -1244,9 +1273,117 @@ export default function Products() {
 
       let result
 
+      // Ajustes manuales de stock desde el modal (toggle businessSettings.enableManualStockEdit).
+      // Si está habilitado y estamos editando un producto sin lotes, construimos la lista
+      // de cambios comparando stockEdits (lo tipeado por el usuario) contra el stock actual
+      // del editingProduct. Luego se aplican a warehouseStocks ANTES de updateProduct y se
+      // generan movements DESPUÉS.
+      if (
+        editingProduct &&
+        businessSettings?.enableManualStockEdit === true &&
+        !noStock &&
+        !(editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0))
+      ) {
+        const activeWhs = (warehouses || []).filter(w => w.isActive)
+        const changes = []
+        if (productData.hasVariants && Array.isArray(productData.variants) && productData.variants.length > 0) {
+          for (const v of productData.variants) {
+            for (const wh of activeWhs) {
+              const raw = stockEdits[stockEditKey(wh.id, v.sku)]
+              if (raw === undefined || raw === '') continue
+              const newVal = parseFloat(raw)
+              if (Number.isNaN(newVal)) continue
+              const origVariant = (editingProduct.variants || []).find(x => x.sku === v.sku)
+              const oldVal = ((origVariant?.warehouseStocks || []).find(x => x.warehouseId === wh.id)?.stock) || 0
+              if (newVal === oldVal) continue
+              changes.push({ warehouseId: wh.id, variantSku: v.sku, oldStock: oldVal, newStock: newVal })
+            }
+          }
+        } else {
+          for (const wh of activeWhs) {
+            const raw = stockEdits[stockEditKey(wh.id, null)]
+            if (raw === undefined || raw === '') continue
+            const newVal = parseFloat(raw)
+            if (Number.isNaN(newVal)) continue
+            const oldVal = ((editingProduct.warehouseStocks || []).find(x => x.warehouseId === wh.id)?.stock) || 0
+            if (newVal === oldVal) continue
+            changes.push({ warehouseId: wh.id, variantSku: null, oldStock: oldVal, newStock: newVal })
+          }
+        }
+        if (changes.length > 0) productData._manualStockChanges = changes
+      }
+
+      // Ajustes manuales de stock desde el modal (toggle businessSettings.enableManualStockEdit).
+      // Llegan en productData._manualStockChanges como [{ warehouseId, variantSku, oldStock, newStock }].
+      // Los aplicamos a warehouseStocks ANTES de updateProduct y generamos movements DESPUÉS.
+      const manualStockChanges = Array.isArray(productData._manualStockChanges) ? productData._manualStockChanges : []
+      delete productData._manualStockChanges
+
+      if (editingProduct && manualStockChanges.length > 0) {
+        if (productData.hasVariants && Array.isArray(productData.variants)) {
+          productData.variants = productData.variants.map(v => {
+            const changes = manualStockChanges.filter(c => c.variantSku === v.sku)
+            if (changes.length === 0) return v
+            let ws = Array.isArray(v.warehouseStocks) ? [...v.warehouseStocks] : []
+            for (const ch of changes) {
+              const idx = ws.findIndex(x => x.warehouseId === ch.warehouseId)
+              if (idx >= 0) ws[idx] = { ...ws[idx], stock: ch.newStock }
+              else ws.push({ warehouseId: ch.warehouseId, stock: ch.newStock, minStock: 0 })
+            }
+            return { ...v, warehouseStocks: ws, stock: ws.reduce((s, x) => s + (x.stock || 0), 0) }
+          })
+          productData.stock = productData.variants.reduce((s, v) => s + (v.stock || 0), 0)
+        } else {
+          let ws = Array.isArray(productData.warehouseStocks) ? [...productData.warehouseStocks] : []
+          for (const ch of manualStockChanges) {
+            const idx = ws.findIndex(x => x.warehouseId === ch.warehouseId)
+            if (idx >= 0) ws[idx] = { ...ws[idx], stock: ch.newStock }
+            else ws.push({ warehouseId: ch.warehouseId, stock: ch.newStock, minStock: 0 })
+          }
+          productData.warehouseStocks = ws
+          productData.stock = ws.reduce((s, x) => s + (x.stock || 0), 0)
+        }
+      }
+
       if (editingProduct) {
         // Update
         result = await updateProduct(getBusinessId(), editingProduct.id, productData)
+
+        // Crear stockMovements de auditoría por cada cambio manual aplicado.
+        // Usamos type='adjustment' y quantity CON signo (delta), igual que el flujo
+        // de "Recuento de inventario" — así el resumen Entradas/Salidas/Balance del
+        // historial cuadra y el badge aparece como "Ajuste" (no Entrada ni Salida).
+        if (result.success && manualStockChanges.length > 0) {
+          const businessId = getBusinessId()
+          const userName = user?.displayName || user?.email || 'Usuario'
+          for (const ch of manualStockChanges) {
+            const delta = ch.newStock - ch.oldStock
+            if (delta === 0) continue
+            const wh = (warehouses || []).find(w => w.id === ch.warehouseId)
+            const variantLabel = ch.variantSku ? ` · variante ${ch.variantSku}` : ''
+            try {
+              await createStockMovement(businessId, {
+                productId: editingProduct.id,
+                productName: editingProduct.name || '',
+                variantSku: ch.variantSku || null,
+                warehouseId: ch.warehouseId,
+                warehouseName: wh?.name || 'General',
+                type: 'adjustment',
+                quantity: delta, // CON signo: + entrada, - salida
+                previousStock: ch.oldStock,
+                newStock: ch.newStock,
+                reason: 'Ajuste manual desde edición de producto',
+                referenceType: 'manual_adjustment',
+                referenceId: editingProduct.id,
+                userId: user?.uid,
+                userName,
+                notes: `Ajuste manual${variantLabel}: ${ch.oldStock} → ${ch.newStock} (${delta > 0 ? '+' : ''}${delta}) por ${userName}`,
+              })
+            } catch (mvErr) {
+              console.error('Error registrando movimiento de ajuste manual:', mvErr)
+            }
+          }
+        }
 
         // Si es producto con variantes y se seleccionó un almacén, asignar warehouseStocks a variantes que no lo tienen
         if (result.success && productData.hasVariants && productData.variants?.length > 0 && variantWarehouseId) {
@@ -5575,17 +5712,95 @@ export default function Products() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
                 {/* Stock Actual (solo al editar) */}
-                {editingProduct && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Stock Actual
-                    </label>
-                    <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 font-semibold">
-                      {editingProduct.stock ?? 0} unidades
+                {editingProduct && (() => {
+                  const stockEditOn = businessSettings?.enableManualStockEdit === true
+                  const hasBatches = !!editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)
+                  const activeWhs = (warehouses || []).filter(w => w.isActive)
+
+                  // Producto con control de lotes → bloquear edición directa con banner.
+                  if (stockEditOn && hasBatches) {
+                    return (
+                      <div className="md:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-amber-900 mb-1">Producto con control de lotes</div>
+                          <p className="text-xs text-amber-800 leading-relaxed mb-2">
+                            El stock real proviene de la suma de los lotes activos. Ajustá las cantidades por lote desde Control de Lotes para preservar la trazabilidad de vencimientos.
+                          </p>
+                          <p className="text-xs text-amber-900 mb-2">Stock actual: <strong>{editingProduct.stock ?? 0} unidades</strong></p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsModalOpen(false)
+                              appNavigate('control-lotes', { state: { productId: editingProduct.id, productName: editingProduct.name } })
+                            }}
+                            className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
+                          >
+                            Ir a Control de Lotes →
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Toggle ON sin lotes → editor por almacén.
+                  if (stockEditOn && activeWhs.length > 0) {
+                    return (
+                      <div className="md:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Boxes className="w-4 h-4 text-emerald-700" />
+                          <label className="text-sm font-medium text-gray-900">Stock Actual</label>
+                          <span className="text-xs text-gray-500">— editable, cada cambio queda auditado</span>
+                        </div>
+                        <div className="space-y-2">
+                          {activeWhs.map((wh) => (
+                            <div key={wh.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-gray-700">{wh.name}</span>
+                                {wh.isDefault && <span className="ml-2 text-xs text-primary-600">(Principal)</span>}
+                              </div>
+                              <div className="w-28">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step={allowDecimalQuantity ? '0.01' : '1'}
+                                  value={stockEdits[stockEditKey(wh.id, null)] ?? ''}
+                                  onChange={(e) => setStockEdits(prev => ({
+                                    ...prev,
+                                    [stockEditKey(wh.id, null)]: e.target.value,
+                                  }))}
+                                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                                />
+                              </div>
+                              <span className="text-xs text-gray-500 w-12">uds.</span>
+                            </div>
+                          ))}
+                        </div>
+                        {activeWhs.length > 1 && (
+                          <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
+                            <span className="text-sm font-medium text-gray-700">Stock Total:</span>
+                            <span className="text-sm font-bold text-emerald-700">
+                              {activeWhs.reduce((sum, wh) => sum + (parseFloat(stockEdits[stockEditKey(wh.id, null)]) || 0), 0)} unidades
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  // Toggle OFF → comportamiento clásico (read-only).
+                  return (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Stock Actual
+                      </label>
+                      <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 font-semibold">
+                        {editingProduct.stock ?? 0} unidades
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Se actualiza con ventas y compras</p>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">Se actualiza con ventas y compras</p>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Stock Inicial - Solo para edición (dato histórico) */}
                 {editingProduct && (
@@ -5924,6 +6139,96 @@ export default function Products() {
               <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
                 Variantes
               </h3>
+
+              {/* Editor manual de stock por variante × almacén — solo en edición con toggle ON
+                  y siempre que NO haya lotes activos (los lotes se gestionan aparte). */}
+              {editingProduct && businessSettings?.enableManualStockEdit === true && !noStock && variants.length > 0 &&
+                !(editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)) && (() => {
+                const activeWhs = (warehouses || []).filter(w => w.isActive)
+                if (activeWhs.length === 0) return null
+                return (
+                  <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className="w-4 h-4 text-blue-700" />
+                      <span className="text-sm font-semibold text-blue-900">Stock actual por variante y almacén</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-3">Cada cambio queda registrado como movimiento de ajuste auditable.</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-blue-200">
+                            <th className="text-left py-2 px-2 font-medium text-gray-700">Variante</th>
+                            {activeWhs.map((wh) => (
+                              <th key={wh.id} className="text-right py-2 px-2 font-medium text-gray-700 whitespace-nowrap">
+                                {wh.name}
+                                {wh.isDefault && <span className="ml-1 text-[10px] text-primary-600">(Principal)</span>}
+                              </th>
+                            ))}
+                            <th className="text-right py-2 px-2 font-medium text-gray-700 whitespace-nowrap">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variants.map((v) => {
+                            const total = activeWhs.reduce((sum, wh) => sum + (parseFloat(stockEdits[stockEditKey(wh.id, v.sku)]) || 0), 0)
+                            return (
+                              <tr key={v.sku} className="border-b border-blue-100/60 last:border-0">
+                                <td className="py-2 px-2">
+                                  <div className="font-medium text-gray-900 text-xs">{v.sku}</div>
+                                  {v.attributes && (
+                                    <div className="text-[10px] text-gray-500">
+                                      {Object.entries(v.attributes).map(([k, val]) => `${k}: ${val}`).join(' · ')}
+                                    </div>
+                                  )}
+                                </td>
+                                {activeWhs.map((wh) => (
+                                  <td key={wh.id} className="py-2 px-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step={allowDecimalQuantity ? '0.01' : '1'}
+                                      value={stockEdits[stockEditKey(wh.id, v.sku)] ?? ''}
+                                      onChange={(e) => setStockEdits(prev => ({
+                                        ...prev,
+                                        [stockEditKey(wh.id, v.sku)]: e.target.value,
+                                      }))}
+                                      className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="py-2 px-2 text-right font-semibold text-blue-700">{total}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Banner para variantes con control de lotes activo. */}
+              {editingProduct && businessSettings?.enableManualStockEdit === true && !noStock &&
+                (editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-amber-900 mb-1">Producto con control de lotes</div>
+                    <p className="text-xs text-amber-800 leading-relaxed mb-2">
+                      Las variantes con lotes se gestionan desde Control de Lotes para preservar la trazabilidad.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsModalOpen(false)
+                        appNavigate('control-lotes', { state: { productId: editingProduct.id, productName: editingProduct.name } })
+                      }}
+                      className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Ir a Control de Lotes →
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Selector de almacén destino para todas las variantes */}
               {!noStock && warehouses.length > 0 && (
