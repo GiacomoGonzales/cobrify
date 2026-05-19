@@ -335,6 +335,8 @@ export default function POS() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
+  const cartScrollRef = useRef(null)
+  const cartSectionRef = useRef(null)
   // Detecta si estamos en la app nativa (móvil/tablet vía Capacitor). En web/desktop
   // no se muestran botones que solo funcionan en la app — como el escáner de
   // código de barras que usa la cámara nativa.
@@ -888,6 +890,18 @@ export default function POS() {
       if (window.innerWidth >= 1024) {
         searchInputRef.current?.focus()
       }
+      // Auto-scroll al último producto agregado para que sea visible (útil al escanear con pistola).
+      // - Interno (carrito → último item): siempre, el carrito tiene scroll propio en móvil y desktop.
+      // - Exterior (panel derecho → inicio del carrito): solo en desktop. En móvil el panel no
+      //   tiene scroll propio, así que un scrollIntoView movería la página entera y alejaría
+      //   al usuario de la lista de productos — no deseado.
+      requestAnimationFrame(() => {
+        const inner = cartScrollRef.current
+        if (inner) inner.scrollTo({ top: inner.scrollHeight, behavior: 'smooth' })
+        if (window.innerWidth >= 1024) {
+          cartSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+        }
+      })
     }
     previousCartLengthRef.current = cart.length
   }, [cart.length])
@@ -2381,6 +2395,64 @@ export default function POS() {
       setExpandedRootCategoryId(hasSubs ? cat.id : null)
     }
   }, [selectedCategoryFilter, categories])
+
+  // Detector global de pistola lectora: captura escaneos aunque el buscador no tenga foco.
+  // Pistolas USB tipo "keyboard wedge" escriben donde está el cursor — si el foco está en otro
+  // botón/elemento no editable, los caracteres se perderían. Aquí los acumulamos y, si detectamos
+  // la firma típica de un scanner (chars muy rápidos terminados en Enter), volcamos al buscador
+  // para que el flujo de auto-agregado existente los procese. Si el usuario está escribiendo en
+  // un input/textarea (cliente, DNI, etc.) no interferimos.
+  useEffect(() => {
+    if (saleCompleted) return
+    let buffer = ''
+    let firstCharTime = 0
+    let lastCharTime = 0
+    let resetTimer = null
+
+    const handleKeyDown = (e) => {
+      const active = document.activeElement
+      const tag = active?.tagName
+      const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active?.isContentEditable
+      // Si el usuario está editando otro campo, el flujo nativo del input maneja el escaneo.
+      if (isEditable) { buffer = ''; firstCharTime = 0; return }
+
+      const now = Date.now()
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3) {
+          const elapsed = lastCharTime - firstCharTime
+          const avgPerChar = buffer.length > 1 ? elapsed / (buffer.length - 1) : 0
+          // Velocidad humana típica: >80ms/char. Scanner: <30ms/char. Umbral 50ms.
+          if (avgPerChar < 50) {
+            e.preventDefault()
+            setSearchTerm(buffer)
+            // Llevar el foco al buscador para que la siguiente edición/escaneo sea natural.
+            searchInputRef.current?.focus()
+          }
+        }
+        buffer = ''
+        firstCharTime = 0
+        return
+      }
+
+      // Solo caracteres imprimibles sin modificadores.
+      if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return
+
+      if (buffer === '') firstCharTime = now
+      buffer += e.key
+      lastCharTime = now
+
+      // Si pasan >300ms sin completar, descartar el buffer (era tipeo humano, no scanner).
+      clearTimeout(resetTimer)
+      resetTimer = setTimeout(() => { buffer = ''; firstCharTime = 0 }, 300)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      clearTimeout(resetTimer)
+    }
+  }, [saleCompleted])
 
   // Auto-agregar producto cuando se escanea código de barras o SKU
   // Debounce de 500ms para evitar que códigos cortos (ej: L34) se agreguen
@@ -7768,7 +7840,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
             <CardContent className={`flex-1 flex flex-col p-3 pt-0 xl:p-6 xl:pt-0 overflow-hidden min-w-0 ${expandedCart ? 'lg:!pt-4' : ''}`}>
               {/* Cart Items */}
-              <div className="flex items-center justify-between mb-2">
+              <div ref={cartSectionRef} className="flex items-center justify-between mb-2">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <ShoppingCart className="w-3.5 h-3.5" />
                   Carrito de Compras
@@ -7847,7 +7919,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </div>
               )}
 
-              <div className={`flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px] ${saleCompleted ? 'opacity-60 pointer-events-none' : ''}`}>
+              <div ref={cartScrollRef} className={`flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px] ${saleCompleted ? 'opacity-60 pointer-events-none' : ''}`}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
                     <ShoppingCart className="w-16 h-16 mb-3" />
