@@ -177,6 +177,16 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
         return
       }
 
+      // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
+      let shouldAutoSendToSunat = false
+      try {
+        const freshSettings = await getCompanySettings(businessId)
+        shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
+      }
+
       // Build items array
       const defaultAffectation = taxConfig.igvExempt ? '20' : '10'
       const items = charges.map(charge => ({
@@ -227,7 +237,9 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
         paymentMethod,
         status: 'paid',
         notes: `Reserva: ${reservation?.guestName || ''} - Hab. ${reservation?.roomNumber || ''}`,
-        sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
+        sunatStatus: (documentType === 'factura' || documentType === 'boleta')
+          ? (shouldAutoSendToSunat ? 'pending' : 'not_sent')
+          : 'not_applicable',
         sunatResponse: null,
         sunatSentAt: null,
         emissionDate,
@@ -249,19 +261,9 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
         return
       }
 
-      // Auto-send to SUNAT if enabled.
-      // Lectura FRESH para evitar stale state si el toggle fue apagado tras
-      // cargar la página.
+      // Auto-send to SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH arriba.
       const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
-      let shouldAutoSend = false
-      try {
-        const freshSettings = await getCompanySettings(businessId)
-        shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
-      } catch (settingsErr) {
-        console.warn('No se pudo releer companySettings:', settingsErr)
-        shouldAutoSend = companySettings?.autoSendToSunat === true
-      }
-      if (shouldAutoSend && canSendToSunat) {
+      if (shouldAutoSendToSunat && canSendToSunat) {
         sendInvoiceToSunat(businessId, result.id)
           .then(() => toast.success('Comprobante aceptado por SUNAT', 4000))
           .catch(() => toast.warning('Error al enviar a SUNAT. Reenvíe desde Ventas.', 5000))

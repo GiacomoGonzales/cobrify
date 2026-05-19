@@ -412,6 +412,18 @@ export default function CreateCreditNote() {
       const creditNoteSeries = series[seriesKey].serie
       const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
+      // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial:
+      //   - true  → 'pending' (cron retryPendingInvoices puede reenviarlo)
+      //   - false → 'not_sent' (invisible para crones, envío 100% manual)
+      let shouldAutoSendToSunat = false
+      try {
+        const freshSettings = await getCompanySettings(user.uid)
+        shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
+      }
+
       const creditNoteData = {
         documentType: 'nota_credito',
         series: creditNoteSeries,
@@ -467,7 +479,7 @@ export default function CreateCreditNote() {
 
         // Estado
         status: 'pending',
-        sunatStatus: 'pending',
+        sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
 
         // Metadata
         userId: user.uid,
@@ -492,18 +504,8 @@ export default function CreateCreditNote() {
         }
         await updateDocumentSeries(user.uid, updatedSeries)
 
-        // Envío automático a SUNAT si está configurado.
-        // Lectura FRESH para evitar stale state si el toggle fue apagado tras
-        // cargar la página.
-        let shouldAutoSend = false
-        try {
-          const freshSettings = await getCompanySettings(user.uid)
-          shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
-        } catch (settingsErr) {
-          console.warn('No se pudo releer companySettings:', settingsErr)
-          shouldAutoSend = companySettings?.autoSendToSunat === true
-        }
-        if (shouldAutoSend) {
+        // Envío automático a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH.
+        if (shouldAutoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito (externa) automáticamente a SUNAT...')
           sendCreditNoteToSunat(user.uid, result.id)
             .then((res) => {
@@ -583,6 +585,16 @@ export default function CreateCreditNote() {
       const creditNoteSeries = series[seriesKey].serie
       const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
+      // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial.
+      let shouldAutoSendToSunat = false
+      try {
+        const freshSettings = await getCompanySettings(user.uid)
+        shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
+      }
+
       const creditNoteData = {
         documentType: 'nota_credito',
         series: creditNoteSeries,
@@ -628,7 +640,7 @@ export default function CreateCreditNote() {
 
         // Estado
         status: 'pending',
-        sunatStatus: 'pending',
+        sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
 
         // Metadata
         userId: user.uid,
@@ -769,18 +781,8 @@ export default function CreateCreditNote() {
           }
         }
 
-        // Envío automático a SUNAT si está configurado.
-        // Lectura FRESH para evitar stale state si el toggle fue apagado tras
-        // cargar la página.
-        let shouldAutoSend = false
-        try {
-          const freshSettings = await getCompanySettings(user.uid)
-          shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
-        } catch (settingsErr) {
-          console.warn('No se pudo releer companySettings:', settingsErr)
-          shouldAutoSend = companySettings?.autoSendToSunat === true
-        }
-        if (shouldAutoSend) {
+        // Envío automático a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH.
+        if (shouldAutoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito automáticamente a SUNAT...')
           sendCreditNoteToSunat(user.uid, result.id)
             .then((res) => {

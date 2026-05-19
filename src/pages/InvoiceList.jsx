@@ -1451,7 +1451,8 @@ Gracias por tu preferencia.`
   }
 
   // Estados SUNAT que se consideran "reenviables" (el comprobante no llegó a aceptarse).
-  const REENVIABLE_SUNAT_STATUSES = ['pending', 'rejected', 'signed', 'SIGNED']
+  // 'not_sent' = creado con envío automático apagado; debe poder enviarse manualmente.
+  const REENVIABLE_SUNAT_STATUSES = ['pending', 'not_sent', 'rejected', 'signed', 'SIGNED']
   // Solo factura/boleta/nota_credito se envían a SUNAT. Nota de venta no aplica.
   const SUNAT_DOC_TYPES = ['factura', 'boleta', 'nota_credito']
 
@@ -2168,6 +2169,13 @@ Gracias por tu preferencia.`
           <Badge variant="warning" className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             Pendiente
+          </Badge>
+        )
+      case 'not_sent':
+        return (
+          <Badge className="flex items-center gap-1 bg-gray-100 text-gray-700">
+            <Send className="w-3 h-3" />
+            No enviado
           </Badge>
         )
       case 'sending':
@@ -3068,9 +3076,9 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Enviar a SUNAT */}
+                  {/* Enviar a SUNAT (pendientes y no enviados por envío manual) */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                   invoice.sunatStatus === 'pending' && (
+                   (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'not_sent') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -3110,9 +3118,9 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Enviar Nota de Crédito a SUNAT */}
+                  {/* Enviar Nota de Crédito a SUNAT (pendientes y no enviados) */}
                   {invoice.documentType === 'nota_credito' &&
-                   invoice.sunatStatus === 'pending' && (
+                   (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'not_sent') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)

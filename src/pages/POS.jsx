@@ -4697,6 +4697,20 @@ export default function POS() {
       }))
 
       // 3. Crear factura
+      // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial:
+      //   - true  → 'pending' (el cron retryPendingInvoices puede reenviarlo)
+      //   - false → 'not_sent' (queda INVISIBLE para el cron, envío 100% manual)
+      // Defensa en profundidad: aunque el cron ya verifica autoSendToSunat,
+      // marcar diferente garantiza que NUNCA se procese automáticamente.
+      let shouldAutoSendToSunat = false
+      try {
+        const freshSettings = await getCompanySettings(businessId)
+        shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings, usando valor en memoria:', settingsErr)
+        shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
+      }
+
       // Calcular datos de pago parcial y ventas al crédito
       const partialAmount = parseFloat(partialPaymentAmount) || 0
       const isCreditSaleForNotaVenta = enablePartialPayment && partialAmount === 0 && documentType === 'nota_venta'
@@ -4844,8 +4858,12 @@ export default function POS() {
           }] : []
         }),
         notes: generalNotes || '',
-        // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT
-        sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
+        // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT.
+        // 'not_sent' cuando autoSendToSunat=false → invisible para crones de retry,
+        // el cliente lo envía manualmente desde InvoiceList. 'pending' = candidato a retry.
+        sunatStatus: (documentType === 'factura' || documentType === 'boleta')
+          ? (shouldAutoSendToSunat ? 'pending' : 'not_sent')
+          : 'not_applicable',
         sunatResponse: null,
         sunatSentAt: null,
         // Fecha de emisión
@@ -5185,18 +5203,10 @@ export default function POS() {
               }
             }
 
-            // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget
-            // Lectura FRESH de companySettings: el state local puede estar stale si
-            // el usuario apagó el toggle en Settings y volvió al POS sin recargar.
-            // Garantiza que cuando autoSendToSunat=false, NUNCA se envíe.
-            let shouldAutoSend = false
-            try {
-              const freshSettings = await getCompanySettings(businessId)
-              shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
-            } catch (settingsErr) {
-              console.warn('No se pudo releer companySettings, usando valor en memoria:', settingsErr)
-              shouldAutoSend = companySettings?.autoSendToSunat === true
-            }
+            // 3.1. Envío automático a SUNAT - reutiliza shouldAutoSendToSunat
+            // ya leído FRESH antes de crear el invoiceData. Consistente con el
+            // sunatStatus inicial que guardamos arriba.
+            const shouldAutoSend = shouldAutoSendToSunat
             const canSendToSunat = bgDocumentType === 'factura' || bgDocumentType === 'boleta'
 
             let isPausedByAdmin = false

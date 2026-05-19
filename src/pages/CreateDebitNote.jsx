@@ -164,6 +164,16 @@ export default function CreateDebitNote() {
       const debitNoteSeries = series[seriesKey].serie
       const debitNoteNumber = `${debitNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
+      // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
+      let shouldAutoSendToSunat = false
+      try {
+        const freshSettings = await getCompanySettings(user.uid)
+        shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
+      }
+
       // Crear item con el cargo adicional
       // unitPrice debe ser el precio CON IGV (el XML generator espera priceWithIGV)
       const additionalItem = {
@@ -209,7 +219,7 @@ export default function CreateDebitNote() {
 
         // Estado
         status: 'pending',
-        sunatStatus: 'pending',
+        sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
 
         // Metadata
         userId: user.uid,
@@ -231,18 +241,8 @@ export default function CreateDebitNote() {
 
       const debitNoteId = result.id
 
-      // 2. Enviar a SUNAT solo si está configurado el envío automático.
-      // Lectura FRESH para evitar stale state si el toggle fue apagado tras
-      // cargar la página.
-      let shouldAutoSend = false
-      try {
-        const freshSettings = await getCompanySettings(user.uid)
-        shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
-      } catch (settingsErr) {
-        console.warn('No se pudo releer companySettings:', settingsErr)
-        shouldAutoSend = companySettings?.autoSendToSunat === true
-      }
-      if (shouldAutoSend) {
+      // 2. Enviar a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH arriba.
+      if (shouldAutoSendToSunat) {
         setMessage({ type: 'info', text: 'Enviando a SUNAT...' })
 
         const auth = getAuth()
