@@ -1550,13 +1550,12 @@ export default function Tables() {
                               {!isLinked && getStatusIcon(table.status)}
                             </div>
                             <div className={`flex items-center gap-2 text-sm ${isLinked ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {/* Indicador de precuenta impresa: ícono Receipt
-                                  + label "Precuenta impresa" en ámbar con pulse
-                                  suave. Combina con el borde ámbar latente del
-                                  card. Tooltip muestra "hace X min". */}
+                              {/* Indicador de precuenta impresa: ícono Receipt + label en ámbar
+                                  con pulse suave. Inline solo desde sm (móvil → banner abajo
+                                  porque el texto no cabe en tarjetas angostas de 2 columnas). */}
                               {hasPreBill && (
                                 <span
-                                  className="inline-flex items-center gap-1 text-amber-700 animate-pulse"
+                                  className="hidden sm:inline-flex items-center gap-1 text-amber-700 animate-pulse"
                                   title={formatPreBillElapsed(table.preBillPrintedAt)}
                                   aria-label="Precuenta impresa"
                                 >
@@ -1570,6 +1569,17 @@ export default function Tables() {
                               </span>
                             </div>
                           </div>
+
+                          {/* Banner de precuenta impresa (solo móvil) — en sm+ se muestra inline arriba */}
+                          {hasPreBill && (
+                            <div
+                              className="sm:hidden mb-2 px-2 py-1 rounded-md text-center text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-300 animate-pulse flex items-center justify-center gap-1"
+                              title={formatPreBillElapsed(table.preBillPrintedAt)}
+                            >
+                              <Receipt className="w-3.5 h-3.5 flex-shrink-0" />
+                              Precuenta impresa
+                            </div>
+                          )}
 
                           {/* Indicador de grupo (fusión) */}
                           {isPrimary && (
