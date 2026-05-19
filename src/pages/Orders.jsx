@@ -924,15 +924,23 @@ export default function Orders() {
     })
   }
 
-  // Marcar orden como entregada (quita de la lista activa)
-  const handleMarkAsDelivered = async (orderId) => {
+  // Marcar orden como entregada (quita de la lista activa).
+  // Si la orden no está cobrada, NO se permite marcar como entregada directamente: se obliga
+  // a pasar por CloseOrderModal (con comprobante / sin comprobante con razón auditable),
+  // igual que en la página de mesas. Evita que se cierren órdenes sin cobrar.
+  const handleMarkAsDelivered = async (order) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
 
+    if (!order?.paid) {
+      handleCloseOrder(order)
+      return
+    }
+
     try {
-      const result = await updateOrderStatus(getBusinessId(), orderId, 'delivered')
+      const result = await updateOrderStatus(getBusinessId(), order.id, 'delivered')
       if (result.success) {
         toast.success('Orden marcada como entregada')
       } else {
@@ -1478,7 +1486,7 @@ export default function Orders() {
                     )}
                     {order.status === 'dispatched' && (
                       <Button
-                        onClick={() => handleMarkAsDelivered(order.id)}
+                        onClick={() => handleMarkAsDelivered(order)}
                         variant="success"
                         size="sm"
                         className="flex-1"
