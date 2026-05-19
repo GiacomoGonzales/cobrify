@@ -658,8 +658,18 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           }
           toast.success(`GRE Transportista ${result.number} creada exitosamente`)
 
-          // Envío automático a SUNAT si está configurado (fire & forget)
-          if (autoSendToSunat && result.id) {
+          // Envío automático a SUNAT si está configurado (fire & forget).
+          // Lectura FRESH para evitar stale state si el toggle fue apagado tras
+          // abrir el modal.
+          let shouldAutoSend = false
+          try {
+            const freshSettings = await getCompanySettings(businessId)
+            shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+          } catch (settingsErr) {
+            console.warn('No se pudo releer companySettings:', settingsErr)
+            shouldAutoSend = autoSendToSunat === true
+          }
+          if (shouldAutoSend && result.id) {
             console.log('🚀 Enviando GRE Transportista automáticamente a SUNAT...')
             toast.info('Enviando a SUNAT en segundo plano...', 3000)
 

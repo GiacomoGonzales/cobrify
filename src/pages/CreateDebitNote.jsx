@@ -231,8 +231,18 @@ export default function CreateDebitNote() {
 
       const debitNoteId = result.id
 
-      // 2. Enviar a SUNAT solo si está configurado el envío automático
-      if (companySettings?.autoSendToSunat) {
+      // 2. Enviar a SUNAT solo si está configurado el envío automático.
+      // Lectura FRESH para evitar stale state si el toggle fue apagado tras
+      // cargar la página.
+      let shouldAutoSend = false
+      try {
+        const freshSettings = await getCompanySettings(user.uid)
+        shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSend = companySettings?.autoSendToSunat === true
+      }
+      if (shouldAutoSend) {
         setMessage({ type: 'info', text: 'Enviando a SUNAT...' })
 
         const auth = getAuth()

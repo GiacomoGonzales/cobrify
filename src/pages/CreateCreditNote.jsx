@@ -492,8 +492,18 @@ export default function CreateCreditNote() {
         }
         await updateDocumentSeries(user.uid, updatedSeries)
 
-        // Envío automático a SUNAT si está configurado
-        if (companySettings?.autoSendToSunat) {
+        // Envío automático a SUNAT si está configurado.
+        // Lectura FRESH para evitar stale state si el toggle fue apagado tras
+        // cargar la página.
+        let shouldAutoSend = false
+        try {
+          const freshSettings = await getCompanySettings(user.uid)
+          shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+        } catch (settingsErr) {
+          console.warn('No se pudo releer companySettings:', settingsErr)
+          shouldAutoSend = companySettings?.autoSendToSunat === true
+        }
+        if (shouldAutoSend) {
           console.log('🚀 Enviando Nota de Crédito (externa) automáticamente a SUNAT...')
           sendCreditNoteToSunat(user.uid, result.id)
             .then((res) => {
@@ -759,8 +769,18 @@ export default function CreateCreditNote() {
           }
         }
 
-        // Envío automático a SUNAT si está configurado
-        if (companySettings?.autoSendToSunat) {
+        // Envío automático a SUNAT si está configurado.
+        // Lectura FRESH para evitar stale state si el toggle fue apagado tras
+        // cargar la página.
+        let shouldAutoSend = false
+        try {
+          const freshSettings = await getCompanySettings(user.uid)
+          shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+        } catch (settingsErr) {
+          console.warn('No se pudo releer companySettings:', settingsErr)
+          shouldAutoSend = companySettings?.autoSendToSunat === true
+        }
+        if (shouldAutoSend) {
           console.log('🚀 Enviando Nota de Crédito automáticamente a SUNAT...')
           sendCreditNoteToSunat(user.uid, result.id)
             .then((res) => {

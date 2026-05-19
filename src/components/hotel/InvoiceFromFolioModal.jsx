@@ -249,9 +249,19 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
         return
       }
 
-      // Auto-send to SUNAT if enabled
+      // Auto-send to SUNAT if enabled.
+      // Lectura FRESH para evitar stale state si el toggle fue apagado tras
+      // cargar la página.
       const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
-      if (companySettings?.autoSendToSunat && canSendToSunat) {
+      let shouldAutoSend = false
+      try {
+        const freshSettings = await getCompanySettings(businessId)
+        shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+      } catch (settingsErr) {
+        console.warn('No se pudo releer companySettings:', settingsErr)
+        shouldAutoSend = companySettings?.autoSendToSunat === true
+      }
+      if (shouldAutoSend && canSendToSunat) {
         sendInvoiceToSunat(businessId, result.id)
           .then(() => toast.success('Comprobante aceptado por SUNAT', 4000))
           .catch(() => toast.warning('Error al enviar a SUNAT. Reenvíe desde Ventas.', 5000))

@@ -5186,7 +5186,17 @@ export default function POS() {
             }
 
             // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget
-            const shouldAutoSend = companySettings?.autoSendToSunat === true
+            // Lectura FRESH de companySettings: el state local puede estar stale si
+            // el usuario apagó el toggle en Settings y volvió al POS sin recargar.
+            // Garantiza que cuando autoSendToSunat=false, NUNCA se envíe.
+            let shouldAutoSend = false
+            try {
+              const freshSettings = await getCompanySettings(businessId)
+              shouldAutoSend = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
+            } catch (settingsErr) {
+              console.warn('No se pudo releer companySettings, usando valor en memoria:', settingsErr)
+              shouldAutoSend = companySettings?.autoSendToSunat === true
+            }
             const canSendToSunat = bgDocumentType === 'factura' || bgDocumentType === 'boleta'
 
             let isPausedByAdmin = false
