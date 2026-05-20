@@ -184,7 +184,7 @@ const hexToRgb = (hex) => {
 /**
  * Genera un PDF para una orden de compra
  */
-export const generatePurchaseOrderPDF = async (order, companySettings, download = true) => {
+export const generatePurchaseOrderPDF = async (order, companySettings, download = true, branding = null) => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
 
   const BLACK = [0, 0, 0]
@@ -762,7 +762,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFontSize(6)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
-  doc.text('Documento generado en Cobrify - Sistema de Facturación Electrónica', MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
+  const footerCompany = branding?.companyName || 'Cobrify'
+  doc.text(`Documento generado en ${footerCompany} - Sistema de Facturación Electrónica`, MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
 
   // ========== GENERAR PDF ==========
   if (download) {
@@ -805,13 +806,13 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   return doc
 }
 
-export const getPurchaseOrderPDFBlob = async (order, companySettings) => {
-  const doc = await generatePurchaseOrderPDF(order, companySettings, false)
+export const getPurchaseOrderPDFBlob = async (order, companySettings, branding = null) => {
+  const doc = await generatePurchaseOrderPDF(order, companySettings, false, branding)
   return doc.output('blob')
 }
 
-export const previewPurchaseOrderPDF = async (order, companySettings) => {
-  const doc = await generatePurchaseOrderPDF(order, companySettings, false)
+export const previewPurchaseOrderPDF = async (order, companySettings, branding = null) => {
+  const doc = await generatePurchaseOrderPDF(order, companySettings, false, branding)
   const isNativePlatform = Capacitor.isNativePlatform()
 
   if (isNativePlatform) {

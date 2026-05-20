@@ -6076,7 +6076,7 @@ export default function Settings() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
                             <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
-                              cobrifyperu.com/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
+                              {resellerCustomDomain || 'cobrifyperu.com'}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
                             </span>
                             <input
                               type="text"

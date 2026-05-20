@@ -40,7 +40,7 @@ const loadLogo = async (logoUrl) => {
 /**
  * Genera PDF A4 para Salida o Retorno de Almacén
  */
-export const generateLogisticsMovementPDF = async (movement, business = {}, type = 'exit') => {
+export const generateLogisticsMovementPDF = async (movement, business = {}, type = 'exit', branding = null) => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -455,7 +455,8 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
   doc.setFontSize(7)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(...GRAY)
-  doc.text('Documento generado por Cobrify', pageWidth / 2, pageHeight - 20, { align: 'center' })
+  const footerCompany = branding?.companyName || 'Cobrify'
+  doc.text(`Documento generado por ${footerCompany}`, pageWidth / 2, pageHeight - 20, { align: 'center' })
 
   return doc
 }
@@ -463,8 +464,8 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
 /**
  * Descargar PDF
  */
-export const downloadLogisticsMovementPDF = async (movement, business, type = 'exit') => {
-  const doc = await generateLogisticsMovementPDF(movement, business, type)
+export const downloadLogisticsMovementPDF = async (movement, business, type = 'exit', branding = null) => {
+  const doc = await generateLogisticsMovementPDF(movement, business, type, branding)
   const prefix = type === 'transfer' ? 'Transferencia' : type === 'exit' ? 'Salida' : 'Retorno'
   const num = movement.number || formatTimestampShort(movement.createdAt)
   const fileName = `${prefix}_${num}.pdf`

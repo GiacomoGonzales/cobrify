@@ -5,6 +5,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
@@ -87,6 +88,7 @@ const DEMO_GUIDES = [
 export default function DispatchGuides() {
   const navigate = useNavigate()
   const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
+  const { branding } = useBranding()
 
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
@@ -334,7 +336,7 @@ export default function DispatchGuides() {
     setDownloadingPdf(guide.id)
     try {
       toast.info(`Generando PDF de ${guide.number}...`)
-      await generateDispatchGuidePDF(guide, companySettings, true, allProducts)
+      await generateDispatchGuidePDF(guide, companySettings, true, allProducts, branding)
       toast.success('PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -356,7 +358,7 @@ export default function DispatchGuides() {
     setPreviewingPdf(guide.id)
     try {
       toast.info(`Generando vista previa de ${guide.number}...`)
-      await previewDispatchGuidePDF(guide, companySettings, allProducts)
+      await previewDispatchGuidePDF(guide, companySettings, allProducts, branding)
     } catch (error) {
       console.error('Error al generar vista previa:', error)
       toast.error('Error al generar la vista previa')
@@ -377,7 +379,7 @@ export default function DispatchGuides() {
     setSharingPdf(guide.id)
     try {
       toast.info(`Preparando PDF para compartir...`)
-      const result = await shareDispatchGuidePDF(guide, companySettings, method, allProducts)
+      const result = await shareDispatchGuidePDF(guide, companySettings, method, allProducts, branding)
       if (result.success) {
         if (!isNativePlatform) {
           toast.success('PDF listo para compartir')

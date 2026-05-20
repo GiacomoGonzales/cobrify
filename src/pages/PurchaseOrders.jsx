@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -42,6 +43,7 @@ export default function PurchaseOrders() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
+  const { branding } = useBranding()
   const appNavigate = useAppNavigate()
   const [orders, setOrders] = useState([])
   const [suppliers, setSuppliers] = useState([])
@@ -128,7 +130,7 @@ export default function PurchaseOrders() {
   const handleDownloadPdf = async (order) => {
     setDownloadingPdf(order.id)
     try {
-      await generatePurchaseOrderPDF(order, companySettings, true)
+      await generatePurchaseOrderPDF(order, companySettings, true, branding)
       toast.success('PDF generado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -140,7 +142,7 @@ export default function PurchaseOrders() {
 
   const handlePreviewPdf = async (order) => {
     try {
-      await previewPurchaseOrderPDF(order, companySettings)
+      await previewPurchaseOrderPDF(order, companySettings, branding)
     } catch (error) {
       console.error('Error al generar vista previa:', error)
       toast.error('Error al generar vista previa')

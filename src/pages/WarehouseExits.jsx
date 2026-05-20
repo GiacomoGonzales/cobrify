@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { getWarehouseExits, createWarehouseExit } from '@/services/warehouseExitService'
 import { getProjects } from '@/services/projectService'
 import { getProducts } from '@/services/firestoreService'
@@ -17,6 +18,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
   const toast = useToast()
+  const { branding } = useBranding()
 
   const [exits, setExits] = useState([])
   const [projects, setProjects] = useState([])
@@ -485,7 +487,7 @@ export default function WarehouseExits() {
                       {exit.notes && <p className="text-sm text-gray-600 italic flex-1">Nota: {exit.notes}</p>}
                       <div className="flex items-center gap-2 ml-auto">
                         <button
-                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(exit, businessInfo, 'exit') }}
+                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(exit, businessInfo, 'exit', branding) }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />

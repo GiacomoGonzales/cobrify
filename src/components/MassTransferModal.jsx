@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import Button from '@/components/ui/Button'
 import { createMassTransfer } from '@/services/massTransferService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function MassTransferModal({
   isOpen,
@@ -21,6 +22,7 @@ export default function MassTransferModal({
   companySettings,
   onTransferCompleted,
 }) {
+  const { branding } = useBranding()
   const [fromWarehouse, setFromWarehouse] = useState('')
   const [toWarehouse, setToWarehouse] = useState('')
   const [items, setItems] = useState([])
@@ -363,7 +365,7 @@ export default function MassTransferModal({
 
   const handleDownloadPDF = async () => {
     if (!lastTransfer) return
-    await downloadLogisticsMovementPDF(lastTransfer, companySettings || {}, 'transfer')
+    await downloadLogisticsMovementPDF(lastTransfer, companySettings || {}, 'transfer', branding)
   }
 
   const handleFinish = () => {

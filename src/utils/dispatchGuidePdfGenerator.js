@@ -231,7 +231,7 @@ function hexToRgb(hex) {
  * Basado en el estilo visual de la Guía de Remisión Transportista
  * Con soporte para paginación dinámica cuando hay muchos items
  */
-export const generateDispatchGuidePDF = async (guide, companySettings, download = true, products = []) => {
+export const generateDispatchGuidePDF = async (guide, companySettings, download = true, products = [], branding = null) => {
   // Crear mapa de productos para buscar SKU por productId
   const productsMap = {}
   products.forEach(p => { productsMap[p.id] = p })
@@ -1408,7 +1408,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   doc.setFontSize(7)
   doc.setTextColor(...MEDIUM_GRAY)
-  doc.text('Documento generado por Cobrify - Sistema de Facturación Electrónica - www.cobrifyperu.com', PAGE_WIDTH/2, currentY, { align: 'center' })
+  const footerCompany = branding?.companyName || 'Cobrify'
+  const footerWebsite = branding?.websiteUrl || branding?.customDomain || 'www.cobrifyperu.com'
+  doc.text(`Documento generado por ${footerCompany} - Sistema de Facturación Electrónica - ${footerWebsite}`, PAGE_WIDTH/2, currentY, { align: 'center' })
 
   // Agregar números de página a todas las páginas
   for (let i = 1; i <= totalPages; i++) {
@@ -1478,16 +1480,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 /**
  * Exporta el PDF como blob para enviar por WhatsApp u otros usos
  */
-export const getDispatchGuidePDFBlob = async (guide, companySettings, products = []) => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
+export const getDispatchGuidePDFBlob = async (guide, companySettings, products = [], branding = null) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products, branding)
   return doc.output('blob')
 }
 
 /**
  * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
  */
-export const previewDispatchGuidePDF = async (guide, companySettings, products = []) => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
+export const previewDispatchGuidePDF = async (guide, companySettings, products = [], branding = null) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products, branding)
   const isNativePlatform = Capacitor.isNativePlatform()
 
   if (isNativePlatform) {
@@ -1533,8 +1535,8 @@ export const previewDispatchGuidePDF = async (guide, companySettings, products =
 /**
  * Comparte el PDF por WhatsApp u otras apps
  */
-export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share', products = []) => {
-  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products)
+export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share', products = [], branding = null) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false, products, branding)
   const isNativePlatform = Capacitor.isNativePlatform()
   const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
 

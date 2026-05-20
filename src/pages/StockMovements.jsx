@@ -19,6 +19,7 @@ import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -34,6 +35,7 @@ import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 export default function StockMovements() {
   const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode } = useAppContext()
   const toast = useToast()
+  const { branding } = useBranding()
   const [movements, setMovements] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [branches, setBranches] = useState([])
@@ -450,7 +452,7 @@ export default function StockMovements() {
       const { getCompanySettings } = await import('@/services/firestoreService')
       const settingsResult = await getCompanySettings(businessId)
       const business = settingsResult.success ? settingsResult.data : {}
-      await downloadLogisticsMovementPDF(transfer, business, 'transfer')
+      await downloadLogisticsMovementPDF(transfer, business, 'transfer', branding)
     } catch (error) {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el PDF')

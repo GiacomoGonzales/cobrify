@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { getWarehouseReturns, createWarehouseReturn } from '@/services/warehouseReturnService'
 import { getProjects } from '@/services/projectService'
 import { getProducts } from '@/services/firestoreService'
@@ -23,6 +24,7 @@ const CONDITION_CONFIG = {
 export default function WarehouseReturns() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
   const toast = useToast()
+  const { branding } = useBranding()
 
   const [returns, setReturns] = useState([])
   const [projects, setProjects] = useState([])
@@ -342,7 +344,7 @@ export default function WarehouseReturns() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
-                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(ret, businessInfo, 'return') }}
+                          onClick={(e) => { e.stopPropagation(); downloadLogisticsMovementPDF(ret, businessInfo, 'return', branding) }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
