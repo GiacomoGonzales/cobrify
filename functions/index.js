@@ -3577,7 +3577,7 @@ export const sendDispatchGuideToSunatFn = onRequest(
         if (result.hash) updateData.hash = result.hash
         if (result.cdrData) updateData.cdrData = result.cdrData // Guardar CDR como fallback
         if (result.xmlFirmado) updateData.xmlData = result.xmlFirmado // Guardar XML firmado como fallback
-        if (result.fileName) updateData.qpseFileName = result.fileName // Para consultar QPse después
+        if (result.nombreArchivo) updateData.qpseFileName = result.nombreArchivo // Para consultar QPse después
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
@@ -3933,7 +3933,7 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
         if (result.hash) updateData.hash = result.hash
         if (result.cdrData) updateData.cdrData = result.cdrData // Guardar CDR como fallback
         if (result.xmlFirmado) updateData.xmlData = result.xmlFirmado // Guardar XML firmado como fallback
-        if (result.fileName) updateData.qpseFileName = result.fileName // Para consultar QPse después
+        if (result.nombreArchivo) updateData.qpseFileName = result.nombreArchivo // Para consultar QPse después
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
@@ -4037,14 +4037,6 @@ export const recoverDispatchGuideCdr = onRequest(
         return
       }
 
-      if (!guideData.sunatTicket) {
-        res.status(400).json({
-          error: 'Esta guía no tiene número de ticket de SUNAT guardado. Las guías emitidas antes de esta actualización no pueden recuperarse automáticamente. Descarga el CDR desde el portal SUNAT.',
-          code: 'NO_TICKET'
-        })
-        return
-      }
-
       // Cargar config del negocio
       const businessRef = db.collection('businesses').doc(businessId)
       const businessDoc = await businessRef.get()
@@ -4054,51 +4046,102 @@ export const recoverDispatchGuideCdr = onRequest(
       }
       const businessData = businessDoc.data()
 
-      // Mapear emissionConfig (solo sunat_direct soporta recuperación por ticket)
-      let sunatConfig = null
-      if (businessData.emissionConfig?.method === 'sunat_direct') {
-        sunatConfig = businessData.emissionConfig.sunat
-      } else if (businessData.sunat?.enabled) {
-        sunatConfig = businessData.sunat
+      // Determinar método de emisión: priorizar el método guardado en la guía,
+      // luego emissionConfig del negocio.
+      const emissionMethod = guideData.sunatMethod
+        || businessData.emissionConfig?.method
+        || (businessData.qpse?.enabled ? 'qpse' : 'sunat_direct')
+
+      console.log(`📋 [CDR-RECOVER] Método de emisión detectado: ${emissionMethod}`)
+
+      const documentNumber = guideData.number || guideId
+      let cdrContent = null
+      let cdrUrl = null
+      let sunatErrorDetail = null
+
+      // ============== Recuperación QPse ==============
+      if (emissionMethod === 'qpse') {
+        if (!guideData.qpseFileName) {
+          res.status(400).json({
+            error: 'Esta guía no tiene qpseFileName guardado. Las guías emitidas antes de esta actualización no pueden recuperarse automáticamente. Descarga el CDR desde el portal SUNAT o desde el panel de QPse.',
+            code: 'NO_QPSE_FILENAME'
+          })
+          return
+        }
+
+        const qpseConfig = businessData.emissionConfig?.qpse || businessData.qpse
+        if (!qpseConfig?.usuario || !qpseConfig?.password) {
+          res.status(400).json({ error: 'Credenciales QPse no configuradas para este negocio.' })
+          return
+        }
+
+        try {
+          console.log(`🎫 [CDR-RECOVER] Consultando QPse con archivo ${guideData.qpseFileName}...`)
+          const token = await obtenerToken(qpseConfig)
+          const estado = await consultarEstado(guideData.qpseFileName, token, qpseConfig.environment || 'demo')
+          console.log(`📋 [CDR-RECOVER] Estado QPse:`, JSON.stringify(estado).substring(0, 500))
+
+          cdrUrl = estado.url_cdr || estado.cdrUrl
+          if (cdrUrl) {
+            cdrContent = await downloadFromUrl(cdrUrl)
+          }
+          sunatErrorDetail = { code: estado.codigo || estado.code, description: estado.mensaje || estado.descripcion }
+        } catch (qpseErr) {
+          console.error('❌ [CDR-RECOVER] Error consultando QPse:', qpseErr.message)
+          res.status(502).json({ error: `Error consultando QPse: ${qpseErr.message}` })
+          return
+        }
+      }
+      // ============== Recuperación SUNAT directo ==============
+      else {
+        if (!guideData.sunatTicket) {
+          res.status(400).json({
+            error: 'Esta guía no tiene número de ticket de SUNAT guardado. Las guías emitidas antes de esta actualización no pueden recuperarse automáticamente. Descarga el CDR desde el portal SUNAT.',
+            code: 'NO_TICKET'
+          })
+          return
+        }
+
+        const sunatConfig = businessData.emissionConfig?.sunat || businessData.sunat
+        if (!sunatConfig?.clientId || !sunatConfig?.clientSecret) {
+          res.status(400).json({
+            error: 'Recuperación SUNAT directo requiere credenciales API (client_id/client_secret) configuradas.'
+          })
+          return
+        }
+
+        const config = {
+          ruc: businessData.ruc,
+          solUser: sunatConfig.solUser,
+          solPassword: sunatConfig.solPassword,
+          clientId: sunatConfig.clientId,
+          clientSecret: sunatConfig.clientSecret,
+          environment: sunatConfig.environment || 'beta',
+        }
+
+        console.log(`🎫 [CDR-RECOVER] Consultando SUNAT con ticket ${guideData.sunatTicket}...`)
+        const result = await recoverCdrByTicket(guideData.sunatTicket, config)
+        cdrContent = result.cdrData
+        sunatErrorDetail = { code: result.code, description: result.description }
       }
 
-      if (!sunatConfig || !sunatConfig.clientId || !sunatConfig.clientSecret) {
-        res.status(400).json({
-          error: 'Recuperación de CDR solo soportada para emisión SUNAT directo con credenciales API configuradas.'
-        })
-        return
-      }
-
-      // Llamar a SUNAT
-      const config = {
-        ruc: businessData.ruc,
-        solUser: sunatConfig.solUser,
-        solPassword: sunatConfig.solPassword,
-        clientId: sunatConfig.clientId,
-        clientSecret: sunatConfig.clientSecret,
-        environment: sunatConfig.environment || 'beta',
-      }
-
-      console.log(`🎫 [CDR-RECOVER] Consultando SUNAT con ticket ${guideData.sunatTicket}...`)
-      const result = await recoverCdrByTicket(guideData.sunatTicket, config)
-
-      if (!result.cdrData) {
+      // ============== Validación común y guardado ==============
+      if (!cdrContent) {
         res.status(404).json({
-          error: 'SUNAT no devolvió el CDR para este ticket. Es posible que ya no esté disponible.',
-          sunatResponse: { code: result.code, description: result.description }
+          error: 'El proveedor no devolvió el CDR para este documento. Es posible que ya no esté disponible.',
+          sunatResponse: sunatErrorDetail
         })
         return
       }
 
       // Guardar CDR en Storage + Firestore
-      const documentNumber = guideData.number || guideId
       let cdrStorageUrl = null
       try {
         cdrStorageUrl = await saveToStorage(
           businessId,
           guideId,
           `${documentNumber}-CDR.xml`,
-          result.cdrData
+          cdrContent
         )
         console.log(`✅ [CDR-RECOVER] CDR guardado en Storage: ${cdrStorageUrl}`)
       } catch (storageErr) {
@@ -4106,11 +4149,12 @@ export const recoverDispatchGuideCdr = onRequest(
       }
 
       const updateData = {
-        cdrData: result.cdrData,
+        cdrData: cdrContent,
         cdrRecoveredAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }
       if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
+      if (cdrUrl) updateData.cdrUrl = cdrUrl
 
       await guideRef.update(updateData)
 
@@ -4118,6 +4162,7 @@ export const recoverDispatchGuideCdr = onRequest(
         success: true,
         message: 'CDR recuperado y guardado exitosamente',
         cdrStorageUrl,
+        method: emissionMethod,
       })
     } catch (error) {
       console.error('❌ [CDR-RECOVER] Error:', error)

@@ -1139,9 +1139,9 @@ export default function DispatchGuides() {
                     <button
                       onClick={async () => {
                         setOpenMenuId(null)
-                        if (!guide.sunatTicket) {
+                        if (!guide.sunatTicket && !guide.qpseFileName) {
                           toast.error(
-                            'Esta guía no tiene número de ticket de SUNAT guardado. Descarga el CDR desde el portal SUNAT.',
+                            'Esta guía no tiene ticket de SUNAT ni nombre de archivo QPse guardados. Descarga el CDR desde el portal SUNAT o QPse.',
                             7000
                           )
                           return
