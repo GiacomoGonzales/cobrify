@@ -15,6 +15,42 @@
  */
 
 import axios from 'axios'
+import JSZip from 'jszip'
+
+/**
+ * Decodifica el CDR devuelto por QPse en `consultarEstado`.
+ *
+ * Para guías de remisión QPse devuelve el CDR como ZIP comprimido en base64.
+ * Para resúmenes/comunicaciones de baja viene como XML directo en base64.
+ * (Doc oficial: https://docs.qpse.pe/endpoints/consultar-ticket).
+ *
+ * Esta función detecta el formato y devuelve siempre el XML del CDR.
+ */
+async function decodeQPseCdr(cdrBase64) {
+  if (!cdrBase64 || typeof cdrBase64 !== 'string') return null
+  try {
+    const buffer = Buffer.from(cdrBase64, 'base64')
+    // Firma ZIP: 0x50 0x4B 0x03 0x04 ('PK\x03\x04')
+    const isZip = buffer.length >= 4
+      && buffer[0] === 0x50 && buffer[1] === 0x4B
+      && buffer[2] === 0x03 && buffer[3] === 0x04
+    if (isZip) {
+      const zip = new JSZip()
+      await zip.loadAsync(buffer)
+      const xmlFileName = Object.keys(zip.files).find(name => name.toLowerCase().endsWith('.xml'))
+      if (!xmlFileName) {
+        console.warn('⚠️ ZIP del CDR no contiene archivo .xml')
+        return null
+      }
+      return await zip.files[xmlFileName].async('text')
+    }
+    // No es ZIP → asumimos XML directo (resúmenes/bajas)
+    return buffer.toString('utf8')
+  } catch (err) {
+    console.warn('⚠️ Error decodificando CDR de QPse:', err.message)
+    return null
+  }
+}
 
 const QPSE_BASE_URL = {
   demo: 'https://demo-cpe.qpse.pe',
@@ -434,28 +470,33 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
             console.log(`✅ PDF URL obtenida: ${resultado.pdfUrl}`)
           }
 
-          // NUEVO: También buscar CDR como contenido directo en consultarEstado.
-          // QPse a veces devuelve el CDR base64 en estadoConsulta.cdr (no solo url_cdr).
-          // Crítico para GRE: el enviarASunat inicial NO trae cdr para guías (devuelve
-          // solo ticket), por lo que sin este check el CDR nunca queda guardado.
+          // Capturar CDR del campo `cdr` de la respuesta del endpoint
+          // /api/cpe/consultar. Para guías (09/31) y resúmenes/bajas, este
+          // es el ÚNICO lugar donde QPse devuelve el CDR — el /cpe/enviar
+          // inicial solo retorna ticket. Para guías el `cdr` viene como
+          // ZIP base64 (firma PK\x03\x04); para resúmenes viene como XML
+          // directo. decodeQPseCdr maneja ambos casos.
           if (!resultado.cdrData) {
             const cdrFromQuery = estadoConsulta.cdr || estadoConsulta.cdr_base64 ||
               estadoConsulta.cdr_content || estadoConsulta.contenido_cdr ||
               estadoConsulta.cdr_xml || ''
             if (cdrFromQuery) {
-              let cdrText = cdrFromQuery
-              // Decodificar base64 si empieza con PD94 (= <?xml en base64)
-              if (typeof cdrText === 'string' && cdrText.startsWith('PD94')) {
-                try {
-                  cdrText = Buffer.from(cdrText, 'base64').toString('utf-8')
-                  console.log('✅ CDR (contenido directo) decodificado de base64 durante polling')
-                } catch (e) {
-                  console.warn('⚠️ Error decodificando CDR base64 del polling:', e.message)
-                }
+              const cdrXml = await decodeQPseCdr(cdrFromQuery)
+              if (cdrXml) {
+                resultado.cdrData = cdrXml
+                console.log(`✅ CDR decodificado durante polling (${cdrXml.length} chars XML)`)
+              } else {
+                console.warn('⚠️ Se recibió campo cdr pero no se pudo decodificar')
               }
-              resultado.cdrData = cdrText
-              console.log(`✅ CDR contenido directo obtenido durante polling (${cdrText.length} chars)`)
             }
+          }
+
+          // QPse usa `state_label` para indicar el estado real del documento.
+          // Si está 'aceptado' marcamos accepted=true aunque el code venga vacío.
+          // Si está 'rechazado' marcamos accepted=false.
+          if (estadoConsulta.state_label === 'aceptado' && !resultado.accepted) {
+            resultado.accepted = true
+            console.log('✅ state_label = aceptado → marcando documento como aceptado')
           }
 
           // También actualizar hash si no lo teníamos
