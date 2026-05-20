@@ -107,6 +107,15 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  /* Scrollbar oculta — útil para carruseles horizontales (tabs, chips) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE/Edge */
+    scrollbar-width: none;     /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;             /* Chrome/Safari/Opera */
+  }
+
   /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     @apply w-1.5;

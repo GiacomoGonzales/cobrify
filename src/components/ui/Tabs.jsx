@@ -12,14 +12,20 @@ export default function Tabs({ defaultValue, children, className }) {
 }
 
 export function TabsList({ children, className }) {
+  // Wrapper scrollable horizontal: si los tabs no caben en pantalla (típico
+  // en móvil cuando hay 5+ tabs), permite deslizar lateralmente sin que
+  // se vea la scrollbar. En desktop con espacio sobrado se comporta igual
+  // que antes (no hay overflow, no aparece scroll).
   return (
-    <div
-      className={cn(
-        'inline-flex h-10 items-center justify-center rounded-lg bg-gray-100 p-1 text-gray-500',
-        className
-      )}
-    >
-      {children}
+    <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+      <div
+        className={cn(
+          'inline-flex h-10 items-center justify-center rounded-lg bg-gray-100 p-1 text-gray-500 whitespace-nowrap',
+          className
+        )}
+      >
+        {children}
+      </div>
     </div>
   )
 }
