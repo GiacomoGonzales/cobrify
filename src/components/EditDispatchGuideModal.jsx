@@ -136,21 +136,30 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   // Tab activo para puntos
   const [activeLocationTab, setActiveLocationTab] = useState('origin')
 
-  // Datos del vehículo (transporte privado)
+  // Datos del vehículo (principal)
   const [vehiclePlate, setVehiclePlate] = useState('')
+  const [vehicleTuce, setVehicleTuce] = useState('')
   const [vehicleAuthEntity, setVehicleAuthEntity] = useState('')
   const [vehicleAuthNumber, setVehicleAuthNumber] = useState('')
 
-  // Datos del conductor (transporte privado)
+  // Vehículos secundarios
+  const [additionalVehicles, setAdditionalVehicles] = useState([])
+
+  // Datos del conductor principal
   const [driverDocType, setDriverDocType] = useState('1')
   const [driverDocNumber, setDriverDocNumber] = useState('')
   const [driverName, setDriverName] = useState('')
   const [driverLastName, setDriverLastName] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
 
+  // Conductores secundarios
+  const [additionalDrivers, setAdditionalDrivers] = useState([])
+
   // Datos de transporte público
   const [carrierRuc, setCarrierRuc] = useState('')
   const [carrierName, setCarrierName] = useState('')
+  const [carrierMtcNumber, setCarrierMtcNumber] = useState('')
+  const [registerVehiclesAndDrivers, setRegisterVehiclesAndDrivers] = useState(false)
   const [isSearchingCarrier, setIsSearchingCarrier] = useState(false)
 
   // Estado para búsqueda de destinatario
@@ -328,13 +337,22 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     // Vehículo
     const vehicle = guide.transport?.vehicle || guide.vehicle || {}
     setVehiclePlate((vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase())
+    setVehicleTuce(vehicle.tuce || '')
     setVehicleAuthEntity(vehicle.authorizationEntity || '')
     setVehicleAuthNumber(vehicle.authorizationNumber || '')
+
+    // Vehículos secundarios
+    setAdditionalVehicles(Array.isArray(guide.transport?.additionalVehicles) ? guide.transport.additionalVehicles : [])
+
+    // Conductores secundarios
+    setAdditionalDrivers(Array.isArray(guide.transport?.additionalDrivers) ? guide.transport.additionalDrivers : [])
 
     // Transporte público
     const carrier = guide.transport?.carrier || guide.carrier || {}
     setCarrierRuc(carrier.ruc || '')
     setCarrierName(carrier.businessName || carrier.name || '')
+    setCarrierMtcNumber(carrier.mtcNumber || '')
+    setRegisterVehiclesAndDrivers(carrier.registerVehiclesAndDrivers === true)
 
     // Items
     if (guide.items && guide.items.length > 0) {
@@ -637,14 +655,36 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           },
           vehicle: {
             plate: vehiclePlate,
+            tuce: vehicleTuce || null,
             authorizationEntity: vehicleAuthEntity || null,
             authorizationNumber: vehicleAuthNumber || null,
           },
+          additionalVehicles: additionalVehicles.filter(v => v.plate?.trim()),
+          additionalDrivers: additionalDrivers.filter(d => d.documentNumber?.trim()),
         } : {
           carrier: {
             ruc: carrierRuc,
             businessName: carrierName,
+            mtcNumber: carrierMtcNumber || null,
+            registerVehiclesAndDrivers,
           },
+          ...(registerVehiclesAndDrivers ? {
+            vehicle: {
+              plate: vehiclePlate,
+              tuce: vehicleTuce || null,
+              authorizationEntity: vehicleAuthEntity || null,
+              authorizationNumber: vehicleAuthNumber || null,
+            },
+            driver: {
+              documentType: driverDocType,
+              documentNumber: driverDocNumber,
+              name: driverName,
+              lastName: driverLastName,
+              license: driverLicense,
+            },
+            additionalVehicles: additionalVehicles.filter(v => v.plate?.trim()),
+            additionalDrivers: additionalDrivers.filter(d => d.documentNumber?.trim()),
+          } : {}),
         },
 
         items: items.map((item, index) => {
@@ -1095,18 +1135,90 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             )}
           </div>
 
-          {/* Datos del vehículo (solo transporte privado) */}
-          {transportMode === '02' && (
+          {/* Datos del transportista (solo transporte público) */}
+          {transportMode === '01' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                <Truck className="w-5 h-5 text-gray-600" />
+                <h3 className="font-semibold text-gray-800">Datos del transportista</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    RUC del Transportista <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="20123456789"
+                      value={carrierRuc}
+                      onChange={(e) => setCarrierRuc(e.target.value)}
+                      maxLength={11}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSearchCarrierRuc}
+                      disabled={isSearchingCarrier || carrierRuc.length !== 11}
+                      className="px-3 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      title="Buscar RUC"
+                    >
+                      {isSearchingCarrier ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Search className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <Input
+                  label="Razón Social del Transportista"
+                  placeholder="TRANSPORTES SAC"
+                  required
+                  value={carrierName}
+                  onChange={(e) => setCarrierName(e.target.value)}
+                />
+
+                <Input
+                  label="N° Registro MTC (opcional)"
+                  placeholder="Ej: 0413189CNG"
+                  value={carrierMtcNumber}
+                  onChange={(e) => setCarrierMtcNumber(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              <label className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={registerVehiclesAndDrivers}
+                  onChange={(e) => setRegisterVehiclesAndDrivers(e.target.checked)}
+                />
+                <div className="text-sm">
+                  <p className="font-medium text-blue-900">Registrar vehículos y conductores del transportista</p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    Si lo activas, podrás registrar aquí los datos del vehículo y conductor del transportista (útil
+                    cuando el tercero no emite su propia Guía de Remisión Transportista).
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {/* Datos del vehículo (privado o público con indicador activo) */}
+          {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <Truck className="w-5 h-5 text-gray-600" />
                 <h3 className="font-semibold text-gray-800">
-                  Datos del vehículo
+                  Datos del vehículo principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
                   placeholder={isM1LVehicle ? "Ej: ABC123 o dejar vacío" : "ABC123"}
@@ -1116,6 +1228,15 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   onChange={(e) => setVehiclePlate(e.target.value.replace(/[-\s]/g, '').toUpperCase())}
                 />
 
+                <Input
+                  label="TUCE / Certificado de Habilitación Vehicular (opcional)"
+                  placeholder="Número de tarjeta/certificado"
+                  value={vehicleTuce}
+                  onChange={(e) => setVehicleTuce(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Select
                   label="Entidad emisora autorización (opcional)"
                   value={vehicleAuthEntity}
@@ -1133,16 +1254,80 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   onChange={(e) => setVehicleAuthNumber(e.target.value)}
                 />
               </div>
+
+              {/* Vehículos secundarios */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-700">Vehículos secundarios</h4>
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalVehicles(prev => [...prev, { plate: '', tuce: '', authEntity: '', authorizationNumber: '' }])}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Agregar vehículo
+                  </button>
+                </div>
+                {additionalVehicles.length === 0 && (
+                  <p className="text-xs text-gray-500">Sin vehículos secundarios. Agrega uno si llevas tracto + carreta, etc.</p>
+                )}
+                {additionalVehicles.map((v, idx) => (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-600">Vehículo secundario #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAdditionalVehicles(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-red-500 hover:text-red-700"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Input
+                        label="Placa"
+                        placeholder="ABC123"
+                        maxLength={6}
+                        value={v.plate || ''}
+                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, plate: e.target.value.replace(/[-\s]/g, '').toUpperCase() } : x))}
+                      />
+                      <Input
+                        label="TUCE / Certificado (opcional)"
+                        placeholder="Número de tarjeta/certificado"
+                        value={v.tuce || ''}
+                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, tuce: e.target.value.toUpperCase() } : x))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Select
+                        label="Entidad emisora (opcional)"
+                        value={v.authEntity || ''}
+                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, authEntity: e.target.value } : x))}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="MTC">MTC</option>
+                        <option value="SUTRAN">SUTRAN</option>
+                      </Select>
+                      <Input
+                        label="N° autorización (opcional)"
+                        placeholder="Número de autorización"
+                        value={v.authorizationNumber || ''}
+                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, authorizationNumber: e.target.value } : x))}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Datos del conductor (solo transporte privado) */}
-          {transportMode === '02' && (
+          {/* Datos del conductor (privado o público con indicador activo) */}
+          {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <User className="w-5 h-5 text-gray-600" />
                 <h3 className="font-semibold text-gray-800">
-                  Datos del conductor
+                  Datos del conductor principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
               </div>
@@ -1201,54 +1386,70 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   onChange={(e) => setDriverLastName(e.target.value)}
                 />
               </div>
-            </div>
-          )}
 
-          {/* Datos del transportista (solo transporte público) */}
-          {transportMode === '01' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Datos del transportista</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    RUC del Transportista <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="20123456789"
-                      value={carrierRuc}
-                      onChange={(e) => setCarrierRuc(e.target.value)}
-                      maxLength={11}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSearchCarrierRuc}
-                      disabled={isSearchingCarrier || carrierRuc.length !== 11}
-                      className="px-3 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                      title="Buscar RUC"
-                    >
-                      {isSearchingCarrier ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Search className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
+              {/* Conductores secundarios */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-700">Conductores secundarios (relevo)</h4>
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalDrivers(prev => [...prev, { documentType: '1', documentNumber: '', name: '', lastName: '', license: '' }])}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Agregar conductor
+                  </button>
                 </div>
-
-                <Input
-                  label="Razón Social del Transportista"
-                  placeholder="TRANSPORTES SAC"
-                  required
-                  value={carrierName}
-                  onChange={(e) => setCarrierName(e.target.value)}
-                />
+                {additionalDrivers.length === 0 && (
+                  <p className="text-xs text-gray-500">Sin conductores adicionales.</p>
+                )}
+                {additionalDrivers.map((d, idx) => (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-600">Conductor secundario #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAdditionalDrivers(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-red-500 hover:text-red-700"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <Select
+                        label="Tipo documento"
+                        value={d.documentType || '1'}
+                        onChange={(e) => setAdditionalDrivers(prev => prev.map((x, i) => i === idx ? { ...x, documentType: e.target.value } : x))}
+                      >
+                        {DOCUMENT_TYPES.filter(t => t.value !== '6').map(type => (
+                          <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
+                      </Select>
+                      <Input
+                        label="N° documento"
+                        value={d.documentNumber || ''}
+                        onChange={(e) => setAdditionalDrivers(prev => prev.map((x, i) => i === idx ? { ...x, documentNumber: e.target.value } : x))}
+                      />
+                      <Input
+                        label="N° licencia"
+                        value={d.license || ''}
+                        onChange={(e) => setAdditionalDrivers(prev => prev.map((x, i) => i === idx ? { ...x, license: e.target.value.toUpperCase() } : x))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Input
+                        label="Nombres"
+                        value={d.name || ''}
+                        onChange={(e) => setAdditionalDrivers(prev => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                      />
+                      <Input
+                        label="Apellidos"
+                        value={d.lastName || ''}
+                        onChange={(e) => setAdditionalDrivers(prev => prev.map((x, i) => i === idx ? { ...x, lastName: e.target.value } : x))}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

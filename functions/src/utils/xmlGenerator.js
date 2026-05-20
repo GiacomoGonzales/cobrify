@@ -2445,15 +2445,28 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
-  // === INDICADOR DE VEHÍCULO M1/L ===
-  // Si el traslado se realiza en vehículos de categoría M1 o L, agregar el indicador
-  // Esto hace que la placa y datos del conductor sean OPCIONALES
-  // Tag: /DespatchAdvice/cac:Shipment/cbc:SpecialInstructions
-  // Valor: SUNAT_Envio_IndicadorTrasladoVehiculoM1L
+  // === INDICADORES SUNAT (cbc:SpecialInstructions) ===
+  // Tag: /DespatchAdvice/cac:Shipment/cbc:SpecialInstructions (puede ir varias veces)
+
+  // Indicador M1/L (solo aplica a transporte privado): hace placa/conductor opcionales
   if (guideData.isM1LVehicle === true) {
     shipment.ele('cbc:SpecialInstructions').txt('SUNAT_Envio_IndicadorTrasladoVehiculoM1L')
     console.log(`🏍️ [GRE XML] Indicador M1/L agregado: vehículo categoría M1 o L`)
   }
+
+  // Indicador "registrar vehículos y conductores del transportista" (transporte público)
+  // Permite al remitente sustentar el traslado anotando los datos del vehículo y conductor del tercero
+  const registerVehiclesAndDrivers = guideData.transportMode === '01'
+    && guideData.transport?.carrier?.registerVehiclesAndDrivers === true
+  if (registerVehiclesAndDrivers) {
+    shipment.ele('cbc:SpecialInstructions').txt('SUNAT_Envio_IndicadorVehiculoConductoresTransp')
+    console.log(`🚚 [GRE XML] Indicador "registrar vehículos y conductores del transportista" agregado`)
+  }
+
+  // ¿Debemos incluir datos de vehículo y conductor en el XML?
+  //   - Privado: sí
+  //   - Público: solo si el indicador anterior está activo
+  const includeVehicleAndDriver = guideData.transportMode === '02' || registerVehiclesAndDrivers
 
   // === DATOS DE TRANSPORTE (ShipmentStage debe ir ANTES de Delivery según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
@@ -2466,67 +2479,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo18'
   }).txt(guideData.transportMode || '02')
 
-  // === TRANSPORTE PRIVADO ===
-  if (guideData.transportMode === '02') {
-    const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
-    transitPeriod.ele('cbc:StartDate').txt(transferDate)
+  // === FECHA DE TRANSPORTE (siempre que haya ShipmentStage) ===
+  const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
+  transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
-    // Verificar si es vehículo M1/L (moto, taxi, auto particular hasta 8 asientos)
-    // Para vehículos M1/L, los datos de conductor y placa son OPCIONALES según SUNAT
-    const isM1LVehicle = guideData.isM1LVehicle === true
-    const hasVehiclePlate = guideData.transport?.vehicle?.plate?.trim()
-    const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
-
-    console.log(`🚗 [GRE XML] Transporte privado - M1/L: ${isM1LVehicle}, Placa: ${hasVehiclePlate || 'NO'}, Conductor: ${hasDriverData || 'NO'}`)
-
-    // Datos del vehículo (TransportMeans debe ir ANTES de DriverPerson según UBL 2.1)
-    // Solo incluir si hay placa O si NO es vehículo M1/L (obligatorio)
-    if (hasVehiclePlate) {
-      const transportMeans = shipmentStage.ele('cac:TransportMeans')
-      const roadTransport = transportMeans.ele('cac:RoadTransport')
-      // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
-      const normalizedPlate = hasVehiclePlate.replace(/[-\s]/g, '').toUpperCase()
-      roadTransport.ele('cbc:LicensePlateID').txt(normalizedPlate)
-      console.log(`📋 [GRE XML] Placa incluida: ${normalizedPlate}`)
-    } else if (!isM1LVehicle) {
-      // Si NO es M1/L y NO hay placa, es un error - pero dejamos que SUNAT lo valide
-      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin placa y NO es vehículo M1/L`)
-    }
-
-    // Datos del conductor (DriverPerson debe ir DESPUÉS de TransportMeans)
-    // Solo incluir si hay datos del conductor O si NO es vehículo M1/L (obligatorio)
-    if (hasDriverData && guideData.transport?.driver) {
-      const driverPerson = shipmentStage.ele('cac:DriverPerson')
-      // Solo schemeID según ejemplos EFACT
-      driverPerson.ele('cbc:ID', {
-        'schemeID': guideData.transport.driver.documentType || '1'
-      }).txt(guideData.transport.driver.documentNumber)
-
-      driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name || '')
-      driverPerson.ele('cbc:FamilyName').txt(guideData.transport.driver.lastName || '')
-      driverPerson.ele('cbc:JobTitle').txt('Principal')
-
-      // Licencia de conducir
-      if (guideData.transport.driver.license) {
-        const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
-        driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
-      }
-      console.log(`👤 [GRE XML] Conductor incluido: ${guideData.transport.driver.name} ${guideData.transport.driver.lastName}`)
-    } else if (!isM1LVehicle) {
-      // Si NO es M1/L y NO hay conductor, es un error - pero dejamos que SUNAT lo valide
-      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin conductor y NO es vehículo M1/L`)
-    }
-  }
-
-  // === TRANSPORTE PÚBLICO ===
+  // === TRANSPORTE PÚBLICO: datos del transportista (CarrierParty) ===
   if (guideData.transportMode === '01' && guideData.transport?.carrier) {
-    // Período de tránsito (también para transporte público)
-    const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
-    transitPeriod.ele('cbc:StartDate').txt(transferDate)
-
     const carrierParty = shipmentStage.ele('cac:CarrierParty')
 
-    // RUC del transportista
+    // RUC del transportista (Validación SUNAT #43)
     const carrierPartyId = carrierParty.ele('cac:PartyIdentification')
     carrierPartyId.ele('cbc:ID', {
       'schemeID': '6',
@@ -2535,9 +2496,71 @@ export function generateDispatchGuideXML(guideData, businessData) {
       'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
     }).txt(guideData.transport.carrier.ruc)
 
-    // Razón social del transportista
+    // Razón social del transportista + Nº Registro MTC (Validaciones SUNAT #44 y #45)
     const carrierLegalEntity = carrierParty.ele('cac:PartyLegalEntity')
     carrierLegalEntity.ele('cbc:RegistrationName').txt(guideData.transport.carrier.businessName)
+    if (guideData.transport.carrier.mtcNumber?.trim()) {
+      carrierLegalEntity.ele('cbc:CompanyID').txt(guideData.transport.carrier.mtcNumber.trim())
+      console.log(`🪪 [GRE XML] Nº Registro MTC del transportista: ${guideData.transport.carrier.mtcNumber}`)
+    }
+  }
+
+  // === DATOS DE VEHÍCULO Y CONDUCTOR (privado, o público con indicador activo) ===
+  if (includeVehicleAndDriver) {
+    const isM1LVehicle = guideData.isM1LVehicle === true
+    const hasVehiclePlate = guideData.transport?.vehicle?.plate?.trim()
+    const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
+
+    console.log(`🚗 [GRE XML] Datos vehículo/conductor - modo: ${guideData.transportMode}, M1/L: ${isM1LVehicle}, Placa: ${hasVehiclePlate || 'NO'}, Conductor: ${hasDriverData || 'NO'}`)
+
+    // Datos del vehículo (TransportMeans debe ir ANTES de DriverPerson según UBL 2.1)
+    if (hasVehiclePlate) {
+      const transportMeans = shipmentStage.ele('cac:TransportMeans')
+      const roadTransport = transportMeans.ele('cac:RoadTransport')
+      const normalizedPlate = hasVehiclePlate.replace(/[-\s]/g, '').toUpperCase()
+      roadTransport.ele('cbc:LicensePlateID').txt(normalizedPlate)
+      console.log(`📋 [GRE XML] Placa incluida: ${normalizedPlate}`)
+    } else if (!isM1LVehicle && guideData.transportMode === '02') {
+      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin placa y NO es vehículo M1/L`)
+    }
+
+    // Datos del conductor principal (DriverPerson después de TransportMeans)
+    if (hasDriverData && guideData.transport?.driver) {
+      const driverPerson = shipmentStage.ele('cac:DriverPerson')
+      driverPerson.ele('cbc:ID', {
+        'schemeID': guideData.transport.driver.documentType || '1'
+      }).txt(guideData.transport.driver.documentNumber)
+      driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name || '')
+      driverPerson.ele('cbc:FamilyName').txt(guideData.transport.driver.lastName || '')
+      driverPerson.ele('cbc:JobTitle').txt('Principal')
+      if (guideData.transport.driver.license) {
+        const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
+        driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
+      }
+      console.log(`👤 [GRE XML] Conductor principal incluido: ${guideData.transport.driver.name} ${guideData.transport.driver.lastName}`)
+    } else if (!isM1LVehicle && guideData.transportMode === '02') {
+      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin conductor y NO es vehículo M1/L`)
+    }
+
+    // Conductores secundarios (Validación SUNAT #57-59)
+    const additionalDrivers = Array.isArray(guideData.transport?.additionalDrivers)
+      ? guideData.transport.additionalDrivers
+      : []
+    additionalDrivers.forEach((d, idx) => {
+      if (!d?.documentNumber?.trim()) return
+      const driverPerson = shipmentStage.ele('cac:DriverPerson')
+      driverPerson.ele('cbc:ID', {
+        'schemeID': d.documentType || '1'
+      }).txt(d.documentNumber)
+      driverPerson.ele('cbc:FirstName').txt(d.name || '')
+      driverPerson.ele('cbc:FamilyName').txt(d.lastName || '')
+      driverPerson.ele('cbc:JobTitle').txt('Secundario')
+      if (d.license) {
+        const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
+        driverLicense.ele('cbc:ID').txt(d.license)
+      }
+      console.log(`👤 [GRE XML] Conductor secundario ${idx + 1} incluido`)
+    })
   }
 
   // === DELIVERY: Punto de llegada y punto de partida (después de ShipmentStage según UBL 2.1) ===
@@ -2584,30 +2607,71 @@ export function generateDispatchGuideXML(guideData, businessData) {
   const despatchAddressLine = despatchAddress.ele('cac:AddressLine')
   despatchAddressLine.ele('cbc:Line').txt(guideData.origin?.address || '')
 
-  // === VEHÍCULO PRINCIPAL - TransportHandlingUnit (OBLIGATORIO para transporte privado) ===
-  // Según ejemplos EFACT, TransportHandlingUnit SIEMPRE debe existir para transporte privado
-  // Estructura correcta:
+  // === VEHÍCULO PRINCIPAL + SECUNDARIOS - TransportHandlingUnit ===
+  // Estructura SUNAT (Validaciones GRE-Remitente #47-52):
   //   <cac:TransportHandlingUnit>
   //     <cac:TransportEquipment>
-  //       <cbc:ID>PLACA</cbc:ID>
+  //       <cbc:ID>PLACA_PRINCIPAL</cbc:ID>                          (#47)
+  //       <cac:ApplicableTransportMeans>
+  //         <cbc:RegistrationNationalityID>TUCE</cbc:RegistrationNationalityID>  (#48)
+  //       </cac:ApplicableTransportMeans>
+  //       <cac:ShipmentDocumentReference>
+  //         <cbc:ID>AUTORIZACION</cbc:ID>                           (#49)
+  //       </cac:ShipmentDocumentReference>
+  //       <cac:AttachedTransportEquipment>                          (vehículo secundario)
+  //         <cbc:ID>PLACA_SEC</cbc:ID>                              (#50)
+  //         <cac:ApplicableTransportMeans>
+  //           <cbc:RegistrationNationalityID>TUCE</cbc:RegistrationNationalityID>  (#51)
+  //         </cac:ApplicableTransportMeans>
+  //         <cac:ShipmentDocumentReference>
+  //           <cbc:ID>AUTORIZACION</cbc:ID>                         (#52)
+  //         </cac:ShipmentDocumentReference>
+  //       </cac:AttachedTransportEquipment>
   //     </cac:TransportEquipment>
   //   </cac:TransportHandlingUnit>
-  if (guideData.transportMode === '02' && guideData.transport?.vehicle?.plate) {
+  if (includeVehicleAndDriver && guideData.transport?.vehicle?.plate) {
     const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
-    // Vehículo principal dentro de TransportEquipment
-    // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
-    const normalizedMainPlate = (guideData.transport.vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
     const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
+
+    // Placa principal (#47)
+    const normalizedMainPlate = (guideData.transport.vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
     transportEquipment.ele('cbc:ID').txt(normalizedMainPlate)
 
-    // Vehículos secundarios (si existen)
-    if (guideData.transport.additionalVehicles?.length > 0) {
-      guideData.transport.additionalVehicles.forEach(vehicle => {
-        const normalizedAdditionalPlate = (vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
-        const additionalEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
-        additionalEquipment.ele('cbc:ID').txt(normalizedAdditionalPlate)
-      })
+    // TUCE del vehículo principal (#48)
+    const mainTuce = guideData.transport.vehicle.tuce?.trim()
+    if (mainTuce) {
+      const applicableMeans = transportEquipment.ele('cac:ApplicableTransportMeans')
+      applicableMeans.ele('cbc:RegistrationNationalityID').txt(mainTuce)
+      console.log(`🪪 [GRE XML] TUCE principal: ${mainTuce}`)
     }
+
+    // Entidad emisora autorización vehículo principal (#49)
+    const mainAuthNumber = guideData.transport.vehicle.authorizationNumber?.trim()
+    if (mainAuthNumber) {
+      const shipDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
+      shipDocRef.ele('cbc:ID').txt(mainAuthNumber)
+    }
+
+    // Vehículos secundarios — cada uno como cac:AttachedTransportEquipment (#50-52)
+    const additionalVehicles = Array.isArray(guideData.transport.additionalVehicles)
+      ? guideData.transport.additionalVehicles
+      : []
+    additionalVehicles.forEach((vehicle, idx) => {
+      if (!vehicle?.plate?.trim()) return
+      const attached = transportEquipment.ele('cac:AttachedTransportEquipment')
+      const normalizedAdditionalPlate = vehicle.plate.replace(/[-\s]/g, '').toUpperCase()
+      attached.ele('cbc:ID').txt(normalizedAdditionalPlate)
+
+      if (vehicle.tuce?.trim()) {
+        const attachedMeans = attached.ele('cac:ApplicableTransportMeans')
+        attachedMeans.ele('cbc:RegistrationNationalityID').txt(vehicle.tuce.trim())
+      }
+      if (vehicle.authorizationNumber?.trim()) {
+        const attachedDocRef = attached.ele('cac:ShipmentDocumentReference')
+        attachedDocRef.ele('cbc:ID').txt(vehicle.authorizationNumber.trim())
+      }
+      console.log(`🚛 [GRE XML] Vehículo secundario ${idx + 1}: ${normalizedAdditionalPlate}`)
+    })
   }
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
