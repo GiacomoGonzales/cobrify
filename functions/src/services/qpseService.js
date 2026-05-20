@@ -850,6 +850,20 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
     console.log(`Ticket: ${ticket}`)
     console.log(`Description: ${description}`)
 
+    // Capturar CDR como contenido directo del campo `cdr` de la respuesta
+    // de consultar. Según docs.qpse.pe, el CDR de comunicaciones de baja
+    // (RA) viene SIN comprimir (XML directo en base64), no como ZIP como
+    // las guías. decodeQPseCdr maneja ambos casos.
+    let cdrData = null
+    const cdrFromQuery = estadoFinal?.cdr || estadoFinal?.cdr_base64 ||
+      estadoFinal?.cdr_content || estadoFinal?.contenido_cdr || ''
+    if (cdrFromQuery) {
+      cdrData = await decodeQPseCdr(cdrFromQuery)
+      if (cdrData) {
+        console.log(`✅ [QPSE VOID FACT] CDR decodificado (${cdrData.length} chars)`)
+      }
+    }
+
     return {
       accepted: accepted,
       responseCode: responseCode,
@@ -859,6 +873,7 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
       nombreArchivo: nombreArchivo,
       xmlFirmado: xmlFirmado,
       cdrUrl: estadoFinal?.url_cdr || '',
+      cdrData: cdrData,
       rawResponse: {
         firma: resultadoFirma,
         envio: resultadoEnvio,
@@ -995,6 +1010,18 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
     const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio.descripcion ||
       (accepted ? 'Boleta anulada correctamente' : 'Pendiente de confirmación de SUNAT')
 
+    // Capturar CDR del campo `cdr` (base64 sin comprimir para resumen RC).
+    // Igual que en voidInvoiceViaQPse — usa decodeQPseCdr para uniformidad.
+    let cdrData = null
+    const cdrFromQuery = estadoFinal?.cdr || estadoFinal?.cdr_base64 ||
+      estadoFinal?.cdr_content || estadoFinal?.contenido_cdr || ''
+    if (cdrFromQuery) {
+      cdrData = await decodeQPseCdr(cdrFromQuery)
+      if (cdrData) {
+        console.log(`✅ [QPSE VOID BOL] CDR decodificado (${cdrData.length} chars)`)
+      }
+    }
+
     return {
       accepted: accepted,
       responseCode: responseCode,
@@ -1004,6 +1031,7 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
       nombreArchivo: nombreArchivo,
       xmlFirmado: xmlFirmado,
       cdrUrl: estadoFinal?.url_cdr || '',
+      cdrData: cdrData,
       rawResponse: {
         firma: resultadoFirma,
         envio: resultadoEnvio,
