@@ -515,8 +515,10 @@ service cloud.firestore {
         allow read, write: if isAdmin();
         // Owners y sub-usuarios pueden leer sucursales de su negocio
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
-        // Solo admins pueden crear/modificar sucursales (se configuran desde panel admin)
-        // Pero owners también pueden leer para usar en POS
+        // Owner del negocio puede ACTUALIZAR sus sucursales (configurar asistencia,
+        // geofence, token QR, período de gracia, etc. desde Control de Asistencia).
+        // Create/delete siguen siendo solo admin (se configuran desde panel admin).
+        allow update: if isAuthenticated() && isOwner(userId);
       }
 
       // Subcollection: Settings (Configuraciones del negocio - Yape, etc.)
