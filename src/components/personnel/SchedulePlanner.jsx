@@ -533,20 +533,20 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs uppercase sticky left-0 bg-gray-50 z-10 min-w-[180px]">
+                  <th className="text-left px-2 sm:px-4 py-3 font-medium text-gray-600 text-xs uppercase sticky left-0 bg-gray-50 z-10 min-w-[120px] sm:min-w-[180px]">
                     Empleado
                   </th>
                   {DAY_KEYS.map((dk, i) => {
                     const date = weekDates[i]
                     const isToday = date.toDateString() === new Date().toDateString()
                     return (
-                      <th key={dk} className={`text-center px-3 py-3 font-medium text-xs uppercase min-w-[120px] ${isToday ? 'bg-primary-50 text-primary-700' : 'text-gray-600'}`}>
+                      <th key={dk} className={`text-center px-2 sm:px-3 py-3 font-medium text-xs uppercase min-w-[100px] sm:min-w-[120px] ${isToday ? 'bg-primary-50 text-primary-700' : 'text-gray-600'}`}>
                         <div>{DAY_LABELS[dk]}</div>
                         <div className="text-[10px] text-gray-400 normal-case font-normal">{formatDayShort(date)}</div>
                       </th>
                     )
                   })}
-                  <th className="text-right px-4 py-3 font-medium text-gray-600 text-xs uppercase min-w-[80px]">Total</th>
+                  <th className="text-right px-2 sm:px-4 py-3 font-medium text-gray-600 text-xs uppercase min-w-[70px] sm:min-w-[80px]">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -557,17 +557,17 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                     .split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
                   return (
                     <tr key={emp.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-2 sticky left-0 bg-white z-10">
+                      <td className="px-2 sm:px-4 py-2 sticky left-0 bg-white z-10">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                             {initials || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium text-gray-900 truncate max-w-[140px]">
+                            <div className="font-medium text-gray-900 truncate max-w-[90px] sm:max-w-[140px] text-xs sm:text-sm">
                               {emp.displayName || 'Sin nombre'}
                               {isDirty && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar" />}
                             </div>
-                            {emp.jobTitle && <div className="text-[11px] text-gray-500 truncate max-w-[140px]">{emp.jobTitle}</div>}
+                            {emp.jobTitle && <div className="hidden sm:block text-[11px] text-gray-500 truncate max-w-[140px]">{emp.jobTitle}</div>}
                           </div>
                         </div>
                       </td>
@@ -693,7 +693,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
   return (
     <div
       ref={ref}
-      className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-left"
+      className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-[min(16rem,calc(100vw-2rem))] sm:w-64 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-left"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100">
@@ -835,7 +835,7 @@ function TemplateForm({ template, onSave, onCancel }) {
           className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded"
         />
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs text-gray-600 mb-1">Inicio</label>
           <input
@@ -943,6 +943,13 @@ function DailyTimeline({
     if (origEnd <= origStart) origEnd += 24 * 60
     let didMove = false
 
+    // Pointer capture: garantiza que pointermove/pointerup lleguen al mismo
+    // elemento aunque el dedo/cursor salga del rectángulo de la barra.
+    // Crítico para touch porque iOS Safari pierde el track sin esto.
+    const captureTarget = e.currentTarget
+    const pointerId = e.pointerId
+    try { captureTarget.setPointerCapture(pointerId) } catch {}
+
     const compute = (clientX) => {
       const dxPx = clientX - startX
       const dxMin = (dxPx / trackRect.width) * TOTAL_MIN
@@ -972,10 +979,12 @@ function DailyTimeline({
       setDragState({ userId: emp.id, dayKey: selectedDayKey, ...compute(mv.clientX) })
     }
     const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
+      try { captureTarget.releasePointerCapture(pointerId) } catch {}
       const latest = dragStateRef.current
       if (didMove && latest && updateCellTimes) {
         updateCellTimes(emp.id, selectedDayKey, latest.start, latest.end)
@@ -986,8 +995,9 @@ function DailyTimeline({
     }
     document.body.style.userSelect = 'none'
     document.body.style.cursor = mode === 'move' ? 'grabbing' : 'ew-resize'
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   // Mapeo de dayKey al date correspondiente de la semana
@@ -1049,10 +1059,10 @@ function DailyTimeline({
 
       {/* Timeline */}
       <div className="overflow-x-auto">
-        <div className="min-w-[900px] relative">
+        <div className="min-w-[640px] sm:min-w-[800px] md:min-w-[900px] relative">
           {/* Header de horas */}
           <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
-            <div className="w-48 flex-shrink-0 px-4 py-2 text-xs font-medium text-gray-600 uppercase">
+            <div className="w-28 sm:w-40 md:w-48 flex-shrink-0 px-2 sm:px-4 py-2 text-xs font-medium text-gray-600 uppercase">
               Empleado
             </div>
             <div className="flex-1 relative h-9">
@@ -1092,7 +1102,7 @@ function DailyTimeline({
             return (
               <div key={emp.id} className="flex border-b border-gray-100 hover:bg-gray-50/50">
                 {/* Nombre del empleado */}
-                <div className="w-48 flex-shrink-0 px-4 py-3 flex items-center gap-2">
+                <div className="w-28 sm:w-40 md:w-48 flex-shrink-0 px-2 sm:px-4 py-3 flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                     {initials || '?'}
                   </div>
@@ -1101,7 +1111,7 @@ function DailyTimeline({
                       {emp.displayName || 'Sin nombre'}
                       {isDirty && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar" />}
                     </div>
-                    {emp.jobTitle && <div className="text-[10px] text-gray-500 truncate">{emp.jobTitle}</div>}
+                    {emp.jobTitle && <div className="hidden sm:block text-[10px] text-gray-500 truncate">{emp.jobTitle}</div>}
                   </div>
                 </div>
 
@@ -1159,7 +1169,9 @@ function DailyTimeline({
                             if (wasDraggedRef.current) return
                             setEditingCell({ userId: emp.id, dayKey: selectedDayKey })
                           }}
-                          onMouseDown={(e) => {
+                          onPointerDown={(e) => {
+                            // Solo procesar primary pointer (descarta clicks derechos, multi-touch)
+                            if (e.pointerType === 'mouse' && e.button !== 0) return
                             const r = e.currentTarget.getBoundingClientRect()
                             const rel = e.clientX - r.left
                             let mode = 'move'
@@ -1168,12 +1180,13 @@ function DailyTimeline({
                             beginDrag(e, emp, previewCell, mode)
                           }}
                           onMouseMove={(e) => {
+                            // Solo aplica a mouse — en touch no hay hover, el cursor visual es irrelevante
                             if (dragStateRef.current) return
                             const r = e.currentTarget.getBoundingClientRect()
                             const rel = e.clientX - r.left
                             e.currentTarget.style.cursor = (rel < HANDLE_PX || rel > r.width - HANDLE_PX) ? 'ew-resize' : 'grab'
                           }}
-                          className="absolute top-2 bottom-2 rounded-md border-2 flex items-center text-xs font-semibold transition-shadow hover:shadow-md select-none overflow-hidden"
+                          className="absolute top-2 bottom-2 rounded-md border-2 flex items-center text-xs font-semibold transition-shadow hover:shadow-md select-none overflow-hidden touch-none"
                           style={{
                             left: `${geo.leftPct}%`,
                             width: `${geo.widthPct}%`,

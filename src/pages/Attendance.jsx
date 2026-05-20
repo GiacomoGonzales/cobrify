@@ -817,70 +817,124 @@ export default function Attendance() {
                           Sin marcaciones para los filtros seleccionados.
                         </div>
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50 border-b border-gray-200">
-                              <tr>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Fecha</th>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Empleado</th>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Sucursal</th>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Tipo</th>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Turno</th>
-                                <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Estado</th>
-                                <th className="text-right px-3 py-2 font-medium text-gray-600 text-xs uppercase"></th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {records.map(r => (
-                                <tr key={r.id} className="hover:bg-gray-50">
-                                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(r.timestamp)}</td>
-                                  <td className="px-3 py-2 text-gray-900">
-                                    <div className="font-medium">{r.userName || '—'}</div>
-                                    <div className="text-xs text-gray-500">{r.userEmail || ''}</div>
-                                  </td>
-                                  <td className="px-3 py-2 text-gray-700">{r.branchName || '—'}</td>
-                                  <td className="px-3 py-2">
-                                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                      {r.type === 'in' ? 'Entrada' : 'Salida'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
-                                    {r.scheduledStart
-                                      ? <span>{r.scheduledStart}{r.scheduledEnd ? `–${r.scheduledEnd}` : ''}</span>
-                                      : <span className="text-gray-300">—</span>}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex flex-col gap-1 items-start">
-                                      {statusBadge(r)}
-                                      {r.justified && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium uppercase">
-                                          Justificada
-                                        </span>
-                                      )}
-                                      {r.isLate && !r.justified && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium uppercase">
-                                          Tardanza · {r.lateMinutes}m
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 text-right">
-                                    {r.approvalStatus === 'pending' && (
-                                      <div className="flex gap-1 justify-end">
-                                        <button onClick={() => handleApproval(r.id, 'approved')} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Aprobar">
-                                          <CheckCircle2 className="w-4 h-4" />
-                                        </button>
-                                        <button onClick={() => handleApproval(r.id, 'rejected')} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Rechazar">
-                                          <XCircle className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </td>
+                        <>
+                          {/* Tabla en sm+, cards apiladas en móvil */}
+                          <div className="hidden sm:block overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Fecha</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Empleado</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Sucursal</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Tipo</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Turno</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-600 text-xs uppercase">Estado</th>
+                                  <th className="text-right px-3 py-2 font-medium text-gray-600 text-xs uppercase"></th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {records.map(r => (
+                                  <tr key={r.id} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(r.timestamp)}</td>
+                                    <td className="px-3 py-2 text-gray-900">
+                                      <div className="font-medium">{r.userName || '—'}</div>
+                                      <div className="text-xs text-gray-500">{r.userEmail || ''}</div>
+                                    </td>
+                                    <td className="px-3 py-2 text-gray-700">{r.branchName || '—'}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                        {r.type === 'in' ? 'Entrada' : 'Salida'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
+                                      {r.scheduledStart
+                                        ? <span>{r.scheduledStart}{r.scheduledEnd ? `–${r.scheduledEnd}` : ''}</span>
+                                        : <span className="text-gray-300">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex flex-col gap-1 items-start">
+                                        {statusBadge(r)}
+                                        {r.justified && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium uppercase">
+                                            Justificada
+                                          </span>
+                                        )}
+                                        {r.isLate && !r.justified && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium uppercase">
+                                            Tardanza · {r.lateMinutes}m
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      {r.approvalStatus === 'pending' && (
+                                        <div className="flex gap-1 justify-end">
+                                          <button onClick={() => handleApproval(r.id, 'approved')} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Aprobar">
+                                            <CheckCircle2 className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => handleApproval(r.id, 'rejected')} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Rechazar">
+                                            <XCircle className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Vista de cards en móvil */}
+                          <div className="sm:hidden divide-y divide-gray-100">
+                            {records.map(r => (
+                              <div key={r.id} className="p-3 space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-gray-900 truncate">{r.userName || '—'}</div>
+                                    <div className="text-xs text-gray-500 truncate">{r.userEmail || ''}</div>
+                                  </div>
+                                  <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                    {r.type === 'in' ? 'Entrada' : 'Salida'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600">
+                                  <span>{formatDateTime(r.timestamp)}</span>
+                                  {r.scheduledStart && (
+                                    <span className="text-gray-500">
+                                      Turno: {r.scheduledStart}{r.scheduledEnd ? `–${r.scheduledEnd}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                {r.branchName && <div className="text-xs text-gray-600">{r.branchName}</div>}
+                                <div className="flex flex-wrap gap-1">
+                                  {statusBadge(r)}
+                                  {r.justified && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium uppercase">
+                                      Justificada
+                                    </span>
+                                  )}
+                                  {r.isLate && !r.justified && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium uppercase">
+                                      Tardanza · {r.lateMinutes}m
+                                    </span>
+                                  )}
+                                </div>
+                                {r.approvalStatus === 'pending' && (
+                                  <div className="flex gap-2 pt-1">
+                                    <button onClick={() => handleApproval(r.id, 'approved')} className="flex-1 px-3 py-1.5 text-xs text-green-700 bg-green-50 hover:bg-green-100 rounded flex items-center justify-center gap-1">
+                                      <CheckCircle2 className="w-4 h-4" />
+                                      Aprobar
+                                    </button>
+                                    <button onClick={() => handleApproval(r.id, 'rejected')} className="flex-1 px-3 py-1.5 text-xs text-red-700 bg-red-50 hover:bg-red-100 rounded flex items-center justify-center gap-1">
+                                      <XCircle className="w-4 h-4" />
+                                      Rechazar
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
