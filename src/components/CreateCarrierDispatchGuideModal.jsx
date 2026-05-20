@@ -804,43 +804,29 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Truck className="w-6 h-6 text-orange-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {editGuide ? 'Editar GRE Transportista' : draftGuide ? 'Continuar GRE Transportista' : 'Nueva GRE Transportista'}
-            </h2>
-            <p className="text-sm text-gray-600">
-              Serie V001 - Guía de Remisión Electrónica del Transportista
-            </p>
-          </div>
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="7xl">
+      {/* Header compacto */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <Truck className="w-4 h-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-900">
+            {editGuide ? 'Editar GRE Transportista' : draftGuide ? 'Continuar GRE Transportista' : 'Nueva GRE Transportista'}
+          </h2>
+          <span className="text-xs text-gray-500">· Serie V001</span>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-6 h-6" />
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)] overflow-y-auto">
-        <div className="flex-1 px-6 py-4 space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(92vh-4rem)] overflow-y-auto">
+        <div className="flex-1 px-5 py-4 space-y-4 text-sm [&_label]:!text-[11px] [&_label]:!font-medium [&_label]:!text-gray-600 [&_label]:!mb-0.5 [&_input]:!py-1.5 [&_input]:!text-sm [&_select]:!py-1.5 [&_select]:!text-sm [&_textarea]:!py-1.5 [&_textarea]:!text-sm">
 
           {/* Datos del Transportista (Emisor) */}
-          <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Building2 className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-orange-900 text-sm">Datos del Transportista (Emisor)</h3>
-                <p className="text-xs text-orange-800 mt-1">Datos de tu empresa de transporte</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Building2 className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del Transportista (Emisor)</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -867,16 +853,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* GRE Remitente Relacionada */}
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <FileText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-blue-900 text-sm">Documentos Relacionados (Opcional)</h3>
-                <p className="text-xs text-blue-800 mt-1">
-                  Referencia a la(s) guía(s) de remisión del remitente
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <FileText className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Documentos Relacionados (Opcional)</h3>
           </div>
 
           {relatedGuides.map((guide, index) => (
@@ -924,14 +903,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           ))}
 
           {/* Datos del Remitente */}
-          <div className="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Building2 className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-indigo-900 text-sm">Datos del Remitente</h3>
-                <p className="text-xs text-indigo-800 mt-1">Empresa o persona que envía la mercancía</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Building2 className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del Remitente</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -989,14 +963,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Datos del Destinatario */}
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <User className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-green-900 text-sm">Datos del Destinatario</h3>
-                <p className="text-xs text-green-800 mt-1">Persona o empresa que recibirá la mercancía</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <User className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del Destinatario</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1075,14 +1044,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Pagador del Flete */}
-          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Building2 className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-yellow-900 text-sm">Pagador del Flete</h3>
-                <p className="text-xs text-yellow-800 mt-1">¿Quién paga el servicio de transporte?</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Building2 className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Pagador del Flete</h3>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -1123,7 +1087,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             </div>
 
             {freightPayer === 'tercero' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-yellow-50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
                 <Select
                   label="Tipo de Documento"
                   value={thirdPartyPayer.documentType}
@@ -1150,14 +1114,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Datos de Envío */}
-          <div className="bg-gray-50 border-l-4 border-gray-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Calendar className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-gray-900 text-sm">Datos de Envío</h3>
-                <p className="text-xs text-gray-700 mt-1">Información del traslado</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos de Envío</h3>
           </div>
 
           {/* Tipo de Transporte */}
@@ -1270,18 +1229,13 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Vehículos */}
-          <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Car className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-purple-900 text-sm">Datos del Vehículo</h3>
-                <p className="text-xs text-purple-800 mt-1">Unidad(es) de transporte asignada(s)</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Car className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del Vehículo</h3>
           </div>
 
           {vehicles.map((vehicle, index) => (
-            <div key={index} className="space-y-3 p-4 bg-purple-50/50 rounded-lg">
+            <div key={index} className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
               {/* Etiqueta Principal/Secundario */}
               <div className="flex justify-between items-center">
                 <span className={`text-xs font-semibold px-2 py-1 rounded ${
@@ -1352,18 +1306,13 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           ))}
 
           {/* Conductores */}
-          <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <User className="w-5 h-5 text-rose-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-rose-900 text-sm">Datos del Conductor</h3>
-                <p className="text-xs text-rose-800 mt-1">Conductor(es) del vehículo</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <User className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del Conductor</h3>
           </div>
 
           {drivers.map((driver, index) => (
-            <div key={index} className="space-y-4 p-4 bg-rose-50/50 rounded-lg">
+            <div key={index} className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
               {/* Etiqueta Principal/Secundario */}
               <div className="flex justify-between items-center">
                 <span className={`text-xs font-semibold px-2 py-1 rounded ${
@@ -1448,14 +1397,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </Button>
 
           {/* Punto de Partida */}
-          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <MapPin className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-amber-900 text-sm">Punto de Partida</h3>
-                <p className="text-xs text-amber-800 mt-1">Dirección donde se recoge la mercancía</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <MapPin className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Punto de Partida</h3>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
@@ -1510,14 +1454,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Punto de Llegada */}
-          <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <MapPin className="w-5 h-5 text-teal-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-teal-900 text-sm">Punto de Llegada</h3>
-                <p className="text-xs text-teal-800 mt-1">Dirección donde se entrega la mercancía</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <MapPin className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Punto de Llegada</h3>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
@@ -1572,14 +1511,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
 
           {/* Bienes */}
-          <div className="bg-cyan-50 border-l-4 border-cyan-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Package className="w-5 h-5 text-cyan-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-cyan-900 text-sm">Agregar bienes o productos a transportar</h3>
-                <p className="text-xs text-cyan-800 mt-1">Detalle de los productos que se transportan</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+            <Package className="w-4 h-4 text-gray-400" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Bienes o productos a transportar</h3>
           </div>
 
           <div className="overflow-x-auto">
@@ -1705,61 +1639,59 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             </p>
           </div>
 
-          {/* Footer - Dentro del scroll */}
-          <div className="border-t border-gray-200 py-4 mt-6 bg-gray-50 -mx-6 px-6">
-            <div className="flex flex-col sm:flex-row justify-between gap-3">
+          {/* Footer compacto */}
+          <div className={`border-t border-gray-200 px-5 py-3 mt-4 bg-gray-50 -mx-5 ${editGuide ? '' : ''}`}>
+            <div className={`grid ${editGuide ? 'grid-cols-2' : 'grid-cols-3'} gap-2 w-full sm:flex sm:w-auto sm:justify-end sm:items-center [&>button]:w-full sm:[&>button]:w-auto`}>
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={onClose}
                 disabled={isSaving || isSavingDraft}
-                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <div className="flex flex-col sm:flex-row gap-3">
-                {!editGuide && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSaveDraft}
-                    disabled={isSaving || isSavingDraft}
-                    className="w-full sm:w-auto"
-                  >
-                    {isSavingDraft ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        Guardar
-                      </>
-                    )}
-                  </Button>
-                )}
+              {!editGuide && (
                 <Button
-                  type="submit"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveDraft}
                   disabled={isSaving || isSavingDraft}
-                  className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
-                  size="lg"
                 >
-                  {isSaving ? (
+                  {isSavingDraft ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      {editGuide ? 'Guardando...' : 'Generando GRE...'}
+                      <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-1.5" />
+                      Guardando...
                     </>
                   ) : (
                     <>
-                      <Truck className="w-5 h-5 mr-2" />
-                      {editGuide ? 'Guardar Cambios' : 'Emitir Guía'}
+                      <Save className="w-3.5 h-3.5 mr-1.5" />
+                      Guardar
                     </>
                   )}
                 </Button>
-              </div>
+              )}
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isSaving || isSavingDraft}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
+                    {editGuide ? 'Guardando...' : 'Generando...'}
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-3.5 h-3.5 mr-1.5" />
+                    {editGuide ? 'Guardar Cambios' : 'Emitir Guía'}
+                  </>
+                )}
+              </Button>
             </div>
-            <p className="text-xs text-gray-500 text-right mt-2">
+            <p className="text-[11px] text-gray-500 text-right mt-1.5">
               Campos obligatorios (*)
             </p>
           </div>
