@@ -1067,7 +1067,14 @@ export default function Attendance() {
                                       )}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                      <p className="font-semibold text-gray-900 truncate">{emp.displayName || 'Sin nombre'}</p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="font-semibold text-gray-900 truncate">{emp.displayName || 'Sin nombre'}</p>
+                                        {emp.excludeFromSchedule && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase">
+                                            Refuerzo
+                                          </span>
+                                        )}
+                                      </div>
                                       <p className="text-xs text-primary-600 uppercase tracking-wide font-medium truncate">
                                         {emp.jobTitle || 'Sin cargo'}
                                       </p>
@@ -1137,7 +1144,7 @@ export default function Attendance() {
                 <TabsContent value="schedules" activeTab={at} className="mt-4">
                   <SchedulePlanner
                     businessId={businessId}
-                    employees={employees}
+                    employees={employees.filter(e => !e.excludeFromSchedule)}
                     currentUserUid={user?.uid}
                     businessInfo={{ businessName: branches?.[0]?.name || '' }}
                     selectedBranchId={selectedScheduleBranch}

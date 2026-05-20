@@ -69,6 +69,7 @@ export default function Users() {
     documentId: '',
     address: '',
     notes: '',
+    excludeFromSchedule: false,
   })
 
   // Verificar si estamos en modo inmobiliaria
@@ -247,6 +248,7 @@ export default function Users() {
     documentId: '',
     address: '',
     notes: '',
+    excludeFromSchedule: false,
   }
 
   const openCreateModal = () => {
@@ -303,6 +305,7 @@ export default function Users() {
       documentId: p.documentId || '',
       address: p.address || '',
       notes: p.notes || '',
+      excludeFromSchedule: p.excludeFromSchedule === true,
     })
     // Si el usuario ya tiene datos de personal, abrir la sección por defecto
     setShowPersonnelSection(!!(p.jobTitle || p.department || p.phone || p.documentId))
@@ -384,6 +387,7 @@ export default function Users() {
       const buildPersonnel = () => {
         const hasData = Object.entries(personnelData).some(([k, v]) => {
           if (k === 'hrStatus') return v !== 'active' // 'active' es el default
+          if (k === 'excludeFromSchedule') return v === true // solo si está activo
           return v !== '' && v !== null && v !== undefined
         })
         if (!hasData) return null
@@ -399,6 +403,7 @@ export default function Users() {
           documentId: personnelData.documentId || null,
           address: personnelData.address || null,
           notes: personnelData.notes || null,
+          excludeFromSchedule: personnelData.excludeFromSchedule === true,
         }
       }
       const personnelPayload = buildPersonnel()
@@ -1337,6 +1342,24 @@ export default function Users() {
                     </select>
                   </div>
                 </div>
+
+                {/* Refuerzo / eventual: no aparece en el planificador de horarios */}
+                <label className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={personnelData.excludeFromSchedule === true}
+                    onChange={(e) => setPersonnelData((p) => ({ ...p, excludeFromSchedule: e.target.checked }))}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 text-sm">Refuerzo / Eventual</div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      No aparecerá en el planificador de horarios (Asistencia → Horarios).
+                      Útil para mozos refuerzo, freelancers o trabajadores por día.
+                      Sigue marcando asistencia y aparece en Personal.
+                    </div>
+                  </div>
+                </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>

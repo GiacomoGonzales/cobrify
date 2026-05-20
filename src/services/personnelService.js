@@ -75,6 +75,9 @@ export const getEmployees = async (ownerId, filters = {}) => {
         emergencyContact: personnel.emergencyContact || null,
         notes: personnel.notes || '',
         photoUrl: personnel.photoUrl || '',
+        // Refuerzo / eventual: no aparece en el planificador de horarios.
+        // Default false (la mayoría del personal sí planifica horarios).
+        excludeFromSchedule: personnel.excludeFromSchedule === true,
         // Datos crudos por si la UI necesita comparar
         personnel,
         raw: data,
