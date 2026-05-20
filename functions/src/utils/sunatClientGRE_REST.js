@@ -349,22 +349,3 @@ function sleep(ms) {
 export function hasAPICredentials(sunatConfig) {
   return !!(sunatConfig?.clientId && sunatConfig?.clientSecret)
 }
-
-/**
- * Recupera el CDR de una guía ya enviada usando su numTicket.
- *
- * Útil cuando la emisión original aceptó la guía pero por algún motivo el
- * CDR no quedó guardado (red, timeout, respuesta truncada, etc.). SUNAT
- * mantiene el CDR consultable por ticket por un tiempo.
- *
- * @param {string} ticket - numTicket devuelto al emitir
- * @param {Object} config - Mismo shape que sendDispatchGuideToSunatREST
- * @returns {Promise<Object>} { accepted, cdrData, code, description, ticket }
- */
-export async function recoverCdrByTicket(ticket, config) {
-  if (!ticket) {
-    throw new Error('Ticket es requerido para recuperar el CDR')
-  }
-  const accessToken = await getAccessToken(config)
-  return await pollDocumentStatus(ticket, accessToken, config.environment)
-}

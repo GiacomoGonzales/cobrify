@@ -2623,58 +2623,6 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
   }
 }
 
-/**
- * Recuperar el CDR de una guía de remisión ya aceptada por SUNAT.
- *
- * Útil cuando el CDR no quedó guardado al momento de la emisión por algún
- * problema puntual. Llama a SUNAT con el numTicket guardado y actualiza el
- * documento con el CDR.
- *
- * @param {string} businessId
- * @param {string} guideId
- * @param {'carrierDispatchGuides' | 'dispatchGuides'} collection
- */
-export const recoverDispatchGuideCdr = async (businessId, guideId, collection = 'carrierDispatchGuides') => {
-  try {
-    const user = auth.currentUser
-    if (!user) throw new Error('Usuario no autenticado')
-
-    const idToken = await user.getIdToken()
-    const useEmulator = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
-    const functionUrl = useEmulator
-      ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/recoverDispatchGuideCdr'
-      : 'https://us-central1-cobrify-395fe.cloudfunctions.net/recoverDispatchGuideCdr'
-
-    const response = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ businessId, guideId, collection }),
-    })
-
-    const result = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: result?.error || `HTTP ${response.status}`,
-        code: result?.code,
-      }
-    }
-
-    return {
-      success: true,
-      message: result.message,
-      cdrStorageUrl: result.cdrStorageUrl,
-    }
-  } catch (error) {
-    console.error('❌ Error recuperando CDR:', error)
-    return { success: false, error: error.message || 'Error al recuperar CDR' }
-  }
-}
-
 // ==================== GUÍAS DE REMISIÓN TRANSPORTISTA ====================
 
 /**

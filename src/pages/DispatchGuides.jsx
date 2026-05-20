@@ -5,7 +5,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts, recoverDispatchGuideCdr } from '@/services/firestoreService'
+import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
@@ -96,7 +96,6 @@ export default function DispatchGuides() {
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de guía siendo enviada
-  const [recoveringCdr, setRecoveringCdr] = useState(null) // ID de guía recuperando CDR
   const [downloadingPdf, setDownloadingPdf] = useState(null) // ID de guía descargándose
   const [previewingPdf, setPreviewingPdf] = useState(null) // ID de guía en vista previa
   const [sharingPdf, setSharingPdf] = useState(null) // ID de guía siendo compartida
@@ -1129,48 +1128,6 @@ export default function DispatchGuides() {
                     >
                       <FileCheck className="w-4 h-4 text-green-600" />
                       <span>CDR SUNAT</span>
-                    </button>
-                  )}
-
-                  {/* Recuperar CDR - Aceptada pero CDR no guardado. Requiere sunatTicket. */}
-                  {guide.sunatStatus === 'accepted' &&
-                   !guide.cdrStorageUrl && !guide.cdrUrl && !guide.cdrData &&
-                   !guide.sunatResponse?.cdrStorageUrl && !guide.sunatResponse?.cdrUrl && !guide.sunatResponse?.cdrData && (
-                    <button
-                      onClick={async () => {
-                        setOpenMenuId(null)
-                        if (!guide.sunatTicket && !guide.qpseFileName) {
-                          toast.error(
-                            'Esta guía no tiene ticket de SUNAT ni nombre de archivo QPse guardados. Descarga el CDR desde el portal SUNAT o QPse.',
-                            7000
-                          )
-                          return
-                        }
-                        setRecoveringCdr(guide.id)
-                        try {
-                          const result = await recoverDispatchGuideCdr(getBusinessId(), guide.id, 'dispatchGuides')
-                          if (result.success) {
-                            toast.success('CDR recuperado. Recargando lista...', 4000)
-                            await loadGuides()
-                          } else {
-                            toast.error(result.error || 'Error al recuperar CDR', 7000)
-                          }
-                        } catch (err) {
-                          console.error('Error recuperando CDR:', err)
-                          toast.error(err.message || 'Error al recuperar CDR', 7000)
-                        } finally {
-                          setRecoveringCdr(null)
-                        }
-                      }}
-                      disabled={recoveringCdr === guide.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 disabled:opacity-50"
-                    >
-                      {recoveringCdr === guide.id ? (
-                        <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4 text-amber-600" />
-                      )}
-                      <span className="text-amber-700">Recuperar CDR de SUNAT</span>
                     </button>
                   )}
 
