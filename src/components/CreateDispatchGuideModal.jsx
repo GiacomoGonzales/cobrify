@@ -1405,114 +1405,72 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-white">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary-100 rounded-lg">
-            <Truck className="w-6 h-6 text-primary-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {cloneData ? 'Clonar Guía de Remisión' : 'Guía de Remisión Electrónica'}
-            </h2>
-            <p className="text-sm text-gray-600">{cloneData ? `Basada en ${cloneData.number}` : 'Guía Remitente'}</p>
-          </div>
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="7xl">
+      {/* Header compacto */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <Truck className="w-4 h-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-900">
+            {cloneData ? 'Clonar Guía de Remisión' : 'Guía de Remisión Remitente'}
+          </h2>
+          {cloneData && <span className="text-xs text-gray-500">· basada en {cloneData.number}</span>}
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Fecha de emisión</p>
-          <p className="font-medium">{issueDate || getLocalDateString()}</p>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-gray-500">Emisión: <span className="font-medium text-gray-700">{issueDate || getLocalDateString()}</span></span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col max-h-[calc(90vh-8rem)]">
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col max-h-[calc(92vh-4rem)]">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-sm [&_label]:!text-[11px] [&_label]:!font-medium [&_label]:!text-gray-600 [&_label]:!mb-0.5 [&_input]:!py-1.5 [&_input]:!text-sm [&_select]:!py-1.5 [&_select]:!text-sm [&_textarea]:!py-1.5 [&_textarea]:!text-sm">
 
-          {/* Selector de Sucursal (solo si hay múltiples sucursales) */}
-          {branches.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Store className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-blue-800 mb-1">
-                    Sucursal de origen
-                  </label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    {hasMainAccess && <option value="">Sucursal Principal</option>}
-                    {branches.map(branch => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-blue-600 mt-1">
-                    Selecciona desde qué sucursal se genera esta guía de remisión
-                  </p>
-                </div>
-              </div>
-              {/* Selector de almacén */}
-              {warehouses.length > 0 && (
-                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-blue-200">
-                  <Package className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          {/* Selector de Sucursal/Almacén */}
+          {(branches.length > 0 || warehouses.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 border border-gray-200 rounded-lg">
+              {branches.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-blue-800 mb-1">
-                      Almacén
-                    </label>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sucursal de origen</label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                    >
+                      {hasMainAccess && <option value="">Sucursal Principal</option>}
+                      {branches.map(branch => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              {warehouses.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Almacén</label>
                     <select
                       value={selectedWarehouseId}
                       onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                      className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-sm"
                     >
                       {warehouses.map(wh => (
                         <option key={wh.id} value={wh.id}>{wh.name}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Stock y lotes se mostrarán de este almacén
-                    </p>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Mostrar almacén si no hay sucursales */}
-          {branches.length === 0 && warehouses.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Package className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-blue-800 mb-1">
-                    Almacén
-                  </label>
-                  <select
-                    value={selectedWarehouseId}
-                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                    className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    {warehouses.map(wh => (
-                      <option key={wh.id} value={wh.id}>{wh.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Sección: Destinatario */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-              <User className="w-5 h-5 text-gray-600" />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <User className="w-4 h-4 text-gray-400" />
               <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
             </div>
 
@@ -1698,8 +1656,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Documentos Relacionados</h3>
+                <FileText className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Documentos Relacionados</h3>
               </div>
               <Button
                 type="button"
@@ -1715,11 +1673,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             {relatedDocuments.length > 0 && (
               <div className="space-y-2">
                 {relatedDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <div key={doc.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2.5 bg-gray-50 rounded-md">
                     <Select
                       value={doc.type}
                       onChange={(e) => updateRelatedDocument(doc.id, 'type', e.target.value)}
-                      className="w-40"
+                      className="w-full sm:w-40"
                     >
                       {RELATED_DOC_TYPES.map(type => (
                         <option key={type.value} value={type.value}>
@@ -1731,21 +1689,21 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       placeholder="Serie"
                       value={doc.series}
                       onChange={(e) => updateRelatedDocument(doc.id, 'series', e.target.value.toUpperCase())}
-                      className="w-24"
+                      className="flex-1 sm:w-24 sm:flex-none min-w-0"
                       maxLength={4}
                     />
-                    <span className="text-gray-400">-</span>
+                    <span className="hidden sm:inline text-gray-400">-</span>
                     <Input
                       placeholder="Número"
                       value={doc.number}
                       onChange={(e) => updateRelatedDocument(doc.id, 'number', e.target.value)}
-                      className="w-32"
+                      className="flex-1 sm:w-32 sm:flex-none min-w-0"
                       maxLength={8}
                     />
                     <button
                       type="button"
                       onClick={() => removeRelatedDocument(doc.id)}
-                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                      className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded flex-shrink-0"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1756,22 +1714,22 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           </div>
 
           {/* Sección: Datos de envío */}
-          <div className="space-y-4 bg-pink-50 p-4 rounded-lg">
-            <div className="flex items-center gap-2 pb-2 border-b border-pink-200">
-              <Truck className="w-5 h-5 text-pink-600" />
-              <h3 className="font-semibold text-pink-800">Datos de envío</h3>
+          <div className="space-y-3 p-3 border border-gray-200 rounded-lg">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <Truck className="w-4 h-4 text-gray-400" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos de envío</h3>
             </div>
 
             {/* Toggle Tipo de Transporte */}
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-700">TIPO DE TRANSPORTE:</span>
-              <div className="flex rounded-lg overflow-hidden border border-gray-300">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-600">TIPO DE TRANSPORTE:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300">
                 <button
                   type="button"
                   onClick={() => setTransportMode('02')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
                     transportMode === '02'
-                      ? 'bg-pink-500 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100'
                   }`}
                 >
@@ -1780,7 +1738,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 <button
                   type="button"
                   onClick={() => setTransportMode('01')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
                     transportMode === '01'
                       ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -1851,21 +1809,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             </label>
 
             {isM1LVehicle && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700">
-                  <strong>Simplificado:</strong> Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
-                </p>
-              </div>
+              <p className="text-xs text-gray-500 italic">
+                Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
+              </p>
             )}
           </div>
 
           {/* Datos del vehículo (solo transporte privado) */}
           {/* Datos del transportista (solo transporte público) */}
           {transportMode === '01' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Datos del transportista</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <Truck className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del transportista</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1924,16 +1880,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               </div>
 
               {/* Indicador "registrar vehículos y conductores del transportista" */}
-              <label className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer">
+              <label className="flex items-start gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-md cursor-pointer">
                 <input
                   type="checkbox"
                   className="mt-0.5"
                   checked={registerVehiclesAndDrivers}
                   onChange={(e) => setRegisterVehiclesAndDrivers(e.target.checked)}
                 />
-                <div className="text-sm">
-                  <p className="font-medium text-blue-900">Registrar vehículos y conductores del transportista</p>
-                  <p className="text-xs text-blue-700 mt-0.5">
+                <div>
+                  <p className="text-xs font-medium text-gray-700">Registrar vehículos y conductores del transportista</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
                     Si lo activas, podrás registrar aquí los datos del vehículo y conductor del transportista (útil
                     cuando el tercero no emite su propia Guía de Remisión Transportista).
                   </p>
@@ -1944,10 +1900,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
           {/* Datos del vehículo (privado o público con indicador activo) */}
           {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <Truck className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                   Datos del vehículo principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
@@ -2058,10 +2014,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
           {/* Datos del conductor (privado o público con indicador activo) */}
           {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <User className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <User className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                   Datos del conductor principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
@@ -2243,7 +2199,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             </div>
 
             {activeLocationTab === 'origin' && (
-              <div className="space-y-4 p-4 bg-pink-50 rounded-lg">
+              <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
                 <Input
                   label="Dirección"
                   placeholder="Av. Principal 123"
@@ -2314,7 +2270,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             )}
 
             {activeLocationTab === 'destination' && (
-              <div className="space-y-4 p-4 bg-cyan-50 rounded-lg">
+              <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
                 <Input
                   label="Dirección"
                   placeholder="Jr. Comercio 456"
@@ -2389,8 +2345,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Agregar bienes o productos a transportar</h3>
+                <Package className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Agregar bienes o productos a transportar</h3>
               </div>
             </div>
 
@@ -2741,75 +2697,65 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         </div>
 
-        {/* Opción de descontar stock - Solo mostrar si NO viene de una factura/boleta de venta */}
-        {/* Cuando viene de una venta, el stock ya fue descontado por la factura/boleta */}
-        {selectedWarehouseId && !referenceInvoice?.id && (
-          <div className="px-6 py-3 bg-amber-50 border-t border-amber-200">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={deductStock}
-                onChange={(e) => setDeductStock(e.target.checked)}
-                className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-900">Descontar stock del almacén</span>
-                <p className="text-xs text-gray-500">Restar las cantidades de los productos del inventario al generar la guía</p>
-              </div>
-            </label>
-          </div>
-        )}
-        {/* Mensaje informativo cuando viene de una factura/boleta */}
-        {selectedWarehouseId && referenceInvoice?.id && !referenceInvoice?.isPurchase && (
-          <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
-            <div className="flex items-center gap-2 text-blue-700">
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm">El stock ya fue descontado al generar la factura/boleta de venta.</p>
+        {/* Footer compacto: check de stock + botones en la misma fila */}
+        <div className="border-t border-gray-200 px-5 py-3 bg-gray-50 rounded-b-lg">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-4">
+              {/* Check de descontar stock — solo si hay almacén y no viene de factura/boleta */}
+              {selectedWarehouseId && !referenceInvoice?.id && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deductStock}
+                    onChange={(e) => setDeductStock(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-700">Descontar stock del almacén</span>
+                </label>
+              )}
+              {/* Aviso si el stock ya fue descontado por la factura */}
+              {selectedWarehouseId && referenceInvoice?.id && !referenceInvoice?.isPurchase && (
+                <p className="text-xs text-gray-500 italic">El stock ya fue descontado al generar la factura/boleta.</p>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Footer con botones */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <div className="flex flex-col sm:flex-row justify-between gap-3">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2 w-full sm:flex sm:w-auto sm:items-center [&>button]:w-full sm:[&>button]:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                disabled={isSaving}
+              >
+                Cancelar
+              </Button>
               <Button
                 type="button"
                 variant="primary"
+                size="sm"
                 disabled={isSaving}
                 onClick={(e) => handleSubmit(e, { skipSunat: true })}
               >
                 Guardar
               </Button>
               <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
+                type="submit"
+                size="sm"
                 disabled={isSaving}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white"
               >
-                Cancelar
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
+                    Emitiendo...
+                  </>
+                ) : (
+                  'Emitir Guía'
+                )}
               </Button>
             </div>
-            <Button
-              type="submit"
-              disabled={isSaving}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
-              size="lg"
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Emitiendo Guía...
-                </>
-              ) : (
-                'Emitir Guía'
-              )}
-            </Button>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-right">
-            Campos obligatorios (*) - El formato PDF de guías de remisión es horizontal (**)
+          <p className="text-[11px] text-gray-500 mt-1.5 text-right">
+            Campos obligatorios (*) — Formato PDF de guías de remisión es horizontal (**)
           </p>
         </div>
       </form>

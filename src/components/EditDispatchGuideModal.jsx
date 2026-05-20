@@ -720,40 +720,30 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   if (!guide) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-white">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Truck className="w-6 h-6 text-orange-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              Editar Guía de Remisión
-            </h2>
-            <p className="text-sm text-gray-600">{guide.number}</p>
-          </div>
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="7xl">
+      {/* Header compacto */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <Truck className="w-4 h-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-900">Editar Guía de Remisión</h2>
+          <span className="text-xs text-gray-500">· {guide.number}</span>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Fecha de emisión</p>
-          <p className="font-medium">{issueDate || '-'}</p>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-gray-500">Emisión: <span className="font-medium text-gray-700">{issueDate || '-'}</span></span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
       </div>
 
       {/* Alerta si ya fue enviada */}
       {isAlreadySent && (
-        <div className="mx-6 mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="font-semibold text-yellow-800">Guía ya procesada por SUNAT</h4>
-              <p className="text-sm text-yellow-700 mt-1">
+        <div className="mx-5 mt-3 p-2.5 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs">
+              <p className="font-medium text-yellow-800">Guía ya procesada por SUNAT</p>
+              <p className="text-yellow-700 mt-0.5">
                 Esta guía ya fue enviada a SUNAT. Los cambios que realice solo se guardarán localmente para referencia.
               </p>
             </div>
@@ -761,39 +751,33 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(92vh-4rem)]">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-sm [&_label]:!text-[11px] [&_label]:!font-medium [&_label]:!text-gray-600 [&_label]:!mb-0.5 [&_input]:!py-1.5 [&_input]:!text-sm [&_select]:!py-1.5 [&_select]:!text-sm [&_textarea]:!py-1.5 [&_textarea]:!text-sm">
 
           {/* Selector de Sucursal */}
           {branches.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Store className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-blue-800 mb-1">
-                    Sucursal de origen
-                  </label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="">Sucursal Principal</option>
-                    {branches.map(branch => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <div className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg">
+              <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <div className="flex-1 max-w-xs">
+                <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sucursal de origen</label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                >
+                  <option value="">Sucursal Principal</option>
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
 
           {/* Sección: Destinatario */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-              <User className="w-5 h-5 text-gray-600" />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <User className="w-4 h-4 text-gray-400" />
               <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
             </div>
 
@@ -979,8 +963,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Documentos Relacionados</h3>
+                <FileText className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Documentos Relacionados</h3>
               </div>
               <Button
                 type="button"
@@ -996,11 +980,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             {relatedDocuments.length > 0 && (
               <div className="space-y-2">
                 {relatedDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <div key={doc.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2.5 bg-gray-50 rounded-md">
                     <Select
                       value={doc.type}
                       onChange={(e) => updateRelatedDocument(doc.id, 'type', e.target.value)}
-                      className="w-40"
+                      className="w-full sm:w-40"
                     >
                       {RELATED_DOC_TYPES.map(type => (
                         <option key={type.value} value={type.value}>
@@ -1012,21 +996,21 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                       placeholder="Serie"
                       value={doc.series}
                       onChange={(e) => updateRelatedDocument(doc.id, 'series', e.target.value.toUpperCase())}
-                      className="w-24"
+                      className="flex-1 sm:w-24 sm:flex-none min-w-0"
                       maxLength={4}
                     />
-                    <span className="text-gray-400">-</span>
+                    <span className="hidden sm:inline text-gray-400">-</span>
                     <Input
                       placeholder="Número"
                       value={doc.number}
                       onChange={(e) => updateRelatedDocument(doc.id, 'number', e.target.value)}
-                      className="w-32"
+                      className="flex-1 sm:w-32 sm:flex-none min-w-0"
                       maxLength={8}
                     />
                     <button
                       type="button"
                       onClick={() => removeRelatedDocument(doc.id)}
-                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                      className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded flex-shrink-0"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1037,10 +1021,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           </div>
 
           {/* Sección: Datos de envío */}
-          <div className="space-y-4 bg-pink-50 p-4 rounded-lg">
-            <div className="flex items-center gap-2 pb-2 border-b border-pink-200">
-              <Truck className="w-5 h-5 text-pink-600" />
-              <h3 className="font-semibold text-pink-800">Datos de envío</h3>
+          <div className="space-y-3 p-3 border border-gray-200 rounded-lg">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <Truck className="w-4 h-4 text-gray-400" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos de envío</h3>
             </div>
 
             {/* Toggle Tipo de Transporte */}
@@ -1050,9 +1034,9 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 <button
                   type="button"
                   onClick={() => setTransportMode('02')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
                     transportMode === '02'
-                      ? 'bg-pink-500 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100'
                   }`}
                 >
@@ -1061,7 +1045,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 <button
                   type="button"
                   onClick={() => setTransportMode('01')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
                     transportMode === '01'
                       ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -1127,20 +1111,18 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             </label>
 
             {isM1LVehicle && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700">
-                  <strong>Simplificado:</strong> Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
-                </p>
-              </div>
+              <p className="text-xs text-gray-500 italic">
+                Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
+              </p>
             )}
           </div>
 
           {/* Datos del transportista (solo transporte público) */}
           {transportMode === '01' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Datos del transportista</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <Truck className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Datos del transportista</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1189,16 +1171,16 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 />
               </div>
 
-              <label className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer">
+              <label className="flex items-start gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-md cursor-pointer">
                 <input
                   type="checkbox"
                   className="mt-0.5"
                   checked={registerVehiclesAndDrivers}
                   onChange={(e) => setRegisterVehiclesAndDrivers(e.target.checked)}
                 />
-                <div className="text-sm">
-                  <p className="font-medium text-blue-900">Registrar vehículos y conductores del transportista</p>
-                  <p className="text-xs text-blue-700 mt-0.5">
+                <div>
+                  <p className="text-xs font-medium text-gray-700">Registrar vehículos y conductores del transportista</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
                     Si lo activas, podrás registrar aquí los datos del vehículo y conductor del transportista (útil
                     cuando el tercero no emite su propia Guía de Remisión Transportista).
                   </p>
@@ -1209,10 +1191,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
           {/* Datos del vehículo (privado o público con indicador activo) */}
           {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <Truck className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                   Datos del vehículo principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
@@ -1323,10 +1305,10 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
           {/* Datos del conductor (privado o público con indicador activo) */}
           {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                <User className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <User className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                   Datos del conductor principal
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
@@ -1482,7 +1464,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             </div>
 
             {activeLocationTab === 'origin' && (
-              <div className="space-y-4 p-4 bg-pink-50 rounded-lg">
+              <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
                 <Input
                   label="Dirección"
                   placeholder="Av. Principal 123"
@@ -1553,7 +1535,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             )}
 
             {activeLocationTab === 'destination' && (
-              <div className="space-y-4 p-4 bg-cyan-50 rounded-lg">
+              <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
                 <Input
                   label="Dirección"
                   placeholder="Jr. Comercio 456"
@@ -1628,8 +1610,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Bienes a transportar ({items.length})</h3>
+                <Package className="w-4 h-4 text-gray-400" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Bienes a transportar ({items.length})</h3>
               </div>
               <Button
                 type="button"
@@ -1768,12 +1750,13 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
         </div>
 
-        {/* Footer con botones */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <div className="flex flex-col sm:flex-row justify-end gap-3">
+        {/* Footer compacto */}
+        <div className="border-t border-gray-200 px-5 py-3 bg-gray-50 rounded-b-lg">
+          <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:justify-end sm:items-center [&>button]:w-full sm:[&>button]:w-auto">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={onClose}
               disabled={isSaving}
             >
@@ -1781,18 +1764,18 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
             </Button>
             <Button
               type="submit"
+              size="sm"
               disabled={isSaving}
               className="bg-orange-500 hover:bg-orange-600 text-white"
-              size="lg"
             >
               {isSaving ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
                   Guardando...
                 </>
               ) : (
                 <>
-                  <Truck className="w-5 h-5 mr-2" />
+                  <Truck className="w-3.5 h-3.5 mr-1.5" />
                   Guardar Cambios
                 </>
               )}
