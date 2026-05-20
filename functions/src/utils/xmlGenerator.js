@@ -363,15 +363,18 @@ export function generateInvoiceXML(invoiceData, businessData) {
   }
 
   // Observaciones libres del usuario (campo "Observaciones" del POS).
-  // SUNAT muestra este cbc:Note en su visualizador siempre y cuando:
+  // SUNAT muestra el cbc:Note en su visualizador (Consulta SOL / PSE) siempre que:
   //   1. Esté envuelto en CDATA (.dat() en xmlbuilder2)
   //   2. Tenga máximo 100 caracteres alfanuméricos
-  //   3. Tenga atributo languageLocaleID con código del Catálogo 52
-  //      (2008 = DETALLE DE LA OPERACIÓN, usado para observaciones libres)
+  //
+  // IMPORTANTE: NO usar languageLocaleID. Ese atributo referencia al Catálogo 52 (leyendas
+  // formales) y SUNAT valida cada código contra el contenido del comprobante. Por ejemplo,
+  // declarar languageLocaleID="2008" sobre una factura que no tiene operaciones exoneradas
+  // hace que SUNAT rechace con código 3289 (ver Factura_F001-00003010 — 2026-05-20).
   const userNotes = (invoiceData.notes || invoiceData.observaciones || '').toString().trim()
   if (userNotes && !isNote) {
     // Solo para facturas/boletas. Para NC/ND, el motivo va en cac:DiscrepancyResponse.
-    root.ele('cbc:Note', { 'languageLocaleID': '2008' }).dat(userNotes.slice(0, 100))
+    root.ele('cbc:Note').dat(userNotes.slice(0, 100))
   }
 
   // Moneda
@@ -1251,11 +1254,11 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   // Observaciones libres del usuario (cbc:Note a nivel documento).
   // En NC, el motivo va aparte en cac:DiscrepancyResponse — esto es para notas
-  // adicionales (ej. observaciones del POS) que aparezcan en el visualizador SUNAT.
-  // Requiere languageLocaleID="2008" + CDATA + máx 100 chars para que SUNAT lo muestre.
+  // adicionales (ej. observaciones del POS). NO usar languageLocaleID porque referencia
+  // al Catálogo 52 y SUNAT rechaza el comprobante si el código no aplica al contenido.
   const cnUserNotes = (creditNoteData.notes || creditNoteData.observaciones || '').toString().trim()
   if (cnUserNotes && cnUserNotes !== (creditNoteData.discrepancyReason || '').toString().trim()) {
-    root.ele('cbc:Note', { 'languageLocaleID': '2008' }).dat(cnUserNotes.slice(0, 100))
+    root.ele('cbc:Note').dat(cnUserNotes.slice(0, 100))
   }
 
   // Moneda
