@@ -96,20 +96,11 @@ export const onNewOrder = onDocumentWritten(
         redirectPath,
       }
 
-      // Enviar al owner (mismo flujo que onNewSale → entrega probada en bloqueado)
+      // Enviar SOLO al owner. Los usuarios secundarios no reciben push
+      // (decisión de producto). El check defensivo en sendPushNotification
+      // también lo refuerza si se reintroduce el envío por error.
       const ownerResult = await sendPushNotification(ownerId, title, body, data)
       console.log(`📤 Push to owner ${ownerId}:`, ownerResult)
-
-      // Enviar también a sub-usuarios del negocio
-      const subUsersSnapshot = await db
-        .collection('users')
-        .where('ownerId', '==', ownerId)
-        .get()
-
-      for (const userDoc of subUsersSnapshot.docs) {
-        const subResult = await sendPushNotification(userDoc.id, title, body, data)
-        console.log(`📤 Push to sub-user ${userDoc.id}:`, subResult)
-      }
     } catch (error) {
       console.error('❌ Error in onNewOrder trigger:', error)
     }

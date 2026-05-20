@@ -10,6 +10,16 @@ export async function sendPushNotification(userId, title, body, data = {}) {
     console.log('   title:', title)
     console.log('   body:', body)
 
+    // Decisión de producto: usuarios secundarios (con campo `ownerId`) NO
+    // reciben notificaciones push. Check defensivo aquí — bloquea cualquier
+    // trigger que intente enviar a un secundario, incluso si nuevos triggers
+    // se agregaran en el futuro sin filtrar.
+    const userSnap = await admin.firestore().collection('users').doc(userId).get()
+    if (userSnap.exists && userSnap.data()?.ownerId) {
+      console.log(`🔕 Skipping push: ${userId} es usuario secundario (ownerId=${userSnap.data().ownerId})`)
+      return { success: false, skipped: 'secondary_user' }
+    }
+
     // Obtener todos los tokens FCM del usuario
     const tokensSnapshot = await admin.firestore()
       .collection('users')
