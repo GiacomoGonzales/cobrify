@@ -1087,6 +1087,9 @@ export default function Attendance() {
                     currentUserUid={user?.uid}
                     businessInfo={{ businessName: branches?.[0]?.name || '' }}
                     selectedBranchId={selectedScheduleBranch}
+                    selectedBranchName={
+                      accessibleScheduleBranches.find(b => b.id === selectedScheduleBranch)?.name || ''
+                    }
                   />
                 </TabsContent>
               )}

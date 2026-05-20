@@ -14,6 +14,7 @@ import { DAY_KEYS, DAY_LABELS } from '@/services/scheduleService'
  * @param {number}   options.isoYear
  * @param {number}   options.isoWeek
  * @param {Object}   [options.businessInfo]  - { businessName, address, logoUrl }
+ * @param {string}   [options.branchName]    - Nombre de la sucursal activa (filtro del planner)
  * @param {boolean}  [options.download=true] - true descarga / false retorna el doc
  */
 export const generateSchedulePDF = async ({
@@ -23,6 +24,7 @@ export const generateSchedulePDF = async ({
   isoYear,
   isoWeek,
   businessInfo = {},
+  branchName = '',
   download = true,
 }) => {
   const doc = new jsPDF({
@@ -53,6 +55,15 @@ export const generateSchedulePDF = async ({
     y += 5
   }
 
+  // Sucursal activa (refleja el filtro del planner)
+  if (branchName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(55, 65, 81)
+    doc.text(`Sucursal: ${branchName}`, pageWidth / 2, y + 4, { align: 'center' })
+    y += 5
+  }
+
   // Rango de fechas
   const monday = weekDates[0]
   const sunday = weekDates[6]
@@ -64,6 +75,7 @@ export const generateSchedulePDF = async ({
     ? `Semana ${isoWeek} · ${isoYear}    (${fmtDate(monday)} – ${fmtDate(sunday)})`
     : `Semana ${isoWeek} · ${isoYear}`
   doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
   doc.setTextColor(107, 114, 128)
   doc.text(rangeText, pageWidth / 2, y + 4, { align: 'center' })
   y += 9

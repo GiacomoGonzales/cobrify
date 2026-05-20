@@ -37,7 +37,7 @@ const formatDayShort = (d) =>
 const formatRange = (mon, sun) =>
   `${mon.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} – ${sun.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`.replace(/\./g, '')
 
-export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID }) {
+export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID, selectedBranchName = '' }) {
   const toast = useToast()
 
   // Semana ISO seleccionada (default: hoy)
@@ -264,6 +264,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
         isoYear,
         isoWeek,
         businessInfo,
+        branchName: selectedBranchName,
       })
       toast.success('PDF generado')
     } catch (e) {
