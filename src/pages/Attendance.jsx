@@ -128,7 +128,14 @@ export default function Attendance() {
   const canManage = !!(isBusinessOwner || isAdmin)
   const toast = useToast()
 
-  const [activeTab, setActiveTab] = useState('mark')
+  // Tab inicial: en app nativa siempre "mark", en web depende del rol.
+  // Se inicializa una sola vez (no se recalcula en cada render).
+  const [activeTab, setActiveTab] = useState(() => {
+    const native = Capacitor.isNativePlatform()
+    if (native) return 'mark'
+    if (isBusinessOwner || isAdmin) return 'records'
+    return 'myhistory'
+  })
   const [branches, setBranches] = useState([])
   const [subUsers, setSubUsers] = useState([])
   const [records, setRecords] = useState([])
@@ -707,10 +714,10 @@ export default function Attendance() {
         )}
       </div>
 
-      <Tabs defaultValue={isNative ? 'mark' : (canManage ? 'records' : 'myhistory')}>
-        {({ activeTab: at, setActiveTab: setAt }) => {
-          // Sincronizar con estado externo
-          if (at !== activeTab) setActiveTab(at)
+      <Tabs defaultValue={activeTab}>
+        {(() => {
+          const at = activeTab
+          const setAt = setActiveTab
           return (
             <>
               <TabsList className="bg-gray-100">
@@ -1214,7 +1221,7 @@ export default function Attendance() {
               )}
             </>
           )
-        }}
+        })()}
       </Tabs>
 
       {/* Modal marcación manual */}
