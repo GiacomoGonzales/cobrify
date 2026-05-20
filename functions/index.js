@@ -6964,6 +6964,20 @@ export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 export { migratePurchasesHTTP } from './migratePurchases.js'
 
 // ========================================
+// RAPPI SELF-ONBOARDING
+// ========================================
+export {
+  rappiOAuthStart,
+  rappiOAuthCallback,
+  rappiWebhook,
+  rappiRegisterWebhook,
+  rappiListWebhooks,
+  rappiProvisionStore,
+  rappiGetStoreStatus,
+  rappiDeprovisionStore,
+} from './rappi/selfOnboarding.js'
+
+// ========================================
 // DYNAMIC META TAGS FOR SOCIAL MEDIA
 // ========================================
 

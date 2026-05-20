@@ -226,12 +226,18 @@ export default function Settings() {
   const [rappiClientId, setRappiClientId] = useState('')
   const [rappiClientSecret, setRappiClientSecret] = useState('')
   const [rappiStoreId, setRappiStoreId] = useState('')
+  const [rappiStoreName, setRappiStoreName] = useState('')
   const [rappiPollingEnabled, setRappiPollingEnabled] = useState(false)
   const [rappiAutoAccept, setRappiAutoAccept] = useState(true)
   const [showRappiSecret, setShowRappiSecret] = useState(false)
   const [isSavingRappi, setIsSavingRappi] = useState(false)
   const [isTestingRappi, setIsTestingRappi] = useState(false)
   const [rappiTestResult, setRappiTestResult] = useState(null)
+  // Self-Onboarding (OAuth merchant + provisioning)
+  const [isConnectingRappiOAuth, setIsConnectingRappiOAuth] = useState(false)
+  const [isProvisioningRappiStore, setIsProvisioningRappiStore] = useState(false)
+  const [isCheckingRappiStatus, setIsCheckingRappiStatus] = useState(false)
+  const [rappiProvisioningResult, setRappiProvisioningResult] = useState(null)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -1007,6 +1013,7 @@ export default function Settings() {
           setRappiClientId(businessData.rappiConfig.clientId || '')
           setRappiClientSecret(businessData.rappiConfig.clientSecret || '')
           setRappiStoreId(businessData.rappiConfig.storeId || '')
+          setRappiStoreName(businessData.rappiConfig.storeName || '')
           setRappiPollingEnabled(businessData.rappiConfig.pollingEnabled === true)
           setRappiAutoAccept(businessData.rappiConfig.autoAccept !== false)
         }
@@ -9388,16 +9395,220 @@ export default function Settings() {
       {/* Tab: Integración Rappi (gated por businessSettings.rappiEnabled) */}
       {activeTab === 'rappi' && (
         <div className="space-y-6">
+          {/* Self-Onboarding: conectar tienda con Rappi */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Bike className="w-5 h-5 text-orange-600" />
-                <CardTitle>Integración con Rappi</CardTitle>
+                <CardTitle>Conectar tienda con Rappi</CardTitle>
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                Configura las credenciales para captar pedidos de Rappi y emitir comprobantes.
-                Esta integración usa <strong>Self Mapping</strong>: tu menú lo cargas en el Portal Partners
-                de Rappi y vinculas los SKUs manualmente para que coincidan con tu catálogo de Cobrify.
+                Vincula tu tienda a la integración de Cobrify mediante el flujo de Self-Onboarding de Rappi.
+                Necesitas tener tu tienda creada en el Portal Partners de Rappi.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Estado OAuth */}
+              <div className={`p-3 rounded-lg border ${
+                businessSettings?.rappiConfig?.merchantToken
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {businessSettings?.rappiConfig?.merchantToken ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                  )}
+                  <div className="text-sm flex-1">
+                    <p className="font-medium">
+                      {businessSettings?.rappiConfig?.merchantToken
+                        ? 'Tienda autenticada con Rappi'
+                        : 'Tienda no conectada'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {businessSettings?.rappiConfig?.merchantToken
+                        ? 'Ya puedes provisionar tu tienda en la integración.'
+                        : 'Inicia sesión con tu cuenta de Rappi para autorizar a Cobrify.'}
+                    </p>
+                  </div>
+                  <Button
+                    variant={businessSettings?.rappiConfig?.merchantToken ? 'outline' : 'default'}
+                    size="sm"
+                    disabled={isConnectingRappiOAuth}
+                    onClick={async () => {
+                      setIsConnectingRappiOAuth(true)
+                      try {
+                        const startFn = httpsCallable(functions, 'rappiOAuthStart')
+                        const result = await startFn({ businessId: getBusinessId(), env: 'sandbox' })
+                        const oauthUrl = result.data?.url
+                        if (!oauthUrl) throw new Error('No se recibió URL de OAuth')
+
+                        // Listener para postMessage del popup
+                        const onMessage = (evt) => {
+                          if (evt.data?.source !== 'rappi-oauth') return
+                          window.removeEventListener('message', onMessage)
+                          if (evt.data.ok) {
+                            toast.success('Conectado con Rappi')
+                            if (refreshBusinessSettings) refreshBusinessSettings()
+                          } else {
+                            toast.error('No se pudo conectar: ' + (evt.data.error || ''))
+                          }
+                          setIsConnectingRappiOAuth(false)
+                        }
+                        window.addEventListener('message', onMessage)
+
+                        const popup = window.open(oauthUrl, 'rappi-oauth', 'width=520,height=700')
+                        // Si el popup se cierra sin enviar postMessage, libera el botón
+                        const interval = setInterval(() => {
+                          if (popup?.closed) {
+                            clearInterval(interval)
+                            window.removeEventListener('message', onMessage)
+                            setIsConnectingRappiOAuth(false)
+                          }
+                        }, 500)
+                      } catch (err) {
+                        console.error('Error iniciando OAuth Rappi:', err)
+                        toast.error('Error: ' + (err.message || 'desconocido'))
+                        setIsConnectingRappiOAuth(false)
+                      }
+                    }}
+                  >
+                    {isConnectingRappiOAuth ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Conectando…</>
+                    ) : businessSettings?.rappiConfig?.merchantToken ? 'Reconectar' : 'Conectar con Rappi'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Provisioning: solo si ya hay merchantToken */}
+              {businessSettings?.rappiConfig?.merchantToken && (
+                <>
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-medium mb-3">Provisionar tienda</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Store ID</label>
+                        <Input
+                          value={rappiStoreId}
+                          onChange={(e) => setRappiStoreId(e.target.value)}
+                          placeholder="Ej: 10"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Nombre de la tienda</label>
+                        <Input
+                          value={rappiStoreName}
+                          onChange={(e) => setRappiStoreName(e.target.value)}
+                          placeholder="Mi Tienda Principal"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Estado integración tienda */}
+                  {businessSettings?.rappiConfig?.storeIntegrationStatus && (
+                    <div className={`p-2 rounded-md text-xs border ${
+                      businessSettings.rappiConfig.storeIntegrationStatus === 'active'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : businessSettings.rappiConfig.storeIntegrationStatus === 'failed'
+                        ? 'bg-red-50 border-red-200 text-red-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      Estado tienda: <strong>{businessSettings.rappiConfig.storeIntegrationStatus}</strong>
+                      {businessSettings.rappiConfig.lastProvisioningOperation && (
+                        <> · {businessSettings.rappiConfig.lastProvisioningOperation}</>
+                      )}
+                    </div>
+                  )}
+
+                  {rappiProvisioningResult && (
+                    <div className={`p-2 rounded-md text-xs border ${
+                      rappiProvisioningResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-red-50 border-red-200 text-red-900'
+                    }`}>
+                      {rappiProvisioningResult.ok ? (
+                        <span>✓ Solicitud enviada. Esperando confirmación de Rappi vía webhook…</span>
+                      ) : (
+                        <span>✗ {rappiProvisioningResult.message || 'Error'} {rappiProvisioningResult.status ? `(HTTP ${rappiProvisioningResult.status})` : ''}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={async () => {
+                        setIsProvisioningRappiStore(true)
+                        setRappiProvisioningResult(null)
+                        try {
+                          const fn = httpsCallable(functions, 'rappiProvisionStore')
+                          const result = await fn({
+                            businessId: getBusinessId(),
+                            storeId: rappiStoreId.trim(),
+                            name: rappiStoreName.trim(),
+                          })
+                          setRappiProvisioningResult(result.data)
+                          if (result.data?.ok) {
+                            toast.success('Solicitud de provisioning enviada')
+                            if (refreshBusinessSettings) refreshBusinessSettings()
+                          } else {
+                            toast.error('Provisioning falló: ' + (result.data?.message || ''))
+                          }
+                        } catch (err) {
+                          console.error('Error provisioning:', err)
+                          toast.error('Error: ' + err.message)
+                          setRappiProvisioningResult({ ok: false, message: err.message })
+                        } finally {
+                          setIsProvisioningRappiStore(false)
+                        }
+                      }}
+                      disabled={isProvisioningRappiStore || !rappiStoreId.trim() || !rappiStoreName.trim()}
+                    >
+                      {isProvisioningRappiStore ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Provisionando…</>
+                      ) : 'Provisionar tienda'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        setIsCheckingRappiStatus(true)
+                        try {
+                          const fn = httpsCallable(functions, 'rappiGetStoreStatus')
+                          const result = await fn({ businessId: getBusinessId() })
+                          if (result.data?.ok) {
+                            toast.success('Estado consultado — revisa la consola')
+                            console.log('Rappi integration status:', result.data.data)
+                          } else {
+                            toast.error('No se pudo consultar: ' + (result.data?.message || ''))
+                          }
+                        } catch (err) {
+                          toast.error('Error: ' + err.message)
+                        } finally {
+                          setIsCheckingRappiStatus(false)
+                        }
+                      }}
+                      disabled={isCheckingRappiStatus}
+                    >
+                      {isCheckingRappiStatus ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Consultando…</>
+                      ) : 'Ver estado en Rappi'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bike className="w-5 h-5 text-orange-600" />
+                <CardTitle>Configuración manual (legacy / pruebas)</CardTitle>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Si Rappi te entregó credenciales propias <strong>por tienda</strong> (modo legacy),
+                puedes guardarlas aquí y probar la conexión directamente. Para el flujo nuevo usa la sección superior.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
