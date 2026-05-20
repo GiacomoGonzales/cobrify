@@ -3509,20 +3509,41 @@ export const sendDispatchGuideToSunatFn = onRequest(
               console.log(`✅ [GRE] CDR guardado: ${cdrStorageUrl ? 'OK' : 'NO'}`)
             }
           } else if (result.method === 'qpse') {
-            // Para QPse, descargar desde las URLs proporcionadas
-            if (result.xmlUrl) {
-              const xmlContent = await downloadFromUrl(result.xmlUrl)
-              if (xmlContent) {
-                xmlStorageUrl = await saveToStorage(
-                  businessId,
-                  guideId,
-                  `${documentNumber}.xml`,
-                  xmlContent
-                )
+            // XML: priorizar xmlFirmado (base64) que SIEMPRE viene cuando QPse
+            // firmó el documento. Fallback a xmlUrl si está. Igual flujo que
+            // facturas (ver sendInvoiceToSunat línea ~920).
+            let xmlContent = null
+            if (result.xmlFirmado) {
+              try {
+                xmlContent = Buffer.from(result.xmlFirmado, 'base64').toString('utf-8')
+              } catch {
+                xmlContent = result.xmlFirmado
               }
             }
-            // CDR puede venir como URL o como contenido directo
-            if (result.cdrUrl) {
+            if (!xmlContent && result.xmlUrl) {
+              xmlContent = await downloadFromUrl(result.xmlUrl)
+            }
+            if (xmlContent) {
+              xmlStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}.xml`,
+                xmlContent
+              )
+              console.log(`✅ [GRE] XML guardado: ${xmlStorageUrl ? 'OK' : 'NO'}`)
+            }
+
+            // CDR: priorizar contenido directo (que ya viene decodificado del
+            // ZIP por decodeQPseCdr en qpseService) sobre URL externa.
+            if (result.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}-CDR.xml`,
+                result.cdrData
+              )
+              console.log(`✅ [GRE] CDR guardado desde contenido directo: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+            } else if (result.cdrUrl) {
               const cdrContent = await downloadFromUrl(result.cdrUrl)
               if (cdrContent) {
                 cdrStorageUrl = await saveToStorage(
@@ -3531,15 +3552,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
                   `${documentNumber}-CDR.xml`,
                   cdrContent
                 )
+                console.log(`✅ [GRE] CDR guardado desde URL: ${cdrStorageUrl ? 'OK' : 'NO'}`)
               }
-            } else if (result.cdrData) {
-              console.log('📄 [GRE] CDR recibido como contenido directo, guardando...')
-              cdrStorageUrl = await saveToStorage(
-                businessId,
-                guideId,
-                `${documentNumber}-CDR.xml`,
-                result.cdrData
-              )
             }
           }
 
