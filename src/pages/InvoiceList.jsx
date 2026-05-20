@@ -2247,6 +2247,8 @@ Gracias por tu preferencia.`
     if (i.status === 'cancelled' || i.status === 'voided' ||
         i.status === 'pending_cancellation' || i.status === 'partial_refund_pending') return false
     if (i.sunatStatus === 'voiding' || i.sunatStatus === 'voided') return false
+    // Archivadas no suman a totales
+    if (i.archived === true) return false
     return true
   }
   const salesInvoices = dateFilteredInvoices.filter(isValidSale)

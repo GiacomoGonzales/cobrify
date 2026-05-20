@@ -136,12 +136,13 @@ export default function Sellers() {
     }
   }
 
-  // Facturas válidas (excluye anuladas/convertidas)
+  // Facturas válidas (excluye anuladas/convertidas/archivadas)
   const validInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       if (invoice.status === 'cancelled' || invoice.status === 'voided') return false
       if (invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
       if (invoice.convertedTo) return false
+      if (invoice.archived === true) return false
       if (!invoice.sellerId) return false
       return true
     })

@@ -218,6 +218,7 @@ export default function Dashboard() {
   // - Excluir notas de crédito y débito (no son ventas, son ajustes)
   // - Excluir notas de venta ya convertidas a boleta/factura (para no duplicar ingresos)
   // - Excluir documentos anulados (notas de venta, boletas, facturas)
+  // - Excluir documentos archivados (el usuario los archivó para que no sumen)
   const validInvoicesForSales = branchFilteredInvoices.filter(inv => {
     // Excluir notas de crédito y débito (no son ventas)
     if (inv.documentType === 'nota_credito' || inv.documentType === 'nota_debito') {
@@ -235,6 +236,10 @@ export default function Dashboard() {
     }
     // Si está en proceso de anulación SUNAT (voiding), tampoco contar
     if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') {
+      return false
+    }
+    // Archivadas no suman a totales (decisión explícita del usuario)
+    if (inv.archived === true) {
       return false
     }
     return true

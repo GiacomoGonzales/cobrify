@@ -413,6 +413,9 @@ export default function CashFlow() {
       // Filtrar por sucursal
       if (!filterByBranch(inv, 'invoice')) return false
 
+      // Archivadas no suman a ingresos
+      if (inv.archived === true) return false
+
       // Una factura se considera como ingreso si:
       // 1. Su status es 'paid' (factura/boleta normal pagada)
       // 2. O tiene paymentHistory con pagos (notas de venta con pagos parciales)
@@ -623,6 +626,9 @@ export default function CashFlow() {
     const pendingInvoices = invoices.filter(inv => {
       // Filtrar por sucursal primero
       if (!filterByBranch(inv, 'invoice')) return false
+
+      // Archivadas no suman a cuentas por cobrar
+      if (inv.archived === true) return false
 
       // Facturas/boletas con status pending
       if (inv.status === 'pending') return true
