@@ -138,11 +138,24 @@ export default function Attendance() {
   // Marcaciones del usuario actual de los últimos 7 días (para vista de jornada)
   const [myWeekRecords, setMyWeekRecords] = useState([])
 
-  // Filtros en tab Marcaciones
+  // Filtros en tab Marcaciones.
+  // Rango por defecto: lunes a domingo de la semana en curso, para que al
+  // entrar el cliente vea de inmediato la actividad reciente sin tener que
+  // elegir fechas. "Limpiar" deja ambos vacíos (= sin filtro de fecha).
+  const getCurrentWeekRange = () => {
+    const today = new Date()
+    const dow = today.getDay() // 0=dom, 1=lun, ..., 6=sab
+    const monday = new Date(today)
+    monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    const toYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return { from: toYmd(monday), to: toYmd(sunday) }
+  }
   const [filterUser, setFilterUser] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
-  const [filterFrom, setFilterFrom] = useState('')
-  const [filterTo, setFilterTo] = useState('')
+  const [filterFrom, setFilterFrom] = useState(() => getCurrentWeekRange().from)
+  const [filterTo, setFilterTo] = useState(() => getCurrentWeekRange().to)
 
   // Modal de marcación manual
   const [showManualModal, setShowManualModal] = useState(false)
@@ -233,7 +246,9 @@ export default function Attendance() {
       if (usersRes.success) setSubUsers(usersRes.data || [])
       if (lastRes.success) setLastMark(lastRes.data)
       if (weekRes.success) setMyWeekRecords(weekRes.data || [])
-      if (canManage) await loadRecords()
+      // Carga inicial filtrada por la semana en curso (estado inicial de los
+      // filtros). Si el usuario quiere ver todo, presiona "Limpiar".
+      if (canManage) await loadRecords({ fromDate: filterFrom || undefined, toDate: filterTo || undefined })
     } catch (e) {
       console.error(e)
     } finally {
