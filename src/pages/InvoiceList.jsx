@@ -728,6 +728,12 @@ Gracias por tu preferencia.`
                   }
                 }
 
+                // Si el item se vendió con número de serie, devolverlo a 'available'
+                // junto con la actualización de stock (transacción atómica única).
+                const serialsToRestore = item.serialNumber
+                  ? [{ serialNumber: item.serialNumber, restore: true }]
+                  : null
+
                 // Actualizar stock usando transacción atómica
                 const variantSku = item.variantSku || item.variantName || null
                 await updateProductStockTransaction(
@@ -736,7 +742,8 @@ Gracias por tu preferencia.`
                   warehouseId,
                   quantityToRestore,
                   batchExtraUpdates,
-                  variantSku
+                  variantSku,
+                  serialsToRestore
                 )
 
                 // Registrar movimiento de stock
@@ -972,6 +979,11 @@ Gracias por tu preferencia.`
                   }
                 }
 
+                // Si el item se vendió con número de serie, devolverlo a 'available'
+                const serialsToRestore = item.serialNumber
+                  ? [{ serialNumber: item.serialNumber, restore: true }]
+                  : null
+
                 const variantSku = item.variantSku || item.variantName || null
                 await updateProductStockTransaction(
                   businessId,
@@ -979,7 +991,8 @@ Gracias por tu preferencia.`
                   warehouseId,
                   quantityToRestore,
                   batchExtraUpdates,
-                  variantSku
+                  variantSku,
+                  serialsToRestore
                 )
 
                 await createStockMovement(businessId, {

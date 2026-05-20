@@ -747,6 +747,11 @@ export default function CreateCreditNote() {
                   }
                 }
 
+                // Si el item se vendió con número de serie, devolverlo a 'available'
+                const serialsToRestore = item.serialNumber
+                  ? [{ serialNumber: item.serialNumber, restore: true }]
+                  : null
+
                 const itemVariantSku = item.variantSku || null
                 await updateProductStockTransaction(
                   user.uid,
@@ -754,7 +759,8 @@ export default function CreateCreditNote() {
                   warehouseId,
                   quantityToRestore,
                   batchExtraUpdates,
-                  itemVariantSku
+                  itemVariantSku,
+                  serialsToRestore
                 )
 
                 await createStockMovement(user.uid, {

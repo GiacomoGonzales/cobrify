@@ -665,6 +665,11 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
         const updatedSerials = product.serials.map(s => {
           const match = serialsToMark.find(stm => stm.serialNumber === s.serialNumber)
           if (!match) return s
+          // Restauración (anulación de venta): volver a disponible
+          if (match.restore) {
+            return { ...s, status: 'available', saleId: null, saleDate: null }
+          }
+          // Venta normal: marcar como vendido
           return { ...s, status: 'sold', saleId: match.saleId || null, saleDate: match.saleDate }
         })
         finalExtraUpdates = { ...extraUpdates, serials: updatedSerials }
