@@ -377,7 +377,7 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
     // SIEMPRE debemos consultar getStatus para obtener la respuesta real de SUNAT
     // El código 0 del envío solo significa "ticket obtenido", no "aceptado por SUNAT"
     const tieneTicket = resultado.ticket || resultadoEnvio.ticket || resultadoEnvio.numero_ticket
-    const necesitaConsultarEstado = tieneTicket || resultado.accepted || !resultado.cdrUrl
+    const necesitaConsultarEstado = tieneTicket || resultado.accepted || (!resultado.cdrUrl && !resultado.cdrData)
 
     if (necesitaConsultarEstado) {
       console.log('📄 Consultando estado final en SUNAT (getStatus)...')
@@ -434,13 +434,37 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
             console.log(`✅ PDF URL obtenida: ${resultado.pdfUrl}`)
           }
 
+          // NUEVO: También buscar CDR como contenido directo en consultarEstado.
+          // QPse a veces devuelve el CDR base64 en estadoConsulta.cdr (no solo url_cdr).
+          // Crítico para GRE: el enviarASunat inicial NO trae cdr para guías (devuelve
+          // solo ticket), por lo que sin este check el CDR nunca queda guardado.
+          if (!resultado.cdrData) {
+            const cdrFromQuery = estadoConsulta.cdr || estadoConsulta.cdr_base64 ||
+              estadoConsulta.cdr_content || estadoConsulta.contenido_cdr ||
+              estadoConsulta.cdr_xml || ''
+            if (cdrFromQuery) {
+              let cdrText = cdrFromQuery
+              // Decodificar base64 si empieza con PD94 (= <?xml en base64)
+              if (typeof cdrText === 'string' && cdrText.startsWith('PD94')) {
+                try {
+                  cdrText = Buffer.from(cdrText, 'base64').toString('utf-8')
+                  console.log('✅ CDR (contenido directo) decodificado de base64 durante polling')
+                } catch (e) {
+                  console.warn('⚠️ Error decodificando CDR base64 del polling:', e.message)
+                }
+              }
+              resultado.cdrData = cdrText
+              console.log(`✅ CDR contenido directo obtenido durante polling (${cdrText.length} chars)`)
+            }
+          }
+
           // También actualizar hash si no lo teníamos
           if ((estadoConsulta.hash || estadoConsulta.codigo_hash) && !resultado.hash) {
             resultado.hash = estadoConsulta.hash || estadoConsulta.codigo_hash
           }
 
-          // Si ya tenemos respuesta definitiva (aceptado con CDR o rechazado), salir
-          if ((resultado.accepted && resultado.cdrUrl) || !resultado.accepted) {
+          // Si ya tenemos respuesta definitiva (aceptado con CDR — URL o data — o rechazado), salir
+          if ((resultado.accepted && (resultado.cdrUrl || resultado.cdrData)) || !resultado.accepted) {
             break
           }
         } catch (consultaError) {
@@ -448,8 +472,8 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
         }
       }
 
-      if (resultado.accepted && !resultado.cdrUrl) {
-        console.warn('⚠️ No se pudo obtener CDR después de 5 intentos')
+      if (resultado.accepted && !resultado.cdrUrl && !resultado.cdrData) {
+        console.warn('⚠️ Documento aceptado pero CDR aún no disponible en QPse después de 5 intentos. Puede consultarse luego.')
       }
     }
 
