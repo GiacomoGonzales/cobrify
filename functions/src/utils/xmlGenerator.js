@@ -3181,8 +3181,15 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const despatchLine = root.ele('cac:DespatchLine')
 
   if (referencesElectronicRemitente) {
-    // Modo anotación opcional (evita OBS 4434)
+    // Modo anotación opcional (evita OBS 4434).
+    // IMPORTANTE: el esquema UBL 2.1 exige cbc:DeliveredQuantity en DespatchLine
+    // ANTES de cac:Item (cardinalidad 1..1), incluso en modo anotación.
+    // SUNAT rechazaba con cvc-complex-type.2.4.a cuando se omitía
+    // (ver Mensaje: Error al ValidarEsquema, ticket 0306).
     despatchLine.ele('cbc:ID').txt('0')
+    despatchLine.ele('cbc:DeliveredQuantity', {
+      'unitCode': 'ZZ'
+    }).txt('1')
     const itemEle = despatchLine.ele('cac:Item')
     itemEle.ele('cbc:Description').txt(annotationText)
   } else {
