@@ -47,6 +47,8 @@ import {
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
+import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
+import { Tag } from 'lucide-react'
 
 // Mapeo nombre lucide → componente. Se usa al renderizar el icono que el negocio
 // asoció a su categoría custom (la categoría guarda solo el nombre del icono).
@@ -360,6 +362,9 @@ export default function Expenses() {
 
   // Tab activo: 'list' (lista de gastos) o 'summary' (resumen con gráficos)
   const [activeTab, setActiveTab] = useState('list')
+
+  // Modal de gestión de categorías de gasto
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false)
 
   // Atajos para setear rango de fechas rápido
   function applyDateShortcut(shortcut) {
@@ -695,6 +700,15 @@ export default function Expenses() {
             className="flex-1 sm:flex-none"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowCategoriesModal(true)}
+            title="Gestionar categorías"
+            className="flex-1 sm:flex-none"
+          >
+            <Tag className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Categorías</span>
           </Button>
           <Button variant="success" onClick={exportToExcel} className="flex-1 sm:flex-none">
             <Download className="w-4 h-4 sm:mr-2" />
@@ -1575,6 +1589,42 @@ export default function Expenses() {
                 )}
               </button>
             </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal: Gestión de categorías de gasto */}
+      {showCategoriesModal && createPortal(
+        <div className="fixed inset-0 z-[9999] overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={async () => {
+            setShowCategoriesModal(false)
+            await loadCategories()
+          }} />
+          <div className="min-h-full flex items-center justify-center p-4 relative">
+            <div className="bg-white rounded-2xl w-full max-w-3xl my-8 relative" onClick={e => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white rounded-t-2xl p-5 border-b border-gray-200 flex items-center justify-between z-10">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-gray-500" />
+                    Categorías de Gastos
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Personaliza las categorías que usarás al registrar gastos.</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    setShowCategoriesModal(false)
+                    await loadCategories()
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5">
+                <ExpenseCategoriesManager />
+              </div>
             </div>
           </div>
         </div>,
