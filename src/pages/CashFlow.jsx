@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getInvoices, getRecentInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
-import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
+import { getExpenses, getExpenseCategories, DEFAULT_EXPENSE_CATEGORIES } from '@/services/expenseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
@@ -153,18 +153,16 @@ const isFinancialMovementInRange = (movement, startDate, endDate) => {
   return isInDateRange(movement.date || movement.createdAt, startDate, endDate)
 }
 
-// Iconos por categoría de egreso
-const CATEGORY_ICONS = {
-  servicios: Zap,
-  proveedores: Package,
-  transporte: Truck,
-  personal: Users,
-  impuestos: FileText,
-  mantenimiento: Building,
-  marketing: TrendingUp,
-  bancarios: Building,
-  otros: MoreHorizontal,
-  compras: ShoppingCart
+// Mapeo nombre lucide → componente para iconos dinámicos de categorías de gasto.
+const ICON_COMPONENTS = {
+  Zap, Building, Package, ShoppingBag: Package, Truck, Users, FileText,
+  Wrench: Building, Megaphone: TrendingUp, CreditCard: Building, MoreHorizontal,
+  ShoppingCart, DollarSign, Calendar
+}
+
+function getCategoryIcon(category) {
+  if (!category) return MoreHorizontal
+  return ICON_COMPONENTS[category.icon] || MoreHorizontal
 }
 
 // Categorías de movimientos financieros (Flujo de Caja)
@@ -203,6 +201,7 @@ export default function CashFlow() {
   const [cashMovements, setCashMovements] = useState([])
   const [loans, setLoans] = useState([])
   const [financialMovements, setFinancialMovements] = useState([])
+  const [expenseCategories, setExpenseCategories] = useState(DEFAULT_EXPENSE_CATEGORIES)
 
   // Sucursales
   const [branches, setBranches] = useState([])
@@ -274,8 +273,28 @@ export default function CashFlow() {
   useEffect(() => {
     if (user?.uid) {
       loadData()
+      loadCategories()
     }
   }, [user?.uid, dateRange])
+
+  async function loadCategories() {
+    if (isDemoMode) {
+      setExpenseCategories(DEFAULT_EXPENSE_CATEGORIES)
+      return
+    }
+    try {
+      const result = await getExpenseCategories(user.uid)
+      if (result.success && Array.isArray(result.data)) {
+        setExpenseCategories(result.data)
+      }
+    } catch (err) {
+      console.error('Error al cargar categorías:', err)
+    }
+  }
+
+  // Lookup de categoría por id (resuelve archivadas y custom)
+  const getCategoryById = (id) =>
+    expenseCategories.find(c => c.id === id) || { id, name: id || 'Otros', color: '#64748B', icon: 'MoreHorizontal' }
 
   async function loadData() {
     setLoading(true)
@@ -1293,8 +1312,9 @@ export default function CashFlow() {
                 <div className="sm:hidden space-y-3">
                   {/* Gastos por categoría */}
                   {Object.entries(cashFlowData.expensesByCategory).map(([category, data]) => {
-                    const CategoryIcon = CATEGORY_ICONS[category] || MoreHorizontal
-                    const categoryName = EXPENSE_CATEGORIES.find(c => c.id === category)?.name || category
+                    const catObj = getCategoryById(category)
+                    const CategoryIcon = getCategoryIcon(catObj)
+                    const categoryName = catObj.name
                     return (
                       <div key={category} className="flex items-center justify-between py-3 border-b border-gray-100">
                         <div className="flex items-center gap-3">
@@ -1421,8 +1441,9 @@ export default function CashFlow() {
                   <tbody>
                     {/* Gastos por categoría */}
                     {Object.entries(cashFlowData.expensesByCategory).map(([category, data]) => {
-                      const CategoryIcon = CATEGORY_ICONS[category] || MoreHorizontal
-                      const categoryName = EXPENSE_CATEGORIES.find(c => c.id === category)?.name || category
+                      const catObj = getCategoryById(category)
+                      const CategoryIcon = getCategoryIcon(catObj)
+                      const categoryName = catObj.name
                       return (
                         <tr key={category} className="border-b border-gray-100">
                           <td className="py-3 text-sm text-gray-500">-</td>

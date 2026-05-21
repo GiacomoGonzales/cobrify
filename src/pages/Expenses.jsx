@@ -8,7 +8,8 @@ import {
   createExpense,
   updateExpense,
   deleteExpense,
-  EXPENSE_CATEGORIES,
+  getExpenseCategories,
+  DEFAULT_EXPENSE_CATEGORIES,
   EXPENSE_PAYMENT_METHODS
 } from '@/services/expenseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -47,30 +48,30 @@ import {
 import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 
-// Mapeo de iconos por categoría
-const CATEGORY_ICONS = {
-  servicios: Zap,
-  proveedores: Package,
-  transporte: Truck,
-  personal: Users,
-  impuestos: FileText,
-  mantenimiento: Wrench,
-  marketing: Megaphone,
-  bancarios: Building,
-  otros: MoreHorizontal
+// Mapeo nombre lucide → componente. Se usa al renderizar el icono que el negocio
+// asoció a su categoría custom (la categoría guarda solo el nombre del icono).
+const ICON_COMPONENTS = {
+  Zap, Building, Package, ShoppingBag: Package, Truck, Users, FileText,
+  Wrench, Megaphone, CreditCard: Building, MoreHorizontal,
+  Receipt, DollarSign, TrendingDown, Calendar, Filter, Search
 }
 
-// Colores por categoría
-const CATEGORY_COLORS = {
-  servicios: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  proveedores: 'bg-blue-100 text-blue-700 border-blue-200',
-  transporte: 'bg-green-100 text-green-700 border-green-200',
-  personal: 'bg-purple-100 text-purple-700 border-purple-200',
-  impuestos: 'bg-red-100 text-red-700 border-red-200',
-  mantenimiento: 'bg-orange-100 text-orange-700 border-orange-200',
-  marketing: 'bg-pink-100 text-pink-700 border-pink-200',
-  bancarios: 'bg-gray-100 text-gray-700 border-gray-200',
-  otros: 'bg-slate-100 text-slate-700 border-slate-200'
+function getCategoryIconComponent(category) {
+  if (!category) return MoreHorizontal
+  return ICON_COMPONENTS[category.icon] || MoreHorizontal
+}
+
+/**
+ * Devuelve clases Tailwind para el badge en base al color hex de la categoría.
+ * Convertimos hex a estilo inline porque Tailwind no puede generar clases dinámicamente.
+ */
+function getCategoryBadgeStyle(category) {
+  const color = category?.color || '#64748B'
+  return {
+    backgroundColor: `${color}1A`, // 10% opacity
+    color: color,
+    borderColor: `${color}33`,     // 20% opacity
+  }
 }
 
 // Datos demo de gastos
@@ -148,6 +149,7 @@ export default function Expenses() {
 
   // Estados
   const [expenses, setExpenses] = useState([])
+  const [expenseCategories, setExpenseCategories] = useState(DEFAULT_EXPENSE_CATEGORIES)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -204,8 +206,28 @@ export default function Expenses() {
     if (user?.uid) {
       loadExpenses()
       loadBranches()
+      loadCategories()
     }
   }, [user?.uid, dateRange])
+
+  async function loadCategories() {
+    if (isDemoMode) {
+      setExpenseCategories(DEFAULT_EXPENSE_CATEGORIES)
+      return
+    }
+    try {
+      const result = await getExpenseCategories(user.uid)
+      if (result.success && Array.isArray(result.data)) {
+        setExpenseCategories(result.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar categorías de gastos:', error)
+    }
+  }
+
+  // Helper: lookup de categoría por id (incluye archivadas para lookups históricos)
+  const getCategoryById = (id) =>
+    expenseCategories.find(c => c.id === id) || { id, name: id || 'Otros', color: '#64748B', icon: 'MoreHorizontal' }
 
   async function loadBranches() {
     if (isDemoMode) return
@@ -487,7 +509,7 @@ export default function Expenses() {
     const data = filteredExpenses.map(e => ({
       'Fecha': e.date instanceof Date ? e.date.toLocaleDateString('es-PE') : new Date(e.date).toLocaleDateString('es-PE'),
       'Descripción': e.description,
-      'Categoría': EXPENSE_CATEGORIES.find(c => c.id === e.category)?.name || e.category,
+      'Categoría': getCategoryById(e.category).name,
       'Proveedor': e.supplier || '-',
       'Referencia': e.reference || '-',
       'Método de Pago': EXPENSE_PAYMENT_METHODS.find(m => m.id === e.paymentMethod)?.name || e.paymentMethod,
@@ -676,7 +698,7 @@ export default function Expenses() {
                 className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer flex-1"
               >
                 <option value="all">Todas las categorías</option>
-                {EXPENSE_CATEGORIES.map(cat => (
+                {expenseCategories.filter(c => !c.archived).map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
@@ -728,8 +750,9 @@ export default function Expenses() {
         ) : (
           <>
             {displayedExpenses.map(expense => {
-              const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
-              const categoryColor = CATEGORY_COLORS[expense.category] || CATEGORY_COLORS.otros
+              const categoryObj = getCategoryById(expense.category)
+              const CategoryIcon = getCategoryIconComponent(categoryObj)
+              const categoryStyle = getCategoryBadgeStyle(categoryObj)
               return (
                 <div key={expense.id} className="bg-white border border-gray-200 rounded-lg px-4 py-3 relative">
                   <div className="flex items-start justify-between">
@@ -767,9 +790,9 @@ export default function Expenses() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${categoryColor}`}>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border" style={categoryStyle}>
                       <CategoryIcon className="w-3 h-3" />
-                      {EXPENSE_CATEGORIES.find(c => c.id === expense.category)?.name || expense.category}
+                      {categoryObj.name}
                     </span>
                     <span className="text-xs text-gray-500">
                       {EXPENSE_PAYMENT_METHODS.find(m => m.id === expense.paymentMethod)?.name || expense.paymentMethod}
@@ -896,8 +919,9 @@ export default function Expenses() {
                 </tr>
               ) : (
                 displayedExpenses.map(expense => {
-                  const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
-                  const categoryColor = CATEGORY_COLORS[expense.category] || CATEGORY_COLORS.otros
+                  const categoryObj = getCategoryById(expense.category)
+                  const CategoryIcon = getCategoryIconComponent(categoryObj)
+                  const categoryStyle = getCategoryBadgeStyle(categoryObj)
 
                   return (
                     <tr key={expense.id} className="hover:bg-gray-50">
@@ -917,9 +941,9 @@ export default function Expenses() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${categoryColor}`}>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border" style={categoryStyle}>
                           <CategoryIcon className="w-3 h-3" />
-                          {EXPENSE_CATEGORIES.find(c => c.id === expense.category)?.name || expense.category}
+                          {categoryObj.name}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -1135,7 +1159,7 @@ export default function Expenses() {
                     onChange={e => setForm({ ...form, category: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   >
-                    {EXPENSE_CATEGORIES.map(cat => (
+                    {expenseCategories.filter(c => !c.archived).map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
                   </select>

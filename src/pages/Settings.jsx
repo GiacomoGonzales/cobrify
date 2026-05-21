@@ -49,6 +49,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import { getTables } from '@/services/tableService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
+import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import {
   deleteAllProducts,
@@ -5076,6 +5077,18 @@ export default function Settings() {
                   )}
                 </div>
               </div>
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Categorías de Gastos */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Categorías de Gastos</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Personaliza las categorías que usarás al registrar gastos del negocio.
+                </p>
+                <ExpenseCategoriesManager />
+              </div>
+
             </div>
           </CardContent>
 

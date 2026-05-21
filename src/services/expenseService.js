@@ -6,10 +6,12 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   getDocs,
   query,
   where,
   orderBy,
+  serverTimestamp,
   Timestamp
 } from 'firebase/firestore'
 
@@ -30,20 +32,75 @@ function parseLocalDate(dateValue) {
   return new Date(dateValue)
 }
 
-// Categorías de gastos predefinidas
-export const EXPENSE_CATEGORIES = [
-  { id: 'servicios', name: 'Servicios Básicos', description: 'Luz, agua, internet, teléfono', icon: 'Zap' },
-  { id: 'alquiler', name: 'Alquiler de Local', description: 'Renta del local comercial', icon: 'Building' },
-  { id: 'proveedores', name: 'Proveedores / Mercadería', description: 'Compras de inventario', icon: 'Package' },
-  { id: 'gastos_ventas', name: 'Gastos de Ventas', description: 'Comisiones, empaques, delivery', icon: 'ShoppingBag' },
-  { id: 'transporte', name: 'Transporte / Combustible', description: 'Delivery, gasolina', icon: 'Truck' },
-  { id: 'personal', name: 'Sueldos / Personal', description: 'Pagos a empleados', icon: 'Users' },
-  { id: 'impuestos', name: 'Impuestos', description: 'SUNAT, municipalidad', icon: 'FileText' },
-  { id: 'mantenimiento', name: 'Mantenimiento', description: 'Reparaciones, limpieza', icon: 'Wrench' },
-  { id: 'marketing', name: 'Marketing / Publicidad', description: 'Redes sociales, volantes', icon: 'Megaphone' },
-  { id: 'bancarios', name: 'Gastos Bancarios', description: 'Comisiones, ITF', icon: 'CreditCard' },
-  { id: 'otros', name: 'Otros', description: 'Gastos varios', icon: 'MoreHorizontal' }
+/**
+ * Categorías de gastos por defecto.
+ * Cada negocio puede personalizarlas en Settings → Categorías de Gastos.
+ * Las defaults se usan como semilla cuando un negocio aún no tiene `expenseCategories`
+ * en su doc de Firestore.
+ *
+ * Modelo: { id, name, description, icon, color, archived? }
+ *   - id: string único. Para custom se genera UUID.
+ *   - icon: nombre del componente lucide-react (ver CATEGORY_ICONS en Expenses.jsx)
+ *   - color: hex para badges y gráficos
+ *   - archived: si true, no aparece en selects pero conserva el historial
+ */
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  { id: 'servicios', name: 'Servicios Básicos', description: 'Luz, agua, internet, teléfono', icon: 'Zap', color: '#F59E0B' },
+  { id: 'alquiler', name: 'Alquiler de Local', description: 'Renta del local comercial', icon: 'Building', color: '#6366F1' },
+  { id: 'proveedores', name: 'Proveedores / Mercadería', description: 'Compras de inventario', icon: 'Package', color: '#0EA5E9' },
+  { id: 'gastos_ventas', name: 'Gastos de Ventas', description: 'Comisiones, empaques, delivery', icon: 'ShoppingBag', color: '#10B981' },
+  { id: 'transporte', name: 'Transporte / Combustible', description: 'Delivery, gasolina', icon: 'Truck', color: '#8B5CF6' },
+  { id: 'personal', name: 'Sueldos / Personal', description: 'Pagos a empleados', icon: 'Users', color: '#EC4899' },
+  { id: 'impuestos', name: 'Impuestos', description: 'SUNAT, municipalidad', icon: 'FileText', color: '#EF4444' },
+  { id: 'mantenimiento', name: 'Mantenimiento', description: 'Reparaciones, limpieza', icon: 'Wrench', color: '#14B8A6' },
+  { id: 'marketing', name: 'Marketing / Publicidad', description: 'Redes sociales, volantes', icon: 'Megaphone', color: '#F97316' },
+  { id: 'bancarios', name: 'Gastos Bancarios', description: 'Comisiones, ITF', icon: 'CreditCard', color: '#06B6D4' },
+  { id: 'otros', name: 'Otros', description: 'Gastos varios', icon: 'MoreHorizontal', color: '#64748B' }
 ]
+
+// Alias retrocompatible — no romper imports antiguos mientras se migran las páginas.
+export const EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES
+
+/**
+ * Obtener las categorías de gastos del negocio.
+ * Si el negocio nunca personalizó, devuelve las defaults.
+ * Retorna también las archived para preservar lookups de gastos históricos.
+ */
+export async function getExpenseCategories(userId) {
+  try {
+    const businessRef = doc(db, 'businesses', userId)
+    const snap = await getDoc(businessRef)
+    if (snap.exists()) {
+      const data = snap.data()
+      const custom = Array.isArray(data.expenseCategories) ? data.expenseCategories : null
+      if (custom && custom.length > 0) {
+        return { success: true, data: custom }
+      }
+    }
+    return { success: true, data: DEFAULT_EXPENSE_CATEGORIES }
+  } catch (error) {
+    console.error('Error al obtener categorías de gastos:', error)
+    return { success: false, error: error.message, data: DEFAULT_EXPENSE_CATEGORIES }
+  }
+}
+
+/**
+ * Guardar las categorías de gastos del negocio.
+ * Sobrescribe la lista completa.
+ */
+export async function saveExpenseCategories(userId, categories) {
+  try {
+    const businessRef = doc(db, 'businesses', userId)
+    await updateDoc(businessRef, {
+      expenseCategories: categories,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar categorías de gastos:', error)
+    return { success: false, error: error.message }
+  }
+}
 
 // Métodos de pago para gastos
 export const EXPENSE_PAYMENT_METHODS = [
