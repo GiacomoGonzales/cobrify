@@ -149,6 +149,9 @@ export default function Expenses() {
 
   // Estados
   const [expenses, setExpenses] = useState([])
+  // Gastos de los últimos 6 meses (independiente del filtro de fecha del listado)
+  // → necesario para el gráfico de evolución mensual del tab Resumen.
+  const [last6MonthsExpenses, setLast6MonthsExpenses] = useState([])
   const [expenseCategories, setExpenseCategories] = useState(DEFAULT_EXPENSE_CATEGORIES)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -249,6 +252,7 @@ export default function Expenses() {
         console.log('🎭 MODO DEMO: Cargando gastos simulados...')
         await new Promise(resolve => setTimeout(resolve, 500))
         setExpenses(DEMO_EXPENSES)
+        setLast6MonthsExpenses(DEMO_EXPENSES)
         setLoading(false)
         return
       }
@@ -264,6 +268,30 @@ export default function Expenses() {
       setLoading(false)
     }
   }
+
+  // Cargar gastos de los últimos 6 meses para el gráfico de evolución.
+  // Independiente del filtro de fecha del listado. Se invoca al cambiar de
+  // usuario y cada vez que se carga el listado (para que el chart se sincronice
+  // tras crear/editar/eliminar un gasto).
+  async function loadLast6MonthsExpenses() {
+    if (!user?.uid || isDemoMode) return
+    const today = new Date()
+    const start = new Date(today.getFullYear(), today.getMonth() - 5, 1)
+    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    try {
+      const data = await getExpenses(user.uid, {
+        startDate: getLocalDateString(start),
+        endDate: getLocalDateString(end),
+      })
+      setLast6MonthsExpenses(data)
+    } catch (err) {
+      console.error('Error cargando gastos 6 meses:', err)
+    }
+  }
+
+  useEffect(() => {
+    loadLast6MonthsExpenses()
+  }, [user?.uid, isDemoMode, expenses.length])
 
   // Filtrar y ordenar gastos
   const filteredExpenses = useMemo(() => {
@@ -412,7 +440,8 @@ export default function Expenses() {
     return { topCategory, dailyAvg, daysInRange, pieData }
   }, [totals, dateRange, expenseCategories])
 
-  // Gastos por mes (últimos 6 meses) — del total de `expenses` sin filtrar
+  // Gastos por mes (últimos 6 meses) — usa last6MonthsExpenses, que se carga
+  // aparte del listado para no depender del filtro de fecha del usuario.
   const monthlyChart = useMemo(() => {
     const now = new Date()
     const buckets = []
@@ -424,7 +453,7 @@ export default function Expenses() {
         total: 0,
       })
     }
-    expenses.forEach(e => {
+    last6MonthsExpenses.forEach(e => {
       const ed = e.date instanceof Date ? e.date : new Date(e.date)
       const key = `${ed.getFullYear()}-${ed.getMonth()}`
       const bucket = buckets.find(b => b.key === key)
@@ -435,7 +464,7 @@ export default function Expenses() {
       }
     })
     return buckets
-  }, [expenses])
+  }, [last6MonthsExpenses])
 
   // Handlers
   function handleSort(field) {
