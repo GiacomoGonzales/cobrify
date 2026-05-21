@@ -3181,20 +3181,26 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const despatchLine = root.ele('cac:DespatchLine')
 
   if (referencesElectronicRemitente) {
-    // Modo anotación opcional (evita OBS 4434).
-    // Estructura UBL 2.1 obligatoria para DespatchLine (en orden):
-    //   1. cbc:ID
-    //   2. cbc:DeliveredQuantity (cardinalidad 1..1)
-    //   3. cac:OrderLineReference (cardinalidad 1..unbounded) ← el XSD lo exige
-    //   4. cac:Item (cardinalidad 1..1)
-    // SUNAT rechaza con cvc-complex-type.2.4.a si falta alguno
-    // (V001-00000384 / TRANSPERC, 2026-05-21).
-    despatchLine.ele('cbc:ID').txt('0')
+    // Caso GRR ELECTRÓNICA referenciada (serie alfa, ej. EG07): conflicto de reglas SUNAT.
+    //
+    //   • OBS 3458 (Dato #20): cbc:ID="0" SOLO se permite cuando hay GRR física
+    //     (serie que empieza con número) o doc 82 o doc 01/04/03/12/48 con
+    //     Indicador de traslado total. NO permite cbc:ID="0" para GRR electrónica.
+    //   • OBS 4434 (Dato #20): NO corresponde DeliveredQuantity > 0 cuando se
+    //     referencia GRR electrónica.
+    //
+    // Única combinación válida para GRR electrónica:
+    //   cbc:ID="1"  (evita 3458)
+    //   DeliveredQuantity="0" unitCode="ZZ"  (no >0, evita 4434)
+    //   OrderLineReference + Item/Description (cumple XSD UBL 2.1)
+    //
+    // El detalle real del bien va en cbc:Description (hasta 500 chars).
+    despatchLine.ele('cbc:ID').txt('1')
     despatchLine.ele('cbc:DeliveredQuantity', {
       'unitCode': 'ZZ'
-    }).txt('1')
+    }).txt('0')
     const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-    orderLineRef.ele('cbc:LineID').txt('0')
+    orderLineRef.ele('cbc:LineID').txt('1')
     const itemEle = despatchLine.ele('cac:Item')
     itemEle.ele('cbc:Description').txt(annotationText)
   } else {
