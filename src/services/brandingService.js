@@ -24,6 +24,10 @@ export async function getResellerBranding(resellerId) {
     const resellerDoc = await getDoc(doc(db, 'resellers', resellerId))
     if (resellerDoc.exists()) {
       const data = resellerDoc.data()
+      // websiteUrl: si el reseller no configuró branding.websiteUrl explícitamente,
+      // usar su customDomain (más útil que un fallback a Cobrify). Se usa en footers
+      // de PDFs, tickets, etc. Limpiamos protocolo y trailing slash.
+      const cleanDomain = (data.customDomain || '').replace(/^https?:\/\//, '').replace(/\/$/, '')
       return {
         ...DEFAULT_BRANDING,
         companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
@@ -33,7 +37,8 @@ export async function getResellerBranding(resellerId) {
         accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
         whatsapp: data.branding?.whatsapp || data.phone || '',
         supportEmail: data.branding?.supportEmail || data.email || '',
-        websiteUrl: data.branding?.websiteUrl || '',
+        websiteUrl: data.branding?.websiteUrl || cleanDomain || '',
+        customDomain: cleanDomain || '',
       }
     }
   } catch (error) {
@@ -70,10 +75,26 @@ export async function getBrandingForClient(userId) {
         // Opción 1: Branding guardado en la suscripción (clientes nuevos)
         if (subscription.resellerBranding) {
           console.log('✅ Using branding from subscription:', subscription.resellerBranding)
-          return {
+          let merged = {
             ...DEFAULT_BRANDING,
             ...subscription.resellerBranding
           }
+          // Si en la subscription no quedó websiteUrl/customDomain (puede ser un snapshot
+          // viejo), traerlos del reseller actual. Necesario para que footers de PDFs
+          // muestren el dominio del reseller en vez de cobrifyperu.com.
+          if ((!merged.websiteUrl || !merged.customDomain) && subscription.resellerId) {
+            try {
+              const fresh = await getResellerBranding(subscription.resellerId)
+              merged = {
+                ...merged,
+                websiteUrl: merged.websiteUrl || fresh.websiteUrl || '',
+                customDomain: merged.customDomain || fresh.customDomain || '',
+              }
+            } catch (e) {
+              console.warn('No se pudo refrescar websiteUrl/customDomain del reseller:', e.message)
+            }
+          }
+          return merged
         }
 
         // Opción 2: Obtener del reseller (clientes antiguos)

@@ -1132,6 +1132,88 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text(carrierNameLines[0], leftValueX + 5, currentY)
 
     currentY += spacious ? 22 : 18
+
+    // Fila 4: Número de Registro MTC del transportista (si aplica)
+    if (carrier.mtcNumber) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('N° Registro MTC:', MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(carrier.mtcNumber, leftValueX + 5, currentY)
+      currentY += spacious ? 20 : 16
+    }
+
+    // === Indicador "registrar vehículos y conductores del transportista" ===
+    // Cuando el remitente sustenta el traslado con datos del vehículo/conductor del tercero
+    // (catálogo SUNAT_Envio_IndicadorVehiculoConductoresTransp).
+    if (carrier.registerVehiclesAndDrivers === true) {
+      // Subtítulo
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
+      doc.text('VEHÍCULO Y CONDUCTOR DEL TRANSPORTISTA', MARGIN_LEFT, currentY)
+      currentY += spacious ? 16 : 12
+      doc.setFontSize(7)
+
+      // Placa
+      const plateValue = vehicle.plate || '-'
+      doc.setFont('helvetica', 'bold')
+      doc.text('Placa del vehículo:', MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
+      doc.text(plateValue, leftValueX + 5, currentY)
+
+      // TUCE / Certificado (a la derecha)
+      if (vehicle.tuce) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('TUCE / Certificado:', rightLabelX, currentY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(vehicle.tuce, rightValueX, currentY)
+      }
+      currentY += spacious ? 20 : 16
+
+      // DNI conductor
+      const dniValue = driver.documentNumber || '-'
+      doc.setFont('helvetica', 'bold')
+      doc.text('DNI del Conductor:', MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
+      doc.text(dniValue, leftValueX + 5, currentY)
+
+      // Licencia (a la derecha)
+      if (driver.license) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Licencia:', rightLabelX, currentY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(driver.license, rightValueX, currentY)
+      }
+      currentY += spacious ? 20 : 16
+
+      // Nombre del conductor
+      const driverFullName = [driver.name, driver.lastName].filter(Boolean).join(' ') || '-'
+      doc.setFont('helvetica', 'bold')
+      doc.text('Nombre del Conductor:', MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      const driverBoxWidth = PAGE_WIDTH - MARGIN_RIGHT - leftValueX - 10
+      doc.rect(leftValueX, currentY - 8, driverBoxWidth, 12)
+      doc.text(driverFullName, leftValueX + 5, currentY)
+      currentY += spacious ? 22 : 18
+
+      // Vehículos secundarios (tracto + carreta, etc.)
+      const additionalVehicles = Array.isArray(guide.transport?.additionalVehicles)
+        ? guide.transport.additionalVehicles.filter(v => v?.plate)
+        : []
+      if (additionalVehicles.length > 0) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Vehículos secundarios:', MARGIN_LEFT, currentY)
+        currentY += spacious ? 14 : 11
+        doc.setFont('helvetica', 'normal')
+        additionalVehicles.forEach((v, idx) => {
+          const text = `${idx + 1}. Placa: ${v.plate}${v.tuce ? ` · TUCE: ${v.tuce}` : ''}${v.authorizationNumber ? ` · Aut.: ${v.authorizationNumber}` : ''}`
+          doc.text(text, MARGIN_LEFT + 10, currentY)
+          currentY += spacious ? 13 : 10
+        })
+        currentY += spacious ? 6 : 4
+      }
+    }
   } else {
     // ========== TRANSPORTE PRIVADO - Mostrar datos del vehículo y conductor ==========
     doc.text('UNIDAD DE TRANSPORTE Y CONDUCTOR', MARGIN_LEFT, currentY)
