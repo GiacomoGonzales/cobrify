@@ -883,10 +883,17 @@ export default function POS() {
   // presentación, precio múltiple o modificadores) limpiar el buscador y devolver el foco al input.
   // Sin esto, el foco queda en el botón clickeado y el Enter de la pistola lectora re-activa
   // ese botón en lugar de buscar el código escaneado.
+  //
+  // Configurable: businessSettings.posClearSearchOnAdd (default true).
+  // Si está en false, conserva el término de búsqueda — útil para agregar varias unidades
+  // del mismo producto o varios productos similares ('coca cola', 'coca cola light', etc.).
   const previousCartLengthRef = useRef(cart.length)
   useEffect(() => {
     if (cart.length > previousCartLengthRef.current) {
-      setSearchTerm('')
+      const clearOnAdd = businessSettings?.posClearSearchOnAdd !== false
+      if (clearOnAdd) {
+        setSearchTerm('')
+      }
       if (window.innerWidth >= 1024) {
         searchInputRef.current?.focus()
       }

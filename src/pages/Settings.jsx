@@ -244,6 +244,7 @@ export default function Settings() {
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
   const [allowNameEdit, setAllowNameEdit] = useState(false)
+  const [posClearSearchOnAdd, setPosClearSearchOnAdd] = useState(true)
   const [autoSku, setAutoSku] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [enableProductLocation, setEnableProductLocation] = useState(false)
@@ -1028,6 +1029,8 @@ export default function Settings() {
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
         setAllowNameEdit(businessData.allowNameEdit || false)
+        // Default true (comportamiento histórico): la búsqueda se limpia al agregar producto
+        setPosClearSearchOnAdd(businessData.posClearSearchOnAdd !== false)
         setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
@@ -4414,6 +4417,25 @@ export default function Settings() {
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
+                      checked={posClearSearchOnAdd}
+                      onChange={(e) => setPosClearSearchOnAdd(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Reiniciar búsqueda al agregar un producto al carrito
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {posClearSearchOnAdd
+                          ? '✓ Habilitado: Cuando agregues un producto al carrito, el campo de búsqueda se limpia automáticamente. Recomendado para flujos con pistola lectora o cuando agregas productos diferentes uno por uno.'
+                          : '✗ Deshabilitado: El término de búsqueda se mantiene después de agregar un producto. Útil cuando agregas varias unidades del mismo producto o varios productos similares (ej. "coca cola", "coca cola light").'}
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
                       checked={allowNameEdit}
                       onChange={(e) => setAllowNameEdit(e.target.checked)}
                       className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -5077,6 +5099,7 @@ export default function Settings() {
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
                       allowNameEdit: allowNameEdit,
+                      posClearSearchOnAdd: posClearSearchOnAdd,
                       autoSku: autoSku,
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
