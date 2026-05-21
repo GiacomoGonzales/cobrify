@@ -60,4 +60,103 @@ const SUNAT_UNITS = [
   { value: 'ZZ',  label: 'ZZ - Servicios' },
 ]
 
+// Set de códigos válidos para validación rápida (case-insensitive vía toUpperCase)
+const VALID_UNIT_CODES = new Set(SUNAT_UNITS.map(u => u.value.toUpperCase()))
+
+/**
+ * Mapeo de aliases comunes (texto libre) → código SUNAT del Catálogo 03.
+ * Cubre variantes históricas que aparecen en datos de productos viejos.
+ */
+const UNIT_ALIASES = {
+  // Unidad
+  'UNIDAD': 'NIU', 'UNIDADES': 'NIU', 'UND': 'NIU', 'UNDS': 'NIU',
+  'UN': 'NIU', 'UNI': 'NIU', 'U': 'NIU', 'UNI.': 'NIU', 'UND.': 'NIU',
+  'UNIT': 'NIU', 'PZA': 'NIU', 'PZ': 'NIU', 'PIEZA': 'NIU', 'PIEZAS': 'NIU',
+  // Peso
+  'KG': 'KGM', 'KGS': 'KGM', 'KILO': 'KGM', 'KILOS': 'KGM', 'KILOGRAMO': 'KGM', 'KILOGRAMOS': 'KGM',
+  'G': 'GRM', 'GR': 'GRM', 'GRS': 'GRM', 'GRAMO': 'GRM', 'GRAMOS': 'GRM',
+  'MG': 'MGM', 'MILIGRAMO': 'MGM', 'MILIGRAMOS': 'MGM',
+  'TN': 'TNE', 'TON': 'TNE', 'TONELADA': 'TNE', 'TONELADAS': 'TNE',
+  'LB': 'LBR', 'LIBRA': 'LBR', 'LIBRAS': 'LBR',
+  'OZ': 'ONZ', 'ONZA': 'ONZ', 'ONZAS': 'ONZ',
+  // Volumen / capacidad
+  'L': 'LTR', 'LT': 'LTR', 'LTS': 'LTR', 'LITRO': 'LTR', 'LITROS': 'LTR',
+  'ML': 'MLT', 'MILILITRO': 'MLT', 'MILILITROS': 'MLT',
+  'GL': 'GLL', 'GAL': 'GLL', 'GALON': 'GLL', 'GALONES': 'GLL',
+  // Longitud
+  'M': 'MTR', 'MT': 'MTR', 'MTS': 'MTR', 'METRO': 'MTR', 'METROS': 'MTR',
+  'CM': 'CMT', 'CENTIMETRO': 'CMT', 'CENTIMETROS': 'CMT',
+  'MM': 'MMT', 'MILIMETRO': 'MMT', 'MILIMETROS': 'MMT',
+  'KM': 'KTM', 'KILOMETRO': 'KTM', 'KILOMETROS': 'KTM',
+  'PULG': 'INH', 'PULGADA': 'INH', 'PULGADAS': 'INH',
+  // Área
+  'M2': 'MTK', 'METRO2': 'MTK', 'METROCUADRADO': 'MTK',
+  'CM2': 'CMK', 'MM2': 'MMK',
+  // Volumen cúbico
+  'M3': 'MTQ', 'METRO3': 'MTQ', 'METROCUBICO': 'MTQ',
+  'CM3': 'CMQ', 'MM3': 'MMQ',
+  // Empaque
+  'CAJA': 'BX', 'CAJAS': 'BX', 'CJ': 'BX',
+  'BOLSA': 'BG', 'BOLSAS': 'BG', 'BLS': 'BG',
+  'PAQUETE': 'PK', 'PAQUETES': 'PK', 'PAQ': 'PK', 'PKT': 'PK',
+  'BOTELLA': 'BO', 'BOTELLAS': 'BO', 'BOT': 'BO',
+  'LATA': 'CA', 'LATAS': 'CA',
+  'BARRIL': 'BLL', 'BARRILES': 'BLL',
+  'CARTON': 'CT', 'CARTONES': 'CT', 'CTN': 'CT',
+  'CIENTO': 'CEN', 'CIENTOS': 'CEN',
+  'DOCENA': 'DZN', 'DOCENAS': 'DZN', 'DOC': 'DZN',
+  'PAR': 'PR', 'PARES': 'PR',
+  'TAMBOR': 'DR', 'TAMBORES': 'DR',
+  'BALDE': 'BJ', 'BALDES': 'BJ', 'BLD': 'BJ',
+  'PALET': 'PF', 'PALETS': 'PF', 'PALETA': 'PF',
+  'PLACA': 'PG', 'PLACAS': 'PG',
+  'ROLLO': 'RO', 'ROLLOS': 'RO',
+  'RESMA': 'RM', 'RESMAS': 'RM',
+  'TUBO': 'TU', 'TUBOS': 'TU',
+  'HOJA': 'ST', 'HOJAS': 'ST',
+  'CONJUNTO': 'SET', 'KIT': 'SET', 'JUEGO': 'SET',
+  'GRUESA': 'GRO',
+  // Tiempo / energía
+  'H': 'HUR', 'HORA': 'HUR', 'HORAS': 'HUR',
+  'KWH': 'KWH', 'KW/H': 'KWH',
+  // Servicio
+  'SERVICIO': 'ZZ', 'SERVICIOS': 'ZZ', 'SERV': 'ZZ', 'SRV': 'ZZ',
+}
+
+/**
+ * Normaliza cualquier texto de unidad (libre o código SUNAT) a un código válido
+ * del Catálogo 03. Si no se puede mapear, devuelve 'NIU' (Unidad) por defecto.
+ *
+ *   normalizeSunatUnit('NIU')      → 'NIU'
+ *   normalizeSunatUnit('niu')      → 'NIU'   (case-insensitive)
+ *   normalizeSunatUnit('UNIDAD')   → 'NIU'
+ *   normalizeSunatUnit('und')      → 'NIU'
+ *   normalizeSunatUnit('kg')       → 'KGM'
+ *   normalizeSunatUnit('Litro')    → 'LTR'
+ *   normalizeSunatUnit('')         → 'NIU'
+ *   normalizeSunatUnit('xxx')      → 'NIU'
+ */
+export function normalizeSunatUnit(input) {
+  if (!input) return 'NIU'
+  const trimmed = String(input).trim()
+  if (!trimmed) return 'NIU'
+
+  // 1. Match exacto contra código válido
+  if (VALID_UNIT_CODES.has(trimmed)) return trimmed
+
+  // 2. Match case-insensitive contra códigos válidos
+  const upper = trimmed.toUpperCase()
+  if (VALID_UNIT_CODES.has(upper)) return upper
+
+  // 3. Alias exacto en uppercase
+  if (UNIT_ALIASES[upper]) return UNIT_ALIASES[upper]
+
+  // 4. Alias sin puntos / espacios / acentos
+  const clean = upper.replace(/[\s.,]/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  if (UNIT_ALIASES[clean]) return UNIT_ALIASES[clean]
+  if (VALID_UNIT_CODES.has(clean)) return clean
+
+  return 'NIU'
+}
+
 export default SUNAT_UNITS

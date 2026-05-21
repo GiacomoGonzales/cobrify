@@ -10,7 +10,7 @@ import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getP
 import { createStockMovement } from '@/services/warehouseService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
-import SUNAT_UNITS from '@/data/sunatUnits'
+import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -384,7 +384,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             description: desc,
             searchTerm: desc,
             quantity: item.quantity || 0,
-            unit: item.unit || 'NIU',
+            unit: normalizeSunatUnit(item.unit),
             sunatCode: '',
             gtin: '',
             subpCode: '',
@@ -615,7 +615,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       description: item.description || '',
       searchTerm: item.description || '',
       quantity: item.quantity || 0,
-      unit: item.unit || 'NIU',
+      unit: normalizeSunatUnit(item.unit),
       sunatCode: item.sunatCode || '',
       gtin: item.gtin || '',
       subpCode: item.subpCode || '',
@@ -910,7 +910,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         productId: product.id,
         code: product.sku || product.code || '',
         description: product.name || '',
-        unit: product.unit === 'UNIDAD' ? 'NIU' : (product.unit || 'NIU'),
+        unit: normalizeSunatUnit(product.unit),
         searchTerm: product.name || '',
         batchNumber,
         batchExpiryDate,

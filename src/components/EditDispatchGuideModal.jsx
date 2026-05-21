@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { updateDispatchGuide, getCompanySettings, getCustomers, getProducts } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
-import SUNAT_UNITS from '@/data/sunatUnits'
+import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -362,7 +362,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         code: item.sku || item.code || '',
         description: item.description || item.name || '',
         quantity: item.quantity || 0,
-        unit: item.unit || 'NIU',
+        unit: normalizeSunatUnit(item.unit),
         sunatCode: item.sunatCode || '',
         gtin: item.gtin || '',
         subpCode: item.subpCode || '',
