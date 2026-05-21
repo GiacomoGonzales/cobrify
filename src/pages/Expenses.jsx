@@ -330,6 +330,41 @@ export default function Expenses() {
     return branch?.name || 'Sucursal Principal'
   }
 
+  // Tab activo: 'list' (lista de gastos) o 'summary' (resumen con gráficos)
+  const [activeTab, setActiveTab] = useState('list')
+
+  // Atajos para setear rango de fechas rápido
+  function applyDateShortcut(shortcut) {
+    const today = new Date()
+    let start, end
+    switch (shortcut) {
+      case 'today':
+        start = end = new Date(today)
+        break
+      case 'week': {
+        const dow = today.getDay() || 7 // domingo = 7
+        start = new Date(today); start.setDate(today.getDate() - (dow - 1))
+        end = new Date(start); end.setDate(start.getDate() + 6)
+        break
+      }
+      case 'month':
+        start = new Date(today.getFullYear(), today.getMonth(), 1)
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+        break
+      case 'prevMonth':
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+        end = new Date(today.getFullYear(), today.getMonth(), 0)
+        break
+      case 'year':
+        start = new Date(today.getFullYear(), 0, 1)
+        end = new Date(today.getFullYear(), 11, 31)
+        break
+      default:
+        return
+    }
+    setDateRange({ startDate: getLocalDateString(start), endDate: getLocalDateString(end) })
+  }
+
   // Calcular totales. Multi-divisa: sumar todo en PEN base (los gastos
   // USD se convierten con su TC congelado). totalUSD se acumula aparte
   // para mostrar "+ $X USD" como subtítulo en la card.
@@ -347,6 +382,60 @@ export default function Expenses() {
     })
     return { total, totalUSD, byCategory, count: filteredExpenses.length }
   }, [filteredExpenses])
+
+  // Top categoría del periodo + promedio diario + datos para gráficos
+  const extraMetrics = useMemo(() => {
+    // Top categoría por monto
+    const sortedByAmount = Object.entries(totals.byCategory)
+      .sort((a, b) => b[1] - a[1])
+    const topEntry = sortedByAmount[0]
+    const topCategory = topEntry
+      ? { ...getCategoryById(topEntry[0]), amount: topEntry[1], pct: totals.total > 0 ? (topEntry[1] / totals.total) * 100 : 0 }
+      : null
+
+    // Promedio diario: total / (días del rango seleccionado, mínimo 1)
+    let daysInRange = 1
+    try {
+      const start = new Date(dateRange.startDate + 'T12:00')
+      const end = new Date(dateRange.endDate + 'T12:00')
+      const ms = end - start
+      daysInRange = Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24)) + 1)
+    } catch (e) { /* default 1 */ }
+    const dailyAvg = totals.total / daysInRange
+
+    // Datos para gráfico de torta (categoría → amount + color)
+    const pieData = sortedByAmount.map(([catId, amount]) => {
+      const c = getCategoryById(catId)
+      return { name: c.name, value: amount, color: c.color || '#64748B' }
+    })
+
+    return { topCategory, dailyAvg, daysInRange, pieData }
+  }, [totals, dateRange, expenseCategories])
+
+  // Gastos por mes (últimos 6 meses) — del total de `expenses` sin filtrar
+  const monthlyChart = useMemo(() => {
+    const now = new Date()
+    const buckets = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      buckets.push({
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        label: d.toLocaleDateString('es-PE', { month: 'short' }).replace('.', '').toUpperCase(),
+        total: 0,
+      })
+    }
+    expenses.forEach(e => {
+      const ed = e.date instanceof Date ? e.date : new Date(e.date)
+      const key = `${ed.getFullYear()}-${ed.getMonth()}`
+      const bucket = buckets.find(b => b.key === key)
+      if (bucket) {
+        const isUSD = e.currency === 'USD'
+        const inBase = isUSD ? (e.amountInBase || convertToBase(e.amount, 'USD', e.exchangeRate)) : (e.amount || 0)
+        bucket.total += inBase
+      }
+    })
+    return buckets
+  }, [expenses])
 
   // Handlers
   function handleSort(field) {
@@ -620,31 +709,86 @@ export default function Expenses() {
           </div>
         </div>
 
+        {/* Top categoría del periodo (dinámica) */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-              <Zap className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Servicios</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(totals.byCategory.servicios || 0)}</p>
-            </div>
+            {extraMetrics.topCategory ? (
+              <>
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${extraMetrics.topCategory.color}1A`, color: extraMetrics.topCategory.color }}
+                >
+                  {(() => {
+                    const Icon = getCategoryIconComponent(extraMetrics.topCategory)
+                    return <Icon className="w-6 h-6" />
+                  })()}
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Top: {extraMetrics.topCategory.name}</p>
+                  <p className="text-xl font-bold text-gray-900">{formatCurrency(extraMetrics.topCategory.amount)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{extraMetrics.topCategory.pct.toFixed(0)}% del total</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <MoreHorizontal className="w-6 h-6 text-gray-400" />
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Top categoría</p>
+                  <p className="text-xl font-bold text-gray-400">—</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Promedio diario */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <Package className="w-6 h-6 text-green-600" />
+            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-emerald-600" />
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500">Proveedores</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(totals.byCategory.proveedores || 0)}</p>
+              <p className="text-sm text-gray-500">Promedio diario</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(extraMetrics.dailyAvg)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{extraMetrics.daysInRange} día{extraMetrics.daysInRange > 1 ? 's' : ''} del periodo</p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Tabs Lista | Resumen */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('list')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'list'
+                ? 'border-red-500 text-red-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Receipt className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+            Lista de gastos
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('summary')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'summary'
+                ? 'border-red-500 text-red-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <TrendingDown className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+            Resumen
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === 'list' && (<>
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-4">
         {/* Búsqueda */}
@@ -659,26 +803,47 @@ export default function Expenses() {
           />
         </div>
 
-        {/* Rango de fechas */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600 font-medium">Período:</span>
+        {/* Rango de fechas + atajos */}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600 font-medium">Período:</span>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="date"
+                value={dateRange.startDate}
+                onChange={e => setDateRange({ ...dateRange, startDate: e.target.value })}
+                className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                onChange={e => setDateRange({ ...dateRange, endDate: e.target.value })}
+                className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <input
-              type="date"
-              value={dateRange.startDate}
-              onChange={e => setDateRange({ ...dateRange, startDate: e.target.value })}
-              className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            />
-            <span className="text-gray-400">-</span>
-            <input
-              type="date"
-              value={dateRange.endDate}
-              onChange={e => setDateRange({ ...dateRange, endDate: e.target.value })}
-              className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            />
+          {/* Atajos rápidos */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { key: 'today', label: 'Hoy' },
+              { key: 'week', label: 'Esta semana' },
+              { key: 'month', label: 'Este mes' },
+              { key: 'prevMonth', label: 'Mes anterior' },
+              { key: 'year', label: 'Año' },
+            ].map(s => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => applyDateShortcut(s.key)}
+                className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1013,6 +1178,52 @@ export default function Expenses() {
           </button>
         </div>
       )}
+      </>)}
+
+      {/* Tab: Resumen */}
+      {activeTab === 'summary' && (
+        <div className="space-y-6">
+          {/* Gráfico de torta por categoría */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Gastos por categoría</h3>
+            {extraMetrics.pieData.length === 0 ? (
+              <p className="text-center text-sm text-gray-500 py-8">
+                No hay datos en el periodo seleccionado.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                <CategoryPieChart data={extraMetrics.pieData} total={totals.total} formatCurrency={formatCurrency} />
+                <div className="space-y-2">
+                  {extraMetrics.pieData.map((d, idx) => {
+                    const pct = totals.total > 0 ? (d.value / totals.total) * 100 : 0
+                    return (
+                      <div key={idx} className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-700 truncate">{d.name}</span>
+                            <span className="font-semibold text-gray-900 ml-2">{formatCurrency(d.value)}</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: d.color }} />
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500 w-12 text-right">{pct.toFixed(0)}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Evolución últimos 6 meses */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Evolución últimos 6 meses</h3>
+            <MonthlyBarChart data={monthlyChart} formatCurrency={formatCurrency} />
+          </div>
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       {showModal && createPortal(
@@ -1340,6 +1551,114 @@ export default function Expenses() {
         </div>,
         document.body
       )}
+    </div>
+  )
+}
+
+/**
+ * Gráfico de torta SVG sin librerías — suficiente para 3-15 categorías.
+ * Cada slice se dibuja con un path Arc.
+ */
+function CategoryPieChart({ data, total, formatCurrency }) {
+  if (!data || data.length === 0 || total === 0) return null
+  const size = 200
+  const radius = 90
+  const cx = size / 2
+  const cy = size / 2
+  let cumulative = 0
+  const slices = data.map((d, idx) => {
+    const pct = d.value / total
+    const startAngle = cumulative * 2 * Math.PI - Math.PI / 2
+    cumulative += pct
+    const endAngle = cumulative * 2 * Math.PI - Math.PI / 2
+    const x1 = cx + radius * Math.cos(startAngle)
+    const y1 = cy + radius * Math.sin(startAngle)
+    const x2 = cx + radius * Math.cos(endAngle)
+    const y2 = cy + radius * Math.sin(endAngle)
+    const largeArc = pct > 0.5 ? 1 : 0
+    // Edge case: si solo hay 1 categoría con 100%, dibujar círculo completo
+    if (data.length === 1) {
+      return { path: `M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0 Z`, color: d.color, key: idx }
+    }
+    return {
+      path: `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`,
+      color: d.color,
+      key: idx,
+    }
+  })
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {slices.map(s => (
+            <path key={s.key} d={s.path} fill={s.color} stroke="white" strokeWidth="2" />
+          ))}
+          {/* Círculo interior para look "donut" */}
+          <circle cx={cx} cy={cy} r={radius * 0.55} fill="white" />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <p className="text-xs text-gray-500">Total</p>
+          <p className="text-base font-bold text-gray-900">{formatCurrency(total)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Gráfico de barras SVG sin librerías — últimos 6 meses.
+ */
+function MonthlyBarChart({ data, formatCurrency }) {
+  if (!data || data.length === 0) return null
+  const maxVal = Math.max(...data.map(d => d.total), 1)
+  const width = 600
+  const height = 220
+  const padding = { top: 20, right: 10, bottom: 30, left: 10 }
+  const chartW = width - padding.left - padding.right
+  const chartH = height - padding.top - padding.bottom
+  const barWidth = chartW / data.length * 0.6
+  const gap = chartW / data.length * 0.4
+  return (
+    <div className="overflow-x-auto">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="w-full max-w-3xl mx-auto">
+        {data.map((d, idx) => {
+          const barHeight = (d.total / maxVal) * chartH
+          const x = padding.left + idx * (barWidth + gap) + gap / 2
+          const y = padding.top + chartH - barHeight
+          return (
+            <g key={d.key}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barHeight}
+                fill="#EF4444"
+                opacity="0.85"
+                rx="4"
+              />
+              <text
+                x={x + barWidth / 2}
+                y={y - 4}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#374151"
+                fontWeight="600"
+              >
+                {d.total > 0 ? formatCurrency(d.total).replace(/\s/g, '') : ''}
+              </text>
+              <text
+                x={x + barWidth / 2}
+                y={padding.top + chartH + 18}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#6B7280"
+              >
+                {d.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
     </div>
   )
 }
