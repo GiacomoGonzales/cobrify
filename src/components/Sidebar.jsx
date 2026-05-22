@@ -358,6 +358,7 @@ function Sidebar() {
               icon: UserCheck,
               label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
+              pageId: 'attendance',
             }]
           : []),
         // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -681,6 +682,7 @@ function Sidebar() {
               icon: UserCheck,
               label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
+              pageId: 'attendance',
             }]
           : []),
         // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -962,6 +964,7 @@ function Sidebar() {
               icon: UserCheck,
               label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
+              pageId: 'attendance',
             }]
           : []),
         // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -1097,6 +1100,7 @@ function Sidebar() {
           icon: UserCheck,
           label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
           menuId: 'attendance',
+          pageId: 'attendance',
         }]
       : []),
     // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -1275,6 +1279,7 @@ function Sidebar() {
               icon: UserCheck,
               label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
+              pageId: 'attendance',
             }]
           : []),
         // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -1466,6 +1471,7 @@ function Sidebar() {
           icon: UserCheck,
           label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
           menuId: 'attendance',
+          pageId: 'attendance',
         }]
       : []),
     // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
@@ -1708,6 +1714,7 @@ function Sidebar() {
               icon: UserCheck,
               label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
+              pageId: 'attendance',
             }]
           : []),
         // Mi Horario: portal del empleado (sub-usuarios) — Capa 4 del módulo Personal
