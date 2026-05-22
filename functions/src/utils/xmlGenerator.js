@@ -2648,11 +2648,23 @@ export function generateDispatchGuideXML(guideData, businessData) {
       console.log(`🪪 [GRE XML] TUCE principal: ${mainTuce}`)
     }
 
+    // Reglas SUNAT 3452 (filas 283-284 del catálogo de validaciones GRE):
+    //   - NO debe emitirse cac:ShipmentDocumentReference/cbc:ID (autorización especial) si:
+    //     · Vehículo es categoría M1 o L (passenger/motos no requieren permiso especial), O
+    //     · Modalidad=01 (público) y NO se marcó "registroTransportista" (no aplica el caso)
+    //   - Emitir igual el campo en estos casos provoca rechazo 3452.
+    //   La autorización especial es rara — solo aplica para cargas/transportes que requieren
+    //   permiso MTC específico (mercancía peligrosa, sobredimensionada, etc.).
+    const authIsAllowed = !guideData.isM1LVehicle
+      && !(guideData.transportMode === '01' && !registerVehiclesAndDrivers)
+
     // Entidad emisora autorización vehículo principal (#49)
     const mainAuthNumber = guideData.transport.vehicle.authorizationNumber?.trim()
-    if (mainAuthNumber) {
+    if (mainAuthNumber && authIsAllowed) {
       const shipDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
       shipDocRef.ele('cbc:ID').txt(mainAuthNumber)
+    } else if (mainAuthNumber) {
+      console.log(`⚠️ [GRE XML] Autorización vehículo principal "${mainAuthNumber}" omitida (no aplica según reglas SUNAT 3452)`)
     }
 
     // Vehículos secundarios — cada uno como cac:AttachedTransportEquipment (#50-52)
@@ -2669,9 +2681,13 @@ export function generateDispatchGuideXML(guideData, businessData) {
         const attachedMeans = attached.ele('cac:ApplicableTransportMeans')
         attachedMeans.ele('cbc:RegistrationNationalityID').txt(vehicle.tuce.trim())
       }
-      if (vehicle.authorizationNumber?.trim()) {
+      // Mismo gate SUNAT 3452 para vehículos secundarios
+      const secAuthNumber = vehicle.authorizationNumber?.trim()
+      if (secAuthNumber && authIsAllowed) {
         const attachedDocRef = attached.ele('cac:ShipmentDocumentReference')
-        attachedDocRef.ele('cbc:ID').txt(vehicle.authorizationNumber.trim())
+        attachedDocRef.ele('cbc:ID').txt(secAuthNumber)
+      } else if (secAuthNumber) {
+        console.log(`⚠️ [GRE XML] Autorización vehículo secundario ${idx + 1} "${secAuthNumber}" omitida (no aplica según reglas SUNAT 3452)`)
       }
       console.log(`🚛 [GRE XML] Vehículo secundario ${idx + 1}: ${normalizedAdditionalPlate}`)
     })

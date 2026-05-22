@@ -1236,6 +1236,21 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   onChange={(e) => setVehicleAuthNumber(e.target.value)}
                 />
               </div>
+              {/* Aviso SUNAT 3452 — ver comentario homólogo en CreateDispatchGuideModal */}
+              {vehicleAuthNumber.trim() && (isM1LVehicle || (transportMode === '01' && !registerVehiclesAndDrivers)) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Este número de autorización será omitido al enviar a SUNAT</p>
+                    <p className="mt-0.5">
+                      {isM1LVehicle
+                        ? 'No aplica para vehículos categoría M1/L.'
+                        : 'En transporte público solo aplica si activas "registrar vehículos del transportista".'}
+                      {' '}La autorización especial es solo para permisos MTC de carga peligrosa, sobredimensionada o similar (regla SUNAT 3452).
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Vehículos secundarios */}
               <div className="space-y-3 pt-2">
