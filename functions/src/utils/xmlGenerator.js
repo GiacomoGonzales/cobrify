@@ -3155,67 +3155,101 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   }
 
   // === LÍNEAS DE DESPACHO (DespatchLine) ===
-  // Regla SUNAT (OBS 4434): si la GRE-Transportista referencia una GRE-Remitente
-  // electrónica (serie que NO empieza con número, ej. "EG07"), NO corresponde
-  // consignar el detalle de bienes con cantidad. En su lugar se permite una
-  // "Anotación opcional sobre los bienes a transportar" usando cbc:ID="0" y
-  // cac:Item/cbc:Description (hasta 500 caracteres).
-  const relatedSeries = (guideData.relatedGuides || [])
-    .map(r => (r.number || '').trim().split('-')[0])
-    .filter(Boolean)
-  const referencesElectronicRemitente = relatedSeries.some(s => /^[A-Za-z]/.test(s))
+  // Estructura según ejemplo OFICIAL de SUNAT (Guía de Elaboración de Documentos
+  // Electrónicos XML, página 21):
+  //
+  //   <cac:DespatchLine>
+  //     <cbc:ID>1</cbc:ID>
+  //     <cbc:DeliveredQuantity unitCode="KGM">10</cbc:DeliveredQuantity>
+  //     <cac:OrderLineReference>
+  //       <cbc:LineID>1</cbc:LineID>
+  //     </cac:OrderLineReference>
+  //     <cac:Item>
+  //       <cbc:Description>ACETONA - 500.50 BALDE</cbc:Description>
+  //       <cac:SellersItemIdentification><cbc:ID>COD1</cbc:ID></cac:SellersItemIdentification>
+  //     </cac:Item>
+  //   </cac:DespatchLine>
+  //
+  // Generamos UN DespatchLine por cada item del guideData.items, con sus datos
+  // reales (cantidad + unidad SUNAT + descripción + código).
+  //
+  // Notas SUNAT:
+  //   - Cuando se referencia GRR electrónica (serie alfa como EG07), SUNAT puede
+  //     generar OBS 4434 ("No corresponde consignar el detalle"), pero es solo
+  //     una OBSERVACIÓN (RET=OBSERV) — la guía queda ACEPTADA.
+  //   - cbc:ID y OrderLineReference/LineID deben ser >= 1 (3458 si es 0 sin
+  //     justificación).
+  //   - DeliveredQuantity debe ser decimal POSITIVO (>0) — 2780 si es 0.
+  //   - unitCode debe estar en Catálogo 03 (4320 si no).
 
   const itemsArr = Array.isArray(guideData.items) ? guideData.items : []
-  const formatItemLine = (it) => {
-    const desc = (it.description || it.name || '').toString().trim()
-    if (!desc) return ''
-    const qty = it.quantity != null && it.quantity !== '' ? String(it.quantity) : ''
-    const unit = (it.unit || '').toString().trim()
-    const prefix = [qty, unit].filter(Boolean).join(' ')
-    return prefix ? `${prefix} ${desc}` : desc
+
+  // Catálogo 03 SUNAT (subconjunto de unidades comunes en facturación PE).
+  const VALID_UNIT_CODES = new Set([
+    '4B','BG','BJ','BLL','BO','BX','CA','CEN','CMK','CMQ','CMT','CT','DR','DZN','DZP',
+    'FT3','GLI','GLL','GRM','GRO','HUR','INH','KGM','KTM','KWH','LBR','LTR','MGM','MLT',
+    'MMK','MMQ','MMT','MTK','MTQ','MTR','NIU','ONZ','PF','PG','PK','PR','RM','RO',
+    'SET','ST','STN','TNE','TU','ZZ'
+  ])
+  // Aliases comunes → código SUNAT del Catálogo 03 (mismo set que usa el frontend).
+  const UNIT_ALIASES = {
+    UNIDAD:'NIU', UNIDADES:'NIU', UND:'NIU', UNDS:'NIU', UN:'NIU', UNI:'NIU', U:'NIU',
+    PIEZA:'NIU', PIEZAS:'NIU', PZA:'NIU', PZ:'NIU',
+    KG:'KGM', KGS:'KGM', KILO:'KGM', KILOGRAMO:'KGM', KILOS:'KGM',
+    G:'GRM', GR:'GRM', GRS:'GRM', GRAMO:'GRM',
+    MG:'MGM', TN:'TNE', TON:'TNE', TONELADA:'TNE',
+    L:'LTR', LT:'LTR', LTS:'LTR', LITRO:'LTR', LITROS:'LTR',
+    ML:'MLT', GAL:'GLL', GALON:'GLL',
+    M:'MTR', MT:'MTR', MTS:'MTR', METRO:'MTR',
+    CM:'CMT', MM:'MMT', KM:'KTM',
+    M2:'MTK', M3:'MTQ',
+    CAJA:'BX', CAJAS:'BX', BOLSA:'BG', BOLSAS:'BG',
+    PAQUETE:'PK', PAQ:'PK', BOTELLA:'BO', LATA:'CA',
+    BARRIL:'BLL', BARRILES:'BLL', CARTON:'CT', BALDE:'BJ',
+    CIENTO:'CEN', DOCENA:'DZN', PAR:'PR', ROLLO:'RO',
+    TAMBOR:'DR', TUBO:'TU', HOJA:'ST', GRUESA:'GRO',
+    SERVICIO:'ZZ', SERVICIOS:'ZZ', H:'HUR', HORA:'HUR',
   }
-  const itemsDescription = itemsArr.map(formatItemLine).filter(Boolean).join(' | ')
-  const fallbackDescription = itemsDescription || guideData.description || 'CARGA'
-  const annotationText = fallbackDescription.substring(0, 500)
+  function normalizeUnit(u) {
+    if (!u) return 'NIU'
+    const up = String(u).trim().toUpperCase()
+    if (VALID_UNIT_CODES.has(up)) return up
+    return UNIT_ALIASES[up] || 'NIU'
+  }
 
-  const despatchLine = root.ele('cac:DespatchLine')
+  if (itemsArr.length > 0) {
+    // Detalle estándar: un DespatchLine por cada bien transportado, con sus datos reales.
+    itemsArr.forEach((item, idx) => {
+      const lineNum = idx + 1
+      // Cantidad: aceptar 0/null → 1 (DeliveredQuantity debe ser >0 según OBS 2780)
+      let qty = Number(item.quantity)
+      if (!Number.isFinite(qty) || qty <= 0) qty = 1
+      const unit = normalizeUnit(item.unit)
+      const desc = ((item.description || item.name || `Item ${lineNum}`)
+        .toString()
+        .trim()
+        .substring(0, 500)) || `Item ${lineNum}`
+      const code = (item.code || item.sku || '').toString().trim().substring(0, 30)
 
-  if (referencesElectronicRemitente) {
-    // Caso GRR ELECTRÓNICA referenciada (serie alfa, ej. EG07).
-    //
-    // Reglas SUNAT (Anexo de validaciones, sheet Guía-Transportista2_0):
-    //   • OBS 3458 (Dato #20, RET=ERROR): cbc:ID="0" SOLO se permite cuando hay
-    //     GRR física (serie que empieza con número), doc 82, o doc 01/04/03/12/48
-    //     con Indicador de traslado total. NO permite "0" para GRR electrónica.
-    //   • OBS 2780 (Dato #21, RET=ERROR): DeliveredQuantity debe ser decimal
-    //     POSITIVO. El valor "0" no califica como positivo y dispara ERROR.
-    //   • OBS 4434 (Dato #20, RET=OBSERV): si referencia GRR electrónica y hay
-    //     DeliveredQuantity > 0, SUNAT marca una OBSERVACIÓN ("No corresponde
-    //     consignar el detalle") pero ACEPTA la guía igual (no rechaza).
-    //
-    // Combinación válida (acepta, solo con observación 4434):
-    //   cbc:ID="1"                                   (evita 3458)
-    //   DeliveredQuantity="1" unitCode="ZZ"          (positivo, evita 2780)
-    //   OrderLineReference/LineID="1"                (estructura UBL 2.1)
-    //   Item/Description con la info real del bien   (hasta 500 chars)
-    despatchLine.ele('cbc:ID').txt('1')
-    despatchLine.ele('cbc:DeliveredQuantity', {
-      'unitCode': 'ZZ'
-    }).txt('1')
-    const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-    orderLineRef.ele('cbc:LineID').txt('1')
-    const itemEle = despatchLine.ele('cac:Item')
-    itemEle.ele('cbc:Description').txt(annotationText)
+      const line = root.ele('cac:DespatchLine')
+      line.ele('cbc:ID').txt(String(lineNum))
+      line.ele('cbc:DeliveredQuantity', { unitCode: unit }).txt(String(qty))
+      line.ele('cac:OrderLineReference').ele('cbc:LineID').txt(String(lineNum))
+      const itemEle = line.ele('cac:Item')
+      itemEle.ele('cbc:Description').dat(desc)
+      if (code) {
+        itemEle.ele('cac:SellersItemIdentification').ele('cbc:ID').txt(code)
+      }
+    })
   } else {
-    // Modo detalle estándar
-    despatchLine.ele('cbc:ID').txt('1')
-    despatchLine.ele('cbc:DeliveredQuantity', {
-      'unitCode': 'ZZ'
-    }).txt('1')
-    const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-    orderLineRef.ele('cbc:LineID').txt('1')
-    const itemEle = despatchLine.ele('cac:Item')
-    itemEle.ele('cbc:Description').txt(annotationText)
+    // Fallback genérico: una sola línea sin detalle real (cuando el remitente no envió items).
+    const fallbackDesc = (guideData.description || 'CARGA').toString().substring(0, 500)
+    const line = root.ele('cac:DespatchLine')
+    line.ele('cbc:ID').txt('1')
+    line.ele('cbc:DeliveredQuantity', { unitCode: 'ZZ' }).txt('1')
+    line.ele('cac:OrderLineReference').ele('cbc:LineID').txt('1')
+    const itemEle = line.ele('cac:Item')
+    itemEle.ele('cbc:Description').dat(fallbackDesc)
   }
 
   // Retornar XML como string
