@@ -3181,24 +3181,27 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const despatchLine = root.ele('cac:DespatchLine')
 
   if (referencesElectronicRemitente) {
-    // Caso GRR ELECTRÓNICA referenciada (serie alfa, ej. EG07): conflicto de reglas SUNAT.
+    // Caso GRR ELECTRÓNICA referenciada (serie alfa, ej. EG07).
     //
-    //   • OBS 3458 (Dato #20): cbc:ID="0" SOLO se permite cuando hay GRR física
-    //     (serie que empieza con número) o doc 82 o doc 01/04/03/12/48 con
-    //     Indicador de traslado total. NO permite cbc:ID="0" para GRR electrónica.
-    //   • OBS 4434 (Dato #20): NO corresponde DeliveredQuantity > 0 cuando se
-    //     referencia GRR electrónica.
+    // Reglas SUNAT (Anexo de validaciones, sheet Guía-Transportista2_0):
+    //   • OBS 3458 (Dato #20, RET=ERROR): cbc:ID="0" SOLO se permite cuando hay
+    //     GRR física (serie que empieza con número), doc 82, o doc 01/04/03/12/48
+    //     con Indicador de traslado total. NO permite "0" para GRR electrónica.
+    //   • OBS 2780 (Dato #21, RET=ERROR): DeliveredQuantity debe ser decimal
+    //     POSITIVO. El valor "0" no califica como positivo y dispara ERROR.
+    //   • OBS 4434 (Dato #20, RET=OBSERV): si referencia GRR electrónica y hay
+    //     DeliveredQuantity > 0, SUNAT marca una OBSERVACIÓN ("No corresponde
+    //     consignar el detalle") pero ACEPTA la guía igual (no rechaza).
     //
-    // Única combinación válida para GRR electrónica:
-    //   cbc:ID="1"  (evita 3458)
-    //   DeliveredQuantity="0" unitCode="ZZ"  (no >0, evita 4434)
-    //   OrderLineReference + Item/Description (cumple XSD UBL 2.1)
-    //
-    // El detalle real del bien va en cbc:Description (hasta 500 chars).
+    // Combinación válida (acepta, solo con observación 4434):
+    //   cbc:ID="1"                                   (evita 3458)
+    //   DeliveredQuantity="1" unitCode="ZZ"          (positivo, evita 2780)
+    //   OrderLineReference/LineID="1"                (estructura UBL 2.1)
+    //   Item/Description con la info real del bien   (hasta 500 chars)
     despatchLine.ele('cbc:ID').txt('1')
     despatchLine.ele('cbc:DeliveredQuantity', {
       'unitCode': 'ZZ'
-    }).txt('0')
+    }).txt('1')
     const orderLineRef = despatchLine.ele('cac:OrderLineReference')
     orderLineRef.ele('cbc:LineID').txt('1')
     const itemEle = despatchLine.ele('cac:Item')
