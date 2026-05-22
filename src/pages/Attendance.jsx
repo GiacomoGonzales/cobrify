@@ -437,10 +437,16 @@ export default function Attendance() {
       if (n !== 'granted') throw new Error('Se necesita permiso de cámara')
     }
 
-    // 2. Asegurar que el módulo Google Barcode Scanner esté listo (evita crash)
-    const moduleReady = await ensureBarcodeModule(BarcodeScanner)
-    if (!moduleReady) {
-      throw new Error('El módulo de escaneo no está disponible. Reintenta en unos segundos.')
+    // 2. Asegurar que el módulo Google Barcode Scanner esté listo (evita crash).
+    //    Solo aplica en Android: en iOS el módulo viene bundled con el plugin
+    //    vía CocoaPods, no se instala en runtime — llamar a las APIs de
+    //    install/available en iOS rechaza con "Not implemented" y muestra
+    //    toasts de error falsos al usuario.
+    if (Capacitor.getPlatform() === 'android') {
+      const moduleReady = await ensureBarcodeModule(BarcodeScanner)
+      if (!moduleReady) {
+        throw new Error('El módulo de escaneo no está disponible. Reintenta en unos segundos.')
+      }
     }
 
     // 3. Escanear con manejo de errores
