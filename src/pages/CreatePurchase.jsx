@@ -9,7 +9,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Alert from '@/components/ui/Alert'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -561,15 +561,15 @@ export default function CreatePurchase() {
     setPurchaseItems(newItems)
   }
 
-  // Filtrar proveedores según búsqueda
-  const filteredSuppliers = suppliers.filter(supplier => {
-    const search = supplierSearch.toLowerCase()
-    return (
-      supplier.businessName?.toLowerCase().includes(search) ||
-      supplier.documentNumber?.includes(search) ||
-      supplier.contactName?.toLowerCase().includes(search)
+  // Filtrar proveedores según búsqueda (flexible: multi-palabra parcial, sin acentos)
+  const filteredSuppliers = suppliers.filter(supplier =>
+    matchesSearchQuery(
+      supplierSearch,
+      supplier.businessName,
+      supplier.documentNumber,
+      supplier.contactName,
     )
-  })
+  )
 
   // Seleccionar proveedor
   const selectSupplier = supplier => {
@@ -585,29 +585,25 @@ export default function CreatePurchase() {
     setShowSupplierDropdown(false)
   }
 
-  // Filtrar productos e ingredientes según búsqueda y modo
+  // Filtrar productos e ingredientes según búsqueda y modo (flexible + sin acentos)
   const getFilteredItems = (index) => {
-    const search = (productSearches[index] || '').toLowerCase()
+    const search = productSearches[index] || ''
 
     let items = []
 
     // Agregar productos si el modo lo permite
     if (itemMode === 'products' || itemMode === 'all') {
-      const filteredProducts = products.filter(product => {
-        return (
-          product.name?.toLowerCase().includes(search) ||
-          product.code?.toLowerCase().includes(search) ||
-          product.category?.toLowerCase().includes(search)
-        )
-      }).map(p => ({ ...p, itemType: 'product' }))
+      const filteredProducts = products.filter(product =>
+        matchesSearchQuery(search, product.name, product.code, product.sku, product.category, product.marca)
+      ).map(p => ({ ...p, itemType: 'product' }))
       items = [...items, ...filteredProducts]
     }
 
     // Agregar ingredientes si el modo lo permite
     if (itemMode === 'ingredients' || itemMode === 'all') {
-      const filteredIngredients = ingredients.filter(ing => {
-        return ing.name?.toLowerCase().includes(search)
-      }).map(i => ({ ...i, itemType: 'ingredient' }))
+      const filteredIngredients = ingredients.filter(ing =>
+        matchesSearchQuery(search, ing.name)
+      ).map(i => ({ ...i, itemType: 'ingredient' }))
       items = [...items, ...filteredIngredients]
     }
 

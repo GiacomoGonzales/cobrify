@@ -120,6 +120,13 @@ export const exportProductsForImport = async (products, categories, businessMode
       product.sanitaryRegistry || '',
     ] : []
 
+    // Concatena código principal + códigos alternativos con "|" (formato que
+    // entiende ImportProductsModal en roundtrip).
+    const codeColumn = [
+      product.code || '',
+      ...(Array.isArray(product.barcodes) ? product.barcodes : []),
+    ].filter(Boolean).join('|')
+
     // SIN variantes
     if (!product.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) {
       const batches = Array.isArray(product.batches) ? product.batches.filter(b => b) : []
@@ -138,7 +145,7 @@ export const exportProductsForImport = async (products, categories, businessMode
 
           return [
             product.sku || '',
-            isFirst ? (product.code || '') : '',
+            isFirst ? codeColumn : '',
             product.name || '',
             isFirst ? (product.description || '') : '',
             isFirst ? (product.marca || '') : '',
@@ -181,7 +188,7 @@ export const exportProductsForImport = async (products, categories, businessMode
 
       return [[
         product.sku || '',
-        product.code || '',
+        codeColumn,
         product.name || '',
         product.description || '',
         product.marca || '',
@@ -403,9 +410,15 @@ export const generateProductsExcel = async (products, categories, businessData, 
       totalStock += stock
       totalValue += stock * price
 
+      // Concatenar código principal + códigos alternativos con "|" para
+      // que el reporte también muestre múltiples EANs del mismo producto.
+      const codeCol = [
+        product.code || '',
+        ...(Array.isArray(product.barcodes) ? product.barcodes : []),
+      ].filter(Boolean).join('|')
       aoa.push([
         product.sku || '',
-        product.code || '',
+        codeCol,
         product.name || 'N/A',
         getCategoryHierarchy(product.category),
         product.description || '',

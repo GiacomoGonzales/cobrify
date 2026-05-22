@@ -10,6 +10,7 @@ import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getP
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
+import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -297,16 +298,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     loadCustomers()
   }, [isOpen, user?.uid, getBusinessId])
 
-  // Filtrar clientes según lo que escribe el usuario en Razón Social
+  // Filtrar clientes según lo que escribe el usuario (búsqueda flexible + sin acentos)
   const filteredCustomers = recipientName.length >= 2
-    ? customers.filter(c => {
-        const searchLower = recipientName.toLowerCase()
-        return (
-          c.name?.toLowerCase().includes(searchLower) ||
-          c.businessName?.toLowerCase().includes(searchLower) ||
-          c.documentNumber?.includes(recipientName)
-        )
-      }).slice(0, 5)
+    ? customers.filter(c =>
+        matchesSearchQuery(recipientName, c.name, c.businessName, c.documentNumber)
+      ).slice(0, 5)
     : []
 
   // Inicializar sucursal seleccionada
@@ -859,26 +855,25 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     ))
   }
 
-  // Filtrar productos según búsqueda (tokenizada y multi-campo, alineado con POS/Inventario)
+  // Filtrar productos según búsqueda (flexible + sin acentos, alineado con POS/Inventario)
   const getFilteredProducts = (searchTerm) => {
     if (!searchTerm) return productsList.slice(0, 8)
-    const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(w => w.length > 0)
     return productsList
       .filter(p => {
         const code = p.code || ''
         const sku = p.sku || ''
-        const text = [
-          p.name || '',
+        return matchesSearchQuery(
+          searchTerm,
+          p.name,
           code,
           code.replace(/-/g, ''),
           sku,
           sku.replace(/-/g, ''),
-          p.marca || '',
-          p.laboratoryName || '',
-          p.genericName || '',
-          p.description || '',
-        ].join(' ').toLowerCase()
-        return searchWords.every(w => text.includes(w))
+          p.marca,
+          p.laboratoryName,
+          p.genericName,
+          p.description,
+        )
       })
       .slice(0, 10)
   }

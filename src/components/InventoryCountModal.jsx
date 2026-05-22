@@ -385,8 +385,12 @@ export default function InventoryCountModal({
         console.log('Código escaneado:', scannedCode)
 
         // Buscar producto por código de barras o SKU
+        // (incluye `barcodes[]`: códigos alternativos del mismo producto)
         const foundProduct = products.find(
-          p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
+          p => p.code === scannedCode ||
+            p.sku === scannedCode ||
+            p.barcode === scannedCode ||
+            (Array.isArray(p.barcodes) && p.barcodes.includes(scannedCode))
         )
 
         if (foundProduct) {

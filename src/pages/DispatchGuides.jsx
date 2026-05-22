@@ -11,6 +11,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
+import { matchesSearchQuery } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
 import { updateDispatchGuide, deleteDispatchGuide } from '@/services/firestoreService'
@@ -525,13 +526,15 @@ export default function DispatchGuides() {
     }
   }
 
-  // Filtrar guías
+  // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
   const filteredGuides = guides.filter(guide => {
-    // Filtrar por búsqueda
-    const search = searchTerm.toLowerCase()
-    const matchesSearch = !searchTerm ||
-      guide.number?.toLowerCase().includes(search) ||
-      guide.destination?.address?.toLowerCase().includes(search)
+    const matchesSearch = matchesSearchQuery(
+      searchTerm,
+      guide.number,
+      guide.destination?.address,
+      guide.destination?.businessName,
+      guide.destination?.documentNumber,
+    )
 
     // Filtrar por sucursal
     let matchesBranch = true

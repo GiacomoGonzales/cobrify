@@ -237,6 +237,10 @@ export default function Products() {
   const [isSaving, setIsSaving] = useState(false)
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [isScanningSearch, setIsScanningSearch] = useState(false)
+  // Códigos de barra adicionales (mismo producto, múltiples EANs)
+  const [extraBarcodes, setExtraBarcodes] = useState([])
+  const [newBarcodeInput, setNewBarcodeInput] = useState('')
+  const [isScanningExtraBarcode, setIsScanningExtraBarcode] = useState(false)
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
@@ -679,6 +683,8 @@ export default function Products() {
       location: '',
     })
     setProductLocation('')
+    setExtraBarcodes([])
+    setNewBarcodeInput('')
     setIsModalOpen(true)
   }
 
@@ -811,6 +817,10 @@ export default function Products() {
       minStock: product.minStock != null ? product.minStock.toString() : '',
     })
 
+    // Cargar códigos de barra adicionales existentes (si los hay)
+    setExtraBarcodes(Array.isArray(product.barcodes) ? product.barcodes.filter(Boolean) : [])
+    setNewBarcodeInput('')
+
     // Inicializar stockEdits con los valores actuales por almacén × variante.
     // Esto alimenta el editor manual (toggle businessSettings.enableManualStockEdit).
     const initStock = {}
@@ -923,6 +933,10 @@ export default function Products() {
       }
     }
 
+    // Copia: arrancar sin códigos extra (los reasigna manualmente el usuario)
+    setExtraBarcodes([])
+    setNewBarcodeInput('')
+
     reset({
       code: '', // Limpiar código para evitar duplicados
       sku: '', // Limpiar SKU para evitar duplicados
@@ -961,6 +975,9 @@ export default function Products() {
     setNewPresentation({ name: '', factor: '', price: '' })
     // Limpiar imágenes
     setProductImages([])
+    // Limpiar códigos de barra adicionales
+    setExtraBarcodes([])
+    setNewBarcodeInput('')
     reset()
   }
 
@@ -1040,9 +1057,17 @@ export default function Products() {
     }
 
     try {
+      // Si el usuario escribió un código en el input "agregar" sin presionar
+      // Enter/+, lo aceptamos automáticamente al guardar para no perderlo.
+      const pendingExtra = (newBarcodeInput || '').trim()
+      const finalExtraBarcodes = pendingExtra && !extraBarcodes.includes(pendingExtra) && pendingExtra !== (data.code || '').trim()
+        ? [...extraBarcodes, pendingExtra]
+        : extraBarcodes
+
       // Build product data based on hasVariants
       const productData = {
         code: data.code || '',
+        barcodes: finalExtraBarcodes,
         sku: data.sku || '',
         name: data.name,
         description: data.description || '',
@@ -1642,6 +1667,67 @@ export default function Products() {
     }
   }
 
+  // ---- Códigos de barra adicionales (múltiples EANs por producto) ----
+  const addExtraBarcode = (rawCode) => {
+    const code = String(rawCode || '').trim()
+    if (!code) return
+    const principalCode = (watch('code') || '').trim()
+    if (code === principalCode) {
+      toast.error('Ese código ya está como código principal')
+      return
+    }
+    if (extraBarcodes.includes(code)) {
+      toast.error('Ese código ya está agregado')
+      return
+    }
+    setExtraBarcodes(prev => [...prev, code])
+    setNewBarcodeInput('')
+  }
+
+  const removeExtraBarcode = (code) => {
+    setExtraBarcodes(prev => prev.filter(c => c !== code))
+  }
+
+  const handleScanExtraBarcode = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.info('El escáner solo está disponible en la app móvil')
+      return
+    }
+    setIsScanningExtraBarcode(true)
+    try {
+      if (Capacitor.getPlatform() === 'android') {
+        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+        if (!available) {
+          toast.info('Instalando módulo de escáner... Por favor espera')
+          await BarcodeScanner.installGoogleBarcodeScannerModule()
+          toast.success('Módulo instalado. Intenta escanear de nuevo.')
+          return
+        }
+      }
+      const { camera } = await BarcodeScanner.checkPermissions()
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear')
+          return
+        }
+      }
+      const { barcodes } = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
+      if (barcodes && barcodes.length > 0) {
+        addExtraBarcode(barcodes[0].rawValue)
+      }
+    } catch (error) {
+      console.error('Error al escanear código adicional:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
+      if (error.message !== 'User cancelled the scan') {
+        toast.error('Error al escanear el código de barras')
+      }
+    } finally {
+      setIsScanningExtraBarcode(false)
+    }
+  }
+
   // Función para escanear código de barras en la búsqueda
   const handleScanSearch = async () => {
     const isNativePlatform = Capacitor.isNativePlatform()
@@ -1684,8 +1770,12 @@ export default function Products() {
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
 
-        // Buscar el producto con ese código
-        const foundProduct = products.find(p => p.code === scannedCode || p.sku === scannedCode)
+        // Buscar el producto con ese código (incluye códigos alternativos)
+        const foundProduct = products.find(p =>
+          p.code === scannedCode ||
+          p.sku === scannedCode ||
+          (Array.isArray(p.barcodes) && p.barcodes.includes(scannedCode))
+        )
 
         if (foundProduct) {
           setSearchTerm(scannedCode)
@@ -5188,6 +5278,80 @@ export default function Products() {
               </div>
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
+
+              {/* Códigos de barra adicionales (mismo producto, varios EANs) */}
+              <div className="mt-3 pl-3 border-l-2 border-gray-200">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Códigos adicionales
+                  <span className="text-gray-400 font-normal ml-1">
+                    (mismo producto, varios códigos)
+                  </span>
+                </label>
+
+                {/* Chips de códigos ya agregados */}
+                {extraBarcodes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {extraBarcodes.map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-md text-xs font-mono"
+                      >
+                        {code}
+                        <button
+                          type="button"
+                          onClick={() => removeExtraBarcode(code)}
+                          className="text-primary-500 hover:text-primary-700"
+                          title="Eliminar"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input para agregar */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Otro código de barras"
+                    value={newBarcodeInput}
+                    onChange={(e) => setNewBarcodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addExtraBarcode(newBarcodeInput)
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addExtraBarcode(newBarcodeInput)}
+                    disabled={!newBarcodeInput.trim()}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 rounded-lg flex items-center gap-1 text-sm"
+                    title="Agregar código"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleScanExtraBarcode}
+                    disabled={isScanningExtraBarcode}
+                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
+                    title="Escanear y agregar"
+                  >
+                    {isScanningExtraBarcode ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ScanBarcode className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Al escanear cualquiera de estos códigos, se agregará este mismo producto.
+                </p>
+              </div>
             </div>
 
             {/* Ubicación del producto (habilitado desde Preferencias) */}

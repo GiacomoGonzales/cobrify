@@ -48,7 +48,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatProductPrice, applyMarginToCost } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -545,6 +545,10 @@ export default function POS() {
   const [showSerialModal, setShowSerialModal] = useState(false)
   const [productForSerialSelection, setProductForSerialSelection] = useState(null)
   const [pendingSerialData, setPendingSerialData] = useState(null) // { price, batch, presentation } datos pendientes del flujo
+  // Multi-selección de N° de serie: el usuario puede marcar varias series y
+  // agregarlas todas al carrito en una sola operación (útil para ventas de
+  // muchas unidades con número de serie individual).
+  const [selectedSerialIds, setSelectedSerialIds] = useState(() => new Set())
 
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
@@ -2303,10 +2307,8 @@ export default function POS() {
       // Excluir productos desactivados (isActive === false).
       // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
       if (p.isActive === false) return false
-      // Dividir búsqueda en palabras individuales para búsqueda flexible
-      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-
-      // Concatenar campos buscables (incluir versión sin guiones para compatibilidad con pistola lectora)
+      // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
+      // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
       const code = p.code || ''
       const sku = p.sku || ''
       // SKUs y códigos de barras de las variantes (para que sean buscables también)
@@ -2317,19 +2319,22 @@ export default function POS() {
             v?.barcode || '',
           ]).filter(Boolean)
         : []
-      const searchableText = [
-        p.name || '',
+      // Códigos de barra adicionales (mismo producto, múltiples EANs)
+      const extraBarcodeTokens = Array.isArray(p.barcodes)
+        ? p.barcodes.flatMap(b => [b || '', String(b || '').replace(/-/g, '')]).filter(Boolean)
+        : []
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        p.name,
         code,
         code.replace(/-/g, ''),
         sku,
         sku.replace(/-/g, ''),
-        p.marca || '',
-        p.laboratoryName || '',
+        p.marca,
+        p.laboratoryName,
         ...variantTokens,
-      ].join(' ').toLowerCase()
-
-      // Verificar que TODAS las palabras estén presentes (en cualquier orden)
-      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
+        ...extraBarcodeTokens,
+      )
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
       let matchesCategory = false
@@ -2491,12 +2496,23 @@ export default function POS() {
       const searchNoHyphens = searchLower.replace(/-/g, '')
 
       // 1) Match en padre (producto sin variantes o código del padre)
+      //    Incluye `barcodes[]`: lista de códigos adicionales para el mismo producto
+      //    (ej. múltiples EANs apuntan al mismo stock).
       const exactMatches = products.filter(p => {
         if (p.isActive === false) return false
         const code = p.code?.toLowerCase() || ''
         const sku = p.sku?.toLowerCase() || ''
-        return code === searchLower || sku === searchLower ||
-          code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens
+        if (code === searchLower || sku === searchLower ||
+          code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens) {
+          return true
+        }
+        if (Array.isArray(p.barcodes) && p.barcodes.length > 0) {
+          return p.barcodes.some(bc => {
+            const b = String(bc || '').toLowerCase()
+            return b === searchLower || b.replace(/-/g, '') === searchNoHyphens
+          })
+        }
+        return false
       })
 
       // 2) Si no hubo match en padre, buscar match exacto en SKU/barcode de variantes
@@ -2605,8 +2621,12 @@ export default function POS() {
         console.log('Código escaneado:', scannedCode)
 
         // 1) Buscar producto por código de barras / SKU del producto padre
+        //    Incluye `barcodes[]` (códigos adicionales para el mismo producto).
         let foundProduct = products.find(
-          p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
+          p => p.code === scannedCode ||
+            p.sku === scannedCode ||
+            p.barcode === scannedCode ||
+            (Array.isArray(p.barcodes) && p.barcodes.includes(scannedCode))
         )
         let foundVariant = null
 
@@ -2901,39 +2921,59 @@ export default function POS() {
     }
   }
 
-  // Manejar selección de número de serie desde el modal
-  const handleSerialSelection = (serial) => {
+  // Construye el cartItem de una serie (helper compartido por single y bulk).
+  const buildSerialCartItem = (product, serial, batchToUse) => ({
+    ...product,
+    quantity: 1,
+    cartId: `${product.id}-serial-${serial.serialNumber}`,
+    serialNumber: serial.serialNumber,
+    serialId: serial.id,
+    // Si es Sin lote, limpiar batchNumber del producto
+    ...(batchToUse?.isNoLot && {
+      isNoLot: true,
+      batchNumber: null,
+      batchExpiryDate: null,
+      batchQuantity: batchToUse.quantity
+    }),
+    // Con lote normal
+    ...(batchToUse && !batchToUse.isNoLot && {
+      batchNumber: batchToUse.lotNumber,
+      batchExpiryDate: batchToUse.expiryDate,
+      batchQuantity: batchToUse.quantity
+    })
+  })
+
+  // Toggle de selección de una serie en el modal multi-select.
+  const toggleSerialSelection = (serialId) => {
+    setSelectedSerialIds(prev => {
+      const next = new Set(prev)
+      if (next.has(serialId)) next.delete(serialId)
+      else next.add(serialId)
+      return next
+    })
+  }
+
+  // Cierra el modal y limpia el estado de selección.
+  const closeSerialModal = () => {
+    setShowSerialModal(false)
+    setProductForSerialSelection(null)
+    setPendingSerialData(null)
+    setSelectedSerialIds(new Set())
+  }
+
+  // Agrega todas las series seleccionadas al carrito de una sola vez.
+  const handleConfirmMultipleSerials = (filteredSerials) => {
     if (!productForSerialSelection) return
     const product = productForSerialSelection
     const batchToUse = pendingSerialData?.batch || null
 
-    const cartItemId = `${product.id}-serial-${serial.serialNumber}`
+    const selected = filteredSerials.filter(s => selectedSerialIds.has(s.id))
+    if (selected.length === 0) return
 
-    const cartItem = {
-      ...product,
-      quantity: 1,
-      cartId: cartItemId,
-      serialNumber: serial.serialNumber,
-      serialId: serial.id,
-      // Si es Sin lote, limpiar batchNumber del producto
-      ...(batchToUse?.isNoLot && {
-        isNoLot: true,
-        batchNumber: null,
-        batchExpiryDate: null,
-        batchQuantity: batchToUse.quantity
-      }),
-      // Con lote normal
-      ...(batchToUse && !batchToUse.isNoLot && {
-        batchNumber: batchToUse.lotNumber,
-        batchExpiryDate: batchToUse.expiryDate,
-        batchQuantity: batchToUse.quantity
-      })
-    }
-    setCart([...cart, cartItem])
-
-    setShowSerialModal(false)
-    setProductForSerialSelection(null)
-    setPendingSerialData(null)
+    const newCartItems = selected.map(serial => buildSerialCartItem(product, serial, batchToUse))
+    setCart(prev => [...prev, ...newCartItems])
+    toast.success(`${selected.length} serie${selected.length > 1 ? 's' : ''} agregada${selected.length > 1 ? 's' : ''} al carrito`)
+    closeSerialModal()
   }
 
   // Manejar selección de lote desde el modal
@@ -9503,14 +9543,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         })()}
       </Modal>
 
-      {/* Modal de Selección de Número de Serie */}
+      {/* Modal de Selección de Número de Serie (multi-select) */}
       <Modal
         isOpen={showSerialModal}
-        onClose={() => {
-          setShowSerialModal(false)
-          setProductForSerialSelection(null)
-          setPendingSerialData(null)
-        }}
+        onClose={closeSerialModal}
         title={`Seleccionar N° de Serie - ${productForSerialSelection?.name || ''}`}
         size="sm"
       >
@@ -9521,35 +9557,96 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           const serialsInCart = cart.filter(item => (item.id === productForSerialSelection.id || item.productId === productForSerialSelection.id) && item.serialNumber).map(item => item.serialNumber)
           const filteredSerials = availableSerials.filter(s => !serialsInCart.includes(s.serialNumber))
 
+          const selectedCount = filteredSerials.filter(s => selectedSerialIds.has(s.id)).length
+          const allSelected = selectedCount === filteredSerials.length && filteredSerials.length > 0
+
           return (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Selecciona el número de serie a vender ({filteredSerials.length} disponibles):
-              </p>
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {filteredSerials.map((serial, idx) => (
+              {/* Header: contador + acción "seleccionar/limpiar todas" */}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-gray-600">
+                  {filteredSerials.length} disponible{filteredSerials.length !== 1 ? 's' : ''}
+                  {selectedCount > 0 && (
+                    <span className="text-primary-600 font-medium"> · {selectedCount} seleccionada{selectedCount !== 1 ? 's' : ''}</span>
+                  )}
+                </p>
+                {filteredSerials.length > 1 && (
                   <button
-                    key={serial.id}
-                    onClick={() => handleSerialSelection(serial)}
-                    className="w-full p-3 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                    type="button"
+                    onClick={() =>
+                      allSelected
+                        ? setSelectedSerialIds(new Set())
+                        : setSelectedSerialIds(new Set(filteredSerials.map(s => s.id)))
+                    }
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700 whitespace-nowrap"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">{serial.serialNumber}</p>
-                        {serial.variantSku && (
-                          <p className="text-xs text-gray-500">Variante: {serial.variantSku}</p>
-                        )}
-                      </div>
-                      <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                        Disponible
-                      </span>
-                    </div>
+                    {allSelected ? 'Limpiar' : 'Seleccionar todas'}
                   </button>
-                ))}
+                )}
               </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {filteredSerials.map((serial) => {
+                  const isSelected = selectedSerialIds.has(serial.id)
+                  return (
+                    <button
+                      key={serial.id}
+                      type="button"
+                      onClick={() => toggleSerialSelection(serial.id)}
+                      className={`w-full p-3 border-2 rounded-lg text-left transition-all flex items-center gap-3 ${
+                        isSelected
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50/30'
+                      }`}
+                    >
+                      {/* Checkbox visual */}
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'border-primary-600 bg-primary-600' : 'border-gray-300 bg-white'
+                      }`}>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                      <div className="flex-1 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{serial.serialNumber}</p>
+                          {serial.variantSku && (
+                            <p className="text-xs text-gray-500">Variante: {serial.variantSku}</p>
+                          )}
+                        </div>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full whitespace-nowrap">
+                          Disponible
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
               {filteredSerials.length === 0 && (
                 <div className="p-3 bg-amber-50 rounded-lg">
                   <p className="text-sm text-amber-700">No hay series disponibles en este almacén.</p>
+                </div>
+              )}
+
+              {/* Botón de confirmación (sticky al fondo) */}
+              {filteredSerials.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={closeSerialModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmMultipleSerials(filteredSerials)}
+                    disabled={selectedCount === 0}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {selectedCount === 0
+                      ? 'Selecciona al menos una serie'
+                      : `Agregar ${selectedCount} al carrito`}
+                  </button>
                 </div>
               )}
             </div>

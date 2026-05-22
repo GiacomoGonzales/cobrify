@@ -10,6 +10,7 @@ import { updateDispatchGuide, getCompanySettings, getCustomers, getProducts } fr
 import { getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
+import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -233,16 +234,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     loadProducts()
   }, [isOpen, user?.uid, getBusinessId])
 
-  // Filtrar clientes según lo que escribe el usuario en Razón Social
+  // Filtrar clientes según lo que escribe el usuario (búsqueda flexible + sin acentos)
   const filteredCustomers = recipientName.length >= 2
-    ? customers.filter(c => {
-        const searchLower = recipientName.toLowerCase()
-        return (
-          c.name?.toLowerCase().includes(searchLower) ||
-          c.businessName?.toLowerCase().includes(searchLower) ||
-          c.documentNumber?.includes(recipientName)
-        )
-      }).slice(0, 5)
+    ? customers.filter(c =>
+        matchesSearchQuery(recipientName, c.name, c.businessName, c.documentNumber)
+      ).slice(0, 5)
     : []
 
   // Cargar datos de la guía cuando se abre el modal

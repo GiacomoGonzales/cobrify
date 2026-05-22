@@ -11,6 +11,52 @@ export function cn(...inputs) {
 }
 
 /**
+ * Normaliza un texto para búsquedas insensibles a acentos/tildes y mayúsculas.
+ *
+ *   "Limón"   → "limon"
+ *   "Café"    → "cafe"
+ *   "Plátano" → "platano"
+ *
+ * Descompone los caracteres acentuados (NFD), quita los marcadores de
+ * diacrítico (U+0300–U+036F) y baja todo a minúsculas. Útil para que el
+ * usuario encuentre un producto aunque escriba sin tildes.
+ *
+ * @param {string} str - Texto a normalizar (acepta null/undefined)
+ * @returns {string}
+ */
+export function normalizeText(str) {
+  return String(str || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
+/**
+ * Búsqueda flexible y tolerante.
+ *
+ * Divide `query` en palabras y devuelve true si TODAS aparecen como
+ * substring (en cualquier orden) en cualquiera de los campos pasados.
+ * Insensible a acentos y a mayúsculas. Útil para que el usuario escriba
+ * trozos de palabras y encuentre productos largos.
+ *
+ *   matchesSearchQuery("pol roj x", "POLO QUICKSILVER ROJO XXL") → true
+ *   matchesSearchQuery("limon", "Jugo de Limón") → true
+ *   matchesSearchQuery("", ...) → true (sin filtro)
+ *
+ * @param {string} query - Lo que escribió el usuario
+ * @param {...(string|null|undefined)} fields - Campos donde buscar
+ * @returns {boolean}
+ */
+export function matchesSearchQuery(query, ...fields) {
+  const normalizedQuery = normalizeText(query).trim()
+  if (!normalizedQuery) return true
+  const words = normalizedQuery.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return true
+  const haystack = normalizeText(fields.filter(Boolean).join(' '))
+  return words.every(w => haystack.includes(w))
+}
+
+/**
  * Formatea un número como moneda.
  *
  * Por compatibilidad con las 686+ llamadas existentes en el repo, el

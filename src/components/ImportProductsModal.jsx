@@ -193,8 +193,14 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       // SKU / Código interno (nuevo campo)
       const sku = String(row.sku || row.SKU || row.Sku || row.codigo_interno || row.Codigo_Interno || row.CODIGO_INTERNO || row.codigoInterno || row.CodigoInterno || '').trim()
 
-      // Código de barras (campo existente, ahora opcional)
-      const code = String(row.codigo_barras || row.Codigo_Barras || row.CODIGO_BARRAS || row.codigoBarras || row.CodigoBarras || row.barcode || row.Barcode || row.BARCODE || row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim()
+      // Código de barras (campo existente, ahora opcional).
+      // Soporta múltiples códigos separados por "|" para registrar varios EANs
+      // que apuntan al mismo producto (ej: "7501|7502|7503"). El primero se
+      // toma como código principal y el resto como `barcodes[]` (alternativos).
+      const codeRaw = String(row.codigo_barras || row.Codigo_Barras || row.CODIGO_BARRAS || row.codigoBarras || row.CodigoBarras || row.barcode || row.Barcode || row.BARCODE || row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim()
+      const codeParts = codeRaw.split('|').map(s => s.trim()).filter(Boolean)
+      const code = codeParts[0] || ''
+      const extraBarcodes = codeParts.slice(1)
 
       // Campos avanzados de inventario (parseados antes para poder usarlos en parsing de stock)
       const allowDecimalQuantity = parseBool(
@@ -293,6 +299,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       const product = {
         sku: sku,
         code: code,
+        barcodes: extraBarcodes,
         name: String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || '').trim(),
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
         cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
@@ -1465,6 +1472,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           </button>
           <p className="text-xs text-gray-500 mt-1">
             Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Múltiples códigos de barra para un mismo producto:</strong> en <code>codigo_barras</code> separa los códigos con <code>|</code> (ej: <code>7501|7502|7503</code>).
+            El primero queda como código principal y los demás se guardan como alternativos: al escanear cualquiera, se agrega ese mismo producto.
           </p>
           <p className="text-xs text-gray-500 mt-1">
             <strong>Auto-precio por cantidad (opcional):</strong> llená <code>precio2_cantidad_minima</code>, <code>precio3_cantidad_minima</code> y/o <code>precio4_cantidad_minima</code> con la cantidad a partir de la cual aplica cada precio.

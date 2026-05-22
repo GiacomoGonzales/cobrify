@@ -32,7 +32,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import {
   getQuotations,
@@ -407,13 +407,15 @@ export default function Quotations() {
     }
   }
 
-  // Filtrar cotizaciones
+  // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
   const filteredQuotations = quotations.filter(quotation => {
-    const search = searchTerm.toLowerCase()
-    const matchesSearch =
-      quotation.number?.toLowerCase().includes(search) ||
-      quotation.customer?.name?.toLowerCase().includes(search) ||
-      quotation.customer?.documentNumber?.includes(search)
+    const matchesSearch = matchesSearchQuery(
+      searchTerm,
+      quotation.number,
+      quotation.customer?.name,
+      quotation.customer?.businessName,
+      quotation.customer?.documentNumber,
+    )
 
     const matchesStatus = filterStatus === 'all' || quotation.status === filterStatus
 

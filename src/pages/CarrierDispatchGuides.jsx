@@ -9,6 +9,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide, deleteCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -315,15 +316,17 @@ export default function CarrierDispatchGuides() {
     setShowCreateModal(true)
   }
 
-  // Filtrar guías
-  const filteredGuides = guides.filter(guide => {
-    const search = searchTerm.toLowerCase()
-    return !searchTerm ||
-      guide.number?.toLowerCase().includes(search) ||
-      guide.destination?.address?.toLowerCase().includes(search) ||
-      guide.vehicle?.plate?.toLowerCase().includes(search) ||
-      guide.shipper?.businessName?.toLowerCase().includes(search)
-  })
+  // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
+  const filteredGuides = guides.filter(guide =>
+    matchesSearchQuery(
+      searchTerm,
+      guide.number,
+      guide.destination?.address,
+      guide.destination?.businessName,
+      guide.vehicle?.plate,
+      guide.shipper?.businessName,
+    )
+  )
 
   const displayedGuides = filteredGuides.slice(0, visibleCount)
   const hasMore = filteredGuides.length > visibleCount

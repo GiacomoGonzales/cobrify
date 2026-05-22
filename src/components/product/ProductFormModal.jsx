@@ -221,6 +221,11 @@ const ProductFormModal = ({
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
 
+  // Códigos de barra adicionales (mismo producto, múltiples EANs)
+  const [extraBarcodes, setExtraBarcodes] = useState([])
+  const [newBarcodeInput, setNewBarcodeInput] = useState('')
+  const [isScanningExtraBarcode, setIsScanningExtraBarcode] = useState(false)
+
   // Image state (multi-imagen, máx 5)
   const [productImages, setProductImages] = useState([])
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -297,6 +302,8 @@ const ProductFormModal = ({
       setPresentations(initialData.presentations || [])
       setProductLocation(initialData.location || '')
       setProductImages(productToImageItems(initialData))
+      setExtraBarcodes(Array.isArray(initialData.barcodes) ? initialData.barcodes.filter(Boolean) : [])
+      setNewBarcodeInput('')
 
       // Inicializar stockEdits con los valores actuales del producto, para que el editor
       // muestre los valores reales y podamos calcular deltas exactos al guardar.
@@ -362,6 +369,8 @@ const ProductFormModal = ({
         location: '',
       })
       setProductLocation('')
+      setExtraBarcodes([])
+      setNewBarcodeInput('')
     }
   }, [isOpen, initialData, reset])
 
@@ -434,6 +443,74 @@ const ProductFormModal = ({
     }
   }
 
+  // ---- Códigos de barra adicionales ----
+  // Permite registrar múltiples EANs que apunten al mismo producto/stock
+  // (ej: 3 sabores de pasta dental que son "el mismo producto" en inventario).
+  const currentCode = watch('code') || ''
+
+  const addExtraBarcode = (rawCode) => {
+    const code = String(rawCode || '').trim()
+    if (!code) return
+    // No duplicar contra el código principal ni contra los ya agregados
+    if (code === currentCode.trim()) {
+      toast.error('Ese código ya está como código principal')
+      return
+    }
+    if (extraBarcodes.includes(code)) {
+      toast.error('Ese código ya está agregado')
+      return
+    }
+    setExtraBarcodes(prev => [...prev, code])
+    setNewBarcodeInput('')
+  }
+
+  const removeExtraBarcode = (code) => {
+    setExtraBarcodes(prev => prev.filter(c => c !== code))
+  }
+
+  const handleScanExtraBarcode = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.error('El escaneo de códigos solo está disponible en la app móvil')
+      return
+    }
+    if (scanningRef.current) return
+    scanningRef.current = true
+    setIsScanningExtraBarcode(true)
+    try {
+      if (Capacitor.getPlatform() === 'android') {
+        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+        if (!available) {
+          toast.info('Instalando módulo de escáner... Por favor espera')
+          await BarcodeScanner.installGoogleBarcodeScannerModule()
+          toast.success('Módulo instalado. Intenta escanear de nuevo.')
+          return
+        }
+      }
+      const { camera } = await BarcodeScanner.checkPermissions()
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se necesita permiso de cámara para escanear')
+          return
+        }
+      }
+      const result = await BarcodeScanner.scan()
+      await BarcodeScanner.stopScan().catch(() => {})
+      if (result.barcodes && result.barcodes.length > 0) {
+        addExtraBarcode(result.barcodes[0].rawValue)
+      }
+    } catch (error) {
+      console.error('Error scanning extra barcode:', error)
+      await BarcodeScanner.stopScan().catch(() => {})
+      if (!error.message?.includes('canceled')) {
+        toast.error('Error al escanear código')
+      }
+    } finally {
+      scanningRef.current = false
+      setIsScanningExtraBarcode(false)
+    }
+  }
+
   // Form submission
   const handleFormSubmit = async (formData) => {
     // Build the complete product data
@@ -448,8 +525,16 @@ const ProductFormModal = ({
         )
       : null
 
+    // Si el usuario escribió un código en el input de "agregar" sin presionar Enter/+
+    // lo aceptamos automáticamente en el submit para no perderlo.
+    const pendingExtra = (newBarcodeInput || '').trim()
+    const finalExtraBarcodes = pendingExtra && !extraBarcodes.includes(pendingExtra) && pendingExtra !== (formData.code || '').trim()
+      ? [...extraBarcodes, pendingExtra]
+      : extraBarcodes
+
     const productData = {
       ...formData,
+      barcodes: finalExtraBarcodes,
       noStock,
       allowDecimalQuantity,
       trackExpiration,
@@ -686,6 +771,80 @@ const ProductFormModal = ({
               </div>
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
+
+              {/* Códigos de barra adicionales (mismo producto, varios EANs) */}
+              <div className="mt-3 pl-3 border-l-2 border-gray-200">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Códigos adicionales
+                  <span className="text-gray-400 font-normal ml-1">
+                    (mismo producto, varios códigos)
+                  </span>
+                </label>
+
+                {/* Chips de códigos ya agregados */}
+                {extraBarcodes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {extraBarcodes.map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-md text-xs font-mono"
+                      >
+                        {code}
+                        <button
+                          type="button"
+                          onClick={() => removeExtraBarcode(code)}
+                          className="text-primary-500 hover:text-primary-700"
+                          title="Eliminar"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input para agregar */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Otro código de barras"
+                    value={newBarcodeInput}
+                    onChange={(e) => setNewBarcodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addExtraBarcode(newBarcodeInput)
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addExtraBarcode(newBarcodeInput)}
+                    disabled={!newBarcodeInput.trim()}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 rounded-lg flex items-center gap-1 text-sm"
+                    title="Agregar código"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleScanExtraBarcode}
+                    disabled={isScanningExtraBarcode}
+                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
+                    title="Escanear y agregar"
+                  >
+                    {isScanningExtraBarcode ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ScanBarcode className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Al escanear cualquiera de estos códigos, se agregará este mismo producto.
+                </p>
+              </div>
             </div>
 
             {/* Ubicación del producto (habilitado desde Preferencias) */}

@@ -165,38 +165,13 @@ export const generateIngredientsTemplate = async () => {
     ['Sal', 'Condimentos y Especias', 'kg', 5, 1, 2.50],
   ]
 
-  const aoa = [['PLANTILLA DE INGREDIENTES'], []]
-  const metaStart = aoa.length
-  aoa.push(['Fecha de generación:', formatDateLocale(new Date(), 'dd/MM/yyyy HH:mm')])
-  aoa.push(['Total filas de ejemplo:', exampleRows.length])
-  const metaEnd = aoa.length - 1
-  aoa.push([])
-
-  // Subtítulo "INSTRUCCIONES" + filas tipo metadata (label en col 0, descripción en col 1)
-  const instrStart = aoa.length
-  aoa.push(['INSTRUCCIONES'])
-  aoa.push(['1.', 'Complete los datos en las columnas correspondientes'])
-  aoa.push(['2.', 'No modifique los encabezados de las columnas'])
-  aoa.push(['3.', 'Los campos marcados con (*) son obligatorios'])
-  aoa.push(['4.', 'Unidades permitidas: kg, g, L, ml, unidades, cajas'])
-  aoa.push(['5.', 'Use punto (.) para decimales en cantidades y precios'])
-  const instrEnd = aoa.length - 1
-  aoa.push([])
-
-  // Tabla
-  const headerRow = aoa.length
-  aoa.push(headers)
-  const dataStart = aoa.length
-  for (const row of exampleRows) aoa.push(row)
+  // Encabezados en la primera fila para que sheet_to_json del importador los reconozca.
+  const headerRow = 0
+  const dataStart = 1
+  const aoa = [headers, ...exampleRows]
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   applyColumnWidths(ws, [30, 22, 22, 16, 16, 16])
-  applyTitleRow(ws, 0, totalCols)
-  applyMetadataRows(ws, metaStart, metaEnd)
-  // Bloque de instrucciones
-  applySubtitleRow(ws, instrStart, totalCols)
-  applyMetadataRows(ws, instrStart + 1, instrEnd)
-  // Encabezado y filas de ejemplo
   applyHeaderRow(ws, headerRow, totalCols)
   for (let i = 0; i < exampleRows.length; i++) {
     const r = dataStart + i

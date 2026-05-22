@@ -581,8 +581,12 @@ export default function StockMovements() {
 
       if (barcodes && barcodes.length > 0) {
         const scannedCode = barcodes[0].rawValue
-        // Buscar si hay un producto con ese código
-        const foundProduct = products.find(p => p.code === scannedCode || p.sku === scannedCode)
+        // Buscar si hay un producto con ese código (incluye códigos alternativos)
+        const foundProduct = products.find(p =>
+          p.code === scannedCode ||
+          p.sku === scannedCode ||
+          (Array.isArray(p.barcodes) && p.barcodes.includes(scannedCode))
+        )
 
         if (foundProduct) {
           setSearchTerm(scannedCode)

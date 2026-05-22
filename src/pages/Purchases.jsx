@@ -34,7 +34,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
@@ -902,17 +902,16 @@ export default function Purchases() {
     .filter(filterByDate) // Filtrar por fecha
     .filter(filterByPayment) // Filtrar por tipo de pago
     .filter(filterByBranch) // Filtrar por sucursal
-    .filter(purchase => {
-      // Si no hay término de búsqueda, mostrar todas las compras
-      if (!searchTerm || searchTerm.trim() === '') return true
-
-      const search = searchTerm.toLowerCase()
-      return (
-        purchase.invoiceNumber?.toLowerCase().includes(search) ||
-        purchase.supplier?.businessName?.toLowerCase().includes(search) ||
-        purchase.supplier?.documentNumber?.includes(search)
+    .filter(purchase =>
+      // Búsqueda flexible: múltiples palabras parciales en cualquier orden,
+      // insensible a acentos. Ej: "fact 001 prov" matchea "Factura 001 - Proveedor SA".
+      matchesSearchQuery(
+        searchTerm,
+        purchase.invoiceNumber,
+        purchase.supplier?.businessName,
+        purchase.supplier?.documentNumber,
       )
-    })
+    )
     .sort((a, b) => {
       let comparison = 0
 

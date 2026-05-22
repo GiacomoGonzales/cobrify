@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -888,27 +888,23 @@ export default function CreateQuotation() {
     const activeProducts = products.filter(p => p.isActive !== false)
     if (!searchTerm) return activeProducts.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
 
-    // Dividir búsqueda en palabras individuales para búsqueda flexible
-    const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
+    // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
+    // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
+    const code = (p) => p.code || ''
+    const sku = (p) => p.sku || ''
     return activeProducts
-      .filter(p => {
-        // Multi-campo (alineado con POS/Inventario): nombre, código/sku con y sin guiones, marca, laboratorio, descripción
-        const code = p.code || ''
-        const sku = p.sku || ''
-        const searchableText = [
-          p.name || '',
-          code,
-          code.replace(/-/g, ''),
-          sku,
-          sku.replace(/-/g, ''),
-          p.marca || '',
-          p.laboratoryName || '',
-          p.genericName || '',
-          p.description || '',
-        ].join(' ').toLowerCase()
-        // Verificar que TODAS las palabras estén presentes (en cualquier orden)
-        return searchWords.every(word => searchableText.includes(word))
-      })
+      .filter(p => matchesSearchQuery(
+        searchTerm,
+        p.name,
+        code(p),
+        code(p).replace(/-/g, ''),
+        sku(p),
+        sku(p).replace(/-/g, ''),
+        p.marca,
+        p.laboratoryName,
+        p.genericName,
+        p.description,
+      ))
       .slice(0, 10) // Máximo 10 resultados
   }
 

@@ -232,7 +232,12 @@ export default function WarehouseExits() {
 
       if (barcodes?.length > 0) {
         const code = barcodes[0].rawValue
-        const found = products.find(p => p.code === code || p.barcode === code || p.sku === code)
+        const found = products.find(p =>
+          p.code === code ||
+          p.barcode === code ||
+          p.sku === code ||
+          (Array.isArray(p.barcodes) && p.barcodes.includes(code))
+        )
         if (found) {
           addProduct(found)
           toast.success(`${found.name} agregado`)
@@ -347,7 +352,8 @@ export default function WarehouseExits() {
   const filteredProducts = productSearch.length >= 1
     ? products.filter(p => {
       const words = productSearch.toLowerCase().split(/\s+/).filter(Boolean)
-      const searchable = `${p.name || ''} ${p.code || ''} ${p.barcode || ''}`.toLowerCase()
+      const extraCodes = Array.isArray(p.barcodes) ? p.barcodes.join(' ') : ''
+      const searchable = `${p.name || ''} ${p.code || ''} ${p.barcode || ''} ${extraCodes}`.toLowerCase()
       return words.every(w => searchable.includes(w))
     }).slice(0, 10)
     : []

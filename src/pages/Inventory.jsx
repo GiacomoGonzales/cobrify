@@ -54,8 +54,8 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatProductPrice } from '@/lib/utils'
-import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
+import { formatCurrency, formatProductPrice, matchesSearchQuery } from '@/lib/utils'
+import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock } from '@/services/warehouseService'
@@ -95,6 +95,32 @@ const getCategoryPath = (categories, categoryId) => {
   return parent ? `${parent} > ${category.name}` : category.name
 }
 
+// Labels para los slugs antiguos hardcoded de ingredientes (retrocompat con datos previos
+// al sistema de categorías personalizables).
+const DEFAULT_INGREDIENT_CATEGORY_LABELS = {
+  granos: 'Granos y Cereales',
+  carnes: 'Carnes',
+  vegetales: 'Vegetales y Frutas',
+  lacteos: 'Lácteos',
+  condimentos: 'Condimentos y Especias',
+  bebidas: 'Bebidas',
+  estetica: 'Estética y Belleza',
+  salud: 'Salud y Farmacia',
+  limpieza: 'Limpieza',
+  otros: 'Otros',
+}
+
+const getIngredientCategoryName = (categories, categoryId) => {
+  if (!categoryId) return ''
+  const match = categories?.find(c => c.id === categoryId)
+  if (match) return match.name
+  if (DEFAULT_INGREDIENT_CATEGORY_LABELS[categoryId]) return DEFAULT_INGREDIENT_CATEGORY_LABELS[categoryId]
+  // Retrocompat: ingredientes viejos guardaron el nombre directamente como string
+  const byName = categories?.find(c => c.name?.toLowerCase() === String(categoryId).toLowerCase())
+  if (byName) return byName.name
+  return categoryId
+}
+
 
 // Función para obtener el stock real de un item (suma de warehouseStocks o stock general)
 const getRealStockValue = (item) => {
@@ -127,6 +153,7 @@ export default function Inventory() {
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
+  const [ingredientCategories, setIngredientCategories] = useState([])
   // Marcas administradas + filtro multi-select (mismo patrón que filterCategories)
   const [brands, setBrands] = useState([])
   const [filterBrands, setFilterBrands] = useState([])
@@ -401,13 +428,21 @@ export default function Inventory() {
       // MODO DEMO: Usar categorías del demo data
       if (isDemoMode && demoData) {
         setProductCategories(demoData.categories || [])
+        setIngredientCategories(demoData.ingredientCategories || [])
         return
       }
 
-      const result = await getProductCategories(getBusinessId())
-      if (result.success) {
-        const migratedCategories = migrateLegacyCategories(result.data || [])
+      const businessId = getBusinessId()
+      const [prodResult, ingResult] = await Promise.all([
+        getProductCategories(businessId),
+        getIngredientCategories(businessId),
+      ])
+      if (prodResult.success) {
+        const migratedCategories = migrateLegacyCategories(prodResult.data || [])
         setProductCategories(migratedCategories)
+      }
+      if (ingResult.success) {
+        setIngredientCategories(ingResult.data || [])
       }
     } catch (error) {
       console.error('Error al cargar categorías:', error)
@@ -573,8 +608,12 @@ export default function Inventory() {
         console.log('Código escaneado:', scannedCode)
 
         // Buscar producto por código de barras o SKU
+        // (incluye `barcodes[]`: códigos alternativos del mismo producto)
         const foundProduct = products.find(
-          p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
+          p => p.code === scannedCode ||
+            p.sku === scannedCode ||
+            p.barcode === scannedCode ||
+            (Array.isArray(p.barcodes) && p.barcodes.includes(scannedCode))
         )
 
         if (foundProduct) {
@@ -1526,21 +1565,17 @@ export default function Inventory() {
     console.log(`🔍 [Inventory] filteredProducts recalculando. allItems.length=${allItems.length}`)
 
     const filtered = allItems.filter(item => {
-      // Búsqueda flexible: dividir en palabras y verificar que TODAS estén presentes
-      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-
-      // Concatenar campos buscables
-      const searchableText = [
-        item.name || '',
-        item.code || '',
-        item.sku || '',
-        item.category || '',
-        item.marca || '',
-        item.laboratoryName || ''
-      ].join(' ').toLowerCase()
-
-      // Verificar que TODAS las palabras estén presentes (en cualquier orden)
-      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
+      // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
+      // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        item.name,
+        item.code,
+        item.sku,
+        item.category,
+        item.marca,
+        item.laboratoryName,
+      )
 
       // Multi-select: array vacío = todas las categorías
       const matchesCategory =
@@ -1673,32 +1708,19 @@ export default function Inventory() {
       return category ? { id: catId, name: category.name } : { id: catId, name: catId }
     })
 
-    // Categorías de ingredientes
+    // Categorías de ingredientes (resuelve a través de ingredientCategories + fallback a slugs viejos)
     const ingredientCats = [...new Set(ingredients.map(i => i.category).filter(Boolean))]
-    const categoryLabels = {
-      'granos': 'Granos y Cereales',
-      'carnes': 'Carnes',
-      'vegetales': 'Vegetales y Frutas',
-      'lacteos': 'Lácteos',
-      'condimentos': 'Condimentos y Especias',
-      'bebidas': 'Bebidas',
-      'estetica': 'Estética y Belleza',
-      'salud': 'Salud y Farmacia',
-      'limpieza': 'Limpieza',
-      'otros': 'Otros'
-    }
-
     ingredientCats.forEach(cat => {
       if (!allCategories.find(c => c.id === cat)) {
         allCategories.push({
           id: cat,
-          name: categoryLabels[cat] || cat
+          name: getIngredientCategoryName(ingredientCategories, cat) || cat
         })
       }
     })
 
     return allCategories
-  }, [products, ingredients, productCategories])
+  }, [products, ingredients, productCategories, ingredientCategories])
 
   // Calcular estadísticas (basadas en productos filtrados para reflejar todos los filtros)
   const statistics = React.useMemo(() => {
@@ -2470,7 +2492,7 @@ export default function Inventory() {
                             <span className="truncate">
                               {isProduct
                                 ? getCategoryPath(productCategories, item.category) || item.category
-                                : item.category
+                                : getIngredientCategoryName(ingredientCategories, item.category)
                               }
                             </span>
                           )}
@@ -2915,7 +2937,7 @@ export default function Inventory() {
                               <p className="text-xs text-gray-500 md:hidden truncate">
                                 {isProduct
                                   ? getCategoryPath(productCategories, item.category) || item.category
-                                  : item.category
+                                  : getIngredientCategoryName(ingredientCategories, item.category)
                                 }
                               </p>
                             )}
@@ -2931,12 +2953,12 @@ export default function Inventory() {
                             className="text-xs text-gray-600 line-clamp-2 block"
                             title={isProduct
                               ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
-                              : item.category || 'Sin categoría'
+                              : getIngredientCategoryName(ingredientCategories, item.category) || 'Sin categoría'
                             }
                           >
                             {isProduct
                               ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
-                              : item.category || 'Sin categoría'
+                              : getIngredientCategoryName(ingredientCategories, item.category) || 'Sin categoría'
                             }
                           </span>
                         </TableCell>

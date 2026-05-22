@@ -127,7 +127,12 @@ export const productVariantSchema = z.object({
 
 // Schema para Producto/Servicio
 export const productSchema = z.object({
-  code: z.string().optional(), // Código de barras (opcional)
+  code: z.string().optional(), // Código de barras principal (opcional)
+  // Códigos de barra adicionales: permite que un mismo producto se escanee
+  // con múltiples EANs (ej. 3 sabores de pasta dental que descuentan del
+  // mismo stock). El `code` queda como principal (para etiquetas/facturas)
+  // y `barcodes` lista los alternativos.
+  barcodes: z.array(z.string()).optional(),
   sku: z.string().optional(), // Código interno/SKU (opcional)
   name: z.string().min(1, 'Nombre es requerido'),
   description: z.string().optional(),
