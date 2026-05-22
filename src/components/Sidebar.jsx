@@ -356,7 +356,7 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Personal',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
             }]
           : []),
@@ -679,7 +679,7 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Personal',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
             }]
           : []),
@@ -960,7 +960,7 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Personal',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
             }]
           : []),
@@ -1095,7 +1095,7 @@ function Sidebar() {
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: 'Personal',
+          label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
           menuId: 'attendance',
         }]
       : []),
@@ -1273,7 +1273,7 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Personal',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
             }]
           : []),
@@ -1464,7 +1464,7 @@ function Sidebar() {
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: 'Personal',
+          label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
           menuId: 'attendance',
         }]
       : []),
@@ -1706,7 +1706,7 @@ function Sidebar() {
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: 'Personal',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
               menuId: 'attendance',
             }]
           : []),
