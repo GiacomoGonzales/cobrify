@@ -424,6 +424,10 @@ export default function POS() {
   // Puede ser un string (una nota) o un array (múltiples notas)
   const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
 
+  // Estado para guía de remisión origen (skip stock si la guía ya descontó al crearse).
+  // Shape: { id, number, stockAlreadyDeducted } | null
+  const [sourceDispatchGuide, setSourceDispatchGuide] = useState(null)
+
   // Estado para cita veterinaria (para marcar como completada al finalizar la venta)
   const [pendingAppointmentData, setPendingAppointmentData] = useState(null)
 
@@ -1626,8 +1630,10 @@ export default function POS() {
       navigate(location.pathname, { replace: true, state: null })
     }
 
-    // Detectar si viene de una guía de remisión (esperar a que products esté cargado)
-    if (location.state?.fromDispatchGuide && !dispatchGuideLoadedRef.current && products.length > 0) {
+    // Detectar si viene de una guía de remisión (esperar a que products esté cargado).
+    // Usamos !productsLoading en vez de products.length > 0 para que también funcione
+    // cuando el negocio no tiene productos en catálogo y la guía solo lleva items manuales.
+    if (location.state?.fromDispatchGuide && !dispatchGuideLoadedRef.current && !productsLoading) {
       const guideInfo = location.state
       dispatchGuideLoadedRef.current = true
 
@@ -1682,16 +1688,26 @@ export default function POS() {
         setGuideNumber(guideInfo.guideNumber)
       }
 
+      // Si la guía ya descontó stock, marcar para que la factura no lo descuente de nuevo
+      if (guideInfo.guideId) {
+        setSourceDispatchGuide({
+          id: guideInfo.guideId,
+          number: guideInfo.guideNumber || '',
+          stockAlreadyDeducted: !!guideInfo.stockAlreadyDeducted,
+        })
+      }
+
       // Si el destinatario tiene RUC, seleccionar factura
       if (guideInfo.customer?.documentNumber?.length === 11) {
         setDocumentType('factura')
       }
 
-      toast.success(`Guía ${guideInfo.guideNumber} cargada - ${guideInfo.items?.length || 0} items. Completa los precios y emite la factura.`)
+      const stockMsg = guideInfo.stockAlreadyDeducted ? ' (stock ya descontado por la guía, no se descontará de nuevo)' : ''
+      toast.success(`Guía ${guideInfo.guideNumber} cargada - ${guideInfo.items?.length || 0} items.${stockMsg} Completa los precios y emite la factura.`)
 
       navigate(location.pathname, { replace: true, state: null })
     }
-  }, [location.state, customers, products])
+  }, [location.state, customers, products, productsLoading])
 
   // Cargar documento para edición o duplicación si viene en la URL
   useEffect(() => {
@@ -4933,6 +4949,11 @@ export default function POS() {
             ? { type: 'nota_venta', id: pendingNotaVentaIds[0] }
             : { type: 'nota_venta', ids: pendingNotaVentaIds },
         }),
+        // Si viene de una guía de remisión que ya descontó stock, no descontar de nuevo
+        ...(sourceDispatchGuide && sourceDispatchGuide.stockAlreadyDeducted && {
+          skipStockDeduction: true,
+          convertedFrom: { type: 'dispatch_guide', id: sourceDispatchGuide.id, number: sourceDispatchGuide.number },
+        }),
       }
 
       // MODO OFFLINE: Si no hay conexión, guardar en cola local
@@ -5151,6 +5172,7 @@ export default function POS() {
         const _markOnlineOrderCompleteOnSale = markOnlineOrderCompleteOnSale
         const _pendingQuotationId = pendingQuotationId
         const _pendingNotaVentaIds = pendingNotaVentaIds
+        const _sourceDispatchGuide = sourceDispatchGuide
         const _pendingAppointmentData = pendingAppointmentData
         if (_tableData) setTableData(null)
         if (_pendingOrderId) {
@@ -5161,6 +5183,7 @@ export default function POS() {
         }
         if (_pendingQuotationId) setPendingQuotationId(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
+        if (_sourceDispatchGuide) setSourceDispatchGuide(null)
         if (_pendingAppointmentData) setPendingAppointmentData(null)
 
         // Capturar datos necesarios para el background
@@ -5256,8 +5279,11 @@ export default function POS() {
               console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
             }
 
-            // 4. Actualizar stock en Firestore (CRÍTICO - con detección específica de fallos)
-            if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0)) {
+            // 4. Actualizar stock en Firestore (CRÍTICO - con detección específica de fallos).
+            //    Skip si viene de nota de venta (ya descontó) o de guía de remisión con
+            //    stock ya descontado (el toggle "descontar stock" se activó al crearla).
+            const _guideAlreadyDeducted = !!(_sourceDispatchGuide && _sourceDispatchGuide.stockAlreadyDeducted)
+            if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) && !_guideAlreadyDeducted) {
               try {
               // Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}

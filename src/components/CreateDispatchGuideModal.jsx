@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2 } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers, updateProductStockTransaction } from '@/services/firestoreService'
-import { createStockMovement } from '@/services/warehouseService'
+import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
@@ -1292,56 +1291,24 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const result = await createDispatchGuide(businessId, dispatchGuide)
 
       if (result.success) {
-        // Descontar stock si el usuario lo activó
+        // Descontar stock si el usuario lo activó. Usamos el helper compartido para
+        // que la lógica de lotes/FEFO sea consistente con anulación y toggle manual.
         if (deductStock && selectedWarehouseId) {
-          try {
-            const stockItems = items.filter(item => item.productId && item.quantity > 0)
-            const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
-            const { db: fireDb } = await import('@/lib/firebase')
-            for (const item of stockItems) {
-              // Marcar serial como despachado si tiene serie seleccionada
-              const extraUpdates = {}
-              if (item.serialNumber) {
-                // Leer producto fresco de Firestore para obtener seriales actualizados
-                const productSnap = await getDocFn(docRef(fireDb, 'businesses', businessId, 'products', item.productId))
-                if (productSnap.exists() && productSnap.data()?.serials?.length > 0) {
-                  const updatedSerials = productSnap.data().serials.map(s =>
-                    s.serialNumber === item.serialNumber && s.status === 'available'
-                      ? { ...s, status: 'dispatched', dispatchGuideId: result.id }
-                      : s
-                  )
-                  extraUpdates.serials = updatedSerials
-                }
-              }
-              await updateProductStockTransaction(
-                businessId,
-                item.productId,
-                selectedWarehouseId,
-                -parseFloat(item.quantity),
-                extraUpdates,
-                item.variantSku || null
-              )
-              await createStockMovement(businessId, {
-                productId: item.productId,
-                productName: item.description || '',
-                warehouseId: selectedWarehouseId,
-                type: 'exit',
-                quantity: -item.quantity,
-                reason: 'Guía de remisión',
-                referenceType: 'dispatch_guide',
-                referenceId: result.id,
-                referenceNumber: result.number,
-                userId: user?.uid || '',
-                ...(item.serialNumber && { serialNumber: item.serialNumber }),
-                ...(item.variantSku && { variantSku: item.variantSku }),
-                notes: `Despacho: ${result.number}${item.serialNumber ? ` S/N: ${item.serialNumber}` : ''}`
-              })
-            }
-            // Marcar guía como stock descontado
-            const { updateDispatchGuide } = await import('@/services/firestoreService')
-            await updateDispatchGuide(businessId, result.id, { stockDeducted: true })
-          } catch (stockError) {
-            console.error('Error al descontar stock:', stockError)
+          const { deductStockForDispatchGuide } = await import('@/services/dispatchGuideStockService')
+          const deductRes = await deductStockForDispatchGuide({
+            businessId,
+            guide: {
+              id: result.id,
+              number: result.number,
+              warehouseId: selectedWarehouseId,
+              items: items.map((item, index) => {
+                const { serials, trackSerials, ...rest } = item
+                return { ...rest, lineNumber: index + 1 }
+              }),
+            },
+            userId: user?.uid,
+          })
+          if (!deductRes.success) {
             toast.warning('Guía creada pero hubo un error al descontar stock')
           }
         }
@@ -1945,6 +1912,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                   onChange={(e) => setVehicleAuthNumber(e.target.value)}
                 />
               </div>
+              {/* Aviso SUNAT 3452: este campo solo aplica para cargas con permiso MTC
+                  especial (mercancía peligrosa, sobredimensionada, etc.). Si no aplica,
+                  SUNAT rechaza la guía. Solo mostramos el aviso cuando el usuario llenó algo. */}
+              {vehicleAuthNumber.trim() && (isM1LVehicle || (transportMode === '01' && !registerVehiclesAndDrivers)) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Este número de autorización será omitido al enviar a SUNAT</p>
+                    <p className="mt-0.5">
+                      {isM1LVehicle
+                        ? 'No aplica para vehículos categoría M1/L.'
+                        : 'En transporte público solo aplica si activas "registrar vehículos del transportista".'}
+                      {' '}La autorización especial es solo para permisos MTC de carga peligrosa, sobredimensionada o similar (regla SUNAT 3452).
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Vehículos secundarios (tracto + carreta, etc.) */}
               <div className="space-y-3 pt-2">
