@@ -9964,7 +9964,10 @@ export const validateShopifreeConnection = onCall(
 import {
   postProductsBulk as shopifreePostProducts,
   deleteProductByExternalId as shopifreeDeleteProduct,
+  getOrders as shopifreeGetOrders,
+  syncOrder as shopifreeSyncOrder,
   mapCobrifyProductToShopifree,
+  mapShopifreeOrderToCobrify,
   hasRelevantProductChange,
 } from './src/services/shopifreeApi.js'
 
@@ -10206,5 +10209,276 @@ export const resyncShopifreeProducts = onCall(
       errors: errors.slice(0, 20), // limitar payload de respuesta
       errorCount: errors.length,
     }
+  }
+)
+
+// -----------------------------------------------------
+// SHOPIFREE Fase 2: Polling de pedidos desde Shopifree
+// -----------------------------------------------------
+
+/**
+ * Procesa los pedidos nuevos de UN negocio.
+ *
+ * - Pide GET /orders?since={lastOrderCursor} con filtro por externalInvoice null
+ *   (Shopifree no filtra server-side por externalInvoice, así que lo hacemos
+ *   client-side acá).
+ * - Por cada pedido sin externalInvoice:
+ *   - Mapea + crea doc en businesses/{bid}/orders/{sf_<orderId>} (idempotente).
+ *   - Llama POST /orders { action: sync, orderId, externalInvoiceId: cobrifyOrderId }.
+ *   - Trackea el createdAt más reciente para actualizar el cursor.
+ *
+ * @returns {Promise<{ processed:number, created:number, alreadySynced:number, errors:Array, newestCreatedAt:string|null }>}
+ */
+const processBusinessShopifreeOrders = async (businessId, businessData) => {
+  const cfg = businessData?.shopifreeConfig
+  const apiKey = cfg?.apiKey
+  if (!apiKey) {
+    return { skipped: true, reason: 'no_api_key' }
+  }
+
+  // Cursor: lastOrderCursor (ISO) o fallback 7 días atrás
+  const since = cfg.lastOrderCursor || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  let response
+  try {
+    response = await shopifreeGetOrders(apiKey, { since, limit: 200 })
+  } catch (err) {
+    const status = err.response?.status
+    const apiError = err.response?.data?.error
+    return {
+      ok: false,
+      error: apiError || err.message || 'Error en GET /orders',
+      status,
+    }
+  }
+
+  const orders = Array.isArray(response?.orders) ? response.orders : []
+  if (orders.length === 0) {
+    return { ok: true, processed: 0, created: 0, alreadySynced: 0, errors: [], newestCreatedAt: null }
+  }
+
+  let created = 0
+  let alreadySynced = 0
+  const errors = []
+  let newestCreatedAt = null
+
+  for (const order of orders) {
+    // Trackear el createdAt más reciente independientemente de si lo procesamos
+    if (order.createdAt && (!newestCreatedAt || order.createdAt > newestCreatedAt)) {
+      newestCreatedAt = order.createdAt
+    }
+
+    // Si ya tiene externalInvoice, es porque ya lo procesamos en una pasada anterior.
+    // Lo contamos pero no lo re-procesamos.
+    if (order.externalInvoice) {
+      alreadySynced += 1
+      continue
+    }
+
+    try {
+      const mapped = mapShopifreeOrderToCobrify(order)
+      if (!mapped) continue
+
+      // Doc ID determinístico para idempotencia: si por algún motivo procesamos
+      // el mismo pedido dos veces (race condition / reintento), el set con merge
+      // no duplica.
+      const docId = `sf_${order.id}`
+      const orderRef = db.collection('businesses').doc(businessId).collection('orders').doc(docId)
+      await orderRef.set({
+        ...mapped,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+
+      // Notificar a Shopifree que ya lo procesamos. Usamos el doc ID interno
+      // como externalInvoiceId (luego cuando se emita la boleta, podríamos
+      // re-sincronizar con el número real — fase futura).
+      try {
+        await shopifreeSyncOrder(apiKey, order.id, docId)
+      } catch (syncErr) {
+        // Si el sync hacia Shopifree falla, el pedido igual quedó en Cobrify.
+        // Lo dejamos sin externalInvoice del lado Shopifree → la próxima
+        // pasada lo va a re-procesar (pero el set con merge en Cobrify es
+        // idempotente, así que no duplica).
+        errors.push({
+          shopifreeOrderId: order.id,
+          error: 'sync_back_failed: ' + (syncErr.response?.data?.error || syncErr.message),
+        })
+        continue
+      }
+
+      created += 1
+    } catch (err) {
+      errors.push({
+        shopifreeOrderId: order.id,
+        error: err.message || 'Error procesando pedido',
+      })
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    processed: orders.length,
+    created,
+    alreadySynced,
+    errors,
+    newestCreatedAt,
+  }
+}
+
+/**
+ * Cron: cada 3 minutos itera todos los negocios con polling habilitado y
+ * procesa sus pedidos nuevos desde Shopifree.
+ *
+ * Diseño:
+ * - Procesa cada negocio en serie (no paralelo) para no saturar la API
+ *   de Shopifree con un burst si hay muchos negocios conectados.
+ * - Por cada negocio: registra un log de la pasada en integrationLogs.
+ * - Si un negocio falla, sigue con los siguientes.
+ */
+export const pollShopifreeOrders = onSchedule(
+  {
+    schedule: 'every 3 minutes',
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const businessesSnap = await db.collection('businesses')
+      .where('shopifreeEnabled', '==', true)
+      .get()
+
+    if (businessesSnap.empty) {
+      console.log('[shopifree-poll] No hay negocios con Shopifree habilitado')
+      return
+    }
+
+    let totalBusinesses = 0
+    let totalCreated = 0
+    let totalErrors = 0
+
+    for (const businessDoc of businessesSnap.docs) {
+      const businessId = businessDoc.id
+      const businessData = businessDoc.data()
+      const cfg = businessData?.shopifreeConfig
+
+      // Skip si no hay apiKey o polling deshabilitado
+      if (!cfg?.apiKey) continue
+      if (cfg.pollingEnabled === false) continue
+
+      totalBusinesses += 1
+
+      try {
+        const result = await processBusinessShopifreeOrders(businessId, businessData)
+
+        if (result.skipped) continue
+
+        if (result.ok && result.processed > 0) {
+          totalCreated += result.created || 0
+        }
+        if (!result.ok || (result.errors?.length || 0) > 0) {
+          totalErrors += result.errors?.length || 1
+        }
+
+        // Actualizar el cursor con el createdAt más reciente que vimos
+        // (incluso si fue uno ya sincronizado — es el "high water mark").
+        if (result.newestCreatedAt) {
+          await db.collection('businesses').doc(businessId).set({
+            shopifreeConfig: {
+              lastOrderCursor: result.newestCreatedAt,
+              lastPollAt: FieldValue.serverTimestamp(),
+            },
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true })
+        } else {
+          // Aunque no haya pedidos nuevos, marcamos que el poll corrió
+          await db.collection('businesses').doc(businessId).set({
+            shopifreeConfig: {
+              lastPollAt: FieldValue.serverTimestamp(),
+            },
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true })
+        }
+
+        // Log de la pasada (solo si hubo actividad o errores, para no spammear)
+        if ((result.created || 0) > 0 || (result.errors?.length || 0) > 0 || result.ok === false) {
+          await logIntegrationEvent(businessId, {
+            action: 'orders_poll',
+            ok: result.ok !== false && (result.errors?.length || 0) === 0,
+            processed: result.processed || 0,
+            created: result.created || 0,
+            alreadySynced: result.alreadySynced || 0,
+            errorCount: result.errors?.length || 0,
+            error: result.error || null,
+          })
+        }
+      } catch (err) {
+        console.error(`[shopifree-poll] error processing business ${businessId}:`, err.message)
+        totalErrors += 1
+        await logIntegrationEvent(businessId, {
+          action: 'orders_poll',
+          ok: false,
+          error: err.message || 'Error desconocido en poll',
+        })
+      }
+    }
+
+    console.log(`[shopifree-poll] Done. businesses=${totalBusinesses}, created=${totalCreated}, errors=${totalErrors}`)
+  }
+)
+
+/**
+ * Callable manual: corre el poll de pedidos AHORA para un negocio específico.
+ * Útil para probar Fase 2 sin esperar el siguiente tick del cron, y para
+ * dar al usuario un botón "Buscar pedidos nuevos" en la UI.
+ *
+ * Input: { businessId }
+ * Output: el mismo shape de processBusinessShopifreeOrders + cursor actualizado.
+ */
+export const pollShopifreeOrdersNow = onCall(
+  { region: 'us-central1', cors: true, timeoutSeconds: 120, memory: '256MiB' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes estar autenticado')
+    }
+    const { businessId } = request.data || {}
+    if (!businessId) {
+      throw new HttpsError('invalid-argument', 'businessId requerido')
+    }
+
+    const isOwner = request.auth.uid === businessId
+    let isSubuser = false
+    if (!isOwner) {
+      const userDoc = await db.collection('users').doc(request.auth.uid).get()
+      if (userDoc.exists && userDoc.data()?.ownerId === businessId) {
+        isSubuser = true
+      }
+    }
+    if (!isOwner && !isSubuser) {
+      throw new HttpsError('permission-denied', 'Sin acceso a este negocio')
+    }
+
+    const businessDoc = await db.collection('businesses').doc(businessId).get()
+    if (!businessDoc.exists) {
+      throw new HttpsError('not-found', 'Negocio no existe')
+    }
+    const businessData = businessDoc.data()
+    if (!businessData?.shopifreeConfig?.apiKey) {
+      throw new HttpsError('failed-precondition', 'Shopifree no está conectado')
+    }
+
+    const result = await processBusinessShopifreeOrders(businessId, businessData)
+
+    if (result.newestCreatedAt || result.ok !== false) {
+      await db.collection('businesses').doc(businessId).set({
+        shopifreeConfig: {
+          ...(result.newestCreatedAt && { lastOrderCursor: result.newestCreatedAt }),
+          lastPollAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+
+    return result
   }
 )

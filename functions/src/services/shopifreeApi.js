@@ -252,3 +252,111 @@ export const hasRelevantProductChange = (before, after) => {
   }
   return false
 }
+
+// =====================================================
+// MAPPER: Pedido Shopifree → Pedido Cobrify
+// =====================================================
+
+/**
+ * Arma un string legible con la dirección de entrega.
+ */
+const formatDeliveryAddress = (addr) => {
+  if (!addr || typeof addr !== 'object') return ''
+  const parts = [addr.street, addr.district, addr.city, addr.state]
+    .filter(p => p && typeof p === 'string' && p.trim().length > 0)
+  let result = parts.join(', ')
+  if (addr.reference && addr.reference.trim()) {
+    result += result ? ` (Ref: ${addr.reference})` : addr.reference
+  }
+  return result
+}
+
+/**
+ * Traduce un item de pedido Shopifree al shape de item interno de Cobrify.
+ * - productExternalId matchea con el productId interno de Cobrify (mismo valor
+ *   que mandamos como externalId al pushear).
+ * - Si productExternalId es null, el item viene de un producto creado
+ *   manualmente en Shopifree (no del catálogo Cobrify) — lo marcamos.
+ */
+const mapShopifreeItem = (item) => ({
+  productId: item.productExternalId || null,
+  shopifreeProductId: item.productId || null,  // el doc ID full de Shopifree (con prefijo api_)
+  name: item.productName || 'Sin nombre',
+  price: Number(item.price) || 0,
+  quantity: Number(item.quantity) || 0,
+  itemTotal: Number(item.itemTotal) || (Number(item.price) || 0) * (Number(item.quantity) || 0),
+  ...(item.productImage && { imageUrl: item.productImage }),
+  ...(item.selectedVariations && { variations: item.selectedVariations }),
+  ...(item.selectedModifiers && { modifiers: item.selectedModifiers }),
+  ...(item.combinationSku && { combinationSku: item.combinationSku }),
+  // Marca el item como "externo" si no matcheó con un producto Cobrify
+  ...(item.productExternalId == null && { isExternalProduct: true }),
+})
+
+/**
+ * Mapea un pedido Shopifree completo al shape que usa Cobrify para sus
+ * pedidos online (OnlineOrders.jsx escucha `source === 'menu_digital'` —
+ * usamos `source: 'shopifree'` para distinguir).
+ *
+ * Devuelve el doc listo para escribir en `businesses/{bid}/orders/{docId}`.
+ * El caller debe usar `shopifreeOrderId` como base del doc ID para
+ * idempotencia (mismo pedido procesado 2x no duplica).
+ */
+export const mapShopifreeOrderToCobrify = (order) => {
+  if (!order || !order.id) return null
+
+  const items = Array.isArray(order.items) ? order.items.map(mapShopifreeItem) : []
+  const customer = order.customer || {}
+  const address = formatDeliveryAddress(order.deliveryAddress)
+
+  return {
+    // Referencias externas
+    source: 'shopifree',
+    shopifreeOrderId: order.id,
+    shopifreeOrderNumber: order.orderNumber || null,
+
+    // Número de pedido visible (reusamos el de Shopifree)
+    orderNumber: order.orderNumber || `SF-${order.id.slice(0, 8)}`,
+
+    // Estado: arranca en pending. El usuario lo procesa desde OnlineOrders.jsx.
+    status: 'pending',
+    overallStatus: 'pending',
+
+    // Cliente
+    customerName: customer.name || '',
+    customerEmail: customer.email || '',
+    customerPhone: customer.phone || '',
+    customerAddress: address,
+
+    // Items
+    items,
+
+    // Tipo de pedido / entrega
+    orderType: order.deliveryMethod === 'delivery' ? 'delivery'
+      : order.deliveryMethod === 'pickup' ? 'takeaway'
+      : null,
+    deliveryMethod: order.deliveryMethod || null,
+    deliveryAddress: order.deliveryAddress || null,
+
+    // Pago
+    paymentMethod: order.paymentMethod || null,
+    paymentStatus: order.paymentStatus || 'pending',
+    paidAt: order.paidAt || null,
+
+    // Montos (ya vienen calculados por Shopifree)
+    subtotal: Number(order.subtotal) || 0,
+    shippingCost: Number(order.shippingCost) || 0,
+    discount: order.discount || null,
+    total: Number(order.total) || 0,
+
+    // Notas
+    notes: order.notes || '',
+
+    // Timestamp original del pedido (para preservar el orden cronológico real)
+    shopifreeCreatedAt: order.createdAt || null,
+
+    // Marcador de "todavía no enviado a SUNAT/no facturado"
+    invoiceEmitted: false,
+  }
+}
+

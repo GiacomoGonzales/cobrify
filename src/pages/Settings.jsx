@@ -249,6 +249,9 @@ export default function Settings() {
   const [shopifreeConnectionResult, setShopifreeConnectionResult] = useState(null)
   const [isResyncingShopifree, setIsResyncingShopifree] = useState(false)
   const [shopifreeResyncResult, setShopifreeResyncResult] = useState(null)
+  const [isTogglingShopifreePolling, setIsTogglingShopifreePolling] = useState(false)
+  const [isPollingShopifreeNow, setIsPollingShopifreeNow] = useState(false)
+  const [shopifreePollResult, setShopifreePollResult] = useState(null)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -10335,6 +10338,190 @@ export default function Settings() {
                       <li>Cada vez que creás, editás o eliminás un producto en Cobrify, se envía automáticamente a Shopifree.</li>
                       <li>Productos con variantes (talla/color) se pushean como producto único sin variantes (Shopifree v1 no soporta variantes en el API).</li>
                       <li>Productos ocultos del catálogo o desactivados se mandan como inactivos.</li>
+                    </ul>
+                  </div>
+
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Card: Captación de pedidos (Fase 2) */}
+            {isConnected && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                    <CardTitle>Captación de pedidos</CardTitle>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Cuando está activado, Cobrify revisa Shopifree cada 3 minutos
+                    en busca de pedidos nuevos y los registra automáticamente en
+                    la sección <strong>Pedidos Online</strong>.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+
+                  {/* Toggle de polling */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={cfg?.pollingEnabled === true}
+                      disabled={isTogglingShopifreePolling || isDemoMode}
+                      onChange={async (e) => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        const enabled = e.target.checked
+                        setIsTogglingShopifreePolling(true)
+                        try {
+                          const businessRef = doc(db, 'businesses', getBusinessId())
+                          await setDoc(businessRef, {
+                            shopifreeConfig: { pollingEnabled: enabled },
+                            updatedAt: serverTimestamp(),
+                          }, { merge: true })
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                          toast.success(enabled
+                            ? 'Captación de pedidos activada'
+                            : 'Captación de pedidos pausada')
+                        } catch (err) {
+                          console.error('Error toggle polling Shopifree:', err)
+                          toast.error('No se pudo actualizar')
+                        } finally {
+                          setIsTogglingShopifreePolling(false)
+                        }
+                      }}
+                      className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900">
+                        Captar pedidos automáticamente desde Shopifree
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Activado: el sistema busca pedidos nuevos cada 3 minutos.
+                        Desactivado: la sincronización queda en pausa (los pedidos
+                        existentes en Shopifree no se pierden, se recuperan al reactivar).
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Info del último poll */}
+                  {cfg?.lastPollAt && (
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div>
+                        <strong>Última búsqueda:</strong>{' '}
+                        {cfg.lastPollAt.toDate
+                          ? cfg.lastPollAt.toDate().toLocaleString('es-PE')
+                          : '—'}
+                      </div>
+                      {cfg.lastOrderCursor && (
+                        <div>
+                          <strong>Cursor:</strong>{' '}
+                          <span className="font-mono text-[11px]">{cfg.lastOrderCursor}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Botón manual: buscar ahora */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={isPollingShopifreeNow || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        setIsPollingShopifreeNow(true)
+                        setShopifreePollResult(null)
+                        try {
+                          const fn = httpsCallable(functions, 'pollShopifreeOrdersNow')
+                          const result = await fn({ businessId: getBusinessId() })
+                          setShopifreePollResult(result.data)
+                          if (result.data?.ok && result.data?.created > 0) {
+                            toast.success(`${result.data.created} pedido(s) nuevo(s) importado(s)`)
+                          } else if (result.data?.processed === 0) {
+                            toast.info('No hay pedidos nuevos')
+                          } else if (result.data?.ok) {
+                            toast.success('Sin pedidos nuevos para procesar')
+                          } else {
+                            toast.error('Error: ' + (result.data?.error || 'Desconocido'))
+                          }
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                        } catch (err) {
+                          console.error('Error polling Shopifree:', err)
+                          toast.error('Error: ' + (err.message || 'desconocido'))
+                          setShopifreePollResult({ ok: false, error: err.message })
+                        } finally {
+                          setIsPollingShopifreeNow(false)
+                        }
+                      }}
+                    >
+                      {isPollingShopifreeNow ? (
+                        <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Buscando…</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4 mr-1.5" />Buscar pedidos ahora</>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Resultado del poll manual */}
+                  {shopifreePollResult && (
+                    <div className={`p-3 rounded-lg border text-sm ${
+                      shopifreePollResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        {shopifreePollResult.ok ? (
+                          <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 text-xs space-y-0.5">
+                          <p className="font-medium">
+                            {shopifreePollResult.ok ? 'Búsqueda completada' : 'Búsqueda con errores'}
+                          </p>
+                          {typeof shopifreePollResult.processed === 'number' && (
+                            <>
+                              <div>Pedidos revisados: {shopifreePollResult.processed}</div>
+                              <div>Importados nuevos: <strong>{shopifreePollResult.created || 0}</strong></div>
+                              {(shopifreePollResult.alreadySynced || 0) > 0 && (
+                                <div>Ya sincronizados: {shopifreePollResult.alreadySynced}</div>
+                              )}
+                              {(shopifreePollResult.errors?.length || 0) > 0 && (
+                                <div className="text-red-700">Errores: {shopifreePollResult.errors.length}</div>
+                              )}
+                            </>
+                          )}
+                          {shopifreePollResult.error && (
+                            <div className="text-red-700">{shopifreePollResult.error}</div>
+                          )}
+                          {shopifreePollResult.errors?.length > 0 && (
+                            <details className="mt-1.5">
+                              <summary className="cursor-pointer underline">Detalle de errores</summary>
+                              <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                                {shopifreePollResult.errors.map((e, idx) => (
+                                  <li key={idx} className="font-mono text-[11px]">
+                                    {e.shopifreeOrderId ? `[${e.shopifreeOrderId}] ` : ''}{e.error}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                    <p className="font-medium mb-1">Cómo funciona</p>
+                    <ul className="space-y-0.5 list-disc pl-4">
+                      <li>Los pedidos se importan en estado <strong>Pendiente</strong> y aparecen en <strong>Pedidos Online</strong>.</li>
+                      <li>Desde ahí podés aceptar, preparar, generar boleta/factura y completar.</li>
+                      <li>Una vez importado, el pedido queda marcado en Shopifree y no se vuelve a traer.</li>
+                      <li>Los items del pedido que matchean con tu catálogo Cobrify se enlazan al producto interno; los que vienen de productos creados manualmente en Shopifree quedan marcados como externos.</li>
                     </ul>
                   </div>
 
