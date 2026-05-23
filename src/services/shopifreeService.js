@@ -18,7 +18,10 @@
  * reglas de Firestore impiden lectura externa (mismo modelo que rappiConfig).
  */
 import { httpsCallable } from 'firebase/functions'
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore'
+import {
+  doc, setDoc, serverTimestamp, getDoc,
+  collection, query, where, orderBy, limit as fsLimit, getDocs,
+} from 'firebase/firestore'
 import { db, functions } from '@/lib/firebase'
 
 /**
@@ -123,4 +126,89 @@ export const getShopifreeStoreUrl = (config) => {
   if (config.customDomain) return `https://${config.customDomain}`
   if (config.storeSubdomain) return `https://${config.storeSubdomain}.shopifree.app`
   return null
+}
+
+/**
+ * Lee los últimos N eventos de integración Shopifree del negocio.
+ * Usado por la UI de monitoreo para mostrar actividad reciente y errores.
+ *
+ * @param {string} businessId
+ * @param {number} [maxItems=50]
+ * @returns {Promise<Array>} - array de logs ordenados por createdAt desc
+ */
+export const getShopifreeIntegrationLogs = async (businessId, maxItems = 50) => {
+  if (!businessId) return []
+  try {
+    const ref = collection(db, 'businesses', businessId, 'integrationLogs')
+    const q = query(
+      ref,
+      where('integration', '==', 'shopifree'),
+      orderBy('createdAt', 'desc'),
+      fsLimit(maxItems),
+    )
+    const snap = await getDocs(q)
+    const logs = []
+    snap.forEach(d => logs.push({ id: d.id, ...d.data() }))
+    return logs
+  } catch (err) {
+    console.error('Error leyendo integrationLogs Shopifree:', err)
+    return []
+  }
+}
+
+/**
+ * Calcula stats agregadas a partir de un array de logs.
+ * Útil para mostrar "X pedidos sincronizados hoy" etc.
+ */
+export const computeShopifreeStats = (logs = []) => {
+  const now = Date.now()
+  const oneDayAgo = now - 24 * 60 * 60 * 1000
+  const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000
+
+  const stats = {
+    totalEvents: logs.length,
+    ordersImportedToday: 0,
+    ordersImportedWeek: 0,
+    productsSyncedToday: 0,
+    productsSyncedWeek: 0,
+    errorsToday: 0,
+    errorsWeek: 0,
+    lastEventAt: null,
+  }
+
+  for (const log of logs) {
+    const ts = log.createdAt?.toDate ? log.createdAt.toDate().getTime() : 0
+    if (!stats.lastEventAt && ts) stats.lastEventAt = ts
+
+    const isOrder = log.action === 'orders_poll'
+    const isProduct = log.action === 'product_create' || log.action === 'product_update' || log.action === 'product_delete'
+    const isError = log.ok === false || (log.errorCount || 0) > 0
+
+    if (ts >= oneDayAgo) {
+      if (isOrder) stats.ordersImportedToday += (log.created || 0)
+      if (isProduct && log.ok) stats.productsSyncedToday += 1
+      if (isError) stats.errorsToday += 1
+    }
+    if (ts >= oneWeekAgo) {
+      if (isOrder) stats.ordersImportedWeek += (log.created || 0)
+      if (isProduct && log.ok) stats.productsSyncedWeek += 1
+      if (isError) stats.errorsWeek += 1
+    }
+  }
+
+  return stats
+}
+
+/**
+ * Etiqueta legible para cada tipo de acción del log.
+ */
+export const getLogActionLabel = (action) => {
+  switch (action) {
+    case 'product_create': return 'Producto creado'
+    case 'product_update': return 'Producto actualizado'
+    case 'product_delete': return 'Producto eliminado'
+    case 'products_resync_all': return 'Resincronización masiva'
+    case 'orders_poll': return 'Búsqueda de pedidos'
+    default: return action || 'Evento'
+  }
 }

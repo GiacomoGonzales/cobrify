@@ -48,7 +48,7 @@ import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, upd
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import { getTables } from '@/services/tableService'
-import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl } from '@/services/shopifreeService'
+import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
@@ -98,6 +98,35 @@ export default function Settings() {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_location.search])
+
+  // Auto-cargar logs de integración Shopifree cuando se entra al tab.
+  // También se refresca tras hacer resync/poll exitosos (ver handlers).
+  useEffect(() => {
+    if (activeTab !== 'shopifree') return
+    if (!user?.uid) return
+    if (isDemoMode) return
+    let cancelled = false
+    setShopifreeLogsLoading(true)
+    getShopifreeIntegrationLogs(getBusinessId(), 50).then(logs => {
+      if (!cancelled) setShopifreeLogs(logs)
+    }).finally(() => {
+      if (!cancelled) setShopifreeLogsLoading(false)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user?.uid])
+
+  const refreshShopifreeLogs = async () => {
+    if (!user?.uid || isDemoMode) return
+    setShopifreeLogsLoading(true)
+    try {
+      const logs = await getShopifreeIntegrationLogs(getBusinessId(), 50)
+      setShopifreeLogs(logs)
+    } finally {
+      setShopifreeLogsLoading(false)
+    }
+  }
+
   const [subscription, setSubscription] = useState(null)
   const [series, setSeries] = useState({
     factura: { serie: 'F001', lastNumber: 0 },
@@ -252,6 +281,9 @@ export default function Settings() {
   const [isTogglingShopifreePolling, setIsTogglingShopifreePolling] = useState(false)
   const [isPollingShopifreeNow, setIsPollingShopifreeNow] = useState(false)
   const [shopifreePollResult, setShopifreePollResult] = useState(null)
+  const [shopifreeLogs, setShopifreeLogs] = useState([])
+  const [shopifreeLogsLoading, setShopifreeLogsLoading] = useState(false)
+  const [shopifreeLogFilter, setShopifreeLogFilter] = useState('all') // all|orders|products|errors
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -10264,6 +10296,7 @@ export default function Settings() {
                           toast.error(`Sincronización con errores: ${result.data?.errorCount || 0}`)
                         }
                         if (refreshBusinessSettings) await refreshBusinessSettings()
+                        refreshShopifreeLogs()
                       } catch (err) {
                         console.error('Error resincronizando productos:', err)
                         toast.error('Error: ' + (err.message || 'desconocido'))
@@ -10449,6 +10482,7 @@ export default function Settings() {
                             toast.error('Error: ' + (result.data?.error || 'Desconocido'))
                           }
                           if (refreshBusinessSettings) await refreshBusinessSettings()
+                          refreshShopifreeLogs()
                         } catch (err) {
                           console.error('Error polling Shopifree:', err)
                           toast.error('Error: ' + (err.message || 'desconocido'))
@@ -10528,6 +10562,162 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Card: Actividad reciente / Monitoreo (Fase 3) */}
+            {isConnected && (() => {
+              const stats = computeShopifreeStats(shopifreeLogs)
+              const filteredLogs = shopifreeLogs.filter(log => {
+                if (shopifreeLogFilter === 'all') return true
+                if (shopifreeLogFilter === 'orders') return log.action === 'orders_poll'
+                if (shopifreeLogFilter === 'products') return log.action?.startsWith('product') || log.action === 'products_resync_all'
+                if (shopifreeLogFilter === 'errors') return log.ok === false || (log.errorCount || 0) > 0
+                return true
+              })
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-emerald-600" />
+                        <CardTitle>Actividad reciente</CardTitle>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={refreshShopifreeLogs}
+                        disabled={shopifreeLogsLoading || isDemoMode}
+                      >
+                        {shopifreeLogsLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Últimos {shopifreeLogs.length} eventos de la integración.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+
+                    {/* Stats agregadas */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-2.5 text-center">
+                        <div className="text-emerald-700 font-medium">Pedidos hoy</div>
+                        <div className="text-2xl font-bold text-emerald-900 mt-0.5">{stats.ordersImportedToday}</div>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-2.5 text-center">
+                        <div className="text-emerald-700 font-medium">Pedidos 7d</div>
+                        <div className="text-2xl font-bold text-emerald-900 mt-0.5">{stats.ordersImportedWeek}</div>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded p-2.5 text-center">
+                        <div className="text-blue-700 font-medium">Productos 7d</div>
+                        <div className="text-2xl font-bold text-blue-900 mt-0.5">{stats.productsSyncedWeek}</div>
+                      </div>
+                      <div className={`border rounded p-2.5 text-center ${
+                        stats.errorsToday > 0
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <div className={`font-medium ${stats.errorsToday > 0 ? 'text-red-700' : 'text-gray-600'}`}>Errores hoy</div>
+                        <div className={`text-2xl font-bold mt-0.5 ${stats.errorsToday > 0 ? 'text-red-900' : 'text-gray-800'}`}>
+                          {stats.errorsToday}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filtros */}
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { id: 'all', label: 'Todos' },
+                        { id: 'orders', label: 'Pedidos' },
+                        { id: 'products', label: 'Productos' },
+                        { id: 'errors', label: 'Errores' },
+                      ].map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => setShopifreeLogFilter(f.id)}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            shopifreeLogFilter === f.id
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Tabla de logs */}
+                    {shopifreeLogsLoading ? (
+                      <div className="flex items-center justify-center py-6 text-gray-500 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Cargando…
+                      </div>
+                    ) : filteredLogs.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-gray-500">
+                        {shopifreeLogs.length === 0
+                          ? 'Aún no hay actividad registrada.'
+                          : 'No hay eventos que coincidan con el filtro.'}
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                        {filteredLogs.map(log => {
+                          const ts = log.createdAt?.toDate ? log.createdAt.toDate() : null
+                          const isError = log.ok === false || (log.errorCount || 0) > 0
+                          return (
+                            <details key={log.id} className="group">
+                              <summary className="cursor-pointer p-3 hover:bg-gray-50 list-none">
+                                <div className="flex items-start gap-3">
+                                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                    isError ? 'bg-red-500' : 'bg-emerald-500'
+                                  }`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-sm font-medium text-gray-900 truncate">
+                                        {getLogActionLabel(log.action)}
+                                      </span>
+                                      <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                                        {ts ? ts.toLocaleString('es-PE', {
+                                          day: '2-digit', month: '2-digit',
+                                          hour: '2-digit', minute: '2-digit',
+                                        }) : '—'}
+                                      </span>
+                                    </div>
+                                    {/* Resumen inline */}
+                                    <div className="text-xs text-gray-600 mt-0.5 truncate">
+                                      {log.productName && <span>{log.productName} </span>}
+                                      {typeof log.created === 'number' && log.action === 'orders_poll' && (
+                                        <span>· {log.created} pedido{log.created !== 1 ? 's' : ''} importado{log.created !== 1 ? 's' : ''}</span>
+                                      )}
+                                      {typeof log.totalChecked === 'number' && log.action === 'products_resync_all' && (
+                                        <span>· {log.totalPushed}/{log.totalChecked} productos</span>
+                                      )}
+                                      {log.error && (
+                                        <span className="text-red-600"> · {log.error}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <ChevronDown className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 transition-transform group-open:rotate-180" />
+                                </div>
+                              </summary>
+                              <pre className="text-[10px] font-mono bg-gray-50 p-2 mx-3 mb-3 rounded overflow-x-auto text-gray-700">
+{JSON.stringify({
+  ...log,
+  createdAt: ts ? ts.toISOString() : undefined,
+}, null, 2)}
+                              </pre>
+                            </details>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                  </CardContent>
+                </Card>
+              )
+            })()}
           </div>
         )
       })()}
