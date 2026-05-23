@@ -32,6 +32,7 @@ import {
   Cog,
   CookingPot,
   Wrench,
+  RotateCcw,
   CheckCircle,
   MoreVertical,
   FlaskConical,
@@ -58,7 +59,7 @@ import { formatCurrency, formatProductPrice, matchesSearchQuery } from '@/lib/ut
 import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock, getLatestActiveStockBackup, revertStockBackup } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import InventoryExportModal from '@/components/InventoryExportModal'
@@ -248,6 +249,12 @@ export default function Inventory() {
   const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
   const [showMassTransferModal, setShowMassTransferModal] = useState(false)
   const [showBulkCorrectionModal, setShowBulkCorrectionModal] = useState(false)
+  // Backup activo de la última verificación masiva (para revertir si algo se desconfiguró).
+  // Visible durante 7 días después de cada verificación.
+  const [latestStockBackup, setLatestStockBackup] = useState(null)
+  const [showRevertModal, setShowRevertModal] = useState(false)
+  const [isReverting, setIsReverting] = useState(false)
+  const [revertProgress, setRevertProgress] = useState({ processed: 0, total: 0, errors: 0 })
   const [showCountHistory, setShowCountHistory] = useState(false)
   const [countHistory, setCountHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -279,7 +286,51 @@ export default function Inventory() {
     loadWarehouses()
     loadBranches()
     loadCompanySettings()
+    loadLatestStockBackup()
   }, [user])
+
+  // Cargar el último backup activo de verificación masiva (si existe y no expiró).
+  const loadLatestStockBackup = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const businessId = getBusinessId()
+      const backup = await getLatestActiveStockBackup(businessId)
+      setLatestStockBackup(backup)
+    } catch (err) {
+      console.error('Error cargando backup activo de stock:', err)
+      setLatestStockBackup(null)
+    }
+  }
+
+  // Revertir la última verificación masiva.
+  const handleRevertStockBackup = async () => {
+    if (!latestStockBackup || isReverting) return
+    setIsReverting(true)
+    setRevertProgress({ processed: 0, total: latestStockBackup.itemsCount || 0, errors: 0 })
+    try {
+      const businessId = getBusinessId()
+      const result = await revertStockBackup(businessId, latestStockBackup.id, {
+        onProgress: (state) => setRevertProgress(state),
+      })
+      if (result.success) {
+        toast.success(`Stock restaurado: ${result.restored} producto(s)`)
+        if (result.errors > 0) {
+          toast.error(`Hubo ${result.errors} error(es) al restaurar algunos items`, 5000)
+        }
+        setLatestStockBackup(null)
+        setShowRevertModal(false)
+        loadProducts()
+        loadIngredients()
+      } else {
+        toast.error('Error al revertir: ' + (result.error || 'Desconocido'))
+      }
+    } catch (err) {
+      console.error('Error revirtiendo backup:', err)
+      toast.error('Error al revertir el backup')
+    } finally {
+      setIsReverting(false)
+    }
+  }
 
   // Resetear página cuando cambia el filtro de tipo (productos/insumos)
   useEffect(() => {
@@ -1913,6 +1964,19 @@ export default function Inventory() {
             <Wrench className="w-4 h-4 mr-2" />
             Verificar stock
           </Button>
+          {/* Botón "Revertir" — solo visible si hay un backup activo (≤ 7 días). */}
+          {latestStockBackup && !isDemoMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRevertModal(true)}
+              className="text-amber-700 border-amber-300 hover:bg-amber-50"
+              title={`Restaura el stock al estado previo a la verificación del ${latestStockBackup.createdAt?.toLocaleString?.('es-PE') || 'reciente'}`}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Revertir verificación
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -4697,14 +4761,93 @@ export default function Inventory() {
             ...products.map(p => ({ id: p.id, name: p.name, isIngredient: false })),
             ...ingredients.map(i => ({ id: i.id, name: i.name, isIngredient: true })),
           ]
-          return await bulkRecalculateStock(businessId, items, { batchSize: 8, onProgress })
+          return await bulkRecalculateStock(businessId, items, {
+            batchSize: 8,
+            onProgress,
+            userId: user?.uid || null,
+            userName: user?.displayName || user?.email || null,
+          })
         }}
         onCompleted={() => {
           // Refrescar inventario tras correcciones
           loadProducts()
           loadIngredients()
+          // Mostrar el botón "Revertir" cargando el nuevo backup
+          loadLatestStockBackup()
         }}
       />
+
+      {/* Modal de confirmación: Revertir verificación masiva */}
+      <Modal
+        isOpen={showRevertModal}
+        onClose={() => !isReverting && setShowRevertModal(false)}
+        title={
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-5 h-5 text-amber-600" />
+            <span className="text-lg font-bold">Revertir verificación de stock</span>
+          </div>
+        }
+        size="md"
+      >
+        {!isReverting && latestStockBackup && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
+              Esto restaurará el stock de <strong>{latestStockBackup.itemsCount}</strong>{' '}
+              producto{latestStockBackup.itemsCount === 1 ? '' : 's'} al estado previo
+              a la verificación.
+              {latestStockBackup.createdAt && (
+                <div className="mt-2 text-xs text-amber-700">
+                  Verificación realizada el{' '}
+                  <strong>{latestStockBackup.createdAt.toLocaleString('es-PE')}</strong>
+                  {latestStockBackup.userName && (
+                    <> por <strong>{latestStockBackup.userName}</strong></>
+                  )}
+                </div>
+              )}
+            </div>
+            <ul className="text-xs text-gray-600 space-y-1 pl-4 list-disc">
+              <li>Solo se restauran los productos que la verificación modificó.</li>
+              <li>Movimientos de stock posteriores a la verificación se mantienen registrados.</li>
+              <li>Una vez revertido, este backup ya no se puede volver a aplicar.</li>
+            </ul>
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowRevertModal(false)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleRevertStockBackup}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Revertir ahora
+              </Button>
+            </div>
+          </div>
+        )}
+        {isReverting && (
+          <div className="space-y-4">
+            <div className="text-center py-2">
+              <Loader2 className="w-10 h-10 text-amber-600 animate-spin mx-auto mb-2" />
+              <div className="text-sm font-medium text-gray-800">
+                Restaurando {revertProgress.processed} de {revertProgress.total}…
+              </div>
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-600 transition-all"
+                style={{
+                  width: `${revertProgress.total > 0
+                    ? Math.min(100, Math.round((revertProgress.processed / revertProgress.total) * 100))
+                    : 0}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 text-center">
+              No cierres esta ventana mientras se restaura el stock.
+            </p>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal de Recuento de Inventario */}
       {/* Modal de opciones de exportación */}

@@ -84,6 +84,11 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
             <li>Los productos con variantes recalculan cada variante por separado.</li>
             <li>Solo se corrigen los productos que efectivamente estén desfasados.</li>
             <li>Los productos correctos no se tocan.</li>
+            <li className="text-amber-700 font-medium">
+              Se crea un backup automático. Si algo se desconfigura,
+              puedes revertir con el botón &quot;Revertir verificación&quot;
+              durante los próximos 7 días.
+            </li>
           </ul>
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={close} className="flex-1">Cancelar</Button>
@@ -159,6 +164,20 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
                 Hubo {result.errors} error{result.errors === 1 ? '' : 'es'} al procesar algunos productos. Revísalos individualmente.
+              </div>
+            </div>
+          )}
+
+          {result.backupId && result.totalCorrected > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <div className="font-semibold">Backup creado automáticamente</div>
+                <div className="mt-1">
+                  Si el stock quedó mal (ej. productos con stock inicial no registrado),
+                  puedes revertir con el botón &quot;Revertir verificación&quot; en
+                  Inventario. Disponible 7 días.
+                </div>
               </div>
             </div>
           )}

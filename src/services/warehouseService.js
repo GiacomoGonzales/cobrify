@@ -1019,6 +1019,18 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
 
     const hasVariants = !isIngredient && product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
 
+    // Snapshot exacto del estado previo. Lo retornamos para que bulkRecalculateStock
+    // pueda construir un backup y permitir revertir si el usuario se arrepiente.
+    // Se serializa con JSON para asegurar que sea inmutable y safe-to-store.
+    const previousSnapshot = {
+      stock: isIngredient ? null : (product.stock ?? null),
+      currentStock: isIngredient ? (product.currentStock ?? null) : null,
+      warehouseStocks: JSON.parse(JSON.stringify(previousWarehouseStocks)),
+      ...(hasVariants && {
+        variants: JSON.parse(JSON.stringify(product.variants || [])),
+      }),
+    }
+
     // ============================================================
     // RAMA A: Producto con variantes — recalcular por variante
     // ============================================================
@@ -1122,6 +1134,7 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
         corrected,
         stockFromMovements: productTotalStock,
         previousStock: previousWarehouseTotal || previousStock,
+        previousSnapshot,
         byWarehouse: productWHAgg,
         hasVariants: true,
         variantsCount: newVariants.length,
@@ -1189,6 +1202,7 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
       corrected: previousWarehouseTotal !== totalFromMovements || previousStock !== totalFromMovements,
       stockFromMovements: totalFromMovements,
       previousStock: previousWarehouseTotal || previousStock,
+      previousSnapshot,
       byWarehouse: stockByWarehouse,
     }
   } catch (error) {
@@ -1210,13 +1224,15 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
  * @returns {Promise<{success:boolean, totalChecked:number, totalCorrected:number, errors:number, corrections:Array, errorDetails:Array}>}
  */
 export const bulkRecalculateStock = async (businessId, items, options = {}) => {
-  const { batchSize = 8, onProgress } = options
+  const { batchSize = 8, onProgress, userId, userName } = options
   if (!Array.isArray(items) || items.length === 0) {
     return { success: true, totalChecked: 0, totalCorrected: 0, errors: 0, corrections: [], errorDetails: [] }
   }
 
   const corrections = []
   const errorDetails = []
+  // Snapshots de los items efectivamente modificados — base del backup para revertir.
+  const backupItems = []
   let processed = 0
   let corrected = 0
   let errors = 0
@@ -1258,9 +1274,35 @@ export const bulkRecalculateStock = async (businessId, items, options = {}) => {
           variantsCount: result.variantsCount || 0,
           byWarehouse: result.byWarehouse || null,
         })
+        // Guardar snapshot para poder revertir más adelante.
+        if (result.previousSnapshot) {
+          backupItems.push({
+            id: item.id,
+            name: item.name || item.id,
+            isIngredient: !!item.isIngredient,
+            previousSnapshot: result.previousSnapshot,
+          })
+        }
       }
     })
     reportProgress(batch[batch.length - 1]?.name)
+  }
+
+  // Crear backup en Firestore con los items que efectivamente cambiaron.
+  // El backup permite revertir la verificación durante 7 días si algo se
+  // desconfiguró (ej. stock que dependía de stock inicial no registrado).
+  let backupId = null
+  if (backupItems.length > 0) {
+    try {
+      backupId = await createStockBackup(businessId, backupItems, {
+        userId: userId || null,
+        userName: userName || null,
+        totalChecked: processed,
+        totalCorrected: corrected,
+      })
+    } catch (err) {
+      console.error('Error creando backup de stock (la verificación continuó):', err)
+    }
   }
 
   return {
@@ -1270,6 +1312,218 @@ export const bulkRecalculateStock = async (businessId, items, options = {}) => {
     errors,
     corrections,
     errorDetails,
+    backupId,
+  }
+}
+
+// =====================================================
+// STOCK BACKUPS (Para revertir verificación masiva)
+// =====================================================
+
+const STOCK_BACKUP_TTL_DAYS = 7
+
+/**
+ * Crea un backup del estado previo al recalculo masivo de stock.
+ * Permite revertir si la verificación desconfiguró productos (ej. cuando
+ * stock inicial no fue registrado como movimiento).
+ *
+ * Si el backup tiene muchos items (>400), se divide en sub-chunks para
+ * no exceder el límite de 1MB por documento de Firestore.
+ *
+ * @param {string} businessId
+ * @param {Array<{id:string, name:string, isIngredient:boolean, previousSnapshot:object}>} backupItems
+ * @param {object} metadata - { userId, userName, totalChecked, totalCorrected }
+ * @returns {Promise<string>} - ID del backup creado
+ */
+export const createStockBackup = async (businessId, backupItems, metadata = {}) => {
+  if (!Array.isArray(backupItems) || backupItems.length === 0) {
+    throw new Error('createStockBackup: backupItems vacío')
+  }
+
+  const backupRef = collection(db, 'businesses', businessId, 'stockBackups')
+  const CHUNK_SIZE = 400
+
+  // Si cabe en un solo doc, lo guardamos inline. Si no, chunks separados.
+  if (backupItems.length <= CHUNK_SIZE) {
+    const docRef = await addDoc(backupRef, {
+      createdAt: serverTimestamp(),
+      reverted: false,
+      revertedAt: null,
+      userId: metadata.userId || null,
+      userName: metadata.userName || null,
+      totalChecked: metadata.totalChecked || 0,
+      totalCorrected: metadata.totalCorrected || backupItems.length,
+      itemsCount: backupItems.length,
+      items: backupItems,
+      hasChunks: false,
+    })
+    return docRef.id
+  }
+
+  // Caso grande: doc principal + sub-chunks en una subcolección.
+  const docRef = await addDoc(backupRef, {
+    createdAt: serverTimestamp(),
+    reverted: false,
+    revertedAt: null,
+    userId: metadata.userId || null,
+    userName: metadata.userName || null,
+    totalChecked: metadata.totalChecked || 0,
+    totalCorrected: metadata.totalCorrected || backupItems.length,
+    itemsCount: backupItems.length,
+    hasChunks: true,
+    chunkCount: Math.ceil(backupItems.length / CHUNK_SIZE),
+  })
+
+  const chunksRef = collection(db, 'businesses', businessId, 'stockBackups', docRef.id, 'chunks')
+  for (let i = 0; i < backupItems.length; i += CHUNK_SIZE) {
+    const chunk = backupItems.slice(i, i + CHUNK_SIZE)
+    await addDoc(chunksRef, { index: i / CHUNK_SIZE, items: chunk })
+  }
+  return docRef.id
+}
+
+/**
+ * Devuelve el último backup activo (no revertido y dentro del TTL de 7 días).
+ * Útil para mostrar el botón "Revertir verificación" en Inventario.
+ *
+ * @param {string} businessId
+ * @param {number} [maxAgeDays=7]
+ * @returns {Promise<{id:string, createdAt:Date, totalCorrected:number, itemsCount:number, userName:string}|null>}
+ */
+export const getLatestActiveStockBackup = async (businessId, maxAgeDays = STOCK_BACKUP_TTL_DAYS) => {
+  try {
+    const backupRef = collection(db, 'businesses', businessId, 'stockBackups')
+    const q = query(
+      backupRef,
+      where('reverted', '==', false),
+      orderBy('createdAt', 'desc'),
+      firestoreLimit(1),
+    )
+    const snap = await getDocs(q)
+    if (snap.empty) return null
+
+    const docSnap = snap.docs[0]
+    const data = docSnap.data()
+    const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null
+
+    // Verificar TTL (7 días por defecto)
+    if (createdAt) {
+      const ageMs = Date.now() - createdAt.getTime()
+      const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000
+      if (ageMs > maxAgeMs) return null
+    }
+
+    return {
+      id: docSnap.id,
+      createdAt,
+      totalChecked: data.totalChecked || 0,
+      totalCorrected: data.totalCorrected || 0,
+      itemsCount: data.itemsCount || 0,
+      userName: data.userName || '',
+      hasChunks: !!data.hasChunks,
+    }
+  } catch (error) {
+    console.error('Error obteniendo backup activo de stock:', error)
+    return null
+  }
+}
+
+/**
+ * Lee los items de un backup (combinando chunks si están separados).
+ */
+const loadBackupItems = async (businessId, backupId) => {
+  const backupDocRef = doc(db, 'businesses', businessId, 'stockBackups', backupId)
+  const backupDoc = await getDoc(backupDocRef)
+  if (!backupDoc.exists()) throw new Error('Backup no encontrado')
+  const data = backupDoc.data()
+
+  if (!data.hasChunks) {
+    return { data, items: data.items || [] }
+  }
+
+  const chunksRef = collection(db, 'businesses', businessId, 'stockBackups', backupId, 'chunks')
+  const chunksSnap = await getDocs(query(chunksRef, orderBy('index', 'asc')))
+  const items = []
+  chunksSnap.forEach(d => {
+    const chunk = d.data()
+    if (Array.isArray(chunk.items)) items.push(...chunk.items)
+  })
+  return { data, items }
+}
+
+/**
+ * Revierte un backup: restaura el stock/warehouseStocks/variants de cada item
+ * al estado previo a la verificación masiva. Marca el backup como `reverted`.
+ *
+ * @param {string} businessId
+ * @param {string} backupId
+ * @param {object} [options]
+ * @param {(state:{processed:number,total:number,errors:number})=>void} [options.onProgress]
+ * @returns {Promise<{success:boolean, restored:number, errors:number, errorDetails:Array}>}
+ */
+export const revertStockBackup = async (businessId, backupId, options = {}) => {
+  const { onProgress, batchSize = 8 } = options
+  try {
+    const { data: backupData, items } = await loadBackupItems(businessId, backupId)
+    if (backupData.reverted) {
+      return { success: false, error: 'Este backup ya fue revertido' }
+    }
+    if (!items.length) {
+      return { success: false, error: 'El backup no tiene items para restaurar' }
+    }
+
+    let processed = 0
+    let restored = 0
+    let errors = 0
+    const errorDetails = []
+
+    const reportProgress = () => {
+      if (onProgress) onProgress({ processed, total: items.length, errors })
+    }
+    reportProgress()
+
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize)
+      await Promise.all(batch.map(async (item) => {
+        try {
+          const collectionName = item.isIngredient ? 'ingredients' : 'products'
+          const itemRef = doc(db, 'businesses', businessId, collectionName, item.id)
+          const snapshot = item.previousSnapshot || {}
+          const updateData = {
+            warehouseStocks: snapshot.warehouseStocks || [],
+            updatedAt: serverTimestamp(),
+          }
+          if (item.isIngredient) {
+            updateData.currentStock = snapshot.currentStock ?? 0
+          } else {
+            updateData.stock = snapshot.stock ?? 0
+          }
+          if (snapshot.variants) {
+            updateData.variants = snapshot.variants
+          }
+          await updateDoc(itemRef, updateData)
+          restored += 1
+        } catch (err) {
+          errors += 1
+          errorDetails.push({ id: item.id, name: item.name, error: err?.message || String(err) })
+        } finally {
+          processed += 1
+        }
+      }))
+      reportProgress()
+    }
+
+    // Marcar backup como revertido
+    const backupDocRef = doc(db, 'businesses', businessId, 'stockBackups', backupId)
+    await updateDoc(backupDocRef, {
+      reverted: true,
+      revertedAt: serverTimestamp(),
+    })
+
+    return { success: true, restored, errors, errorDetails }
+  } catch (error) {
+    console.error('Error revirtiendo backup de stock:', error)
+    return { success: false, error: error.message }
   }
 }
 
@@ -1428,6 +1682,9 @@ export default {
   syncAllProductsStock,
   recalculateStockFromMovements,
   bulkRecalculateStock,
+  createStockBackup,
+  getLatestActiveStockBackup,
+  revertStockBackup,
   recalculateStockFromWarehouses,
   getTotalAvailableStock,
   // Inventory Counts
