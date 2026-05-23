@@ -83,6 +83,41 @@ html {
 const DAY_NAMES = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 0: 'Domingo' }
 const DAY_SHORT = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 0: 'Dom' }
 
+// Etiqueta corta y legible para la unidad del producto. Acepta tanto códigos
+// SUNAT (NIU, KGM, ...) como nombres legibles legacy (UNIDAD, KG, ...).
+const SHORT_UNIT_LABELS = {
+  NIU: 'unid', UNIDAD: 'unid',
+  KGM: 'kg', KG: 'kg',
+  GRM: 'g', G: 'g',
+  LTR: 'L', LITRO: 'L', L: 'L',
+  MLT: 'ml', ML: 'ml',
+  MTR: 'm', METRO: 'm', M: 'm',
+  CMT: 'cm', CM: 'cm',
+  BX: 'caja', PK: 'paq', SET: 'set',
+}
+const getShortUnitLabel = (unit) => {
+  if (!unit) return ''
+  return SHORT_UNIT_LABELS[String(unit).toUpperCase()] || String(unit).toLowerCase()
+}
+
+// Formatea cantidad para visualización: enteros sin decimales, decimales
+// con hasta 2 dígitos limpios (1 → "1", 1.5 → "1.5", 1.25 → "1.25").
+const formatQty = (n) => {
+  const num = Number(n) || 0
+  if (Number.isInteger(num)) return String(num)
+  return Number(num.toFixed(3)).toString()
+}
+
+// Parsea cantidad libre del usuario (acepta "1,5" y "1.5"). Devuelve null si inválido.
+const parseQtyInput = (str) => {
+  if (str === null || str === undefined) return null
+  const cleaned = String(str).trim().replace(',', '.')
+  if (cleaned === '') return null
+  const num = parseFloat(cleaned)
+  if (!Number.isFinite(num) || num <= 0) return null
+  return num
+}
+
 const isBusinessOpen = (businessHours) => {
   if (!businessHours?.enabled) return { open: true, message: '' }
   const now = new Date()
@@ -1005,41 +1040,76 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           )}
 
           {/* Selector de cantidad */}
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-gray-600">Cantidad:</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const newQty = Math.max(1, quantity - 1)
-                  // Auto-ajustar al mejor nivel de precio aplicable a la nueva cantidad.
-                  // Esto cubre tanto downgrade (de Especial → VIP → Delivery → Público)
-                  // como upgrade — siempre elige el más barato aplicable.
-                  if (hasMultiplePrices) {
-                    setSelectedPriceLevel(computeBestPriceLevelFor(newQty))
-                  }
-                  setQuantity(newQty)
-                }}
-                className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-              <span className="w-12 text-center text-xl font-semibold">{quantity}</span>
-              <button
-                onClick={() => {
-                  const newQty = quantity + 1
-                  // Igual lógica que el botón "−": elegir el nivel más barato aplicable.
-                  // Esto permite escalar Público → Delivery → VIP → Especial al subir.
-                  if (hasMultiplePrices) {
-                    setSelectedPriceLevel(computeBestPriceLevelFor(newQty))
-                  }
-                  setQuantity(newQty)
-                }}
-                className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+          {(() => {
+            // Productos con `allowDecimalQuantity` (ej. avena por kilo, pollo por kilo)
+            // muestran input editable + saltos de 0.5. Resto: comportamiento entero clásico.
+            const allowsDecimals = !!product.allowDecimalQuantity
+            const step = allowsDecimals ? 0.5 : 1
+            const minQty = allowsDecimals ? 0.01 : 1
+            const unitLabel = getShortUnitLabel(product.unit)
+
+            const applyQty = (newQty) => {
+              const clamped = Math.max(minQty, Number(newQty.toFixed(3)))
+              if (hasMultiplePrices) {
+                setSelectedPriceLevel(computeBestPriceLevelFor(clamped))
+              }
+              setQuantity(clamped)
+            }
+
+            return (
+              <div className="flex items-center gap-4 mb-6">
+                <span className="text-gray-600">Cantidad:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => applyQty(quantity - step)}
+                    className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  {allowsDecimals ? (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatQty(quantity)}
+                      onChange={(e) => {
+                        // Permitir tipear libremente — validamos en blur.
+                        const raw = e.target.value.replace(',', '.')
+                        // Solo dígitos y un punto
+                        if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                          const num = parseFloat(raw)
+                          if (!Number.isNaN(num) && num > 0) {
+                            if (hasMultiplePrices) {
+                              setSelectedPriceLevel(computeBestPriceLevelFor(num))
+                            }
+                            setQuantity(num)
+                          } else if (raw === '' || raw === '.') {
+                            // Mientras está editando, dejarlo borrar — se recupera en blur
+                            setQuantity(0)
+                          }
+                        }
+                      }}
+                      onBlur={() => {
+                        // Si quedó en 0 o vacío al perder foco, restaurar mínimo.
+                        if (!quantity || quantity < minQty) applyQty(minQty)
+                      }}
+                      className="w-20 text-center text-xl font-semibold border-2 border-gray-200 rounded-lg py-1 focus:border-primary-500 focus:outline-none"
+                    />
+                  ) : (
+                    <span className="w-12 text-center text-xl font-semibold">{quantity}</span>
+                  )}
+                  <button
+                    onClick={() => applyQty(quantity + step)}
+                    className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  {allowsDecimals && unitLabel && (
+                    <span className="text-sm font-medium text-gray-500 ml-1">{unitLabel}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Botón agregar */}
           <button
@@ -1119,7 +1189,7 @@ function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddM
             {activeTableOrder.items.map((item, idx) => (
               <div key={item.itemId || idx} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
                 <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-gray-600">{item.quantity}</span>
+                  <span className="text-xs font-bold text-gray-600">{formatQty(item.quantity)}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -1678,7 +1748,11 @@ function CartDrawer({
                   // - item.catalogHidePrice=true → esa línea dice "(A consultar)"
                   // - si hay al menos un item oculto o el global está off → el total también es "A consultar"
                   const orderItems = (orderConfirmItems || []).map(item => {
-                    let line = `• ${item.quantity}x ${item.name}`
+                    // Para productos por peso (kg, L, etc.) mostramos "1.5 kg" en vez de "1.5x"
+                    const qtyDisplay = item.allowDecimalQuantity
+                      ? `${formatQty(item.quantity)} ${getShortUnitLabel(item.unit)}`
+                      : `${formatQty(item.quantity)}x`
+                    let line = `• ${qtyDisplay} ${item.name}`
                     if (item.modifiers?.length > 0) {
                       line += ` (${item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(', ')})`
                     }
@@ -1814,27 +1888,44 @@ function CartDrawer({
                         </div>
                       )}
                       {showPrices && <p className="text-gray-600 mt-1">{fmtCartUnit(item)}</p>}
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          onClick={() => onUpdateQuantity(item.cartItemId || item.id, Math.max(0, item.quantity - 1))}
-                          className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-8 text-center font-medium">{item.quantity}</span>
-                        <button
-                          onClick={() => onUpdateQuantity(item.cartItemId || item.id, item.quantity + 1)}
-                          className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => onRemove(item.cartItemId || item.id)}
-                          className="ml-auto w-8 h-8 rounded-full text-red-500 hover:bg-red-50 flex items-center justify-center"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {(() => {
+                        // Productos por peso (allowDecimalQuantity): saltos de 0.5, mínimo 0.5.
+                        // Resto: comportamiento entero clásico.
+                        const itemAllowsDecimals = !!item.allowDecimalQuantity
+                        const itemStep = itemAllowsDecimals ? 0.5 : 1
+                        const itemMin = itemAllowsDecimals ? 0.5 : 0
+                        const itemUnitLabel = getShortUnitLabel(item.unit)
+                        const newQtyMinus = Math.max(itemMin, Number((item.quantity - itemStep).toFixed(3)))
+                        const newQtyPlus = Number((item.quantity + itemStep).toFixed(3))
+                        return (
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              onClick={() => onUpdateQuantity(item.cartItemId || item.id, newQtyMinus)}
+                              className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="min-w-[2rem] text-center font-medium">
+                              {formatQty(item.quantity)}
+                              {itemAllowsDecimals && itemUnitLabel && (
+                                <span className="text-xs text-gray-500 ml-0.5">{itemUnitLabel}</span>
+                              )}
+                            </span>
+                            <button
+                              onClick={() => onUpdateQuantity(item.cartItemId || item.id, newQtyPlus)}
+                              className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => onRemove(item.cartItemId || item.id)}
+                              className="ml-auto w-8 h-8 rounded-full text-red-500 hover:bg-red-50 flex items-center justify-center"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -2754,7 +2845,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       return Number(convertFromBase(pricePen, 'USD', catalogExchangeRate || 1).toFixed(2))
     }
     const items = cart.map(item => {
-      let itemText = `• ${item.quantity}x ${item.name}`
+      // Para productos por peso (kg, L, etc.) usamos "1.5 kg" en vez de "1.5x"
+      const qtyDisplay = item.allowDecimalQuantity
+        ? `${formatQty(item.quantity)} ${getShortUnitLabel(item.unit)}`
+        : `${formatQty(item.quantity)}x`
+      let itemText = `• ${qtyDisplay} ${item.name}`
       // Agregar nivel de precio si no es el default
       if (item.priceLevelLabel) {
         itemText += ` (${item.priceLevelLabel})`
