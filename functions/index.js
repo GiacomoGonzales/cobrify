@@ -1,5 +1,6 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
@@ -9952,6 +9953,258 @@ export const validateShopifreeConnection = onCall(
         error: apiError || err.message || 'Error desconocido al validar',
         status: status || null,
       }
+    }
+  }
+)
+
+// -----------------------------------------------------
+// SHOPIFREE Fase 1: Push automático de productos
+// -----------------------------------------------------
+
+import {
+  postProductsBulk as shopifreePostProducts,
+  deleteProductByExternalId as shopifreeDeleteProduct,
+  mapCobrifyProductToShopifree,
+  hasRelevantProductChange,
+} from './src/services/shopifreeApi.js'
+
+const SHOPIFREE_API_BASE_LOG = 'https://shopifree.app/api/v1'
+
+/**
+ * Resuelve el mapa { categoryId → categoryName } desde el doc del business.
+ * Lo necesitamos para mandar `categoryName` (Shopifree hace find-or-create por nombre).
+ */
+const getCategoryMap = async (businessId) => {
+  try {
+    const snap = await db.collection('businesses').doc(businessId).get()
+    const cats = snap.data()?.productCategories
+    if (!Array.isArray(cats)) return new Map()
+    const map = new Map()
+    for (const c of cats) {
+      if (c?.id && c?.name) map.set(c.id, c.name)
+    }
+    return map
+  } catch (err) {
+    console.warn('[shopifree] no se pudo cargar categorías:', err.message)
+    return new Map()
+  }
+}
+
+/**
+ * Loguea un evento de sincronización en businesses/{bid}/integrationLogs.
+ * Se usa para debugging y para la UI de monitoreo de Fase 3.
+ *
+ * Mantenemos solo los últimos N logs por negocio para no inflar Firestore;
+ * la limpieza se hace en un cron aparte (Fase 3) o cuando se accedan.
+ */
+const logIntegrationEvent = async (businessId, eventData) => {
+  try {
+    await db.collection('businesses').doc(businessId)
+      .collection('integrationLogs').add({
+        integration: 'shopifree',
+        createdAt: FieldValue.serverTimestamp(),
+        ...eventData,
+      })
+  } catch (err) {
+    console.error('[shopifree] error guardando log:', err.message)
+  }
+}
+
+/**
+ * Trigger Firestore: cada vez que se crea/edita/borra un producto, sincroniza
+ * con Shopifree si el negocio tiene conexión activa.
+ *
+ * - create: POST /products (insert)
+ * - update: POST /products (upsert; se reenvía completo, no patch)
+ * - delete: DELETE /products?externalId=...
+ *
+ * Optimizaciones:
+ * - Salta si el negocio NO tiene shopifreeConfig.apiKey.
+ * - En updates, solo dispara si cambió algún campo relevante (no en cada
+ *   updatedAt o cambios de stock por movimientos internos no observables).
+ */
+export const onShopifreeProductSync = onDocumentWritten(
+  'businesses/{businessId}/products/{productId}',
+  async (event) => {
+    const { businessId, productId } = event.params
+    const before = event.data.before?.exists ? event.data.before.data() : null
+    const after = event.data.after?.exists ? event.data.after.data() : null
+
+    // Cargar config del business (apiKey)
+    let businessData
+    try {
+      const businessDoc = await db.collection('businesses').doc(businessId).get()
+      if (!businessDoc.exists) return
+      businessData = businessDoc.data()
+    } catch (err) {
+      console.error('[shopifree] error leyendo business:', err.message)
+      return
+    }
+
+    const apiKey = businessData?.shopifreeConfig?.apiKey
+    if (!apiKey) return // negocio no conectado a Shopifree
+
+    // Si el toggle global está OFF, no hacer nada (permite "pausar" la sync).
+    if (businessData.shopifreeEnabled === false) return
+
+    const isDelete = !after
+    const isCreate = !before && !!after
+    const isUpdate = !!before && !!after
+
+    // Filtrar updates irrelevantes (evita loops si solo cambió updatedAt)
+    if (isUpdate && !hasRelevantProductChange(before, after)) return
+
+    try {
+      if (isDelete) {
+        const result = await shopifreeDeleteProduct(apiKey, productId)
+        await logIntegrationEvent(businessId, {
+          action: 'product_delete',
+          ok: true,
+          externalId: productId,
+          productName: before?.name || null,
+          result,
+        })
+      } else {
+        const categoryMap = await getCategoryMap(businessId)
+        const mapped = mapCobrifyProductToShopifree(productId, after, { categoryMap })
+        if (!mapped) return
+        const result = await shopifreePostProducts(apiKey, [mapped])
+        await logIntegrationEvent(businessId, {
+          action: isCreate ? 'product_create' : 'product_update',
+          ok: (result?.errors?.length || 0) === 0,
+          externalId: productId,
+          productName: after?.name || null,
+          result,
+        })
+      }
+    } catch (err) {
+      const status = err.response?.status
+      const apiError = err.response?.data?.error
+      console.error(`[shopifree] sync error product=${productId}:`, err.message, apiError)
+      await logIntegrationEvent(businessId, {
+        action: isDelete ? 'product_delete' : (isCreate ? 'product_create' : 'product_update'),
+        ok: false,
+        externalId: productId,
+        productName: after?.name || before?.name || null,
+        error: apiError || err.message || 'Error desconocido',
+        status: status || null,
+      })
+    }
+  }
+)
+
+/**
+ * Callable manual: sincroniza TODOS los productos del negocio con Shopifree.
+ * Útil para primera carga después de conectar, o para reparar inconsistencias.
+ *
+ * Procesa en chunks de 100 productos (mitad del límite Shopifree de 200 para
+ * dejar margen) con delay entre chunks para no saturar.
+ *
+ * Input: { businessId: string }
+ * Output: { ok, totalChecked, totalPushed, errors[] }
+ */
+export const resyncShopifreeProducts = onCall(
+  { region: 'us-central1', cors: true, timeoutSeconds: 540, memory: '512MiB' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes estar autenticado')
+    }
+    const { businessId } = request.data || {}
+    if (!businessId) {
+      throw new HttpsError('invalid-argument', 'businessId requerido')
+    }
+
+    // Permisos
+    const isOwner = request.auth.uid === businessId
+    let isSubuser = false
+    if (!isOwner) {
+      const userDoc = await db.collection('users').doc(request.auth.uid).get()
+      if (userDoc.exists && userDoc.data()?.ownerId === businessId) {
+        isSubuser = true
+      }
+    }
+    if (!isOwner && !isSubuser) {
+      throw new HttpsError('permission-denied', 'Sin acceso a este negocio')
+    }
+
+    const businessDoc = await db.collection('businesses').doc(businessId).get()
+    if (!businessDoc.exists) {
+      throw new HttpsError('not-found', 'Negocio no existe')
+    }
+    const businessData = businessDoc.data()
+    const apiKey = businessData?.shopifreeConfig?.apiKey
+    if (!apiKey) {
+      throw new HttpsError('failed-precondition', 'Shopifree no está conectado')
+    }
+
+    // Cargar categorías y todos los productos
+    const categoryMap = await getCategoryMap(businessId)
+    const productsSnap = await db.collection('businesses').doc(businessId)
+      .collection('products').get()
+
+    const allMapped = []
+    productsSnap.forEach(docSnap => {
+      const mapped = mapCobrifyProductToShopifree(docSnap.id, docSnap.data(), { categoryMap })
+      if (mapped) allMapped.push(mapped)
+    })
+
+    const CHUNK_SIZE = 100
+    const CHUNK_DELAY_MS = 800
+    let totalPushed = 0
+    let totalCreated = 0
+    let totalUpdated = 0
+    const errors = []
+
+    for (let i = 0; i < allMapped.length; i += CHUNK_SIZE) {
+      const chunk = allMapped.slice(i, i + CHUNK_SIZE)
+      try {
+        const result = await shopifreePostProducts(apiKey, chunk)
+        totalPushed += chunk.length
+        totalCreated += result?.created || 0
+        totalUpdated += result?.updated || 0
+        if (Array.isArray(result?.errors) && result.errors.length > 0) {
+          errors.push(...result.errors)
+        }
+      } catch (err) {
+        const apiError = err.response?.data?.error
+        errors.push({
+          chunkStart: i,
+          chunkSize: chunk.length,
+          error: apiError || err.message || 'Error desconocido',
+        })
+      }
+      if (i + CHUNK_SIZE < allMapped.length) {
+        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
+      }
+    }
+
+    // Log de la operación
+    await logIntegrationEvent(businessId, {
+      action: 'products_resync_all',
+      ok: errors.length === 0,
+      totalChecked: allMapped.length,
+      totalPushed,
+      totalCreated,
+      totalUpdated,
+      errorCount: errors.length,
+    })
+
+    // Actualizar lastResyncAt en la config
+    await db.collection('businesses').doc(businessId).set({
+      shopifreeConfig: {
+        lastProductsResyncAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+
+    return {
+      ok: errors.length === 0,
+      totalChecked: allMapped.length,
+      totalPushed,
+      totalCreated,
+      totalUpdated,
+      errors: errors.slice(0, 20), // limitar payload de respuesta
+      errorCount: errors.length,
     }
   }
 )

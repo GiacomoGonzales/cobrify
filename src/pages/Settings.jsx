@@ -247,6 +247,8 @@ export default function Settings() {
   const [isConnectingShopifree, setIsConnectingShopifree] = useState(false)
   const [isPingingShopifree, setIsPingingShopifree] = useState(false)
   const [shopifreeConnectionResult, setShopifreeConnectionResult] = useState(null)
+  const [isResyncingShopifree, setIsResyncingShopifree] = useState(false)
+  const [shopifreeResyncResult, setShopifreeResyncResult] = useState(null)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -10206,19 +10208,139 @@ export default function Settings() {
                   </div>
                 )}
 
-                {/* Aviso sobre próximas fases */}
-                {isConnected && (
-                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
-                    <p className="font-medium mb-1">Próximos pasos</p>
-                    <p>
-                      La sincronización automática de productos y la captación
-                      de pedidos se activarán en las próximas fases de la integración.
-                      Por ahora, sólo está validada la conexión.
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
+
+            {/* Card: Sincronización de productos (Fase 1) */}
+            {isConnected && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-5 h-5 text-emerald-600" />
+                    <CardTitle>Sincronización de productos</CardTitle>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Tus productos se sincronizan automáticamente con Shopifree
+                    cuando los creás, editás o eliminás. Si necesitás resincronizar
+                    todos los productos manualmente (ej. primera carga o reparación),
+                    usá el botón de abajo.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+
+                  {/* Última resincronización */}
+                  {cfg?.lastProductsResyncAt && (
+                    <div className="text-xs text-gray-600">
+                      <strong>Última resincronización completa:</strong>{' '}
+                      {cfg.lastProductsResyncAt.toDate
+                        ? cfg.lastProductsResyncAt.toDate().toLocaleString('es-PE')
+                        : '—'}
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    disabled={isResyncingShopifree || isDemoMode}
+                    onClick={async () => {
+                      if (isDemoMode) {
+                        toast.error('No disponible en modo demo')
+                        return
+                      }
+                      if (!window.confirm('¿Sincronizar todos los productos del inventario con Shopifree? Esto puede tardar varios minutos si tenés muchos productos.')) {
+                        return
+                      }
+                      setIsResyncingShopifree(true)
+                      setShopifreeResyncResult(null)
+                      try {
+                        const fn = httpsCallable(functions, 'resyncShopifreeProducts')
+                        const result = await fn({ businessId: getBusinessId() })
+                        setShopifreeResyncResult(result.data)
+                        if (result.data?.ok) {
+                          toast.success(`Sincronizados ${result.data.totalPushed} productos`)
+                        } else {
+                          toast.error(`Sincronización con errores: ${result.data?.errorCount || 0}`)
+                        }
+                        if (refreshBusinessSettings) await refreshBusinessSettings()
+                      } catch (err) {
+                        console.error('Error resincronizando productos:', err)
+                        toast.error('Error: ' + (err.message || 'desconocido'))
+                        setShopifreeResyncResult({ ok: false, error: err.message })
+                      } finally {
+                        setIsResyncingShopifree(false)
+                      }
+                    }}
+                  >
+                    {isResyncingShopifree ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Sincronizando…</>
+                    ) : (
+                      <><RefreshCw className="w-4 h-4 mr-1.5" />Sincronizar todos los productos</>
+                    )}
+                  </Button>
+
+                  {/* Resultado del resync */}
+                  {shopifreeResyncResult && (
+                    <div className={`p-3 rounded-lg border text-sm ${
+                      shopifreeResyncResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        {shopifreeResyncResult.ok ? (
+                          <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-medium">
+                            {shopifreeResyncResult.ok ? 'Sincronización exitosa' : 'Sincronización con errores'}
+                          </p>
+                          {typeof shopifreeResyncResult.totalChecked === 'number' && (
+                            <div className="text-xs mt-1 space-y-0.5">
+                              <div>Procesados: {shopifreeResyncResult.totalChecked}</div>
+                              <div>Pusheados: {shopifreeResyncResult.totalPushed}</div>
+                              {(shopifreeResyncResult.totalCreated || 0) > 0 && (
+                                <div>Creados nuevos: {shopifreeResyncResult.totalCreated}</div>
+                              )}
+                              {(shopifreeResyncResult.totalUpdated || 0) > 0 && (
+                                <div>Actualizados: {shopifreeResyncResult.totalUpdated}</div>
+                              )}
+                              {(shopifreeResyncResult.errorCount || 0) > 0 && (
+                                <div className="text-red-700">
+                                  Errores: {shopifreeResyncResult.errorCount}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {shopifreeResyncResult.errors?.length > 0 && (
+                            <details className="mt-2 text-xs">
+                              <summary className="cursor-pointer underline">Ver detalle de errores</summary>
+                              <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                                {shopifreeResyncResult.errors.map((e, idx) => (
+                                  <li key={idx} className="font-mono text-[11px]">
+                                    {e.externalId ? `[${e.externalId}] ` : ''}
+                                    {e.error || JSON.stringify(e)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                    <p className="font-medium mb-1">Cómo funciona</p>
+                    <ul className="space-y-0.5 list-disc pl-4">
+                      <li>Cada vez que creás, editás o eliminás un producto en Cobrify, se envía automáticamente a Shopifree.</li>
+                      <li>Productos con variantes (talla/color) se pushean como producto único sin variantes (Shopifree v1 no soporta variantes en el API).</li>
+                      <li>Productos ocultos del catálogo o desactivados se mandan como inactivos.</li>
+                    </ul>
+                  </div>
+
+                </CardContent>
+              </Card>
+            )}
           </div>
         )
       })()}
