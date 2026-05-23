@@ -3759,98 +3759,99 @@ export default function Settings() {
                 </p>
               </div>
 
-              {/* Integraciones */}
-              {businessMode === 'restaurant' && (
-                <>
-                  <div className="border-t border-gray-200"></div>
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900 mb-1">Integraciones</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Conecta servicios externos a Cobrify.
-                    </p>
-                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={businessSettings?.rappiEnabled === true}
-                        onChange={async (e) => {
-                          if (isDemoMode) {
-                            toast.error('No disponible en modo demo')
-                            return
-                          }
-                          const enabled = e.target.checked
-                          try {
-                            const businessRef = doc(db, 'businesses', getBusinessId())
-                            await setDoc(businessRef, {
-                              rappiEnabled: enabled,
-                              updatedAt: serverTimestamp(),
-                            }, { merge: true })
-                            if (refreshBusinessSettings) await refreshBusinessSettings()
-                            toast.success(enabled
-                              ? 'Integración con Rappi activada'
-                              : 'Integración con Rappi desactivada')
-                          } catch (error) {
-                            console.error('Error toggle Rappi:', error)
-                            toast.error('No se pudo actualizar')
-                          }
-                        }}
-                        className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900 flex items-center gap-2">
-                          <Bike className="w-4 h-4 text-orange-600" />
-                          Habilitar integración con Rappi
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          Activa la captación de pedidos desde Rappi. Se mostrará el módulo
-                          "Pedidos Rappi" en el menú lateral y un nuevo tab "Rappi" en esta
-                          configuración para cargar tus credenciales.
-                        </p>
-                      </div>
-                    </label>
+              {/* Integraciones — visibles para TODOS los modos de negocio.
+                  Cada toggle individual decide si aplica al modo (ej. Rappi solo restaurant). */}
+              <div className="border-t border-gray-200"></div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Integraciones</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Conecta servicios externos a Cobrify.
+                </p>
 
-                    {/* Toggle Shopifree: tienda online externa */}
-                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors mt-3">
-                      <input
-                        type="checkbox"
-                        checked={businessSettings?.shopifreeEnabled === true}
-                        onChange={async (e) => {
-                          if (isDemoMode) {
-                            toast.error('No disponible en modo demo')
-                            return
-                          }
-                          const enabled = e.target.checked
-                          try {
-                            const businessRef = doc(db, 'businesses', getBusinessId())
-                            await setDoc(businessRef, {
-                              shopifreeEnabled: enabled,
-                              updatedAt: serverTimestamp(),
-                            }, { merge: true })
-                            if (refreshBusinessSettings) await refreshBusinessSettings()
-                            toast.success(enabled
-                              ? 'Integración con Shopifree activada'
-                              : 'Integración con Shopifree desactivada')
-                          } catch (error) {
-                            console.error('Error toggle Shopifree:', error)
-                            toast.error('No se pudo actualizar')
-                          }
-                        }}
-                        className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900 flex items-center gap-2">
-                          <ShoppingBag className="w-4 h-4 text-emerald-600" />
-                          Habilitar integración con Shopifree (Tienda Online)
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          Conecta tu catálogo Cobrify con tu tienda online en Shopifree.
-                          Aparecerá un nuevo tab "Tienda Online" en esta configuración
-                          para pegar tu API key y sincronizar productos y pedidos automáticamente.
-                        </p>
-                      </div>
-                    </label>
+                {/* Toggle Rappi: solo restaurant */}
+                {businessMode === 'restaurant' && (
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={businessSettings?.rappiEnabled === true}
+                      onChange={async (e) => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        const enabled = e.target.checked
+                        try {
+                          const businessRef = doc(db, 'businesses', getBusinessId())
+                          await setDoc(businessRef, {
+                            rappiEnabled: enabled,
+                            updatedAt: serverTimestamp(),
+                          }, { merge: true })
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                          toast.success(enabled
+                            ? 'Integración con Rappi activada'
+                            : 'Integración con Rappi desactivada')
+                        } catch (error) {
+                          console.error('Error toggle Rappi:', error)
+                          toast.error('No se pudo actualizar')
+                        }
+                      }}
+                      className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900 flex items-center gap-2">
+                        <Bike className="w-4 h-4 text-orange-600" />
+                        Habilitar integración con Rappi
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Activa la captación de pedidos desde Rappi. Se mostrará el módulo
+                        "Pedidos Rappi" en el menú lateral y un nuevo tab "Rappi" en esta
+                        configuración para cargar tus credenciales.
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                {/* Toggle Shopifree: aplica a TODOS los modos (retail, restaurant, farmacia, etc.) */}
+                <label className={`flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors ${businessMode === 'restaurant' ? 'mt-3' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={businessSettings?.shopifreeEnabled === true}
+                    onChange={async (e) => {
+                      if (isDemoMode) {
+                        toast.error('No disponible en modo demo')
+                        return
+                      }
+                      const enabled = e.target.checked
+                      try {
+                        const businessRef = doc(db, 'businesses', getBusinessId())
+                        await setDoc(businessRef, {
+                          shopifreeEnabled: enabled,
+                          updatedAt: serverTimestamp(),
+                        }, { merge: true })
+                        if (refreshBusinessSettings) await refreshBusinessSettings()
+                        toast.success(enabled
+                          ? 'Integración con Shopifree activada'
+                          : 'Integración con Shopifree desactivada')
+                      } catch (error) {
+                        console.error('Error toggle Shopifree:', error)
+                        toast.error('No se pudo actualizar')
+                      }
+                    }}
+                    className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900 flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                      Habilitar integración con Shopifree (Tienda Online)
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      Conecta tu catálogo Cobrify con tu tienda online en Shopifree.
+                      Aparecerá un nuevo tab "Tienda Online" en esta configuración
+                      para pegar tu API key y sincronizar productos y pedidos automáticamente.
+                    </p>
                   </div>
-                </>
-              )}
+                </label>
+              </div>
             </div>
           </CardContent>
 
