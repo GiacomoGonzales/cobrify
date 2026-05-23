@@ -22,7 +22,7 @@ import Button from '@/components/ui/Button'
  */
 export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, onStart, onCompleted }) {
   const [phase, setPhase] = useState('idle')
-  const [progress, setProgress] = useState({ processed: 0, total: 0, corrected: 0, errors: 0, currentName: '' })
+  const [progress, setProgress] = useState({ processed: 0, total: 0, corrected: 0, errors: 0, skipped: 0, currentName: '' })
   const [result, setResult] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -30,7 +30,7 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
     if (phase === 'running') return
     if (phase === 'done' && onCompleted) onCompleted()
     setPhase('idle')
-    setProgress({ processed: 0, total: 0, corrected: 0, errors: 0, currentName: '' })
+    setProgress({ processed: 0, total: 0, corrected: 0, errors: 0, skipped: 0, currentName: '' })
     setResult(null)
     setErrorMsg('')
     onClose()
@@ -38,7 +38,7 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
 
   const handleStart = async () => {
     setPhase('running')
-    setProgress({ processed: 0, total: totalItems, corrected: 0, errors: 0, currentName: '' })
+    setProgress({ processed: 0, total: totalItems, corrected: 0, errors: 0, skipped: 0, currentName: '' })
     setResult(null)
     setErrorMsg('')
     try {
@@ -84,6 +84,11 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
             <li>Los productos con variantes recalculan cada variante por separado.</li>
             <li>Solo se corrigen los productos que efectivamente estén desfasados.</li>
             <li>Los productos correctos no se tocan.</li>
+            <li className="text-gray-700">
+              <strong>Productos con lotes o números de serie se omiten por seguridad</strong>{' '}
+              (esos requieren Control de Lotes / Recuento de Inventario porque el
+              recalculo no puede reconstruir lotes/series desde movimientos).
+            </li>
             <li className="text-amber-700 font-medium">
               Se crea un backup automático. Si algo se desconfigura,
               puedes revertir con el botón &quot;Revertir verificación&quot;
@@ -119,10 +124,14 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+          <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
             <div className="bg-green-50 border border-green-200 rounded p-2">
               <div className="font-medium text-green-700">Corregidos</div>
               <div className="text-lg font-bold text-green-800">{progress.corrected}</div>
+            </div>
+            <div className="bg-gray-100 border border-gray-200 rounded p-2">
+              <div className="font-medium text-gray-700">Omitidos</div>
+              <div className="text-lg font-bold text-gray-800">{progress.skipped || 0}</div>
             </div>
             <div className="bg-red-50 border border-red-200 rounded p-2">
               <div className="font-medium text-red-700">Errores</div>
@@ -146,7 +155,7 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-3 gap-2 text-sm">
             <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
               <div className="text-xs font-medium text-green-700">Corregidos</div>
               <div className="text-2xl font-bold text-green-800">{result.totalCorrected}</div>
@@ -154,10 +163,30 @@ export default function BulkStockCorrectionModal({ isOpen, onClose, totalItems, 
             <div className="bg-gray-50 border border-gray-200 rounded p-3 text-center">
               <div className="text-xs font-medium text-gray-600">Ya estaban OK</div>
               <div className="text-2xl font-bold text-gray-800">
-                {Math.max(0, result.totalChecked - result.totalCorrected - result.errors)}
+                {Math.max(0, result.totalChecked - result.totalCorrected - result.errors - (result.totalSkipped || 0))}
               </div>
             </div>
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-center" title="Productos con lotes o series omitidos por seguridad">
+              <div className="text-xs font-medium text-amber-700">Omitidos</div>
+              <div className="text-2xl font-bold text-amber-800">{result.totalSkipped || 0}</div>
+            </div>
           </div>
+
+          {result.totalSkipped > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <div className="font-semibold">
+                  {result.totalSkipped} producto{result.totalSkipped === 1 ? '' : 's'} con lotes o series fueron omitidos
+                </div>
+                <div className="mt-1">
+                  Para esos casos usa <strong>Control de Lotes</strong> (productos con vencimiento)
+                  o <strong>Recuento de Inventario</strong> (productos con números de serie). El
+                  recalculo automático no puede reconstruir lotes ni series desde los movimientos.
+                </div>
+              </div>
+            </div>
+          )}
 
           {result.errors > 0 && (
             <div className="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-800 flex items-start gap-2">

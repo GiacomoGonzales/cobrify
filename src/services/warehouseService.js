@@ -1019,6 +1019,20 @@ export const recalculateStockFromMovements = async (businessId, productId, isIng
 
     const hasVariants = !isIngredient && product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
 
+    // Saltar productos con lotes (trackExpiration) o números de serie (trackSerials):
+    // el recalculo masivo no sabe reconstruir batches[] ni serials[] desde movimientos
+    // y dejaría el producto inconsistente (stock total OK pero detalle viejo).
+    // El usuario debe usar Control de Lotes / Recuento de Inventario para esos casos.
+    if (!isIngredient && (product.trackExpiration === true || product.trackSerials === true)) {
+      return {
+        success: true,
+        skipped: true,
+        skipReason: product.trackExpiration ? 'lotes' : 'series',
+        corrected: false,
+        previousStock,
+      }
+    }
+
     // Snapshot exacto del estado previo. Lo retornamos para que bulkRecalculateStock
     // pueda construir un backup y permitir revertir si el usuario se arrepiente.
     // Se serializa con JSON para asegurar que sea inmutable y safe-to-store.
@@ -1231,15 +1245,19 @@ export const bulkRecalculateStock = async (businessId, items, options = {}) => {
 
   const corrections = []
   const errorDetails = []
+  // Items saltados por seguridad (lotes / series). Reportados al final para
+  // que el usuario sepa que debe gestionarlos por separado.
+  const skipped = []
   // Snapshots de los items efectivamente modificados — base del backup para revertir.
   const backupItems = []
   let processed = 0
   let corrected = 0
   let errors = 0
+  let skippedCount = 0
 
   const reportProgress = (currentName) => {
     if (onProgress) {
-      onProgress({ processed, total: items.length, corrected, errors, currentName })
+      onProgress({ processed, total: items.length, corrected, errors, skipped: skippedCount, currentName })
     }
   }
   reportProgress()
@@ -1262,6 +1280,14 @@ export const bulkRecalculateStock = async (businessId, items, options = {}) => {
       if (!result.success) {
         errors += 1
         errorDetails.push({ id: item.id, name: item.name || item.id, error: result.error })
+      } else if (result.skipped) {
+        // Lotes o series — se omitió por seguridad.
+        skippedCount += 1
+        skipped.push({
+          id: item.id,
+          name: item.name || item.id,
+          reason: result.skipReason || 'lotes/series',
+        })
       } else if (result.corrected) {
         corrected += 1
         corrections.push({
@@ -1313,6 +1339,8 @@ export const bulkRecalculateStock = async (businessId, items, options = {}) => {
     corrections,
     errorDetails,
     backupId,
+    totalSkipped: skippedCount,
+    skipped,
   }
 }
 
