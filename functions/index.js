@@ -6,6 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
+import axios from 'axios'
 import { randomUUID } from 'crypto'
 import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision, emitirGuiaRemisionTransportista } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
@@ -9876,6 +9877,81 @@ export const cleanupOrphanedCloudinaryAssets = onCall(
       console.error('cleanupOrphanedCloudinaryAssets error:', err)
       stats.errors++
       throw new HttpsError('internal', err.message || String(err))
+    }
+  }
+)
+
+// =====================================================
+// SHOPIFREE — Integración con tienda online externa
+// =====================================================
+//
+// Shopifree (https://shopifree.app) expone una REST API v1 con auth Bearer.
+// El merchant genera un API key en su dashboard de Shopifree y lo pega en
+// Cobrify. Esta función valida que el key sea válido (haciendo GET /store).
+// El front decide después si guarda el key + datos del store en Firestore.
+//
+// Fase siguiente: trigger Firestore para push de productos + cron para
+// polling de pedidos nuevos.
+
+const SHOPIFREE_API_BASE = 'https://shopifree.app/api/v1'
+
+/**
+ * Valida un API key de Shopifree haciendo GET /store. No persiste nada.
+ *
+ * Input: { apiKey: string, businessId: string }
+ * Output: { ok: boolean, store?: {...}, error?: string, status?: number }
+ *
+ * Permisos: el caller debe ser el owner del business o un sub-usuario del
+ * mismo (mismo patrón que testRappiConnection).
+ */
+export const validateShopifreeConnection = onCall(
+  { region: 'us-central1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes estar autenticado')
+    }
+    const { apiKey, businessId } = request.data || {}
+    if (!apiKey || typeof apiKey !== 'string') {
+      throw new HttpsError('invalid-argument', 'apiKey requerido')
+    }
+    if (!businessId) {
+      throw new HttpsError('invalid-argument', 'businessId requerido')
+    }
+
+    // Validar permiso: owner o sub-usuario
+    const isOwner = request.auth.uid === businessId
+    let isSubuser = false
+    if (!isOwner) {
+      const userDoc = await db.collection('users').doc(request.auth.uid).get()
+      if (userDoc.exists && userDoc.data()?.ownerId === businessId) {
+        isSubuser = true
+      }
+    }
+    if (!isOwner && !isSubuser) {
+      throw new HttpsError('permission-denied', 'Sin acceso a este negocio')
+    }
+
+    try {
+      const response = await axios.get(`${SHOPIFREE_API_BASE}/store`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        timeout: 15000,
+      })
+      const store = response.data?.store
+      if (!store) {
+        return { ok: false, error: 'Respuesta inesperada de Shopifree' }
+      }
+      return { ok: true, store }
+    } catch (err) {
+      const status = err.response?.status
+      if (status === 401) {
+        return { ok: false, error: 'API key inválido o expirado', status }
+      }
+      const apiError = err.response?.data?.error
+      return {
+        ok: false,
+        error: apiError || err.message || 'Error desconocido al validar',
+        status: status || null,
+      }
     }
   }
 )

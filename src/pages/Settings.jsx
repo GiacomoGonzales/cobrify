@@ -48,6 +48,7 @@ import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, upd
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import { getTables } from '@/services/tableService'
+import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
@@ -239,6 +240,13 @@ export default function Settings() {
   const [isProvisioningRappiStore, setIsProvisioningRappiStore] = useState(false)
   const [isCheckingRappiStatus, setIsCheckingRappiStatus] = useState(false)
   const [rappiProvisioningResult, setRappiProvisioningResult] = useState(null)
+
+  // Estados para integración Shopifree (tienda online externa)
+  const [shopifreeApiKeyInput, setShopifreeApiKeyInput] = useState('')
+  const [showShopifreeKey, setShowShopifreeKey] = useState(false)
+  const [isConnectingShopifree, setIsConnectingShopifree] = useState(false)
+  const [isPingingShopifree, setIsPingingShopifree] = useState(false)
+  const [shopifreeConnectionResult, setShopifreeConnectionResult] = useState(null)
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
@@ -2523,6 +2531,8 @@ export default function Settings() {
     { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
     // Tab de Rappi: solo visible cuando businessSettings.rappiEnabled === true (modo restaurante)
     ...(businessSettings?.rappiEnabled === true ? [{ id: 'rappi', label: 'Rappi', icon: Bike }] : []),
+    // Tab de Shopifree: solo visible cuando businessSettings.shopifreeEnabled === true
+    ...(businessSettings?.shopifreeEnabled === true ? [{ id: 'shopifree', label: 'Tienda Online', icon: ShoppingBag }] : []),
     // Solo mostrar si tiene el feature bulkDelete (o en desarrollo)
     ...((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
   ]
@@ -3794,6 +3804,47 @@ export default function Settings() {
                           Activa la captación de pedidos desde Rappi. Se mostrará el módulo
                           "Pedidos Rappi" en el menú lateral y un nuevo tab "Rappi" en esta
                           configuración para cargar tus credenciales.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Toggle Shopifree: tienda online externa */}
+                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors mt-3">
+                      <input
+                        type="checkbox"
+                        checked={businessSettings?.shopifreeEnabled === true}
+                        onChange={async (e) => {
+                          if (isDemoMode) {
+                            toast.error('No disponible en modo demo')
+                            return
+                          }
+                          const enabled = e.target.checked
+                          try {
+                            const businessRef = doc(db, 'businesses', getBusinessId())
+                            await setDoc(businessRef, {
+                              shopifreeEnabled: enabled,
+                              updatedAt: serverTimestamp(),
+                            }, { merge: true })
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                            toast.success(enabled
+                              ? 'Integración con Shopifree activada'
+                              : 'Integración con Shopifree desactivada')
+                          } catch (error) {
+                            console.error('Error toggle Shopifree:', error)
+                            toast.error('No se pudo actualizar')
+                          }
+                        }}
+                        className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900 flex items-center gap-2">
+                          <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                          Habilitar integración con Shopifree (Tienda Online)
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          Conecta tu catálogo Cobrify con tu tienda online en Shopifree.
+                          Aparecerá un nuevo tab "Tienda Online" en esta configuración
+                          para pegar tu API key y sincronizar productos y pedidos automáticamente.
                         </p>
                       </div>
                     </label>
@@ -9921,6 +9972,255 @@ export default function Settings() {
           </Card>
         </div>
       )}
+
+      {/* Tab: Tienda Online — Shopifree (gated por businessSettings.shopifreeEnabled) */}
+      {activeTab === 'shopifree' && (() => {
+        const cfg = businessSettings?.shopifreeConfig
+        const isConnected = !!cfg?.apiKey && !!cfg?.storeId
+        const storeUrl = isConnected ? getShopifreeStoreUrl(cfg) : null
+        const connectedAt = cfg?.connectedAt?.toDate ? cfg.connectedAt.toDate() : null
+        const lastPingAt = cfg?.lastPingAt?.toDate ? cfg.lastPingAt.toDate() : null
+
+        return (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                  <CardTitle>Conectá tu tienda online con Shopifree</CardTitle>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Sincronizá tu catálogo y recibí los pedidos de tu tienda online
+                  directamente en Cobrify. Necesitás un API key generado desde
+                  tu dashboard de Shopifree.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+
+                {/* Estado de conexión */}
+                <div className={`p-4 rounded-lg border ${
+                  isConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {isConnected ? (
+                      <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {isConnected ? (
+                        <>
+                          <p className="font-medium text-emerald-900">
+                            Conectado a: {cfg.storeName}
+                          </p>
+                          {storeUrl && (
+                            <a
+                              href={storeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-emerald-700 hover:underline inline-flex items-center gap-1 mt-1"
+                            >
+                              {storeUrl.replace(/^https?:\/\//, '')}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 mt-3">
+                            {cfg.currency && <div><strong>Moneda:</strong> {cfg.currency}</div>}
+                            {cfg.plan && <div><strong>Plan:</strong> {cfg.plan}</div>}
+                            {cfg.country && <div><strong>País:</strong> {cfg.country}</div>}
+                            {connectedAt && (
+                              <div className="col-span-2">
+                                <strong>Conectado el:</strong> {connectedAt.toLocaleString('es-PE')}
+                              </div>
+                            )}
+                            {lastPingAt && (
+                              <div className="col-span-2">
+                                <strong>Última verificación:</strong> {lastPingAt.toLocaleString('es-PE')}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-700">
+                          Tienda no conectada. Pegá tu API key abajo para conectarla.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Formulario de conexión / desconexión */}
+                {!isConnected ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                        API Key de Shopifree
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            type={showShopifreeKey ? 'text' : 'password'}
+                            value={shopifreeApiKeyInput}
+                            onChange={(e) => {
+                              setShopifreeApiKeyInput(e.target.value)
+                              setShopifreeConnectionResult(null)
+                            }}
+                            placeholder="sfk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            className="pr-10 font-mono text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowShopifreeKey(!showShopifreeKey)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            tabIndex={-1}
+                          >
+                            {showShopifreeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <Button
+                          disabled={isConnectingShopifree || !shopifreeApiKeyInput.trim() || isDemoMode}
+                          onClick={async () => {
+                            if (isDemoMode) {
+                              toast.error('No disponible en modo demo')
+                              return
+                            }
+                            const key = shopifreeApiKeyInput.trim()
+                            if (!key.startsWith('sfk_')) {
+                              setShopifreeConnectionResult({ ok: false, error: 'El API key debe empezar con "sfk_"' })
+                              return
+                            }
+                            setIsConnectingShopifree(true)
+                            setShopifreeConnectionResult(null)
+                            try {
+                              const result = await validateShopifreeApiKey(getBusinessId(), key)
+                              if (result.ok && result.store) {
+                                await connectShopifree(getBusinessId(), key, result.store)
+                                setShopifreeConnectionResult({ ok: true, store: result.store })
+                                setShopifreeApiKeyInput('')
+                                toast.success(`Conectado a ${result.store.name}`)
+                                if (refreshBusinessSettings) await refreshBusinessSettings()
+                              } else {
+                                setShopifreeConnectionResult(result)
+                                toast.error(result.error || 'No se pudo conectar')
+                              }
+                            } catch (err) {
+                              console.error('Error conectando Shopifree:', err)
+                              setShopifreeConnectionResult({ ok: false, error: err.message || 'Error' })
+                              toast.error('Error al conectar')
+                            } finally {
+                              setIsConnectingShopifree(false)
+                            }
+                          }}
+                        >
+                          {isConnectingShopifree ? (
+                            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Conectando…</>
+                          ) : (
+                            'Conectar'
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        Generá tu API key desde{' '}
+                        <a
+                          href="https://shopifree.app/es/dashboard/api"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          tu dashboard de Shopifree
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </p>
+                    </div>
+
+                    {/* Resultado de error */}
+                    {shopifreeConnectionResult && !shopifreeConnectionResult.ok && (
+                      <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-sm text-red-800">
+                            <p className="font-medium">No se pudo conectar</p>
+                            <p className="text-xs mt-1">{shopifreeConnectionResult.error}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      disabled={isPingingShopifree || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        setIsPingingShopifree(true)
+                        try {
+                          const result = await pingShopifree(getBusinessId())
+                          if (result.ok) {
+                            toast.success('Conexión verificada')
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                          } else {
+                            toast.error('Error: ' + (result.error || 'No se pudo verificar'))
+                          }
+                        } catch (err) {
+                          console.error(err)
+                          toast.error('Error al verificar')
+                        } finally {
+                          setIsPingingShopifree(false)
+                        }
+                      }}
+                    >
+                      {isPingingShopifree ? (
+                        <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Verificando…</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4 mr-1.5" />Verificar conexión</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      disabled={isConnectingShopifree || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        if (!window.confirm('¿Desconectar la tienda de Shopifree? El catálogo dejará de sincronizarse.')) return
+                        try {
+                          await disconnectShopifree(getBusinessId())
+                          toast.success('Tienda desconectada')
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                        } catch (err) {
+                          console.error(err)
+                          toast.error('Error al desconectar')
+                        }
+                      }}
+                    >
+                      <X className="w-4 h-4 mr-1.5" />
+                      Desconectar
+                    </Button>
+                  </div>
+                )}
+
+                {/* Aviso sobre próximas fases */}
+                {isConnected && (
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                    <p className="font-medium mb-1">Próximos pasos</p>
+                    <p>
+                      La sincronización automática de productos y la captación
+                      de pedidos se activarán en las próximas fases de la integración.
+                      Por ahora, sólo está validada la conexión.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
 
       {/* Tab: Limpieza de Datos */}
       {activeTab === 'limpieza' && (
