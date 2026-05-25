@@ -255,6 +255,10 @@ function App() {
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />
+              <Route path="pedidos-online" element={<OnlineOrders />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="contabilidad" element={<Accounting />} />
             </Route>
 
             {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}
@@ -292,6 +296,10 @@ function App() {
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="contabilidad" element={<Accounting />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
             </Route>
 
             {/* Rutas de demo farmacia (sin autenticación, con datos de ejemplo de farmacia) */}
@@ -323,6 +331,11 @@ function App() {
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
+              <Route path="pedidos-online" element={<OnlineOrders />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="contabilidad" element={<Accounting />} />
             </Route>
 
             {/* Rutas de demo hotel (sin autenticación, con datos de ejemplo de hotel) */}
@@ -350,6 +363,9 @@ function App() {
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="usuarios" element={<UserManagement />} />
               <Route path="configuracion" element={<Settings />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="contabilidad" element={<Accounting />} />
             </Route>
 
             {/* Rutas de demo veterinaria (sin autenticación, con datos de ejemplo de veterinaria) */}
@@ -374,6 +390,18 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="configuracion" element={<Settings />} />
+              <Route path="pedidos-online" element={<OnlineOrders />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
+              <Route path="ordenes-compra" element={<PurchaseOrders />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="vendedores" element={<Sellers />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="flujo-caja" element={<CashFlow />} />
+              <Route path="contabilidad" element={<Accounting />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
             </Route>
 
             {/* Ruta de cuenta suspendida (sin layout) */}
