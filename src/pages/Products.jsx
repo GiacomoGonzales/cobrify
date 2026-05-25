@@ -3658,7 +3658,7 @@ export default function Products() {
               Exportar SKUs Rappi
             </Button>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {/* Selector de columnas visibles */}
             <div className="relative">
               <Button
