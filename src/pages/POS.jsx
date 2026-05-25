@@ -1312,6 +1312,18 @@ export default function POS() {
         setMarkOrderPaidOnComplete(orderInfo.markAsPaidOnComplete || false)
       }
 
+      // Si la orden está asociada a una mesa, guardar info de mesa para que se libere
+      // automáticamente al completar el pago (restaura comportamiento previo).
+      if (orderInfo.tableId) {
+        setTableData({
+          tableId: orderInfo.tableId,
+          tableNumber: orderInfo.tableNumber || null,
+          orderId: orderInfo.orderId,
+          waiterId: orderInfo.waiterId || null,
+          waiterName: orderInfo.waiterName || null,
+        })
+      }
+
       // Establecer tipo de orden
       setOrderType(orderInfo.orderType || 'takeaway')
 

@@ -920,6 +920,12 @@ export default function Orders() {
         items: order.items,
         orderType: order.orderType,
         markAsPaidOnComplete: true, // Flag para marcar como pagada al completar
+        // Si la orden está asociada a una mesa, pasar info para que se libere automáticamente
+        // al completar el pago (restaura comportamiento previo: Cobrar libera la mesa).
+        tableId: order.tableId || null,
+        tableNumber: order.tableNumber || null,
+        waiterId: order.waiterId || null,
+        waiterName: order.waiterName || null,
       }
     })
   }
