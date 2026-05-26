@@ -880,9 +880,14 @@ export default function POS() {
     }
   }, [allowedDocumentTypes])
 
-  // Autofocus en barra de búsqueda solo en desktop
+  // Autofocus en barra de búsqueda solo en desktop/laptop.
+  // Tablets quedan excluidos aunque tengan ancho >= 1024px (ej. iPad Pro,
+  // tablets Android grandes en landscape) — abrir el teclado virtual al
+  // entrar al POS es molesto. Detectamos "tiene mouse" con `pointer: fine`.
   useEffect(() => {
-    if (!isLoading && window.innerWidth >= 1024 && searchInputRef.current) {
+    const hasFinePointer = typeof window !== 'undefined'
+      && window.matchMedia?.('(pointer: fine)').matches
+    if (!isLoading && window.innerWidth >= 1024 && hasFinePointer && searchInputRef.current) {
       searchInputRef.current.focus()
     }
   }, [isLoading])
@@ -902,7 +907,12 @@ export default function POS() {
       if (clearOnAdd) {
         setSearchTerm('')
       }
-      if (window.innerWidth >= 1024) {
+      // Solo enfocar el buscador en desktop/laptop con mouse físico.
+      // Tablets (incluso >= 1024px de ancho) tienen `pointer: coarse` y
+      // queremos evitar abrir el teclado virtual al agregar cada producto.
+      const hasFinePointer = typeof window !== 'undefined'
+        && window.matchMedia?.('(pointer: fine)').matches
+      if (window.innerWidth >= 1024 && hasFinePointer) {
         searchInputRef.current?.focus()
       }
       // Auto-scroll al último producto agregado para que sea visible (útil al escanear con pistola).
@@ -2560,10 +2570,15 @@ export default function POS() {
       if (exactMatches.length === 1) {
         const product = exactMatches[0]
 
-        // Verificar que el producto tenga stock disponible en el almacén seleccionado
-        // IMPORTANTE: Usar getStockInWarehouse para verificar stock real del almacén
+        // Verificar que el producto tenga stock disponible en el almacén seleccionado.
+        // IMPORTANTE: Usar getTotalAvailableStock (no getStockInWarehouse) para que
+        // incluya el "stock huérfano" — productos cuyo stock total existe pero no
+        // está formalmente asignado al almacén. Esto unifica el comportamiento con
+        // el escaneo por cámara (handleScanBarcode → getCurrentWarehouseStock) que
+        // ya consideraba el huérfano. Antes la pistola Bluetooth rechazaba como
+        // "sin stock" productos que la cámara sí podía vender.
         const warehouseStock = selectedWarehouse
-          ? getStockInWarehouse(product, selectedWarehouse.id)
+          ? getTotalAvailableStock(product, selectedWarehouse.id)
           : (product.stock || 0)
 
         const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || companySettings?.allowNegativeStock
