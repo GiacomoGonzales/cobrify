@@ -1,6 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { getFirestore } from 'firebase-admin/firestore'
 import { sendPushNotification } from './sendPushNotification.js'
+import { getEnabledSubUsers } from './getEnabledSubUsers.js'
 
 /**
  * Trigger cuando se crea o actualiza una orden en un negocio.
@@ -96,11 +97,21 @@ export const onNewOrder = onDocumentWritten(
         redirectPath,
       }
 
-      // Enviar SOLO al owner. Los usuarios secundarios no reciben push
-      // (decisión de producto). El check defensivo en sendPushNotification
-      // también lo refuerza si se reintroduce el envío por error.
+      // Enviar al owner
       const ownerResult = await sendPushNotification(ownerId, title, body, data)
       console.log(`📤 Push to owner ${ownerId}:`, ownerResult)
+
+      // Enviar a sub-usuarios habilitados (default false: no reciben a menos
+      // que el dueño los habilite explícitamente en Gestión de Usuarios).
+      const subUserIds = await getEnabledSubUsers(db, ownerId, notifType === 'items_added' ? 'new_order' : notifType, false)
+      for (const uid of subUserIds) {
+        try {
+          const subResult = await sendPushNotification(uid, title, body, data, { allowSecondaryUsers: true })
+          console.log(`📤 Push to sub-user ${uid}:`, subResult)
+        } catch (err) {
+          console.error(`❌ Error notificando sub-usuario ${uid}:`, err)
+        }
+      }
     } catch (error) {
       console.error('❌ Error in onNewOrder trigger:', error)
     }

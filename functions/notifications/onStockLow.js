@@ -1,6 +1,32 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { sendPushNotification } from './sendPushNotification.js'
+import { getEnabledSubUsers } from './getEnabledSubUsers.js'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+
+/**
+ * Notifica a los sub-usuarios habilitados con la flag `low_stock` (un solo
+ * toggle cubre tanto stock bajo como sin stock, para no saturar la UI).
+ */
+async function notifySubUsersStock(db, ownerId, title, message, metadata, type) {
+  const subUserIds = await getEnabledSubUsers(db, ownerId, 'low_stock', false)
+  for (const uid of subUserIds) {
+    try {
+      await sendPushNotification(uid, title, message, metadata, { allowSecondaryUsers: true })
+      await db.collection('notifications').add({
+        userId: uid,
+        type,
+        title,
+        message,
+        metadata,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } catch (err) {
+      console.error(`❌ Error notificando sub-usuario ${uid} (stock):`, err)
+    }
+  }
+}
 
 /**
  * Trigger cuando un producto se queda sin stock o con stock bajo
@@ -62,6 +88,9 @@ export const onProductStockChange = onDocumentUpdated(
           updatedAt: FieldValue.serverTimestamp()
         })
         console.log(`🔔 Bell notification created for out_of_stock: ${productId}`)
+
+        // Notificar a sub-usuarios habilitados
+        await notifySubUsersStock(db, ownerId, title, message, metadata, 'out_of_stock')
       }
       // Stock bajo: usa el minStock configurado por producto (default 3).
       // Notifica cuando el stock cruzó el umbral hacia abajo: estaba por
@@ -102,6 +131,9 @@ export const onProductStockChange = onDocumentUpdated(
           updatedAt: FieldValue.serverTimestamp()
         })
         console.log(`🔔 Bell notification created for low_stock: ${productId}`)
+
+        // Notificar a sub-usuarios habilitados
+        await notifySubUsersStock(db, ownerId, title, message, metadata, 'low_stock')
       }
 
       console.log(`Push notification sent for stock change: ${productId}`)

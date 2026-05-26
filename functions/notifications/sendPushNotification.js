@@ -2,22 +2,37 @@ import admin from 'firebase-admin'
 
 /**
  * Enviar notificación push a un usuario
+ *
+ * @param {string} userId - UID del destinatario
+ * @param {string} title - Título de la notificación
+ * @param {string} body - Cuerpo de la notificación
+ * @param {object} data - Data payload adicional
+ * @param {object} options - Opciones extra
+ * @param {boolean} options.allowSecondaryUsers - Si es true, permite enviar a
+ *   sub-usuarios (con campo `ownerId`). Por defecto false: los sub-usuarios
+ *   NO reciben push de nuevas ventas / pedidos / stock. Casos que SÍ deben
+ *   llegarles (ej: pago Yape) deben pasar { allowSecondaryUsers: true }.
  */
-export async function sendPushNotification(userId, title, body, data = {}) {
+export async function sendPushNotification(userId, title, body, data = {}, options = {}) {
   try {
+    const { allowSecondaryUsers = false } = options
+
     console.log('📨 sendPushNotification called')
     console.log('   userId:', userId)
     console.log('   title:', title)
     console.log('   body:', body)
+    console.log('   allowSecondaryUsers:', allowSecondaryUsers)
 
-    // Decisión de producto: usuarios secundarios (con campo `ownerId`) NO
-    // reciben notificaciones push. Check defensivo aquí — bloquea cualquier
-    // trigger que intente enviar a un secundario, incluso si nuevos triggers
-    // se agregaran en el futuro sin filtrar.
-    const userSnap = await admin.firestore().collection('users').doc(userId).get()
-    if (userSnap.exists && userSnap.data()?.ownerId) {
-      console.log(`🔕 Skipping push: ${userId} es usuario secundario (ownerId=${userSnap.data().ownerId})`)
-      return { success: false, skipped: 'secondary_user' }
+    // Check defensivo: sub-usuarios bloqueados por defecto (decisión de
+    // producto). Algunos triggers específicos (Yape) deben llegar a todos los
+    // empleados — esos pasan { allowSecondaryUsers: true } para saltarse el
+    // check.
+    if (!allowSecondaryUsers) {
+      const userSnap = await admin.firestore().collection('users').doc(userId).get()
+      if (userSnap.exists && userSnap.data()?.ownerId) {
+        console.log(`🔕 Skipping push: ${userId} es usuario secundario (ownerId=${userSnap.data().ownerId})`)
+        return { success: false, skipped: 'secondary_user' }
+      }
     }
 
     // Obtener todos los tokens FCM del usuario

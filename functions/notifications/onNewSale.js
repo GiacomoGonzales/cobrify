@@ -1,5 +1,6 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { sendPushNotification } from './sendPushNotification.js'
+import { getEnabledSubUsers } from './getEnabledSubUsers.js'
 import { getFirestore } from 'firebase-admin/firestore'
 
 /**
@@ -51,20 +52,30 @@ export const onNewSale = onDocumentCreated(
       // Multi-divisa: usar el símbolo de la moneda real del invoice. Si la
       // factura es USD, mostrar "$ 87.36" en vez de "S/ 87.36".
       const currencySymbol = invoice.currency === 'USD' ? '$' : 'S/'
-      const result = await sendPushNotification(
-        ownerId,
-        'Nueva Venta Realizada',
-        `Venta de ${currencySymbol} ${invoice.total.toFixed(2)} - ${paymentMethod} en ${businessName}`,
-        {
-          type: 'new_sale',
-          invoiceId: invoiceId,
-          businessId,
-          amount: invoice.total.toString(),
-          currency: invoice.currency || 'PEN'
-        }
-      )
+      const title = 'Nueva Venta Realizada'
+      const body = `Venta de ${currencySymbol} ${invoice.total.toFixed(2)} - ${paymentMethod} en ${businessName}`
+      const pushData = {
+        type: 'new_sale',
+        invoiceId: invoiceId,
+        businessId,
+        amount: invoice.total.toString(),
+        currency: invoice.currency || 'PEN'
+      }
 
-      console.log('📤 Push notification result:', result)
+      const result = await sendPushNotification(ownerId, title, body, pushData)
+      console.log('📤 Push notification result (owner):', result)
+
+      // Enviar a sub-usuarios habilitados (default false)
+      const subUserIds = await getEnabledSubUsers(db, ownerId, 'new_sale', false)
+      for (const uid of subUserIds) {
+        try {
+          const subResult = await sendPushNotification(uid, title, body, pushData, { allowSecondaryUsers: true })
+          console.log(`📤 Push to sub-user ${uid}:`, subResult)
+        } catch (err) {
+          console.error(`❌ Error notificando sub-usuario ${uid}:`, err)
+        }
+      }
+
       console.log(`✅ Push notification sent for new sale: ${invoiceId}`)
     } catch (error) {
       console.error('❌ Error in onNewSale trigger:', error)

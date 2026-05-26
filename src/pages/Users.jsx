@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell } from 'lucide-react'
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -54,6 +54,21 @@ export default function Users() {
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
   const [waiters, setWaiters] = useState([])
   const [defaultWaiterId, setDefaultWaiterId] = useState('')
+
+  // Preferencias de notificaciones para sub-usuarios.
+  // Por defecto los sub-usuarios NO reciben notificaciones (decisión de
+  // producto previa). Excepción: Yape se enciende por defecto porque es la
+  // notificación crítica para cajeros que confirman pagos en el momento.
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    yape_payment: true,
+    new_order: false,
+    new_sale: false,
+    low_stock: false,
+  })
+  const [showNotificationsSection, setShowNotificationsSection] = useState(false)
+  // Estados de colapso para las secciones avanzadas del modal (redesign visual).
+  const [showAccessSection, setShowAccessSection] = useState(false)
+  const [showPOSSection, setShowPOSSection] = useState(false)
 
   // Datos de personal (Capa 1 del módulo Personal). Todos opcionales.
   const [showPersonnelSection, setShowPersonnelSection] = useState(false)
@@ -267,6 +282,15 @@ export default function Users() {
     setHideDiscountInPOS(false)
     setPersonnelData(emptyPersonnel)
     setShowPersonnelSection(false)
+    setNotificationPreferences({
+      yape_payment: true,
+      new_order: false,
+      new_sale: false,
+      low_stock: false,
+    })
+    setShowNotificationsSection(false)
+    setShowAccessSection(false)
+    setShowPOSSection(false)
     reset({
       email: '',
       password: '',
@@ -309,6 +333,29 @@ export default function Users() {
     })
     // Si el usuario ya tiene datos de personal, abrir la sección por defecto
     setShowPersonnelSection(!!(p.jobTitle || p.department || p.phone || p.documentId))
+    // Cargar preferencias de notificaciones. Si el usuario no tiene el campo
+    // (sub-usuarios viejos), aplicar defaults razonables (Yape on, resto off).
+    const np = userToEdit.notificationPreferences || {}
+    setNotificationPreferences({
+      yape_payment: np.yape_payment !== false, // default true
+      new_order: np.new_order === true,
+      new_sale: np.new_sale === true,
+      low_stock: np.low_stock === true,
+    })
+    // Abrir la sección si tiene alguna preferencia distinta del default básico
+    setShowNotificationsSection(
+      np.new_order === true || np.new_sale === true || np.low_stock === true || np.yape_payment === false
+    )
+    // Auto-expandir secciones avanzadas si el usuario ya tiene datos en ellas
+    setShowAccessSection(
+      (userToEdit.allowedWarehouses?.length > 0) ||
+      (userToEdit.allowedBranches?.length > 0) ||
+      !!userToEdit.agentId
+    )
+    const pages = userToEdit.allowedPages || []
+    setShowPOSSection(
+      pages.includes('pos') || pages.includes('cash-register')
+    )
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -426,6 +473,7 @@ export default function Users() {
           hideStockInPOS,
           hideDiscountInPOS,
           personnel: personnelPayload,
+          notificationPreferences,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -466,6 +514,7 @@ export default function Users() {
           hideStockInPOS,
           hideDiscountInPOS,
           personnel: personnelPayload,
+          notificationPreferences,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -762,29 +811,29 @@ export default function Users() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={isEditMode ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
-        size="5xl"
+        title={isEditMode ? 'Editar usuario' : 'Nuevo usuario secundario'}
+        size="3xl"
       >
         <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* COLUMNA IZQUIERDA - Datos del usuario */}
-            <div className="space-y-5">
-              {/* Datos básicos */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <UsersIcon className="w-5 h-5 text-primary-600" />
-                  Datos del Usuario
-                </h3>
+          <div className="divide-y divide-gray-200">
 
+            {/* === SECCIÓN 1: Datos del usuario === */}
+            <div className="pb-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-primary-50 rounded-lg">
+                  <UsersIcon className="w-4 h-4 text-primary-600" />
+                </div>
+                <h3 className="text-base font-semibold text-gray-900">Datos del usuario</h3>
+              </div>
+              <div className="space-y-4">
                 <Input
-                  label="Nombre Completo"
+                  label="Nombre completo"
                   placeholder="Ej: Juan Pérez"
                   error={errors.displayName?.message}
                   {...register('displayName', {
                     required: 'Nombre es requerido',
                   })}
                 />
-
                 <Input
                   label="Email"
                   type="email"
@@ -799,7 +848,6 @@ export default function Users() {
                     },
                   })}
                 />
-
                 {!isEditMode && (
                   <div className="relative">
                     <Input
@@ -825,336 +873,17 @@ export default function Users() {
                   </div>
                 )}
               </div>
-
-              {/* Vinculación con Agente (solo en modo inmobiliaria) */}
-              {isRealEstateMode && agents.length > 0 && (
-                <div className="bg-cyan-50 rounded-xl p-4 space-y-3">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <UserCheck className="w-5 h-5 text-cyan-600" />
-                    Vincular con Agente
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Vincula al usuario con un agente para que vea solo sus comisiones
-                  </p>
-                  <select
-                    value={selectedAgentId}
-                    onChange={(e) => setSelectedAgentId(e.target.value)}
-                    className="w-full px-3 py-2 border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-white"
-                  >
-                    <option value="">Sin vincular (verá todas)</option>
-                    {agents.map(agent => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.name} - {agent.commissionPercent}%
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Restricción de Almacenes */}
-              {warehouses.length > 0 && (
-                <div className="bg-amber-50 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Warehouse className="w-5 h-5 text-amber-600" />
-                      Almacenes
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={selectAllWarehouses}
-                      className="text-xs text-amber-700 hover:text-amber-800 font-medium"
-                    >
-                      {selectedWarehouses.length === warehouses.length ? 'Ninguno' : 'Todos'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-amber-700">
-                    Sin selección = acceso a todos
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    {warehouses.map((warehouse) => (
-                      <label
-                        key={warehouse.id}
-                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                          selectedWarehouses.includes(warehouse.id)
-                            ? 'bg-amber-200 text-amber-900'
-                            : 'bg-white hover:bg-amber-100'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedWarehouses.includes(warehouse.id)}
-                          onChange={() => toggleWarehouseSelection(warehouse.id)}
-                          className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500"
-                        />
-                        <span className="truncate">{warehouse.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Restricción de Sucursales */}
-              {branches.length > 0 && (
-                <div className="bg-cyan-50 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Store className="w-5 h-5 text-cyan-600" />
-                      Sucursales
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={selectAllBranches}
-                      className="text-xs text-cyan-700 hover:text-cyan-800 font-medium"
-                    >
-                      {selectedBranches.length === branches.length + 1 ? 'Ninguna' : 'Todas'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-cyan-700">
-                    Sin selección = acceso a todas
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    <label
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                        selectedBranches.includes('main')
-                          ? 'bg-cyan-200 text-cyan-900'
-                          : 'bg-white hover:bg-cyan-100'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedBranches.includes('main')}
-                        onChange={() => toggleBranchSelection('main')}
-                        className="w-4 h-4 text-cyan-600 border-cyan-300 rounded focus:ring-cyan-500"
-                      />
-                      <span className="truncate">Principal</span>
-                    </label>
-                    {branches.map((branch) => (
-                      <label
-                        key={branch.id}
-                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                          selectedBranches.includes(branch.id)
-                            ? 'bg-cyan-200 text-cyan-900'
-                            : 'bg-white hover:bg-cyan-100'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedBranches.includes(branch.id)}
-                          onChange={() => toggleBranchSelection(branch.id)}
-                          className="w-4 h-4 text-cyan-600 border-cyan-300 rounded focus:ring-cyan-500"
-                        />
-                        <span className="truncate">{branch.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Configuración de Caja (solo si tiene acceso a caja o POS) */}
-              {(selectedPages.includes('cash-register') || selectedPages.includes('pos')) && (
-                <div className="bg-green-50 rounded-xl p-4 space-y-3">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-green-600" />
-                    Configuración de Caja
-                  </h3>
-                  <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-green-100">
-                    <input
-                      type="checkbox"
-                      checked={independentCashRegister}
-                      onChange={() => setIndependentCashRegister(!independentCashRegister)}
-                      className="w-4 h-4 text-green-600 border-green-300 rounded focus:ring-green-500"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-gray-900">Caja independiente</span>
-                      <p className="text-xs text-green-700 mt-0.5">
-                        {independentCashRegister
-                          ? 'Este usuario abre y cierra su propia caja'
-                          : 'Las ventas de este usuario se suman a la caja principal'}
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              )}
-
-              {/* Restricciones POS (solo si POS está en selectedPages) */}
-              {selectedPages.includes('pos') && (
-                <div className="bg-purple-50 rounded-xl p-4 space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-purple-600" />
-                    Restricciones POS
-                  </h3>
-                  <p className="text-xs text-purple-700">
-                    Si no se selecciona ninguno, se permiten todos
-                  </p>
-
-                  {/* Tipos de comprobante */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Tipos de Comprobante:</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {[
-                        { id: 'boleta', label: 'Boleta de Venta' },
-                        { id: 'factura', label: 'Factura Electrónica' },
-                        { id: 'nota_venta', label: 'Nota de Venta' },
-                      ].map(docType => (
-                        <label
-                          key={docType.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                            allowedDocumentTypes.includes(docType.id)
-                              ? 'bg-purple-200 text-purple-900'
-                              : 'bg-white hover:bg-purple-100'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={allowedDocumentTypes.includes(docType.id)}
-                            onChange={() => {
-                              setAllowedDocumentTypes(prev =>
-                                prev.includes(docType.id)
-                                  ? prev.filter(d => d !== docType.id)
-                                  : [...prev, docType.id]
-                              )
-                            }}
-                            className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
-                          />
-                          <span>{docType.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Métodos de pago */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: 'cash', label: 'Efectivo' },
-                        { id: 'card', label: 'Tarjeta' },
-                        { id: 'transfer', label: 'Transferencia' },
-                        { id: 'yape', label: 'Yape' },
-                        { id: 'plin', label: 'Plin' },
-                        ...(businessMode === 'restaurant' ? [
-                          { id: 'rappiPay', label: 'Rappi' },
-                          { id: 'pedidosYa', label: 'PedidosYa' },
-                          { id: 'didifood', label: 'DiDiFood' },
-                        ] : []),
-                      ].map(method => (
-                        <label
-                          key={method.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                            allowedPaymentMethods.includes(method.id)
-                              ? 'bg-purple-200 text-purple-900'
-                              : 'bg-white hover:bg-purple-100'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={allowedPaymentMethods.includes(method.id)}
-                            onChange={() => {
-                              setAllowedPaymentMethods(prev =>
-                                prev.includes(method.id)
-                                  ? prev.filter(m => m !== method.id)
-                                  : [...prev, method.id]
-                              )
-                            }}
-                            className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
-                          />
-                          <span>{method.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Vendedor asignado */}
-                  {posSellers.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-gray-700">Vendedor Asignado:</p>
-                      <select
-                        value={assignedSellerId}
-                        onChange={(e) => setAssignedSellerId(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                      >
-                        <option value="">Sin asignar (puede elegir cualquiera)</option>
-                        {posSellers.map(seller => (
-                          <option key={seller.id} value={seller.id}>
-                            {seller.code ? `${seller.code} - ` : ''}{seller.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-purple-600">
-                        Si se asigna, el vendedor queda fijo en el POS y no se puede cambiar
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Mozo por defecto (solo modo restaurante) */}
-                  {isRestaurantMode && waiters.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-gray-700">Mozo por Defecto:</p>
-                      <select
-                        value={defaultWaiterId}
-                        onChange={(e) => setDefaultWaiterId(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                      >
-                        <option value="">Sin mozo por defecto</option>
-                        {waiters.map(waiter => (
-                          <option key={waiter.id} value={waiter.id}>
-                            {waiter.code ? `${waiter.code} - ` : ''}{waiter.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-purple-600">
-                        Aparecerá preseleccionado al ocupar una mesa. El usuario podrá cambiarlo si lo necesita.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Ocultar stock */}
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-purple-100">
-                      <input
-                        type="checkbox"
-                        checked={hideStockInPOS}
-                        onChange={() => setHideStockInPOS(!hideStockInPOS)}
-                        className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">Ocultar stock en productos</span>
-                        <p className="text-xs text-purple-600 mt-0.5">
-                          {hideStockInPOS
-                            ? 'El usuario NO verá el stock en las tarjetas del POS'
-                            : 'El usuario puede ver el stock en las tarjetas del POS'}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Ocultar descuentos */}
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors bg-white hover:bg-purple-100">
-                      <input
-                        type="checkbox"
-                        checked={hideDiscountInPOS}
-                        onChange={() => setHideDiscountInPOS(!hideDiscountInPOS)}
-                        className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">Ocultar descuentos en POS</span>
-                        <p className="text-xs text-purple-600 mt-0.5">
-                          {hideDiscountInPOS
-                            ? 'El usuario NO podrá aplicar descuentos en el POS'
-                            : 'El usuario puede aplicar descuentos en el POS'}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* COLUMNA DERECHA - Permisos de páginas */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Permisos de Acceso</h3>
+            {/* === SECCIÓN 2: Permisos de acceso === */}
+            <div className="py-5">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary-50 rounded-lg">
+                    <Shield className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900">Permisos de acceso</h3>
+                </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-500">
                     {selectedPages.length}/{availablePages.length}
@@ -1168,9 +897,9 @@ export default function Users() {
                   </button>
                 </div>
               </div>
+              <p className="text-xs text-gray-500 mb-3">Páginas y módulos a los que tendrá acceso.</p>
 
-              {/* Lista de páginas por categoría */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[460px] overflow-y-auto">
+              <div className="border border-gray-200 rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
                 {Object.entries(pagesByCategory).map(([category, pages]) => {
                   const categoryPageIds = pages.map(p => p.id)
                   const selectedInCategory = categoryPageIds.filter(id => selectedPages.includes(id)).length
@@ -1190,11 +919,11 @@ export default function Users() {
                           ) : (
                             <ChevronRight className="w-4 h-4 text-gray-500" />
                           )}
-                          <span className="font-medium text-gray-700">
+                          <span className="font-medium text-gray-700 text-sm">
                             {CATEGORY_NAMES[category] || category}
                           </span>
                           <span className="text-xs text-gray-500">
-                            ({selectedInCategory}/{pages.length})
+                            {selectedInCategory}/{pages.length}
                           </span>
                         </div>
                         <button
@@ -1204,16 +933,12 @@ export default function Users() {
                             toggleCategoryPages(category)
                           }}
                           className={`p-1 rounded transition-colors ${
-                            allSelected
-                              ? 'text-green-600 hover:bg-green-100'
-                              : someSelected
-                              ? 'text-amber-600 hover:bg-amber-100'
-                              : 'text-gray-400 hover:bg-gray-200'
+                            allSelected || someSelected
+                              ? 'text-primary-600 hover:bg-primary-50'
+                              : 'text-gray-400 hover:bg-gray-100'
                           }`}
                         >
-                          {allSelected ? (
-                            <CheckCircle2 className="w-5 h-5" />
-                          ) : someSelected ? (
+                          {allSelected || someSelected ? (
                             <CheckCircle2 className="w-5 h-5" />
                           ) : (
                             <XCircle className="w-5 h-5" />
@@ -1223,14 +948,14 @@ export default function Users() {
 
                       {/* Páginas de la categoría */}
                       {expandedCategories[category] && (
-                        <div className="grid grid-cols-2 gap-1 p-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-2">
                           {pages.map((page) => (
                             <label
                               key={page.id}
-                              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-sm ${
+                              className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors text-sm ${
                                 selectedPages.includes(page.id)
-                                  ? 'bg-primary-100 text-primary-900 ring-1 ring-primary-300'
-                                  : 'hover:bg-gray-100'
+                                  ? 'bg-primary-50 text-primary-900'
+                                  : 'hover:bg-gray-50 text-gray-700'
                               }`}
                             >
                               <input
@@ -1250,211 +975,660 @@ export default function Users() {
               </div>
 
               {selectedPages.length === 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm text-red-700">
-                    Debes seleccionar al menos una página
-                  </p>
+                <p className="mt-3 text-sm text-red-600">Debes seleccionar al menos una página.</p>
+              )}
+            </div>
+
+            {/* === SECCIÓN 3: Acceso a sucursales y almacenes (colapsable) === */}
+            {(warehouses.length > 0 || branches.length > 0 || (isRealEstateMode && agents.length > 0)) && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAccessSection((v) => !v)}
+                  className={`w-full flex items-center justify-between py-4 transition-colors text-left ${
+                    showAccessSection ? 'bg-gray-50/60' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg transition-colors ${
+                      showAccessSection ? 'bg-primary-50' : 'bg-gray-100'
+                    }`}>
+                      <Store className={`w-4 h-4 ${showAccessSection ? 'text-primary-600' : 'text-gray-500'}`} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Acceso a sucursales y almacenes</h3>
+                      <p className="text-xs text-gray-500">Restringe a ubicaciones específicas.</p>
+                    </div>
+                  </div>
+                  {showAccessSection ? (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+
+                {showAccessSection && (
+                  <div className="pb-5 space-y-5">
+                    {/* Sucursales */}
+                    {branches.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="text-sm font-medium text-gray-700">Sucursales</h4>
+                          <button
+                            type="button"
+                            onClick={selectAllBranches}
+                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            {selectedBranches.length === branches.length + 1 ? 'Ninguna' : 'Todas'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">Sin selección = acceso a todas.</p>
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                          <label
+                            className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                              selectedBranches.includes('main')
+                                ? 'border-primary-300 bg-primary-50 text-primary-900'
+                                : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedBranches.includes('main')}
+                              onChange={() => toggleBranchSelection('main')}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <span className="truncate">Principal</span>
+                          </label>
+                          {branches.map((branch) => (
+                            <label
+                              key={branch.id}
+                              className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                selectedBranches.includes(branch.id)
+                                  ? 'border-primary-300 bg-primary-50 text-primary-900'
+                                  : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedBranches.includes(branch.id)}
+                                onChange={() => toggleBranchSelection(branch.id)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              />
+                              <span className="truncate">{branch.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Almacenes */}
+                    {warehouses.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="text-sm font-medium text-gray-700">Almacenes</h4>
+                          <button
+                            type="button"
+                            onClick={selectAllWarehouses}
+                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            {selectedWarehouses.length === warehouses.length ? 'Ninguno' : 'Todos'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">Sin selección = acceso a todos.</p>
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                          {warehouses.map((warehouse) => (
+                            <label
+                              key={warehouse.id}
+                              className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                selectedWarehouses.includes(warehouse.id)
+                                  ? 'border-primary-300 bg-primary-50 text-primary-900'
+                                  : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedWarehouses.includes(warehouse.id)}
+                                onChange={() => toggleWarehouseSelection(warehouse.id)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              />
+                              <span className="truncate">{warehouse.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Vincular con agente (solo modo inmobiliaria) */}
+                    {isRealEstateMode && agents.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-1">Vincular con agente</h4>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Si vinculas un agente, el usuario verá solo sus comisiones.
+                        </p>
+                        <select
+                          value={selectedAgentId}
+                          onChange={(e) => setSelectedAgentId(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        >
+                          <option value="">Sin vincular (verá todas)</option>
+                          {agents.map(agent => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.name} - {agent.commissionPercent}%
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === SECCIÓN 4: Configuración del POS y caja (colapsable) === */}
+            {(selectedPages.includes('pos') || selectedPages.includes('cash-register')) && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowPOSSection((v) => !v)}
+                  className={`w-full flex items-center justify-between py-4 transition-colors text-left ${
+                    showPOSSection ? 'bg-gray-50/60' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg transition-colors ${
+                      showPOSSection ? 'bg-primary-50' : 'bg-gray-100'
+                    }`}>
+                      <DollarSign className={`w-4 h-4 ${showPOSSection ? 'text-primary-600' : 'text-gray-500'}`} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Configuración del POS y caja</h3>
+                      <p className="text-xs text-gray-500">Comprobantes, métodos de pago, caja, descuentos.</p>
+                    </div>
+                  </div>
+                  {showPOSSection ? (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+
+                {showPOSSection && (
+                  <div className="pb-5 space-y-5">
+                    {/* Caja */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Caja</h4>
+                      <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={independentCashRegister}
+                          onChange={() => setIndependentCashRegister(!independentCashRegister)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">Caja independiente</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {independentCashRegister
+                              ? 'Este usuario abre y cierra su propia caja.'
+                              : 'Las ventas de este usuario se suman a la caja principal.'}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {selectedPages.includes('pos') && (
+                      <>
+                        {/* Comprobantes + Métodos de pago */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-1">Tipos de comprobante</h4>
+                            <p className="text-xs text-gray-500 mb-2">Sin selección = se permiten todos.</p>
+                            <div className="space-y-2">
+                              {[
+                                { id: 'boleta', label: 'Boleta de Venta' },
+                                { id: 'factura', label: 'Factura Electrónica' },
+                                { id: 'nota_venta', label: 'Nota de Venta' },
+                              ].map(docType => (
+                                <label
+                                  key={docType.id}
+                                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                    allowedDocumentTypes.includes(docType.id)
+                                      ? 'border-primary-300 bg-primary-50 text-primary-900'
+                                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={allowedDocumentTypes.includes(docType.id)}
+                                    onChange={() => {
+                                      setAllowedDocumentTypes(prev =>
+                                        prev.includes(docType.id)
+                                          ? prev.filter(d => d !== docType.id)
+                                          : [...prev, docType.id]
+                                      )
+                                    }}
+                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                  />
+                                  <span>{docType.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-1">Métodos de pago</h4>
+                            <p className="text-xs text-gray-500 mb-2">Sin selección = se permiten todos.</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { id: 'cash', label: 'Efectivo' },
+                                { id: 'card', label: 'Tarjeta' },
+                                { id: 'transfer', label: 'Transferencia' },
+                                { id: 'yape', label: 'Yape' },
+                                { id: 'plin', label: 'Plin' },
+                                ...(businessMode === 'restaurant' ? [
+                                  { id: 'rappiPay', label: 'Rappi' },
+                                  { id: 'pedidosYa', label: 'PedidosYa' },
+                                  { id: 'didifood', label: 'DiDiFood' },
+                                ] : []),
+                              ].map(method => (
+                                <label
+                                  key={method.id}
+                                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                    allowedPaymentMethods.includes(method.id)
+                                      ? 'border-primary-300 bg-primary-50 text-primary-900'
+                                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={allowedPaymentMethods.includes(method.id)}
+                                    onChange={() => {
+                                      setAllowedPaymentMethods(prev =>
+                                        prev.includes(method.id)
+                                          ? prev.filter(m => m !== method.id)
+                                          : [...prev, method.id]
+                                      )
+                                    }}
+                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                  />
+                                  <span>{method.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Vendedor / Mozo asignado */}
+                        {(posSellers.length > 0 || (isRestaurantMode && waiters.length > 0)) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {posSellers.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 mb-1">Vendedor asignado</h4>
+                                <select
+                                  value={assignedSellerId}
+                                  onChange={(e) => setAssignedSellerId(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                >
+                                  <option value="">Sin asignar (puede elegir cualquiera)</option>
+                                  {posSellers.map(seller => (
+                                    <option key={seller.id} value={seller.id}>
+                                      {seller.code ? `${seller.code} - ` : ''}{seller.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Si se asigna, queda fijo en el POS.
+                                </p>
+                              </div>
+                            )}
+
+                            {isRestaurantMode && waiters.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 mb-1">Mozo por defecto</h4>
+                                <select
+                                  value={defaultWaiterId}
+                                  onChange={(e) => setDefaultWaiterId(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                >
+                                  <option value="">Sin mozo por defecto</option>
+                                  {waiters.map(waiter => (
+                                    <option key={waiter.id} value={waiter.id}>
+                                      {waiter.code ? `${waiter.code} - ` : ''}{waiter.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Preseleccionado al ocupar mesa.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Visualización en POS */}
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Visualización</h4>
+                          <div className="space-y-2">
+                            <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                              <input
+                                type="checkbox"
+                                checked={hideStockInPOS}
+                                onChange={() => setHideStockInPOS(!hideStockInPOS)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">Ocultar stock en productos</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {hideStockInPOS
+                                    ? 'El usuario NO verá el stock en las tarjetas del POS.'
+                                    : 'El usuario puede ver el stock en las tarjetas del POS.'}
+                                </div>
+                              </div>
+                            </label>
+
+                            <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                              <input
+                                type="checkbox"
+                                checked={hideDiscountInPOS}
+                                onChange={() => setHideDiscountInPOS(!hideDiscountInPOS)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">Ocultar descuentos en POS</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {hideDiscountInPOS
+                                    ? 'El usuario NO podrá aplicar descuentos en el POS.'
+                                    : 'El usuario puede aplicar descuentos en el POS.'}
+                                </div>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === SECCIÓN 5: Información laboral (colapsable) === */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowPersonnelSection((v) => !v)}
+                className={`w-full flex items-center justify-between py-4 transition-colors text-left ${
+                  showPersonnelSection ? 'bg-gray-50/60' : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg transition-colors ${
+                    showPersonnelSection ? 'bg-primary-50' : 'bg-gray-100'
+                  }`}>
+                    <Briefcase className={`w-4 h-4 ${showPersonnelSection ? 'text-primary-600' : 'text-gray-500'}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Información laboral</h3>
+                    <p className="text-xs text-gray-500">Cargo, jornada, fecha de ingreso, vacaciones (opcional).</p>
+                  </div>
+                </div>
+                {showPersonnelSection ? (
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                )}
+              </button>
+
+              {showPersonnelSection && (
+                <div className="pb-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
+                      <Input
+                        type="text"
+                        value={personnelData.jobTitle}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, jobTitle: e.target.value }))}
+                        placeholder="Ej: Cajero, Supervisor, Almacenero"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Área / Departamento</label>
+                      <Input
+                        type="text"
+                        value={personnelData.department}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, department: e.target.value }))}
+                        placeholder="Ej: Ventas, Cocina, Logística"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de jornada</label>
+                      <select
+                        value={personnelData.employmentType}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, employmentType: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                      >
+                        <option value="">Sin especificar</option>
+                        {EMPLOYMENT_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Estado RR.HH.</label>
+                      <select
+                        value={personnelData.hrStatus}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, hrStatus: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                      >
+                        {HR_STATUSES.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Refuerzo / eventual */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={personnelData.excludeFromSchedule === true}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, excludeFromSchedule: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Refuerzo / Eventual</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        No aparecerá en el planificador de horarios. Útil para mozos refuerzo, freelancers o trabajadores por día. Sigue marcando asistencia.
+                      </div>
+                    </div>
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de ingreso</label>
+                      <Input
+                        type="date"
+                        value={personnelData.hireDate}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, hireDate: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Horas semanales</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="80"
+                        value={personnelData.weeklyHours}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, weeklyHours: e.target.value }))}
+                        placeholder="40"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Días de vacaciones / año</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="60"
+                        value={personnelData.vacationDaysPerYear}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, vacationDaysPerYear: e.target.value }))}
+                        placeholder="15"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                      <Input
+                        type="tel"
+                        value={personnelData.phone}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, phone: e.target.value }))}
+                        placeholder="+51 999 999 999"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">DNI / Documento</label>
+                      <Input
+                        type="text"
+                        value={personnelData.documentId}
+                        onChange={(e) => setPersonnelData((p) => ({ ...p, documentId: e.target.value }))}
+                        placeholder="Número de identificación"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                    <Input
+                      type="text"
+                      value={personnelData.address}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, address: e.target.value }))}
+                      placeholder="Dirección de residencia"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notas internas</label>
+                    <textarea
+                      value={personnelData.notes}
+                      onChange={(e) => setPersonnelData((p) => ({ ...p, notes: e.target.value }))}
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                      placeholder="Información adicional, observaciones, etc."
+                    />
+                  </div>
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Datos de personal (Capa 1 del módulo Personal). Sección colapsable. */}
-          <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowPersonnelSection((v) => !v)}
-              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <Briefcase className="w-4 h-4 text-indigo-600" />
+            {/* === SECCIÓN 6: Notificaciones (colapsable) === */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowNotificationsSection((v) => !v)}
+                className={`w-full flex items-center justify-between py-4 transition-colors text-left ${
+                  showNotificationsSection ? 'bg-gray-50/60' : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg transition-colors ${
+                    showNotificationsSection ? 'bg-primary-50' : 'bg-gray-100'
+                  }`}>
+                    <Bell className={`w-4 h-4 ${showNotificationsSection ? 'text-primary-600' : 'text-gray-500'}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Notificaciones</h3>
+                    <p className="text-xs text-gray-500">Push al celular y campanita del header.</p>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <h3 className="font-medium text-gray-900">Datos de personal (opcional)</h3>
-                  <p className="text-xs text-gray-500">
-                    Cargo, área, fecha de ingreso, vacaciones por año, etc.
+                {showNotificationsSection ? (
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                )}
+              </button>
+
+              {showNotificationsSection && (
+                <div className="pb-5 space-y-2">
+                  <p className="text-xs text-gray-500 mb-2">
+                    Las notificaciones llegan como push al celular (con la app instalada) y a la campanita del header. Por defecto los sub-usuarios solo reciben las de Yape.
                   </p>
-                </div>
-              </div>
-              {showPersonnelSection ? (
-                <ChevronDown className="w-5 h-5 text-gray-500" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-gray-500" />
-              )}
-            </button>
 
-            {showPersonnelSection && (
-              <div className="p-4 space-y-4 bg-white">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cargo
-                    </label>
-                    <Input
-                      type="text"
-                      value={personnelData.jobTitle}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, jobTitle: e.target.value }))}
-                      placeholder="Ej: Cajero, Supervisor, Almacenero"
+                  {/* Yape */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={notificationPreferences.yape_payment === true}
+                      onChange={(e) => setNotificationPreferences((p) => ({ ...p, yape_payment: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Área / Departamento
-                    </label>
-                    <Input
-                      type="text"
-                      value={personnelData.department}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, department: e.target.value }))}
-                      placeholder="Ej: Ventas, Cocina, Logística"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tipo de jornada
-                    </label>
-                    <select
-                      value={personnelData.employmentType}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, employmentType: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    >
-                      <option value="">Sin especificar</option>
-                      {EMPLOYMENT_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Estado RR.HH.
-                    </label>
-                    <select
-                      value={personnelData.hrStatus}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, hrStatus: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    >
-                      {HR_STATUSES.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Refuerzo / eventual: no aparece en el planificador de horarios */}
-                <label className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={personnelData.excludeFromSchedule === true}
-                    onChange={(e) => setPersonnelData((p) => ({ ...p, excludeFromSchedule: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 text-sm">Refuerzo / Eventual</div>
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      No aparecerá en el planificador de horarios (Asistencia → Horarios).
-                      Útil para mozos refuerzo, freelancers o trabajadores por día.
-                      Sigue marcando asistencia y aparece en Personal.
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">Pago Yape recibido</div>
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium text-gray-600 bg-gray-100 rounded">Recomendado</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Avisa cuando entra un pago por Yape. Ideal para cajeros que confirman pagos en el momento.
+                      </div>
                     </div>
-                  </div>
-                </label>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Fecha de ingreso
-                    </label>
-                    <Input
-                      type="date"
-                      value={personnelData.hireDate}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, hireDate: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Horas semanales
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="80"
-                      value={personnelData.weeklyHours}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, weeklyHours: e.target.value }))}
-                      placeholder="40"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Días de vacaciones / año
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="60"
-                      value={personnelData.vacationDaysPerYear}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, vacationDaysPerYear: e.target.value }))}
-                      placeholder="15"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Teléfono
-                    </label>
-                    <Input
-                      type="tel"
-                      value={personnelData.phone}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, phone: e.target.value }))}
-                      placeholder="+51 999 999 999"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      DNI / Documento
-                    </label>
-                    <Input
-                      type="text"
-                      value={personnelData.documentId}
-                      onChange={(e) => setPersonnelData((p) => ({ ...p, documentId: e.target.value }))}
-                      placeholder="Número de identificación"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dirección
                   </label>
-                  <Input
-                    type="text"
-                    value={personnelData.address}
-                    onChange={(e) => setPersonnelData((p) => ({ ...p, address: e.target.value }))}
-                    placeholder="Dirección de residencia"
-                  />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notas internas
+                  {/* Nuevo pedido */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={notificationPreferences.new_order === true}
+                      onChange={(e) => setNotificationPreferences((p) => ({ ...p, new_order: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Nuevo pedido</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Pedidos del menú digital, catálogo online, mesas y mozos. Útil para mozos o staff de cocina.
+                      </div>
+                    </div>
                   </label>
-                  <textarea
-                    value={personnelData.notes}
-                    onChange={(e) => setPersonnelData((p) => ({ ...p, notes: e.target.value }))}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                    placeholder="Información adicional, observaciones, etc."
-                  />
+
+                  {/* Nueva venta */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={notificationPreferences.new_sale === true}
+                      onChange={(e) => setNotificationPreferences((p) => ({ ...p, new_sale: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Nueva venta facturada</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Cada vez que se emite una boleta o factura.
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Stock bajo */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={notificationPreferences.low_stock === true}
+                      onChange={(e) => setNotificationPreferences((p) => ({ ...p, low_stock: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Stock bajo o sin stock</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Alerta cuando un producto llega a su stock mínimo o se agota. Útil para inventario y compras.
+                      </div>
+                    </div>
+                  </label>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
           </div>
 
           {/* Botones */}
-          <div className="flex gap-3 pt-6 mt-6 border-t border-gray-200">
+          <div className="flex gap-3 pt-6 mt-2 border-t border-gray-200">
             <Button
               type="button"
               variant="outline"
@@ -1471,9 +1645,9 @@ export default function Users() {
                   Guardando...
                 </>
               ) : isEditMode ? (
-                'Actualizar Usuario'
+                'Actualizar usuario'
               ) : (
-                'Crear Usuario'
+                'Crear usuario'
               )}
             </Button>
           </div>

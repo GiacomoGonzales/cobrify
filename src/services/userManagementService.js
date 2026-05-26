@@ -287,6 +287,14 @@ export const createManagedUser = async (ownerId, userData) => {
       // sub-usuarios viejos siguen funcionando porque el sub-objeto puede no
       // existir y la UI lo lee con `?.`.
       personnel: userData.personnel || null,
+      // Preferencias de notificaciones push y campanita. Por defecto: solo
+      // Yape encendido (matching el comportamiento por defecto del backend).
+      notificationPreferences: userData.notificationPreferences || {
+        yape_payment: true,
+        new_order: false,
+        new_sale: false,
+        low_stock: false,
+      },
       ownerId, // ID del usuario que lo creó (dueño del negocio)
       isActive: true,
       createdAt: serverTimestamp(),

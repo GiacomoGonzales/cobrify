@@ -1,5 +1,6 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { sendPushNotification } from './sendPushNotification.js'
+import { getEnabledSubUsers } from './getEnabledSubUsers.js'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -50,45 +51,67 @@ export const onYapePayment = onDocumentCreated(
       console.log('👤 Owner ID:', ownerId)
       console.log('🏢 Business:', businessName)
 
+      // Obtener sub-usuarios habilitados para Yape (default true: si un
+      // sub-usuario viejo no tiene el campo, recibe — coincide con lo que
+      // el dueño espera al activar Yape para todo el equipo).
+      const subUserIds = await getEnabledSubUsers(db, ownerId, 'yape_payment', true)
+
+      // Lista final: dueño + sub-usuarios habilitados (deduplicada)
+      const recipientIds = Array.from(new Set([ownerId, ...subUserIds]))
+
       // Preparar mensaje
       const title = '💜 Yape Recibido'
       const body = `S/ ${payment.amount?.toFixed(2) || '0.00'} de ${payment.senderName || 'Desconocido'}`
 
-      // Enviar notificación push al dueño
-      const result = await sendPushNotification(
-        ownerId,
-        title,
-        body,
-        {
-          type: 'yape_payment',
-          paymentId: paymentId,
-          businessId,
-          amount: (payment.amount || 0).toString(),
-          senderName: payment.senderName || 'Desconocido'
-        }
-      )
-
-      console.log('📤 Push notification result:', result)
-      console.log(`✅ Yape push notification sent for payment: ${paymentId}`)
-
-      // Crear notificación en la colección notifications (campanita)
-      await db.collection('notifications').add({
-        userId: ownerId,
+      const pushData = {
         type: 'yape_payment',
-        title: title,
-        message: body,
-        metadata: {
-          paymentId: paymentId,
-          businessId: businessId,
-          amount: payment.amount || 0,
-          senderName: payment.senderName || 'Desconocido'
-        },
-        read: false,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp()
-      })
+        paymentId: paymentId,
+        businessId,
+        amount: (payment.amount || 0).toString(),
+        senderName: payment.senderName || 'Desconocido'
+      }
 
-      console.log(`🔔 Bell notification created for Yape payment: ${paymentId}`)
+      const notifiedUsers = []
+
+      // Enviar push + crear notificación de campanita a cada destinatario
+      for (const uid of recipientIds) {
+        try {
+          // Push: pasar allowSecondaryUsers: true para saltarse el check
+          // defensivo que normalmente bloquea push a sub-usuarios.
+          const pushResult = await sendPushNotification(
+            uid,
+            title,
+            body,
+            pushData,
+            { allowSecondaryUsers: true }
+          )
+          console.log(`📤 Push to ${uid === ownerId ? 'owner' : 'sub-user'} ${uid}:`, pushResult)
+
+          // Campanita: una notificación por usuario para que cada uno la vea
+          // solo en su propio header (el query filtra por userId).
+          await db.collection('notifications').add({
+            userId: uid,
+            type: 'yape_payment',
+            title: title,
+            message: body,
+            metadata: {
+              paymentId: paymentId,
+              businessId: businessId,
+              amount: payment.amount || 0,
+              senderName: payment.senderName || 'Desconocido'
+            },
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          })
+
+          notifiedUsers.push(uid)
+        } catch (err) {
+          console.error(`❌ Error notificando a ${uid}:`, err)
+        }
+      }
+
+      console.log(`🔔 Yape notificado a ${notifiedUsers.length}/${recipientIds.length} usuarios (payment: ${paymentId})`)
 
       // Actualizar el documento de pago
       await db
@@ -97,7 +120,7 @@ export const onYapePayment = onDocumentCreated(
         .collection('yapePayments')
         .doc(paymentId)
         .update({
-          notifiedUsers: [ownerId],
+          notifiedUsers: notifiedUsers,
           notifiedAt: new Date()
         })
 
