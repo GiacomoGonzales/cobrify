@@ -669,6 +669,9 @@ export default function CreateCreditNote() {
 
         // Items: en modo "descuento global" se envía un solo item sintético
         // que representa el descuento. En modo normal van los items seleccionados.
+        // IMPORTANTE: la Cloud Function (xmlGenerator) asume que item.unitPrice
+        // YA INCLUYE IGV (igual que los items del POS). Por eso unitPrice y
+        // subtotal son el `total` (con IGV), no el `subtotal` sin IGV.
         items: globalDiscountMode
           ? [{
               productId: null,
@@ -677,9 +680,7 @@ export default function CreateCreditNote() {
               description: formData.discrepancyReason || 'Descuento aplicado a factura',
               quantity: 1,
               unit: 'NIU',
-              // unitPrice = subtotal SIN IGV (el monto que el usuario ingresó
-              // ya incluye IGV; lo desglosamos en calculateTotals).
-              unitPrice: Number(subtotal.toFixed(2)),
+              unitPrice: Number(total.toFixed(2)),
               subtotal: Number(total.toFixed(2)),
               // Flag para identificar este item como descuento global
               isGlobalDiscount: true,
