@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   FileText,
-  Users,
   Package,
   DollarSign,
   Plus,
@@ -11,9 +10,14 @@ import {
   Store,
   Eye,
   EyeOff,
+  Receipt,
+  ShoppingBag,
+  Trophy,
+  CreditCard,
+  Award,
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -21,9 +25,12 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
+import MonthlyDailySalesChart from '@/components/charts/MonthlyDailySalesChart'
+import YearlyMonthlyChart from '@/components/charts/YearlyMonthlyChart'
+import PaymentMethodsPieChart from '@/components/charts/PaymentMethodsPieChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
-import { getRecentInvoices, getCustomers, getProducts } from '@/services/firestoreService'
+import { getRecentInvoices, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getTablesStats } from '@/services/tableService'
@@ -36,14 +43,19 @@ export default function Dashboard() {
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
-  const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [hideDashboardData, setHideDashboardData] = useState(false)
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
   const [openTablesAmount, setOpenTablesAmount] = useState(0) // Suma de mesas ocupadas (modo restaurante)
+  // Aggregates mensuales del gráfico de 12 meses (Fase B: server-side, no descarga
+  // miles de invoices, solo 12 queries de sum).
+  const [monthlyYearData, setMonthlyYearData] = useState([])
+  const [monthlyYearLoading, setMonthlyYearLoading] = useState(false)
+  // Si los aggregates fallan (índice faltante de Firestore o similar), marcamos
+  // un error suave para que la UI muestre un mensaje claro en vez del chart vacío.
+  const [monthlyYearError, setMonthlyYearError] = useState(false)
 
   const toggleShowAmounts = () => {
     const newValue = !showAmounts
@@ -68,6 +80,7 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData()
     loadBranches()
+    loadMonthlyAggregates()
   }, [user, isDemoMode])
 
   // Cargar sucursales para filtro
@@ -84,32 +97,123 @@ export default function Dashboard() {
     }
   }
 
+  // Cargar aggregates mensuales para el gráfico de 12 meses.
+  // Server-side: 12 queries paralelas de sum('total'), no descarga los invoices.
+  // En demo mode computa desde demoData.invoices en memoria.
+  const loadMonthlyAggregates = async () => {
+    const monthNames = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+    const today = new Date()
+    const peruDate = today.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [currentYear, currentMonth] = peruDate.split('-').map(Number)
+
+    // Construir las 12 ventanas de mes (de 11 atrás hasta el actual)
+    const windows = []
+    for (let i = 11; i >= 0; i--) {
+      let m = currentMonth - i
+      let y = currentYear
+      while (m <= 0) { m += 12; y -= 1 }
+      const monthStart = new Date(`${y}-${String(m).padStart(2, '0')}-01T00:00:00-05:00`)
+      const nextMonth = m === 12 ? 1 : m + 1
+      const nextYear = m === 12 ? y + 1 : y
+      const monthEnd = new Date(`${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00-05:00`)
+      const label = m === 1 || i === 11
+        ? `${monthNames[m - 1]} ${String(y).slice(-2)}`
+        : monthNames[m - 1]
+      windows.push({ monthStart, monthEnd, label })
+    }
+
+    // En demo: computar desde demoData.invoices
+    if (isDemoMode && demoData?.invoices) {
+      const data = windows.map(w => {
+        const ventas = (demoData.invoices || []).reduce((sum, inv) => {
+          const invDate = inv.emissionDate
+            ? new Date(inv.emissionDate + 'T12:00:00')
+            : inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+          if (!invDate) return sum
+          if (invDate >= w.monthStart && invDate < w.monthEnd) {
+            return sum + (Number(inv.total) || 0)
+          }
+          return sum
+        }, 0)
+        return { month: w.label, ventas }
+      })
+      setMonthlyYearData(data)
+      return
+    }
+
+    if (!user?.uid) return
+    const businessId = getBusinessId()
+    if (!businessId) return
+
+    setMonthlyYearLoading(true)
+    setMonthlyYearError(false)
+    try {
+      // 12 queries en paralelo: server-side sum('total') por mes.
+      // Cada aggregation cobra 1 read por cada 1000 documentos en el rango
+      // (mucho más barato que descargar todos los invoices).
+      // Requiere índice compuesto (createdAt ASC, total ASC) sobre `invoices`.
+      const queries = windows.map(w =>
+        getAggregateFromServer(
+          query(
+            collection(db, 'businesses', businessId, 'invoices'),
+            where('createdAt', '>=', w.monthStart),
+            where('createdAt', '<', w.monthEnd)
+          ),
+          { totalSum: sum('total') }
+        )
+      )
+      const results = await Promise.all(queries)
+      const data = results.map((res, idx) => ({
+        month: windows[idx].label,
+        ventas: res.data().totalSum || 0,
+      }))
+      setMonthlyYearData(data)
+    } catch (error) {
+      // El error más común es "failed-precondition" cuando falta el índice
+      // compuesto (createdAt + total). Está definido en firestore.indexes.json:
+      // deploy con `firebase deploy --only firestore:indexes` y espera 1-10 min.
+      console.warn(
+        '⚠️ Aggregates mensuales no disponibles. ' +
+        'Verifica que el índice (createdAt, total) sobre `invoices` esté creado. ' +
+        'Deploy: firebase deploy --only firestore:indexes'
+      )
+      setMonthlyYearData([])
+      setMonthlyYearError(true)
+    } finally {
+      setMonthlyYearLoading(false)
+    }
+  }
+
   // Helper: Obtener medianoche de hoy en hora Perú (UTC-5)
-  const getStartOfTodayPeru = () => {
+  // useCallback con [] → referencia estable, no invalida useMemos.
+  const getStartOfTodayPeru = useCallback(() => {
     const now = new Date()
     const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) // 'YYYY-MM-DD'
     return new Date(peruDate + 'T00:00:00-05:00')
-  }
+  }, [])
 
   // Helper: Obtener inicio del mes actual en hora Perú
-  const getStartOfMonthPeru = () => {
+  const getStartOfMonthPeru = useCallback(() => {
     const now = new Date()
     const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
     const [year, month] = peruDate.split('-')
     return new Date(`${year}-${month}-01T00:00:00-05:00`)
-  }
+  }, [])
 
   // Helper: Obtener inicio del día N días atrás en hora Perú
-  const getDaysAgo = days => {
-    const today = getStartOfTodayPeru()
+  const getDaysAgo = useCallback((days) => {
+    const today = (() => {
+      const now = new Date()
+      const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+      return new Date(peruDate + 'T00:00:00-05:00')
+    })()
     return new Date(today.getTime() - days * 24 * 60 * 60 * 1000)
-  }
+  }, [])
 
   const loadDashboardData = async () => {
     if (isDemoMode && demoData) {
       // Load demo data
       setInvoices(demoData.invoices || [])
-      setCustomers(demoData.customers || [])
       setProducts(demoData.products || [])
       // Calcular monto de mesas abiertas en modo demo restaurante
       if (businessMode === 'restaurant' && Array.isArray(demoData.tables)) {
@@ -136,34 +240,33 @@ export default function Dashboard() {
 
       // Check if we should hide dashboard data from secondary users
       const shouldHideData = businessData.hideDashboardDataFromSecondary && !isAdmin && !isBusinessOwner
-      setHideDashboardData(shouldHideData)
 
       // If we need to hide data, don't load anything
       if (shouldHideData) {
         setInvoices([])
-        setCustomers([])
         setProducts([])
         setIsLoading(false)
         return
       }
 
-      // Cargar facturas desde el inicio del mes o 14 días atrás (lo que sea más antiguo)
-      // Se necesitan 14 días para el gráfico comparativo y desde inicio del mes para "Ventas del Mes"
-      const fourteenDaysAgo = getDaysAgo(14)
-      const monthStart = getStartOfMonthPeru()
-      const sinceDate = monthStart < fourteenDaysAgo ? monthStart : fourteenDaysAgo
+      // Cargar facturas desde 2 meses atrás (inicio del mes anterior).
+      // Suficiente para: 7 días (gráfico semanal), mes actual (gráfico diario,
+      // top productos/clientes/pagos) y mes anterior (comparación %).
+      // El gráfico de 12 meses NO se computa aquí — usa server-side aggregations
+      // separadas (mucho más livianas que descargar miles de invoices).
+      const twoMonthsAgo = new Date()
+      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2)
+      twoMonthsAgo.setDate(1)
+      twoMonthsAgo.setHours(0, 0, 0, 0)
+      const sinceDate = twoMonthsAgo
 
-      const [invoicesResult, customersResult, productsResult] = await Promise.all([
+      const [invoicesResult, productsResult] = await Promise.all([
         getRecentInvoices(businessId, sinceDate),
-        getCustomers(businessId),
         getProducts(businessId),
       ])
 
       if (invoicesResult.success) {
         setInvoices(invoicesResult.data || [])
-      }
-      if (customersResult.success) {
-        setCustomers(customersResult.data || [])
       }
       if (productsResult.success) {
         setProducts(productsResult.data || [])
@@ -188,7 +291,7 @@ export default function Dashboard() {
   }
 
   // Helper to get date from invoice - usa fecha de emisión si existe, sino createdAt
-  const getInvoiceDate = (inv) => {
+  const getInvoiceDate = useCallback((inv) => {
     if (inv?.emissionDate) {
       if (inv.emissionDate.toDate) return inv.emissionDate.toDate()
       if (typeof inv.emissionDate === 'string') {
@@ -205,135 +308,266 @@ export default function Dashboard() {
     }
     if (!inv?.createdAt) return null
     return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
-  }
+  }, [])
 
-  // Filtrar por sucursal primero
-  const branchFilteredInvoices = filterBranch === 'all'
-    ? invoices
-    : filterBranch === 'main'
-      ? invoices.filter(inv => !inv.branchId)
-      : invoices.filter(inv => inv.branchId === filterBranch)
+  // === Filtrado por sucursal (memoized) ===
+  const branchFilteredInvoices = useMemo(() => {
+    return filterBranch === 'all'
+      ? invoices
+      : filterBranch === 'main'
+        ? invoices.filter(inv => !inv.branchId)
+        : invoices.filter(inv => inv.branchId === filterBranch)
+  }, [invoices, filterBranch])
 
-  // Filtrar facturas válidas para cálculos de ventas:
-  // - Excluir notas de crédito y débito (no son ventas, son ajustes)
-  // - Excluir notas de venta ya convertidas a boleta/factura (para no duplicar ingresos)
-  // - Excluir documentos anulados (notas de venta, boletas, facturas)
-  // - Excluir documentos archivados (el usuario los archivó para que no sumen)
-  const validInvoicesForSales = branchFilteredInvoices.filter(inv => {
-    // Excluir notas de crédito y débito (no son ventas)
-    if (inv.documentType === 'nota_credito' || inv.documentType === 'nota_debito') {
-      return false
-    }
-    // Si es una nota de venta que ya fue convertida a boleta/factura, no contar
-    // (se cuenta la boleta/factura resultante en su lugar)
-    if (inv.documentType === 'nota_venta' && inv.convertedTo) {
-      return false
-    }
-    // Si el documento está anulado o pendiente de anulación por NC, no contar
-    if (inv.status === 'cancelled' || inv.status === 'voided' ||
-        inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') {
-      return false
-    }
-    // Si está en proceso de anulación SUNAT (voiding), tampoco contar
-    if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') {
-      return false
-    }
-    // Archivadas no suman a totales (decisión explícita del usuario)
-    if (inv.archived === true) {
-      return false
-    }
-    return true
-  })
-
-  // Calcular ventas del día — multi-divisa: cada factura se convierte a
-  // PEN base con el TC congelado en ella. Para facturas PEN es no-op.
-  const todayInvoices = validInvoicesForSales.filter(inv => {
-    const invDate = getInvoiceDate(inv)
-    if (!invDate) return false
-    return invDate >= getStartOfTodayPeru()
-  })
-  const todaysSales = todayInvoices.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
-  // Total USD nativo (sin convertir) para subtítulo informativo en la card.
-  const todaysSalesUSD = todayInvoices
-    .filter(inv => normalizeCurrency(inv.currency) === 'USD')
-    .reduce((sum, inv) => sum + (Number(inv.total) || 0), 0)
-
-  // Calcular ventas del mes
-  const monthInvoices = validInvoicesForSales.filter(inv => {
-    const invDate = getInvoiceDate(inv)
-    if (!invDate) return false
-    return invDate >= getStartOfMonthPeru()
-  })
-  const monthSales = monthInvoices.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
-  const monthSalesUSD = monthInvoices
-    .filter(inv => normalizeCurrency(inv.currency) === 'USD')
-    .reduce((sum, inv) => sum + (Number(inv.total) || 0), 0)
-
-  // Facturas pendientes
-  const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
-
-  // Productos con stock bajo. Usa el umbral configurado por producto
-  // (minStock); si no existe, cae al default global (DEFAULT_MIN_STOCK=3).
-  const lowStockProducts = products.filter(p => {
-    const threshold = Number.isFinite(Number(p.minStock)) && Number(p.minStock) >= 0
-      ? Number(p.minStock)
-      : 3
-    if (p.hasVariants && p.variants?.length > 0) {
-      const totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-      return totalStock <= threshold
-    }
-    return p.stock !== null && p.stock <= threshold
-  })
-
-  // Datos de ventas de los últimos 7 días con comparativa de semana anterior
-  const salesData = []
-  const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-
-  for (let i = 6; i >= 0; i--) {
-    const dayStart = getDaysAgo(i)
-    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
-
-    // Semana anterior (mismo día, 7 días antes)
-    const prevDayStart = getDaysAgo(i + 7)
-    const prevDayEnd = new Date(prevDayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
-
-    const daySales = validInvoicesForSales
-      .filter(inv => {
-        const invDate = getInvoiceDate(inv)
-        if (!invDate) return false
-        return invDate >= dayStart && invDate <= dayEnd
-      })
-      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
-
-    const prevDaySales = validInvoicesForSales
-      .filter(inv => {
-        const invDate = getInvoiceDate(inv)
-        if (!invDate) return false
-        return invDate >= prevDayStart && invDate <= prevDayEnd
-      })
-      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
-
-    salesData.push({
-      name: dayNames[dayStart.getDay()],
-      ventas: daySales,
-      ventasAnterior: prevDaySales,
+  // === Filtrado de facturas válidas (memoized) ===
+  // Excluye notas de crédito/débito, notas de venta convertidas, anuladas y
+  // archivadas. Solo se recomputa cuando cambian las facturas o el filtro.
+  const validInvoicesForSales = useMemo(() => {
+    return branchFilteredInvoices.filter(inv => {
+      if (inv.documentType === 'nota_credito' || inv.documentType === 'nota_debito') return false
+      if (inv.documentType === 'nota_venta' && inv.convertedTo) return false
+      if (inv.status === 'cancelled' || inv.status === 'voided' ||
+          inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') return false
+      if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') return false
+      if (inv.archived === true) return false
+      return true
     })
-  }
+  }, [branchFilteredInvoices])
 
-  // Calcular cambio del día anterior
-  const yesterdaySales = validInvoicesForSales
-    .filter(inv => {
+  // === Stats del día (memoized: un solo pase calcula hoy + ayer) ===
+  const todayStats = useMemo(() => {
+    const todayStart = getStartOfTodayPeru()
+    const yesterdayStart = getDaysAgo(1)
+    const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
+
+    let todaySales = 0
+    let todaySalesUSD = 0
+    let yesterdaySales = 0
+
+    for (const inv of validInvoicesForSales) {
       const invDate = getInvoiceDate(inv)
-      if (!invDate) return false
-      const yesterday = getDaysAgo(1)
-      const yesterdayEnd = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1)
-      return invDate >= yesterday && invDate <= yesterdayEnd
-    })
-    .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+      if (!invDate) continue
+      const totalBase = getDocumentTotalInBase(inv)
+      if (invDate >= todayStart) {
+        todaySales += totalBase
+        if (normalizeCurrency(inv.currency) === 'USD') {
+          todaySalesUSD += Number(inv.total) || 0
+        }
+      } else if (invDate >= yesterdayStart && invDate <= yesterdayEnd) {
+        yesterdaySales += totalBase
+      }
+    }
+    return { todaySales, todaySalesUSD, yesterdaySales }
+  }, [validInvoicesForSales, getStartOfTodayPeru, getDaysAgo, getInvoiceDate])
 
+  const todaysSales = todayStats.todaySales
+  const todaysSalesUSD = todayStats.todaySalesUSD
+  const yesterdaySales = todayStats.yesterdaySales
   const todayChange = yesterdaySales > 0
     ? ((todaysSales - yesterdaySales) / yesterdaySales * 100).toFixed(1)
     : todaysSales > 0 ? '+100.0' : '0.0'
+
+  // === Stats del mes (memoized, single-pass) ===
+  // UN SOLO recorrido de las facturas calcula:
+  //   monthSales, monthSalesUSD, monthSalesCount, avgTicketMonth,
+  //   dailyMonthData (bucket por día), avgDailyMonth,
+  //   topProducts (aggregando items), topCustomers (por cliente),
+  //   paymentMethodsData (por método de pago).
+  // Esto reemplaza ~60 iteraciones anteriores con UNA sola.
+  const monthStats = useMemo(() => {
+    const monthStart = getStartOfMonthPeru()
+    const dailyMap = {}
+    const productMap = {}
+    const customerMap = {}
+    const paymentMap = {}
+    let monthSales = 0
+    let monthSalesUSD = 0
+    let monthCount = 0
+
+    for (const inv of validInvoicesForSales) {
+      const invDate = getInvoiceDate(inv)
+      if (!invDate || invDate < monthStart) continue
+
+      const totalBase = getDocumentTotalInBase(inv)
+      const currency = normalizeCurrency(inv.currency)
+
+      monthSales += totalBase
+      if (currency === 'USD') monthSalesUSD += Number(inv.total) || 0
+      monthCount++
+
+      // Bucket por día del mes (1..N)
+      const day = invDate.getDate()
+      dailyMap[day] = (dailyMap[day] || 0) + totalBase
+
+      // Top productos (aggrega items)
+      const items = inv.items || []
+      for (let j = 0; j < items.length; j++) {
+        const item = items[j]
+        const key = item.productId || item.name || 'sin-nombre'
+        let entry = productMap[key]
+        if (!entry) {
+          entry = { name: item.name || 'Producto sin nombre', quantity: 0, total: 0 }
+          productMap[key] = entry
+        }
+        const qty = Number(item.quantity) || 0
+        entry.quantity += qty
+        entry.total += Number(item.total) || qty * (Number(item.price) || 0)
+      }
+
+      // Top clientes
+      const customer = inv.customer
+      if (customer) {
+        const ckey = customer.documentNumber || customer.name || customer.businessName
+        if (ckey) {
+          let centry = customerMap[ckey]
+          if (!centry) {
+            centry = {
+              name: customer.businessName || customer.name || 'Cliente sin nombre',
+              document: customer.documentNumber || '',
+              total: 0,
+              count: 0,
+            }
+            customerMap[ckey] = centry
+          }
+          centry.total += totalBase
+          centry.count += 1
+        }
+      }
+
+      // Métodos de pago (split o legacy)
+      if (Array.isArray(inv.payments) && inv.payments.length > 0) {
+        const rate = Number(inv.exchangeRate) || 1
+        const isUSD = currency === 'USD'
+        for (let k = 0; k < inv.payments.length; k++) {
+          const p = inv.payments[k]
+          const method = p.method || 'Otro'
+          const amount = Number(p.amount) || 0
+          paymentMap[method] = (paymentMap[method] || 0) + (isUSD ? amount * rate : amount)
+        }
+      } else if (inv.paymentMethod) {
+        paymentMap[inv.paymentMethod] = (paymentMap[inv.paymentMethod] || 0) + totalBase
+      }
+    }
+
+    // Construir dailyMonthData (1..N días del mes)
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [year, month, dayStr] = peruDate.split('-').map(Number)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const todayDay = dayStr
+    const dailyMonthData = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      dailyMonthData.push({ day: d, ventas: dailyMap[d] || 0, isFuture: d > todayDay })
+    }
+    const avgDailyMonth = monthSales / Math.max(todayDay, 1)
+
+    // Top 5 productos / clientes ordenados
+    const topProducts = Object.values(productMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5)
+    const topCustomers = Object.values(customerMap)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
+    // Métodos de pago con porcentaje
+    const paymentsTotal = Object.values(paymentMap).reduce((s, v) => s + v, 0)
+    const paymentMethodsData = Object.entries(paymentMap)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percent: paymentsTotal > 0 ? (value / paymentsTotal) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value)
+
+    return {
+      monthSales,
+      monthSalesUSD,
+      monthCount,
+      avgTicketMonth: monthCount > 0 ? monthSales / monthCount : 0,
+      dailyMonthData,
+      avgDailyMonth,
+      topProducts,
+      topCustomers,
+      paymentMethodsData,
+    }
+  }, [validInvoicesForSales, getStartOfMonthPeru, getInvoiceDate])
+
+  const monthSales = monthStats.monthSales
+  const monthSalesUSD = monthStats.monthSalesUSD
+  const monthSalesCount = monthStats.monthCount
+  const avgTicketMonth = monthStats.avgTicketMonth
+  const dailyMonthData = monthStats.dailyMonthData
+  const avgDailyMonth = monthStats.avgDailyMonth
+  const topProducts = monthStats.topProducts
+  const topCustomers = monthStats.topCustomers
+  const paymentMethodsData = monthStats.paymentMethodsData
+
+  // === Ventas mes ANTERIOR (memoized) ===
+  const prevMonthSales = useMemo(() => {
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [year, month] = peruDate.split('-').map(Number)
+    const prevMonth = month === 1 ? 12 : month - 1
+    const prevYear = month === 1 ? year - 1 : year
+    const prevMonthStart = new Date(`${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00-05:00`)
+    const monthStart = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00-05:00`)
+
+    let total = 0
+    for (const inv of validInvoicesForSales) {
+      const invDate = getInvoiceDate(inv)
+      if (!invDate) continue
+      if (invDate >= prevMonthStart && invDate < monthStart) {
+        total += getDocumentTotalInBase(inv)
+      }
+    }
+    return total
+  }, [validInvoicesForSales, getInvoiceDate])
+
+  const monthChange = prevMonthSales > 0
+    ? ((monthSales - prevMonthSales) / prevMonthSales * 100).toFixed(1)
+    : monthSales > 0 ? '+100.0' : '0.0'
+
+  // === Ventas de los últimos 7 días (memoized, single-pass con map por día) ===
+  const salesData = useMemo(() => {
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+    const fourteenDaysAgo = getDaysAgo(13) // 14 días = de hoy hasta 13 atrás
+    const todayEnd = new Date(getStartOfTodayPeru().getTime() + 24 * 60 * 60 * 1000 - 1)
+    // Bucketear por clave 'YYYY-MM-DD' en zona Perú
+    const dayMap = {}
+    for (const inv of validInvoicesForSales) {
+      const invDate = getInvoiceDate(inv)
+      if (!invDate || invDate < fourteenDaysAgo || invDate > todayEnd) continue
+      const key = invDate.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+      dayMap[key] = (dayMap[key] || 0) + getDocumentTotalInBase(inv)
+    }
+    const data = []
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = getDaysAgo(i)
+      const prevDayStart = getDaysAgo(i + 7)
+      const dayKey = dayStart.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+      const prevDayKey = prevDayStart.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+      data.push({
+        name: dayNames[dayStart.getDay()],
+        ventas: dayMap[dayKey] || 0,
+        ventasAnterior: dayMap[prevDayKey] || 0,
+      })
+    }
+    return data
+  }, [validInvoicesForSales, getDaysAgo, getStartOfTodayPeru, getInvoiceDate])
+
+  // === Productos con stock bajo (memoized) ===
+  const lowStockProducts = useMemo(() => {
+    return products.filter(p => {
+      const threshold = Number.isFinite(Number(p.minStock)) && Number(p.minStock) >= 0
+        ? Number(p.minStock)
+        : 3
+      if (p.hasVariants && p.variants?.length > 0) {
+        const totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+        return totalStock <= threshold
+      }
+      return p.stock !== null && p.stock <= threshold
+    })
+  }, [products])
 
   // Formatear fecha corta en zona Perú (ej: "30 mar")
   const formatShortDate = (date) => {
@@ -376,39 +610,43 @@ export default function Dashboard() {
         ? `+ ${formatCurrency(monthSalesUSD, 'USD')} USD (incluido en el total)`
         : null,
       icon: TrendingUp,
-      change: `${validInvoicesForSales.filter(inv => {
-        const invDate = getInvoiceDate(inv)
-        if (!invDate) return false
-        return invDate >= getStartOfMonthPeru()
-      }).length} comprobantes`,
+      change: prevMonthSales > 0
+        ? (monthSales >= prevMonthSales ? `+${monthChange}% vs mes anterior` : `${monthChange}% vs mes anterior`)
+        : (monthSales > 0 ? 'Primer mes con ventas' : 'Sin ventas aún'),
+      changeType: prevMonthSales > 0
+        ? (monthSales >= prevMonthSales ? 'positive' : 'negative')
+        : 'positive',
+      isSalesAmount: true,
+    },
+    {
+      title: 'Ticket Promedio (mes)',
+      value: showAmounts ? formatCurrency(avgTicketMonth) : hiddenAmount,
+      icon: Receipt,
+      change: monthSalesCount > 0 ? `Sobre ${monthSalesCount} venta${monthSalesCount !== 1 ? 's' : ''}` : 'Sin ventas',
       changeType: 'positive',
       isSalesAmount: true,
     },
     {
-      title: 'Facturas Pendientes',
-      value: pendingInvoices.length,
-      icon: FileText,
-      change: pendingInvoices.length > 0 ? 'Requiere atención' : 'Todo al día',
-      changeType: pendingInvoices.length > 0 ? 'warning' : 'positive',
-    },
-    {
-      title: 'Stock Bajo',
-      value: lowStockProducts.length,
-      icon: AlertTriangle,
-      change: lowStockProducts.length > 0 ? 'Revisar inventario' : 'Stock adecuado',
-      changeType: lowStockProducts.length > 0 ? 'danger' : 'positive',
+      title: 'N° Ventas (mes)',
+      subtitle: monthRangeLabel,
+      value: monthSalesCount,
+      icon: ShoppingBag,
+      change: monthSalesCount > 0 ? 'Comprobantes emitidos' : 'Sin ventas',
+      changeType: 'positive',
     },
   ]
 
-  // Últimas 5 facturas
-  const recentInvoices = [...invoices]
-    .sort((a, b) => {
-      const dateA = getInvoiceDate(a)
-      const dateB = getInvoiceDate(b)
-      if (!dateA || !dateB) return 0
-      return dateB - dateA
-    })
-    .slice(0, 5)
+  // Últimas 5 facturas (memoized)
+  const recentInvoices = useMemo(() => {
+    return [...invoices]
+      .sort((a, b) => {
+        const dateA = getInvoiceDate(a)
+        const dateB = getInvoiceDate(b)
+        if (!dateA || !dateB) return 0
+        return dateB - dateA
+      })
+      .slice(0, 5)
+  }, [invoices, getInvoiceDate])
 
   const getStatusBadge = status => {
     switch (status) {
@@ -562,48 +800,142 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Charts and Quick Stats Row */}
+      {/* Gráficos principales: mes actual día por día + últimos 12 meses */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Ventas del mes</CardTitle>
+              <p className="text-xs text-gray-500 mt-1">Día por día — {monthRangeLabel}</p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <MonthlyDailySalesChart data={dailyMonthData} avgDaily={avgDailyMonth} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Últimos 12 meses</CardTitle>
+              <p className="text-xs text-gray-500 mt-1">Curva de crecimiento del negocio</p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {monthlyYearLoading ? (
+              <div className="flex items-center justify-center h-[300px]">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : monthlyYearError ? (
+              <div className="flex flex-col items-center justify-center h-[300px] text-center px-4">
+                <AlertTriangle className="w-8 h-8 text-amber-500 mb-2" />
+                <p className="text-sm text-gray-700 font-medium">Gráfico no disponible</p>
+                <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                  Necesita un índice de Firestore que se está creando.
+                  Vuelve a recargar en unos minutos.
+                </p>
+              </div>
+            ) : (
+              <YearlyMonthlyChart data={monthlyYearData} />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Gráfico semanal (comparativa 7 días vs semana anterior) */}
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Ventas de los últimos 7 días</CardTitle>
+            <p className="text-xs text-gray-500 mt-1">Comparado con la semana anterior</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <SalesChart data={salesData} />
+        </CardContent>
+      </Card>
+
+      {/* Análisis del mes: Top productos / Métodos de pago / Top clientes */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales Chart */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ventas de los Últimos 7 Días</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SalesChart data={salesData} />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Users className="w-8 h-8 text-primary-600" />
-                <span className="text-3xl font-bold text-gray-900">{customers.length}</span>
+        {/* Top 5 productos más vendidos del mes */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-gray-500" />
+              <CardTitle>Top productos del mes</CardTitle>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Por unidades vendidas</p>
+          </CardHeader>
+          <CardContent>
+            {topProducts.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-500">
+                Sin ventas este mes
               </div>
-              <p className="text-sm text-gray-600">Total Clientes</p>
-              <Link to={`${routePrefix}/clientes`} className="text-xs text-primary-600 hover:underline mt-1 inline-block">
-                Ver clientes →
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Package className="w-8 h-8 text-primary-600" />
-                <span className="text-3xl font-bold text-gray-900">{products.length}</span>
+            ) : (
+              <div className="space-y-3">
+                {topProducts.map((p, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-700">
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                      <p className="text-xs text-gray-500">{p.quantity} und · {showAmounts ? formatCurrency(p.total) : 'S/ ****'}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm text-gray-600">Productos Activos</p>
-              <Link to={`${routePrefix}/productos`} className="text-xs text-primary-600 hover:underline mt-1 inline-block">
-                Ver productos →
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Métodos de pago */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-gray-500" />
+              <CardTitle>Métodos de pago</CardTitle>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Cómo te pagaron este mes</p>
+          </CardHeader>
+          <CardContent>
+            <PaymentMethodsPieChart data={paymentMethodsData} />
+          </CardContent>
+        </Card>
+
+        {/* Top 5 clientes del mes */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-gray-500" />
+              <CardTitle>Top clientes del mes</CardTitle>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Por monto comprado</p>
+          </CardHeader>
+          <CardContent>
+            {topCustomers.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-500">
+                Sin clientes identificados este mes
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topCustomers.map((c, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-700">
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {c.count} compra{c.count !== 1 ? 's' : ''} · {showAmounts ? formatCurrency(c.total) : 'S/ ****'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Low Stock Alert */}
