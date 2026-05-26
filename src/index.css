@@ -26,6 +26,17 @@
     scroll-behavior: smooth;
   }
 
+  /* En tablets (touch + pantalla mediana o grande), aplicar zoom out al 85%
+     para que la UI no se sienta apretada. La media query combina:
+       - min-width: 768px → tablets en portrait o landscape
+       - pointer: coarse → dispositivo táctil (excluye laptops/desktops con mouse)
+     Esto NO afecta a teléfonos (anchos < 768px) ni desktops (pointer: fine). */
+  @media (min-width: 768px) and (pointer: coarse) {
+    html {
+      font-size: 85%;
+    }
+  }
+
   body {
     @apply bg-gray-50 text-gray-900 font-sans;
     margin: 0;

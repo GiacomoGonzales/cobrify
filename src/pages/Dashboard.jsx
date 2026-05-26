@@ -714,14 +714,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid — el icono queda en la esquina superior derecha (alineado
+          al título), tamaño fijo, sin competir por el ancho con el valor.
+          `items-start` evita que se mueva según la cantidad de líneas de cada
+          card; `flex-shrink-0` lo blinda contra valores largos. */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => (
           <Card key={index} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
                     <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.title}</p>
                     {stat.isSalesAmount && (
                       <button
@@ -730,9 +733,9 @@ export default function Dashboard() {
                         title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
                       >
                         {showAmounts ? (
-                          <Eye className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                          <Eye className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
                         ) : (
-                          <EyeOff className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                          <EyeOff className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
                         )}
                       </button>
                     )}
@@ -740,7 +743,7 @@ export default function Dashboard() {
                   {stat.subtitle && (
                     <p className="text-xs text-primary-600 mt-0.5">{stat.subtitle}</p>
                   )}
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2 truncate">{stat.value}</p>
                   {stat.usdSubtitle && (
                     <p className="text-xs text-emerald-700 mt-0.5 font-medium">{stat.usdSubtitle}</p>
                   )}
@@ -776,16 +779,16 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div
-                  className={`p-2 sm:p-3 rounded-lg ${
+                  className={`p-2 rounded-lg flex-shrink-0 ${
                     stat.changeType === 'danger'
-                      ? 'bg-red-100'
+                      ? 'bg-red-50'
                       : stat.changeType === 'warning'
-                      ? 'bg-yellow-100'
-                      : 'bg-primary-100'
+                      ? 'bg-yellow-50'
+                      : 'bg-primary-50'
                   }`}
                 >
                   <stat.icon
-                    className={`w-5 h-5 sm:w-6 sm:h-6 ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 ${
                       stat.changeType === 'danger'
                         ? 'text-red-600'
                         : stat.changeType === 'warning'

@@ -1673,102 +1673,110 @@ export default function CashRegister() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
+      {/* Header — 2 filas para que no se aprieten todos los elementos:
+            Fila 1: título + botones de acción (siempre).
+            Fila 2: selectores de sucursal/cajero + badges informativos (solo si aplican).
+          En desktop con suficiente ancho la fila 2 puede tener varios elementos
+          y se ven en línea; en tablet cada uno ocupa su espacio sin aplastarse. */}
+      <div className="space-y-3">
+        {/* Fila 1: Título + acciones principales */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
+          </div>
+
+          {activeTab === 'current' && !isViewingOtherUser && !isViewingAll && (
+            !currentSession ? (
+              <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
+                <Unlock className="w-4 h-4 mr-2" />
+                Abrir Caja
+              </Button>
+            ) : (
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button variant="outline" onClick={() => setShowMovementModal(true)} className="flex-1 sm:flex-initial">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Movimiento
+                </Button>
+                <Button variant="danger" onClick={() => setShowCloseModal(true)} className="flex-1 sm:flex-initial">
+                  <Lock className="w-4 h-4 mr-2" />
+                  Cerrar Caja
+                </Button>
+              </div>
+            )
+          )}
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          {/* Selector de Sucursal - Solo mostrar si hay más de una opción */}
-          {(branches.length > 0 || !hasMainAccess) && (
-            <div className="flex items-center gap-2">
-              <Store className="w-4 h-4 text-gray-500" />
-              <select
-                value={selectedBranch?.id || ''}
-                onChange={e => {
-                  if (e.target.value === '') {
-                    setSelectedBranch(null)
-                  } else {
-                    const branch = branches.find(b => b.id === e.target.value)
-                    setSelectedBranch(branch)
-                  }
-                  // El useEffect recargará datos automáticamente al cambiar selectedBranch
-                }}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
-                {hasMainAccess && <option value="">Sucursal Principal</option>}
-                {branches.map(branch => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Selector de Usuario - Solo visible para owner con sub-usuarios */}
-          {showUserSelector && (
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-gray-500" />
-              <select
-                value={selectedCashUser || ''}
-                onChange={e => {
-                  const val = e.target.value
-                  setSelectedCashUser(val === '' ? null : val)
-                }}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Mi Caja</option>
-                {independentSubUsers.map(su => {
-                  const suUid = su.uid || su.id
-                  const hasOpen = openSessions.some(s => s.openedByUserId === suUid)
-                  return (
-                    <option key={suUid} value={suUid}>
-                      {su.displayName || su.email}{hasOpen ? ' (Caja abierta)' : ''}
+        {/* Fila 2: Selectores + badges (solo si hay al menos uno que mostrar) */}
+        {((branches.length > 0 || !hasMainAccess) || showUserSelector || isViewingOtherUser || isViewingAll) && (
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Selector de Sucursal */}
+            {(branches.length > 0 || !hasMainAccess) && (
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm">
+                <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <select
+                  value={selectedBranch?.id || ''}
+                  onChange={e => {
+                    if (e.target.value === '') {
+                      setSelectedBranch(null)
+                    } else {
+                      const branch = branches.find(b => b.id === e.target.value)
+                      setSelectedBranch(branch)
+                    }
+                  }}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer pr-1"
+                >
+                  {hasMainAccess && <option value="">Sucursal Principal</option>}
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
                     </option>
-                  )
-                })}
-                <option value="all">Todos</option>
-              </select>
-            </div>
-          )}
-        </div>
+                  ))}
+                </select>
+              </div>
+            )}
 
-        {/* Badge cuando se ve caja ajena */}
-        {isViewingOtherUser && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
-            <Eye className="w-4 h-4 text-amber-600" />
-            <span className="text-sm text-amber-700 font-medium">Viendo caja de {viewingUserName}</span>
-          </div>
-        )}
-        {isViewingAll && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-            <Eye className="w-4 h-4 text-blue-600" />
-            <span className="text-sm text-blue-700 font-medium">Viendo todas las cajas</span>
-          </div>
-        )}
+            {/* Selector de Usuario (Cajero) */}
+            {showUserSelector && (
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm">
+                <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <select
+                  value={selectedCashUser || ''}
+                  onChange={e => {
+                    const val = e.target.value
+                    setSelectedCashUser(val === '' ? null : val)
+                  }}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="">Mi Caja</option>
+                  {independentSubUsers.map(su => {
+                    const suUid = su.uid || su.id
+                    const hasOpen = openSessions.some(s => s.openedByUserId === suUid)
+                    return (
+                      <option key={suUid} value={suUid}>
+                        {su.displayName || su.email}{hasOpen ? ' (Caja abierta)' : ''}
+                      </option>
+                    )
+                  })}
+                  <option value="all">Todos</option>
+                </select>
+              </div>
+            )}
 
-        {activeTab === 'current' && !isViewingOtherUser && !isViewingAll && (
-          !currentSession ? (
-            <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
-              <Unlock className="w-4 h-4 mr-2" />
-              Abrir Caja
-            </Button>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowMovementModal(true)} className="w-full sm:w-auto">
-                <Plus className="w-4 h-4 mr-2" />
-                Movimiento
-              </Button>
-              <Button variant="danger" onClick={() => setShowCloseModal(true)} className="w-full sm:w-auto">
-                <Lock className="w-4 h-4 mr-2" />
-                Cerrar Caja
-              </Button>
-            </div>
-          )
+            {/* Badge cuando se ve caja ajena */}
+            {isViewingOtherUser && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                <Eye className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span className="text-sm text-amber-700 font-medium">Viendo caja de {viewingUserName}</span>
+              </div>
+            )}
+            {isViewingAll && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                <Eye className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-sm text-blue-700 font-medium">Viendo todas las cajas</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
