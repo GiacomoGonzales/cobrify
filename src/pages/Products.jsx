@@ -3630,41 +3630,55 @@ export default function Products() {
             Gestiona tu catálogo de productos y servicios
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-<Button
-            variant="outline"
-            onClick={() => setIsImportModalOpen(true)}
-            className="w-full sm:w-auto"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Importar Excel
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleExportToExcel}
-            className="w-full sm:w-auto"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
-          {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
+        {/* Botones del header agrupados en 2 filas para mejor jerarquía visual:
+              Fila 1 — Acciones de datos: Importar / Exportar / Rappi / + Nuevo Producto
+              Fila 2 — Vista y categorización: Columnas / Categorías / Marcas
+            En desktop (lg+) ambas filas se ven a la derecha del título. En
+            móvil/tablet cada una toma su ancho y respira sin aplastarse. */}
+        <div className="flex flex-col gap-2 w-full lg:w-auto lg:items-end">
+          {/* Fila 1: Acciones de gestión de datos */}
+          <div className="flex flex-wrap gap-2 w-full lg:w-auto lg:justify-end">
             <Button
               variant="outline"
-              onClick={handleExportForRappi}
-              className="w-full sm:w-auto"
-              title="Exporta SKUs en formato listo para Self Mapping en Portal Partners de Rappi"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex-1 sm:flex-initial"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Importar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportToExcel}
+              className="flex-1 sm:flex-initial"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Exportar SKUs Rappi
+              Exportar
             </Button>
-          )}
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
+              <Button
+                variant="outline"
+                onClick={handleExportForRappi}
+                className="flex-1 sm:flex-initial"
+                title="Exporta SKUs en formato listo para Self Mapping en Portal Partners de Rappi"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Rappi
+              </Button>
+            )}
+            <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
+              <Plus className="w-4 h-4 mr-2" />
+              Nuevo Producto
+            </Button>
+          </div>
+
+          {/* Fila 2: Configuración de vista y categorización */}
+          <div className="flex flex-wrap gap-2 w-full lg:w-auto lg:justify-end">
             {/* Selector de columnas visibles */}
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-initial">
               <Button
                 variant="outline"
                 onClick={() => setColumnSelectorOpen(!columnSelectorOpen)}
-                className={`flex-1 sm:flex-initial ${hasHiddenColumns ? 'border-primary-400 text-primary-700' : ''}`}
+                className={`w-full sm:w-auto ${hasHiddenColumns ? 'border-primary-400 text-primary-700' : ''}`}
                 title="Columnas visibles"
               >
                 <SlidersHorizontal className="w-4 h-4 sm:mr-2" />
@@ -3734,10 +3748,6 @@ export default function Products() {
             >
               <Tag className="w-4 h-4 mr-2" />
               Marcas
-            </Button>
-            <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Producto
             </Button>
           </div>
         </div>

@@ -155,7 +155,16 @@ export default function CreateCreditNote() {
         setSelectedInvoice(invoice)
         setFormData(prev => ({
           ...prev,
-          items: invoice.items.map(item => ({ ...item, selected: true })),
+          // Preservar la cantidad original como `originalQuantity` para que
+          // el cap del input (Math.min(newQty, originalQuantity)) siempre
+          // referencie el valor de la factura original — no la cantidad
+          // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
+          // podía volver a subir a 5 porque el cap caía al valor actual.
+          items: invoice.items.map(item => ({
+            ...item,
+            selected: true,
+            originalQuantity: item.quantity,
+          })),
           discrepancyReason: CREDIT_NOTE_REASONS.find(r => r.code === prev.discrepancyCode)?.description || ''
         }))
       }
