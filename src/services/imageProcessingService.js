@@ -22,9 +22,11 @@ const isValidHttpUrl = (string) => {
 
 export const LOGO_SPECS = {
   58: {
-    maxWidth: 384,
-    maxHeight: 200,
-    recommendedWidth: 120
+    // Reducido a la mitad (antes 384x200) — feedback de usuarios: en papel
+    // de 58mm vía Bluetooth el logo salía demasiado grande.
+    maxWidth: 192,
+    maxHeight: 100,
+    recommendedWidth: 60
   },
   80: {
     maxWidth: 576,
