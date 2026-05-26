@@ -36,6 +36,11 @@ const CREDIT_NOTE_REASONS = [
   { code: '13', description: 'Otros conceptos' },
 ]
 
+// Códigos de motivo que permiten "Descuento global por monto fijo".
+// Cuando el usuario elige uno de estos, aparece la opción de ingresar un monto
+// directo en S/ en vez de jugar con cantidades de items.
+const GLOBAL_DISCOUNT_CODES = ['04', '05', '09']
+
 export default function CreateCreditNote() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -66,6 +71,13 @@ export default function CreateCreditNote() {
     discrepancyReason: '',
     items: [],
   })
+
+  // Modo descuento global (para motivos 04/05/09). Cuando está activo el
+  // usuario ingresa un MONTO en S/ directamente y se ignora la selección
+  // de items — se envía a SUNAT un solo item sintético "Descuento global"
+  // con ese monto.
+  const [globalDiscountMode, setGlobalDiscountMode] = useState(false)
+  const [globalDiscountAmount, setGlobalDiscountAmount] = useState('')
 
   // Form data para factura externa
   const [externalData, setExternalData] = useState({
@@ -213,6 +225,12 @@ export default function CreateCreditNote() {
       discrepancyCode: code,
       discrepancyReason: reason?.description || ''
     }))
+    // Si el nuevo motivo NO admite "descuento global", desactivar ese modo
+    // para volver al flujo de items.
+    if (!GLOBAL_DISCOUNT_CODES.includes(code)) {
+      setGlobalDiscountMode(false)
+      setGlobalDiscountAmount('')
+    }
   }
 
   const handleItemToggle = (index) => {
@@ -288,14 +306,21 @@ export default function CreateCreditNote() {
   }
 
   const calculateTotals = () => {
+    const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
+    const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
+
+    // Modo descuento global: el usuario ingresó un MONTO directo en S/.
+    if (globalDiscountMode) {
+      const totalConIgv = parseFloat(globalDiscountAmount) || 0
+      const subtotal = igvExempt ? totalConIgv : totalConIgv / (1 + igvRate / 100)
+      const igv = igvExempt ? 0 : totalConIgv - subtotal
+      return { subtotal, igv, total: totalConIgv, igvRate, igvExempt }
+    }
+
     const selectedItems = formData.items.filter(item => item.selected)
 
     // item.subtotal YA INCLUYE IGV (es el precio final que pagó el cliente)
     const totalConIgv = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
-
-    // Usar la tasa IGV del documento original (si está exonerado, IGV = 0)
-    const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
-    const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
 
     // Extraer el IGV del total (no sumarlo)
     // Total = Subtotal + IGV = Subtotal * (1 + igvRate/100)
@@ -565,8 +590,28 @@ export default function CreateCreditNote() {
       return
     }
 
-    const selectedItems = formData.items.filter(item => item.selected)
-    if (selectedItems.length === 0) {
+    // Declarar selectedItems aquí (vacío si globalDiscountMode) para que
+    // esté disponible en todo el handler. Sin esto la línea que arma
+    // creditNoteData.items lo encontraría como undefined.
+    const selectedItems = globalDiscountMode
+      ? []
+      : formData.items.filter(item => item.selected)
+
+    // Validaciones específicas del modo "descuento global"
+    if (globalDiscountMode) {
+      const amount = parseFloat(globalDiscountAmount) || 0
+      if (amount <= 0) {
+        setMessage({ type: 'error', text: 'Ingresa un monto de descuento mayor a 0' })
+        return
+      }
+      if (amount > Number(selectedInvoice.total)) {
+        setMessage({
+          type: 'error',
+          text: `El descuento no puede superar el total de la factura (${formatCurrency(selectedInvoice.total, selectedInvoice.currency)})`,
+        })
+        return
+      }
+    } else if (selectedItems.length === 0) {
       setMessage({ type: 'error', text: 'Debes seleccionar al menos un ítem' })
       return
     }
@@ -622,11 +667,27 @@ export default function CreateCreditNote() {
         // Cliente (mismo que el documento original)
         customer: selectedInvoice.customer,
 
-        // Items seleccionados
-        items: selectedItems.map(item => ({
-          ...item,
-          originalQuantity: item.quantity // Guardar cantidad original para referencia
-        })),
+        // Items: en modo "descuento global" se envía un solo item sintético
+        // que representa el descuento. En modo normal van los items seleccionados.
+        items: globalDiscountMode
+          ? [{
+              productId: null,
+              code: '',
+              name: 'Descuento global',
+              description: formData.discrepancyReason || 'Descuento aplicado a factura',
+              quantity: 1,
+              unit: 'NIU',
+              // unitPrice = subtotal SIN IGV (el monto que el usuario ingresó
+              // ya incluye IGV; lo desglosamos en calculateTotals).
+              unitPrice: Number(subtotal.toFixed(2)),
+              subtotal: Number(total.toFixed(2)),
+              // Flag para identificar este item como descuento global
+              isGlobalDiscount: true,
+            }]
+          : selectedItems.map(item => ({
+              ...item,
+              originalQuantity: item.quantity // Guardar cantidad original para referencia
+            })),
 
         // Totales
         subtotal,
@@ -826,7 +887,11 @@ export default function CreateCreditNote() {
     }
   }
 
-  const totals = formData.items.length > 0 ? calculateTotals() : { subtotal: 0, igv: 0, total: 0 }
+  // En modo descuento global usamos calculateTotals directamente (no depende
+  // de items.length). En modo items, requerimos al menos 1 item cargado.
+  const totals = (formData.items.length > 0 || globalDiscountMode)
+    ? calculateTotals()
+    : { subtotal: 0, igv: 0, total: 0 }
   const externalTotals = externalData.items.length > 0 ? calculateExternalTotals() : { subtotal: 0, igv: 0, total: 0 }
 
   if (isLoading) {
@@ -1001,11 +1066,92 @@ export default function CreateCreditNote() {
                 required
               />
             </div>
+
+            {/* Modo "descuento global" — visible solo para motivos 04/05/09.
+                Permite ingresar un MONTO en S/ directamente en lugar de jugar
+                con cantidades de items. Útil cuando el descuento no se
+                corresponde con un item específico (ej. promoción al total). */}
+            {selectedInvoice && GLOBAL_DISCOUNT_CODES.includes(formData.discrepancyCode) && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Modo de aplicación
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 cursor-pointer p-2 bg-white rounded-lg border border-gray-200 hover:border-gray-300">
+                    <input
+                      type="radio"
+                      checked={!globalDiscountMode}
+                      onChange={() => setGlobalDiscountMode(false)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Por items (ajustar cantidades)</div>
+                      <div className="text-xs text-gray-500">Selecciona qué items se acreditan y en qué cantidad. Útil cuando el descuento corresponde a productos específicos.</div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer p-2 bg-white rounded-lg border border-gray-200 hover:border-gray-300">
+                    <input
+                      type="radio"
+                      checked={globalDiscountMode}
+                      onChange={() => setGlobalDiscountMode(true)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Descuento global por monto fijo</div>
+                      <div className="text-xs text-gray-500">Ingresa un monto en {normalizeCurrency(selectedInvoice.currency) === 'USD' ? '$' : 'S/'} que se descuenta del total. SUNAT lo procesa con el código de motivo seleccionado.</div>
+                    </div>
+                  </label>
+                </div>
+
+                {globalDiscountMode && (
+                  <div className="pt-3 border-t border-blue-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Monto a descontar (incluye IGV)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600 font-medium">
+                        {normalizeCurrency(selectedInvoice.currency) === 'USD' ? '$' : 'S/'}
+                      </span>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        max={selectedInvoice.total}
+                        step="0.01"
+                        value={globalDiscountAmount}
+                        onChange={e => setGlobalDiscountAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="flex-1"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Máximo: {formatCurrency(selectedInvoice.total, selectedInvoice.currency)} (total de la factura original)
+                    </p>
+                    {parseFloat(globalDiscountAmount) > 0 && (
+                      <div className="mt-3 p-2 bg-white rounded border border-gray-200 text-xs text-gray-700 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Subtotal sin IGV:</span>
+                          <span className="font-medium">{formatCurrency(parseFloat(globalDiscountAmount) / (1 + (selectedInvoice?.taxConfig?.igvRate ?? 18) / 100), selectedInvoice.currency)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>IGV ({selectedInvoice?.taxConfig?.igvRate ?? 18}%):</span>
+                          <span className="font-medium">{formatCurrency(parseFloat(globalDiscountAmount) - parseFloat(globalDiscountAmount) / (1 + (selectedInvoice?.taxConfig?.igvRate ?? 18) / 100), selectedInvoice.currency)}</span>
+                        </div>
+                        <div className="flex justify-between font-semibold border-t border-gray-100 pt-1">
+                          <span>Total descuento:</span>
+                          <span className="text-primary-600">{formatCurrency(parseFloat(globalDiscountAmount), selectedInvoice.currency)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Items */}
-        {selectedInvoice && (
+        {/* Items — Solo visible cuando NO estás en modo descuento global.
+            En descuento global el monto se toma del input directamente. */}
+        {selectedInvoice && !globalDiscountMode && (
           <Card>
             <CardHeader>
               <CardTitle>3. Items a Incluir en la Nota</CardTitle>
