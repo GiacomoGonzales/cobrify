@@ -41,6 +41,13 @@ const CREDIT_NOTE_REASONS = [
 // directo en S/ en vez de jugar con cantidades de items.
 const GLOBAL_DISCOUNT_CODES = ['04', '05', '09']
 
+// SUNAT prohíbe estos motivos sobre BOLETAS de venta (solo se permiten en
+// facturas). Referencia: Guía de elaboración de Nota de Crédito Electrónica
+// UBL 2.1, sección 8: "para el caso de boletas de venta, no es posible
+// emitir Notas de crédito con motivos 04 (descuento global), 05 (descuento
+// por ítem) ni 08 (bonificación)".
+const BOLETA_DISALLOWED_CODES = ['04', '05', '08']
+
 export default function CreateCreditNote() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -165,20 +172,33 @@ export default function CreateCreditNote() {
       const invoice = invoices.find(inv => inv.id === formData.referencedInvoiceId)
       if (invoice) {
         setSelectedInvoice(invoice)
-        setFormData(prev => ({
-          ...prev,
-          // Preservar la cantidad original como `originalQuantity` para que
-          // el cap del input (Math.min(newQty, originalQuantity)) siempre
-          // referencie el valor de la factura original — no la cantidad
-          // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
-          // podía volver a subir a 5 porque el cap caía al valor actual.
-          items: invoice.items.map(item => ({
-            ...item,
-            selected: true,
-            originalQuantity: item.quantity,
-          })),
-          discrepancyReason: CREDIT_NOTE_REASONS.find(r => r.code === prev.discrepancyCode)?.description || ''
-        }))
+        setFormData(prev => {
+          // Si la factura referenciada es boleta y el motivo actual no es
+          // permitido por SUNAT sobre boletas (04/05/08), resetear a '01'.
+          const isBoletaRef = invoice.documentType === 'boleta'
+          const codeIsInvalid = isBoletaRef && BOLETA_DISALLOWED_CODES.includes(prev.discrepancyCode)
+          const newCode = codeIsInvalid ? '01' : prev.discrepancyCode
+          // Si se reseteó y estaba en modo descuento global, desactivarlo.
+          if (codeIsInvalid) {
+            setGlobalDiscountMode(false)
+            setGlobalDiscountAmount('')
+          }
+          return {
+            ...prev,
+            // Preservar la cantidad original como `originalQuantity` para que
+            // el cap del input (Math.min(newQty, originalQuantity)) siempre
+            // referencie el valor de la factura original — no la cantidad
+            // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
+            // podía volver a subir a 5 porque el cap caía al valor actual.
+            items: invoice.items.map(item => ({
+              ...item,
+              selected: true,
+              originalQuantity: item.quantity,
+            })),
+            discrepancyCode: newCode,
+            discrepancyReason: CREDIT_NOTE_REASONS.find(r => r.code === newCode)?.description || ''
+          }
+        })
       }
     }
   }, [formData.referencedInvoiceId, invoices])
@@ -1048,12 +1068,26 @@ export default function CreateCreditNote() {
                 onChange={e => handleReasonChange(e.target.value)}
                 required
               >
-                {CREDIT_NOTE_REASONS.map(reason => (
-                  <option key={reason.code} value={reason.code}>
-                    {reason.code} - {reason.description}
-                  </option>
-                ))}
+                {CREDIT_NOTE_REASONS
+                  .filter(reason => {
+                    // Sobre boletas, SUNAT no permite motivos 04/05/08.
+                    if (selectedInvoice?.documentType === 'boleta' && BOLETA_DISALLOWED_CODES.includes(reason.code)) {
+                      return false
+                    }
+                    return true
+                  })
+                  .map(reason => (
+                    <option key={reason.code} value={reason.code}>
+                      {reason.code} - {reason.description}
+                    </option>
+                  ))}
               </Select>
+              {selectedInvoice?.documentType === 'boleta' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  ℹ️ SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas.
+                  Para descontar sobre boleta usa el motivo <strong>09 - Disminución en el valor</strong>.
+                </p>
+              )}
             </div>
 
             <div>
