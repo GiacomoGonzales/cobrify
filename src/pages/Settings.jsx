@@ -395,6 +395,7 @@ export default function Settings() {
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
+  const [catalogHideOutOfStock, setCatalogHideOutOfStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
@@ -1159,6 +1160,7 @@ export default function Settings() {
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
         setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
+        setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
@@ -7041,6 +7043,18 @@ export default function Settings() {
                         </label>
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                           <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
+                            <span className="text-xs text-gray-500">Los productos sin stock no aparecerán en el catálogo (en vez de mostrarse como "Agotado"). Útil si no quieres que los clientes los vean.</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogHideOutOfStock}
+                            onChange={(e) => setCatalogHideOutOfStock(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
                             <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
                             <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
                           </div>
@@ -7263,6 +7277,7 @@ export default function Settings() {
                         catalogTagline,
                         catalogShowPrices,
                         catalogIgnoreStock,
+                        catalogHideOutOfStock,
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
                         catalogLogoUrl: catalogLogoUrl || null,

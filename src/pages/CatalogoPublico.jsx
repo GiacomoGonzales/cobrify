@@ -2576,10 +2576,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return hidden
   }, [categories])
 
+  // Si el negocio activó "Ocultar productos sin stock", omitir productos agotados
+  // del catálogo público (en vez de mostrarlos con badge "Agotado").
+  // No aplica si "Ignorar stock" está activo (en ese caso todos son disponibles).
+  const hideOutOfStock = business?.catalogHideOutOfStock === true
+  const ignoreStockSetting = business?.catalogIgnoreStock === true
+
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       // Excluir productos desactivados (isActive === false) del catálogo público.
       if (product.isActive === false) return false
+
+      // Excluir productos sin stock si la opción está activa (y no se ignora el stock)
+      if (hideOutOfStock && !ignoreStockSetting && isProductOutOfStock(product, false)) {
+        return false
+      }
 
       const matchesSearch = !searchQuery ||
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -2606,7 +2617,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds])
+  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting])
 
   // Productos destacados
   const featuredProducts = useMemo(() => {
