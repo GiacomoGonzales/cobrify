@@ -2476,8 +2476,15 @@ export default function POS() {
           if (avgPerChar < 50) {
             e.preventDefault()
             setSearchTerm(buffer)
-            // Llevar el foco al buscador para que la siguiente edición/escaneo sea natural.
-            searchInputRef.current?.focus()
+            // En desktop con mouse, llevar el foco al buscador para que el
+            // cajero pueda continuar editando con teclado. En tablets evitar
+            // el focus para no abrir el teclado virtual — la pistola escribe
+            // vía keydown global, no necesita que el input esté enfocado.
+            const hasFinePointer = typeof window !== 'undefined'
+              && window.matchMedia?.('(pointer: fine)').matches
+            if (hasFinePointer) {
+              searchInputRef.current?.focus()
+            }
           }
         }
         buffer = ''
