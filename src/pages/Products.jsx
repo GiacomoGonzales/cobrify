@@ -1068,6 +1068,16 @@ export default function Products() {
         ? [...extraBarcodes, pendingExtra]
         : extraBarcodes
 
+      // Si estamos editando un producto cuyos lotes los gestiona el flujo de
+      // Compras (tiene batches[] activos), NO debemos sobreescribir los
+      // quick-access fields `expirationDate`, `batchNumber` y `trackExpiration`
+      // desde este modal — esos los recalcula CreatePurchase derivándolos del
+      // batch con vencimiento más cercano. Sobreescribirlos desde acá borraba
+      // la info de lote/vencimiento que el usuario había cargado en la compra.
+      const hasActiveBatches = !!editingProduct &&
+        Array.isArray(editingProduct.batches) &&
+        editingProduct.batches.some(b => (Number(b.quantity) || 0) > 0)
+
       // Build product data based on hasVariants
       const productData = {
         code: data.code || '',
@@ -1080,9 +1090,15 @@ export default function Products() {
         cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null,
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
-        trackExpiration: trackExpiration,
+        // Con batches activos, forzar trackExpiration:true (los lotes lo implican)
+        trackExpiration: hasActiveBatches ? true : trackExpiration,
         trackSerials: trackSerials,
-        expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
+        // Si hay batches activos, omitir expirationDate del payload — updateDoc
+        // hace merge y preserva el valor existente (calculado por Compras).
+        ...(hasActiveBatches
+          ? {}
+          : { expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null }
+        ),
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         // Stock mínimo por producto para alerta de bajo stock. Si está vacío
         // se guarda null y los lugares que consumen el dato usan el default
@@ -1136,7 +1152,10 @@ export default function Products() {
               marca: brand ? brand.name : (pharmacyData.marca || null),
             }
           })()),
-          batchNumber: pharmacyData.batchNumber || null,
+          // Mismo razonamiento que expirationDate: si hay batches activos
+          // (lote gestionado por Compras), no tocar batchNumber — preservar
+          // el valor del lote más cercano vía merge.
+          ...(hasActiveBatches ? {} : { batchNumber: pharmacyData.batchNumber || null }),
           activeIngredient: pharmacyData.activeIngredient || null,
           therapeuticAction: pharmacyData.therapeuticAction || null,
           saleCondition: pharmacyData.saleCondition || 'sin_receta',
