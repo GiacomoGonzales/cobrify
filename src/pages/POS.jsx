@@ -6199,8 +6199,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
 
           {/* Search — sticky en desktop para que quede pegado al header al scrollear */}
-          <div className={`flex gap-2 lg:sticky lg:top-0 lg:z-20 lg:bg-gray-50 lg:py-2 ${saleCompleted ? 'opacity-50' : ''}`}>
-            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
+          <div className={`flex gap-2 min-w-0 lg:sticky lg:top-0 lg:z-20 lg:bg-gray-50 lg:py-2 ${saleCompleted ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1 min-w-0">
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
                 ref={searchInputRef}
@@ -6209,14 +6209,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 disabled={saleCompleted}
-                className="flex-1 text-base sm:text-lg border-none bg-transparent focus:ring-0 focus:outline-none disabled:cursor-not-allowed"
+                className="flex-1 min-w-0 text-base sm:text-lg border-none bg-transparent focus:ring-0 focus:outline-none disabled:cursor-not-allowed"
               />
             </div>
             {isNativeApp && (
               <button
                 onClick={handleScanBarcode}
                 disabled={saleCompleted || isScanning}
-                className="flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg px-4 py-2 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                className="flex-shrink-0 flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg px-4 py-2 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                 title="Escanear código de barras"
               >
                 {isScanning ? (
@@ -6226,22 +6226,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </button>
             )}
-            {/* Toggle vista cards / lista (sin contenedor, botones sueltos) */}
+            {/* Toggle vista cards / lista — un solo botón que alterna */}
             <button
-              onClick={() => setProductViewMode('grid')}
+              onClick={() => setProductViewMode(productViewMode === 'grid' ? 'list' : 'grid')}
               disabled={saleCompleted}
-              title="Vista en cuadrícula"
-              className={`flex items-center justify-center rounded-lg p-2 transition-colors disabled:opacity-50 ${productViewMode === 'grid' ? 'bg-primary-600 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+              title={productViewMode === 'grid' ? 'Cambiar a vista en lista' : 'Cambiar a vista en cuadrícula'}
+              className="flex-shrink-0 flex items-center justify-center rounded-lg p-2 bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <LayoutGrid className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setProductViewMode('list')}
-              disabled={saleCompleted}
-              title="Vista en lista"
-              className={`flex items-center justify-center rounded-lg p-2 transition-colors disabled:opacity-50 ${productViewMode === 'list' ? 'bg-primary-600 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
-            >
-              <List className="w-5 h-5" />
+              {productViewMode === 'grid' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
             </button>
           </div>
 
