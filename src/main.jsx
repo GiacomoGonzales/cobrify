@@ -1,17 +1,6 @@
-// Polyfill de structuredClone para WebViews antiguas de Android (< 98).
-// La librería capacitor-thermal-printer (y el receipt-printer-encoder que usa
-// internamente) llama a structuredClone() para clonar configuraciones. En
-// tablets con Android System WebView desactualizado falla con "structuredClone
-// is not defined". Este fallback con JSON funciona para objetos planos (que es
-// el caso de las configs del printer). DEBE estar al inicio, antes de cualquier
-// import que pudiera usar la función.
-if (typeof globalThis.structuredClone !== 'function') {
-  globalThis.structuredClone = function structuredClonePolyfill(value) {
-    if (value === undefined || value === null) return value
-    return JSON.parse(JSON.stringify(value))
-  }
-}
-
+// El polyfill de structuredClone para WebViews Android < 98 está inline en
+// index.html (script síncrono que corre antes de este bundle de módulos).
+// Allí está la implementación robusta que soporta Uint8Array, Date, Map, etc.
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'

@@ -100,6 +100,58 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Polyfill de structuredClone para WebViews antiguas de Android (< 98).
+      DEBE estar inline aquí (no en main.jsx) para ejecutarse antes que el
+      bundle de módulos ES. La librería capacitor-thermal-printer llama a
+      structuredClone() para clonar argumentos de plugin (típicamente strings
+      base64, pero también puede recibir Uint8Array, Date, etc.). Cubre todos
+      esos tipos en lugar del fallback básico con JSON que rompe binarios.
+    -->
+    <script>
+      (function() {
+        if (typeof window.structuredClone === 'function') return;
+        function clone(value) {
+          if (value === null || value === undefined) return value;
+          var t = typeof value;
+          if (t !== 'object' && t !== 'function') return value;
+          if (value instanceof Date) return new Date(value.getTime());
+          if (value instanceof RegExp) return new RegExp(value.source, value.flags);
+          if (value instanceof ArrayBuffer) return value.slice(0);
+          if (ArrayBuffer.isView(value)) {
+            // Uint8Array, Int8Array, Float32Array, DataView, etc.
+            return new value.constructor(
+              clone(value.buffer),
+              value.byteOffset,
+              value.length !== undefined ? value.length : value.byteLength
+            );
+          }
+          if (Array.isArray(value)) {
+            var arr = new Array(value.length);
+            for (var i = 0; i < value.length; i++) arr[i] = clone(value[i]);
+            return arr;
+          }
+          if (value instanceof Map) {
+            var m = new Map();
+            value.forEach(function (v, k) { m.set(clone(k), clone(v)); });
+            return m;
+          }
+          if (value instanceof Set) {
+            var s = new Set();
+            value.forEach(function (v) { s.add(clone(v)); });
+            return s;
+          }
+          var out = {};
+          for (var key in value) {
+            if (Object.prototype.hasOwnProperty.call(value, key)) {
+              out[key] = clone(value[key]);
+            }
+          }
+          return out;
+        }
+        window.structuredClone = clone;
+      })();
+    </script>
     <!-- Script para limpiar título si es dominio de reseller (antes de React) -->
     <script>
       (function() {
