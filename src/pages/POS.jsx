@@ -8556,7 +8556,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 )}
 
-                {/* Advertencia SUNAT para boletas mayores a 700 soles */}
+                {/* Advertencia SUNAT para boletas mayores a 700 soles.
+                    SUNAT acepta cualquier doc de identidad válido (DNI, CE, RUC,
+                    Pasaporte). La validación al procesar la venta es genérica
+                    (líneas 4460+); este aviso lo refleja para no confundir al
+                    cajero (caso real reportado: cliente con RUC en boleta). */}
                 {documentType === 'boleta' && amounts.total > 700 && (
                   <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
                     <div className="flex items-start gap-2">
@@ -8566,7 +8570,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           Normativa SUNAT
                         </p>
                         <p className="text-xs text-amber-700 mt-1">
-                          Las boletas mayores a S/ 700.00 requieren obligatoriamente el <strong>DNI y nombre completo</strong> del cliente
+                          Las boletas mayores a S/ 700.00 requieren obligatoriamente un <strong>documento de identidad</strong> (DNI, RUC, CE o Pasaporte) y el <strong>nombre completo</strong> del cliente
                         </p>
                       </div>
                     </div>
