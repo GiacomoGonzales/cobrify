@@ -119,7 +119,9 @@ export default function Dashboard() {
       const label = m === 1 || i === 11
         ? `${monthNames[m - 1]} ${String(y).slice(-2)}`
         : monthNames[m - 1]
-      windows.push({ monthStart, monthEnd, label })
+      // year/monthNum se conservan crudos (no derivados de monthStart.getMonth())
+      // para evitar desfases por la timezone del browser.
+      windows.push({ monthStart, monthEnd, label, year: y, monthNum: m })
     }
 
     // En demo: computar desde demoData.invoices
@@ -135,7 +137,7 @@ export default function Dashboard() {
           }
           return sum
         }, 0)
-        return { month: w.label, ventas }
+        return { month: w.label, year: w.year, monthNum: w.monthNum, ventas }
       })
       setMonthlyYearData(data)
       return
@@ -165,6 +167,8 @@ export default function Dashboard() {
       const results = await Promise.all(queries)
       const data = results.map((res, idx) => ({
         month: windows[idx].label,
+        year: windows[idx].year,
+        monthNum: windows[idx].monthNum,
         ventas: res.data().totalSum || 0,
       }))
       setMonthlyYearData(data)
@@ -491,6 +495,31 @@ export default function Dashboard() {
       paymentMethodsData,
     }
   }, [validInvoicesForSales, getStartOfMonthPeru, getInvoiceDate])
+
+  // === Chart 12 meses ajustado con datos validados ===
+  // El aggregate server-side sum('total') incluye TODO: notas de crédito/débito,
+  // anuladas, notas de venta convertidas, archivadas, y suma USD sin convertir.
+  // Para los meses ya cargados localmente (~3 meses) reemplazamos el valor con
+  // el total validado (mismo cálculo que "Ventas del Mes"). Meses más antiguos
+  // siguen mostrando el aggregate — aproximado pero barato en reads.
+  const monthlyYearDataAdjusted = useMemo(() => {
+    if (!monthlyYearData.length) return monthlyYearData
+    const localTotals = new Map()
+    for (const inv of validInvoicesForSales) {
+      const date = getInvoiceDate(inv)
+      if (!date) continue
+      // Año/mes en hora Perú — debe coincidir con cómo se arman los buckets.
+      const peruYmd = date.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+      const [yStr, mStr] = peruYmd.split('-')
+      const key = `${parseInt(yStr, 10)}-${parseInt(mStr, 10)}`
+      localTotals.set(key, (localTotals.get(key) || 0) + getDocumentTotalInBase(inv))
+    }
+    return monthlyYearData.map(entry => {
+      if (entry.year == null || entry.monthNum == null) return entry
+      const key = `${entry.year}-${entry.monthNum}`
+      return localTotals.has(key) ? { ...entry, ventas: localTotals.get(key) } : entry
+    })
+  }, [monthlyYearData, validInvoicesForSales, getInvoiceDate])
 
   const monthSales = monthStats.monthSales
   const monthSalesUSD = monthStats.monthSalesUSD
@@ -839,7 +868,7 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : (
-              <YearlyMonthlyChart data={monthlyYearData} />
+              <YearlyMonthlyChart data={monthlyYearDataAdjusted} />
             )}
           </CardContent>
         </Card>
