@@ -4470,8 +4470,13 @@ export default function POS() {
         abortCheckout('El Carnet de Extranjería debe tener al menos 9 caracteres')
         return
       }
-      if (!customerData.name || customerData.name.trim() === '') {
-        abortCheckout('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el nombre completo del cliente')
+      // Para RUC, la razón social va en businessName; para DNI/CE/Pasaporte
+      // va en name. Aceptamos cualquiera de los dos para no bloquear boletas
+      // con RUC (caso real reportado: I.E.E. con RUC válido pero name vacío).
+      const hasIdentityName = (customerData.name && customerData.name.trim() !== '')
+        || (customerData.businessName && customerData.businessName.trim() !== '')
+      if (!hasIdentityName) {
+        abortCheckout('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el nombre o razón social del cliente')
         return
       }
     }
