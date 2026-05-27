@@ -6454,14 +6454,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {quantityInCart}
                         </div>
                       )}
-                      {/* Imagen pequeña */}
-                      {product.imageUrl ? (
+                      {/* Imagen pequeña (sólo si el producto tiene imagen) */}
+                      {product.imageUrl && (
                         <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded bg-gray-100 overflow-hidden">
                           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-                        </div>
-                      ) : (
-                        <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded bg-gray-100 flex items-center justify-center text-gray-300">
-                          <ShoppingCart className="w-5 h-5" />
                         </div>
                       )}
                       {/* Info principal */}
@@ -8088,74 +8084,63 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       const isBonifLine = displayDiscount > 0 &&
                         Math.abs(lineTotalWithIGV - displayDiscount) < 0.005
                       return (
-                      <div key={group.key} className="p-2 sm:p-3 xl:p-4 bg-gray-50 rounded-xl space-y-2 xl:space-y-3 overflow-hidden min-w-0">
-                        {/* Fila 1: Imagen + Nombre + Eliminar */}
-                        <div className="flex gap-2 xl:gap-3 min-w-0">
-                          {/* Product thumbnail */}
+                      <div key={group.key} className="p-2 bg-gray-50 rounded-lg min-w-0 hover:bg-gray-100 transition-colors">
+                        {/* Fila 1: miniatura + nombre/sub-info + eliminar */}
+                        <div className="flex items-start gap-2 min-w-0">
+                          {/* Miniatura (sólo si el producto tiene imagen) */}
                           {item.imageUrl && (
-                            <div className="w-12 h-12 xl:w-16 xl:h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                              />
+                            <div className="w-10 h-10 flex-shrink-0 rounded bg-white overflow-hidden">
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                             </div>
                           )}
-                          {/* Nombre + Eliminar */}
-                          <div className="flex-1 min-w-0 flex items-start justify-between">
-                            <div className="flex-1 pr-2">
-                              {companySettings?.allowNameEdit ? (
-                                <input
-                                  type="text"
-                                  value={item.name}
-                                  onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
-                                  className="font-semibold text-sm xl:text-base text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
-                                />
-                              ) : (
-                                <p className="font-semibold text-sm xl:text-base text-gray-900 line-clamp-2">
-                                  {item.name}
-                                </p>
-                              )}
+                          {/* Nombre + sub-info inline */}
+                          <div className="flex-1 min-w-0 pt-0.5">
+                            {companySettings?.allowNameEdit ? (
+                              <input
+                                type="text"
+                                value={item.name}
+                                onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
+                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
+                              />
+                            ) : (
+                              <p className="font-semibold text-sm text-gray-900 line-clamp-1" title={item.name}>
+                                {item.name}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] mt-0.5 min-w-0">
                               {isBonifLine && (
                                 <span
-                                  className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200"
-                                  title="Este ítem se envía a SUNAT como Bonificación (afectación 15, tributo 9996). El IGV referencial lo asume tu empresa."
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full border border-purple-200 font-medium"
+                                  title="Bonificación SUNAT (afectación 15, tributo 9996)"
                                 >
-                                  <Gift className="w-3 h-3" />
-                                  Bonificación
+                                  <Gift className="w-2.5 h-2.5" />
+                                  Bonif.
                                 </span>
                               )}
                               {item.isVariant && item.variantAttributes && (
-                                <p className="text-sm text-gray-600 mt-0.5">
-                                  {Object.entries(item.variantAttributes).map(([key, value]) => (
-                                    <span key={key} className="mr-2">
-                                      {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                                    </span>
-                                  ))}
-                                </p>
+                                <span className="text-gray-600 truncate">
+                                  {Object.entries(item.variantAttributes).map(([, v]) => v).join(' / ')}
+                                </span>
                               )}
                               {item.presentationName && (
-                                <p className="text-sm text-green-600 mt-0.5 font-medium">
+                                <span className="text-green-600 font-medium truncate">
                                   {item.presentationName} (×{item.presentationFactor})
-                                </p>
+                                </span>
                               )}
                               {item.batchNumber && (
-                                <p className="text-xs text-orange-600 mt-0.5">
-                                  Lote: {item.batchNumber}
-                                  {item.batchExpiryDate && ` | Vence: ${formatBatchExpiry(item.batchExpiryDate)}`}
-                                </p>
+                                <span className="text-orange-600 truncate">
+                                  Lote: {item.batchNumber}{item.batchExpiryDate && ` · ${formatBatchExpiry(item.batchExpiryDate)}`}
+                                </span>
                               )}
                               {item.isNoLot && (
-                                <p className="text-xs text-amber-600 mt-0.5">
-                                  Sin lote asignado
-                                </p>
+                                <span className="text-amber-600">Sin lote</span>
                               )}
                               {isSerialGroup ? (
-                                <div className="flex flex-wrap gap-1 mt-1">
+                                <div className="flex flex-wrap gap-1 min-w-0">
                                   {group.members.map(m => (
                                     <span
                                       key={m.cartId || m.id}
-                                      className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200"
+                                      className="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded-full border border-blue-200"
                                     >
                                       <span className="font-medium">{m.serialNumber}</span>
                                       <button
@@ -8164,269 +8149,222 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                         className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
                                         title="Quitar esta serie"
                                       >
-                                        <X className="w-3 h-3" />
+                                        <X className="w-2.5 h-2.5" />
                                       </button>
                                     </span>
                                   ))}
                                 </div>
                               ) : item.serialNumber && (
-                                <p className="text-xs text-blue-600 mt-0.5">
-                                  S/N: {item.serialNumber}
-                                </p>
+                                <span className="text-blue-600 truncate">S/N: {item.serialNumber}</span>
                               )}
                               {item.modifiers && item.modifiers.length > 0 && (
-                                <div className="mt-0.5">
-                                  {item.modifiers.map((mod, idx) => (
-                                    <p key={idx} className="text-xs text-purple-600">
-                                      {mod.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')}
-                                      {mod.options.some(o => o.priceAdjustment > 0) && (
-                                        <span className="text-purple-400 ml-1">
-                                          (+{formatCurrency(mod.options.reduce((s, o) => s + (o.priceAdjustment || 0) * (o.quantity || 1), 0))})
-                                        </span>
-                                      )}
-                                    </p>
-                                  ))}
-                                </div>
+                                <span className="text-purple-600 truncate">
+                                  {item.modifiers.flatMap(mod => mod.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName)).join(', ')}
+                                </span>
                               )}
                             </div>
-                            <button
-                              onClick={() => isSerialGroup ? removeSerialGroup(itemId) : removeFromCart(itemId)}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1.5 transition-colors flex-shrink-0"
-                              title={isSerialGroup ? 'Quitar todas las series' : 'Quitar'}
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
                           </div>
+                          {/* Eliminar (en fila 1 para que nombre tenga ancho completo) */}
+                          <button
+                            onClick={() => isSerialGroup ? removeSerialGroup(itemId) : removeFromCart(itemId)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded p-1 transition-colors flex-shrink-0"
+                            title={isSerialGroup ? 'Quitar todas las series' : 'Quitar'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-
-                        {/* Fila 2: Observaciones + Descuento (ancho completo) */}
-                        <div className="flex gap-1.5 xl:gap-2 min-w-0">
+                        {/* Fila 2: cantidad (izq) + precio (der) */}
+                        <div className="flex items-center justify-between gap-2 mt-2 min-w-0">
+                          {/* Controles cantidad */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {isSerialGroup ? (
+                              <span className="text-sm font-semibold text-gray-700 px-1">
+                                ×{displayQty}
+                              </span>
+                            ) : item.allowDecimalQuantity ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={amountModeItemId === itemId ? amountModeValue : item.quantity}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (amountModeItemId === itemId) {
+                                      setAmountModeValue(val)
+                                      const amount = parseFloat(val)
+                                      const price = item.unitPrice || item.price
+                                      if (!isNaN(amount) && amount > 0 && price > 0) {
+                                        setQuantityDirectly(itemId, Math.round((amount / price) * 1000) / 1000)
+                                      }
+                                    } else {
+                                      setQuantityDirectly(itemId, val)
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (amountModeItemId === itemId) {
+                                      if (!amountModeValue || parseFloat(amountModeValue) <= 0) {
+                                        setAmountModeItemId(null)
+                                        setAmountModeValue('')
+                                      }
+                                    } else {
+                                      handleQuantityBlur(itemId, item.quantity)
+                                    }
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  step={amountModeItemId === itemId ? '0.01' : '0.001'}
+                                  min="0.001"
+                                  className={`w-16 px-1.5 py-1 text-sm text-center font-semibold border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                                    amountModeItemId === itemId ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
+                                  }`}
+                                />
+                                <div className="flex rounded border border-gray-300 overflow-hidden text-[10px]">
+                                  <button
+                                    onClick={() => { setAmountModeItemId(null); setAmountModeValue('') }}
+                                    className={`px-1.5 py-1 font-medium transition-colors ${
+                                      amountModeItemId !== itemId ? 'bg-primary-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    {getUnitShortLabel(item.unit || 'KGM')}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const price = item.unitPrice || item.price
+                                      const qty = parseFloat(item.quantity)
+                                      const amount = (!isNaN(qty) && qty > 0 && price > 0) ? Math.round(qty * price * 100) / 100 : ''
+                                      setAmountModeItemId(itemId)
+                                      setAmountModeValue(amount !== '' ? String(amount) : '')
+                                    }}
+                                    className={`px-1.5 py-1 font-medium transition-colors ${
+                                      amountModeItemId === itemId ? 'bg-primary-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    {currency === 'USD' ? '$' : 'S/'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => updateQuantity(itemId, -1)}
+                                  className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value)
+                                    if (!isNaN(val) && val >= 0) {
+                                      setQuantityDirectly(itemId, val)
+                                    }
+                                  }}
+                                  onBlur={() => handleQuantityBlur(itemId, item.quantity)}
+                                  onFocus={(e) => e.target.select()}
+                                  min="1"
+                                  className="w-11 text-center font-bold text-sm border border-gray-300 rounded py-1 focus:outline-none focus:ring-1 focus:ring-primary-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                                <button
+                                  onClick={() => updateQuantity(itemId, 1)}
+                                  className="w-7 h-7 rounded bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          {/* Precio */}
+                          {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
+                            <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={editingPrice}
+                                  onChange={(e) => setEditingPrice(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveEditedPrice(itemId)
+                                    else if (e.key === 'Escape') cancelEditingPrice()
+                                  }}
+                                  className="w-20 px-2 py-1 text-sm font-bold text-right border border-primary-500 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  autoFocus
+                                  step="0.01"
+                                  min="0.01"
+                                />
+                                <button onClick={() => saveEditedPrice(itemId)} className="text-green-600 hover:text-green-800 p-1" title="Guardar">
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button onClick={cancelEditingPrice} className="text-gray-600 hover:text-gray-800 p-1" title="Cancelar">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {!taxConfig?.igvExempt && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = parseFloat(editingPrice) || 0
+                                    const igvRate = taxConfig?.igvRate || 18
+                                    if (editingPriceWithoutIgv) {
+                                      setEditingPrice((current * (1 + igvRate / 100)).toFixed(2))
+                                    } else {
+                                      setEditingPrice((current / (1 + igvRate / 100)).toFixed(2))
+                                    }
+                                    setEditingPriceWithoutIgv(!editingPriceWithoutIgv)
+                                  }}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded ${editingPriceWithoutIgv ? 'bg-blue-100 text-blue-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                >
+                                  {editingPriceWithoutIgv ? 'Sin IGV' : 'Con IGV'}
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                              <div className="text-right min-w-[58px]">
+                                {displayDiscount > 0 ? (
+                                  <>
+                                    <p className="text-[10px] text-gray-400 line-through leading-tight">
+                                      {formatCurrency(item.price * displayQty, currency)}
+                                    </p>
+                                    <p className="font-bold text-orange-600 text-sm leading-tight">
+                                      {formatCurrency((item.price * displayQty) - displayDiscount)}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="font-bold text-gray-900 text-sm">
+                                    {formatCurrency(item.price * displayQty, currency)}
+                                  </p>
+                                )}
+                              </div>
+                              {companySettings?.allowPriceEdit && (
+                                <button onClick={() => startEditingPrice(itemId, item.price)} className="text-primary-600 hover:text-primary-700 p-1" title="Editar precio">
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Fila 3: nota + descuento por item */}
+                        <div className="flex gap-1.5 mt-1.5 min-w-0">
                           <input
                             type="text"
                             placeholder="Nota..."
                             value={item.observations || ''}
                             onChange={(e) => updateItemObservations(itemId, e.target.value)}
-                            className="flex-1 min-w-0 text-xs xl:text-sm px-2 xl:px-3 py-1.5 xl:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="flex-1 min-w-0 text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
                           {!hideDiscountInPOS && (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Tag className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-orange-500 flex-shrink-0" />
-                            <input
-                              type="number"
-                              placeholder="Dcto"
-                              value={isSerialGroup ? (displayDiscount || '') : (item.itemDiscount || '')}
-                              onChange={(e) => isSerialGroup ? updateGroupDiscount(itemId, e.target.value) : updateItemDiscount(itemId, e.target.value)}
-                              min="0"
-                              max={isSerialGroup ? (item.price * displayQty) : (item.price * item.quantity)}
-                              step="0.01"
-                              className="w-16 xl:w-20 text-xs xl:text-sm px-1.5 xl:px-2 py-1.5 xl:py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                          </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Tag className="w-3 h-3 text-orange-500 flex-shrink-0" />
+                              <input
+                                type="number"
+                                placeholder="Dcto"
+                                value={isSerialGroup ? (displayDiscount || '') : (item.itemDiscount || '')}
+                                onChange={(e) => isSerialGroup ? updateGroupDiscount(itemId, e.target.value) : updateItemDiscount(itemId, e.target.value)}
+                                min="0"
+                                max={isSerialGroup ? (item.price * displayQty) : (item.price * item.quantity)}
+                                step="0.01"
+                                className="w-14 text-xs px-1.5 py-1 border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                            </div>
                           )}
-                        </div>
-
-                        {/* Fila 3: Cantidad + Precio (ancho completo) */}
-                        <div className="flex items-center justify-between min-w-0">
-                              <div className="flex items-center space-x-2">
-                                {isSerialGroup ? (
-                                  <span className="text-sm font-semibold text-gray-700">
-                                    {displayQty} {displayQty === 1 ? 'unidad' : 'unidades'}
-                                  </span>
-                                ) : item.allowDecimalQuantity ? (
-                                  /* Input editable para productos por peso/monto */
-                                  <div className="flex items-center gap-1.5">
-                                    <input
-                                      type="number"
-                                      value={amountModeItemId === itemId ? amountModeValue : item.quantity}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        if (amountModeItemId === itemId) {
-                                          setAmountModeValue(val)
-                                          const amount = parseFloat(val)
-                                          const price = item.unitPrice || item.price
-                                          if (!isNaN(amount) && amount > 0 && price > 0) {
-                                            setQuantityDirectly(itemId, Math.round((amount / price) * 1000) / 1000)
-                                          }
-                                        } else {
-                                          setQuantityDirectly(itemId, val)
-                                        }
-                                      }}
-                                      onBlur={() => {
-                                        if (amountModeItemId === itemId) {
-                                          if (!amountModeValue || parseFloat(amountModeValue) <= 0) {
-                                            setAmountModeItemId(null)
-                                            setAmountModeValue('')
-                                          }
-                                        } else {
-                                          handleQuantityBlur(itemId, item.quantity)
-                                        }
-                                      }}
-                                      onFocus={(e) => e.target.select()}
-                                      step={amountModeItemId === itemId ? '0.01' : '0.001'}
-                                      min="0.001"
-                                      placeholder={amountModeItemId === itemId ? '0.00' : ''}
-                                      className={`w-20 px-2 py-1.5 text-sm text-center font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                                        amountModeItemId === itemId ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
-                                      }`}
-                                    />
-                                    {/* Toggle kg / S/ */}
-                                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                                      <button
-                                        onClick={() => { setAmountModeItemId(null); setAmountModeValue('') }}
-                                        className={`px-2 py-1.5 text-xs font-medium transition-colors ${
-                                          amountModeItemId !== itemId
-                                            ? 'bg-primary-600 text-white'
-                                            : 'bg-white text-gray-500 hover:bg-gray-50'
-                                        }`}
-                                      >
-                                        {getUnitShortLabel(item.unit || 'KGM')}
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          // Pre-calcular monto basado en peso actual
-                                          const price = item.unitPrice || item.price
-                                          const qty = parseFloat(item.quantity)
-                                          const amount = (!isNaN(qty) && qty > 0 && price > 0) ? Math.round(qty * price * 100) / 100 : ''
-                                          setAmountModeItemId(itemId)
-                                          setAmountModeValue(amount !== '' ? String(amount) : '')
-                                        }}
-                                        className={`px-2 py-1.5 text-xs font-medium transition-colors ${
-                                          amountModeItemId === itemId
-                                            ? 'bg-primary-600 text-white'
-                                            : 'bg-white text-gray-500 hover:bg-gray-50'
-                                        }`}
-                                      >
-                                        {currency === 'USD' ? '$' : 'S/'}
-                                      </button>
-                                    </div>
-                                    {/* Mostrar peso calculado en modo S/ */}
-                                    {amountModeItemId === itemId && item.quantity > 0 && (
-                                      <span className="text-xs text-gray-500">= {item.quantity} {getUnitShortLabel(item.unit || 'KGM')}</span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  /* Botones +/- para productos normales con cantidad editable */
-                                  <>
-                                    <button
-                                      onClick={() => updateQuantity(itemId, -1)}
-                                      className="w-7 h-7 xl:w-9 xl:h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
-                                    >
-                                      <Minus className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
-                                    </button>
-                                    <input
-                                      type="number"
-                                      value={item.quantity}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value)
-                                        if (!isNaN(val) && val >= 0) {
-                                          setQuantityDirectly(itemId, val)
-                                        }
-                                      }}
-                                      onBlur={() => handleQuantityBlur(itemId, item.quantity)}
-                                      onFocus={(e) => e.target.select()}
-                                      min="1"
-                                      className="w-10 xl:w-14 text-center font-bold text-sm xl:text-base border border-gray-300 rounded-lg py-1 xl:py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                    <button
-                                      onClick={() => updateQuantity(itemId, 1)}
-                                      className="w-7 h-7 xl:w-9 xl:h-9 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-
-                              {/* Precio unitario editable */}
-                              <div className="flex items-center gap-2">
-                                {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        type="number"
-                                        value={editingPrice}
-                                        onChange={(e) => setEditingPrice(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            saveEditedPrice(itemId)
-                                          } else if (e.key === 'Escape') {
-                                            cancelEditingPrice()
-                                          }
-                                        }}
-                                        className="w-20 px-2 py-1.5 text-base font-bold text-right border border-primary-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        autoFocus
-                                        step="0.01"
-                                        min="0.01"
-                                      />
-                                      <button
-                                        onClick={() => saveEditedPrice(itemId)}
-                                        className="text-green-600 hover:text-green-800 p-1.5"
-                                        title="Guardar"
-                                      >
-                                        <Check className="w-5 h-5" />
-                                      </button>
-                                      <button
-                                        onClick={cancelEditingPrice}
-                                        className="text-gray-600 hover:text-gray-800 p-1.5"
-                                        title="Cancelar"
-                                      >
-                                        <X className="w-5 h-5" />
-                                      </button>
-                                    </div>
-                                    {!taxConfig?.igvExempt && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const current = parseFloat(editingPrice) || 0
-                                          const igvRate = taxConfig?.igvRate || 18
-                                          if (editingPriceWithoutIgv) {
-                                            setEditingPrice((current * (1 + igvRate / 100)).toFixed(2))
-                                          } else {
-                                            setEditingPrice((current / (1 + igvRate / 100)).toFixed(2))
-                                          }
-                                          setEditingPriceWithoutIgv(!editingPriceWithoutIgv)
-                                        }}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded self-end ${editingPriceWithoutIgv ? 'bg-blue-100 text-blue-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                                      >
-                                        {editingPriceWithoutIgv ? 'Sin IGV' : 'Con IGV'}
-                                      </button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1">
-                                    <div className="text-right">
-                                      {displayQty > 1 && (
-                                        <p className="text-sm text-gray-500">
-                                          {displayQty} x {formatCurrency(item.price, currency)}
-                                        </p>
-                                      )}
-                                      {displayDiscount > 0 ? (
-                                        <>
-                                          <p className="text-sm text-gray-400 line-through">
-                                            {formatCurrency(item.price * displayQty, currency)}
-                                          </p>
-                                          <p className="font-bold text-orange-600 text-base xl:text-lg">
-                                            {formatCurrency((item.price * displayQty) - displayDiscount)}
-                                          </p>
-                                        </>
-                                      ) : (
-                                        <p className="font-bold text-gray-900 text-base xl:text-lg">
-                                          {formatCurrency(item.price * displayQty, currency)}
-                                        </p>
-                                      )}
-                                    </div>
-                                    {companySettings?.allowPriceEdit && (
-                                      <button
-                                        onClick={() => startEditingPrice(itemId, item.price)}
-                                        className="text-primary-600 hover:text-primary-700 p-1.5"
-                                        title="Editar precio"
-                                      >
-                                        <Edit2 className="w-5 h-5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                          </div>
                         </div>
                       </div>
                       )
