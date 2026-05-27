@@ -2276,6 +2276,45 @@ class EscPosBuilder {
     return this;
   }
 
+  // Código de barras (ESC/POS Function B: GS k m n d1...dn)
+  // type: 'CODE128' (default), 'CODE39', 'EAN13', 'EAN8', 'UPCA', 'UPCE', 'ITF', 'CODABAR', 'CODE93'
+  // options.height: altura en dots (1-255, default 80)
+  // options.width: ancho del módulo (2-6, default 2)
+  // options.hri: posición del texto legible ('none'|'above'|'below'(default)|'both')
+  barcode(code, type = 'CODE128', options = {}) {
+    const { height = 80, width = 2, hri = 'below' } = options;
+
+    // GS H n — posición del texto HRI
+    const hriMap = { none: 0, above: 1, below: 2, both: 3 };
+    const hriValue = hriMap[hri] ?? 2;
+    this.commands.push(EscPosBuilder.GS, 0x48, hriValue);
+    // GS f n — fuente HRI (0 = font A estándar)
+    this.commands.push(EscPosBuilder.GS, 0x66, 0x00);
+    // GS h n — altura del barcode
+    this.commands.push(EscPosBuilder.GS, 0x68, Math.max(1, Math.min(255, height)));
+    // GS w n — ancho del módulo (2-6)
+    this.commands.push(EscPosBuilder.GS, 0x77, Math.max(2, Math.min(6, width)));
+
+    const typeMap = {
+      UPCA: 65, UPCE: 66, EAN13: 67, EAN8: 68,
+      CODE39: 69, ITF: 70, CODABAR: 71,
+      CODE93: 72, CODE128: 73,
+    };
+    const m = typeMap[type] || 73;
+
+    // CODE128 acepta ASCII completo si se prefija con el selector de code set {B
+    let dataStr = String(code || '');
+    if (m === 73 && !dataStr.startsWith('{')) {
+      dataStr = '{B' + dataStr;
+    }
+    const dataBytes = new TextEncoder().encode(dataStr);
+    const n = Math.min(255, dataBytes.length);
+    const trimmed = dataBytes.subarray(0, n);
+
+    this.commands.push(EscPosBuilder.GS, 0x6B, m, n, ...trimmed);
+    return this;
+  }
+
   // Obtener bytes para enviar
   build() {
     return new Uint8Array(this.commands);
@@ -3345,6 +3384,19 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     const closingAmount = sessionData?.closingAmount || 0;
     const difference = sessionData?.difference || (closingAmount - expectedAmount);
 
+    // Yape: saldo paralelo en billetera digital
+    const openingAmountYape = sessionData?.openingAmountYape || 0;
+    const totalIncomeYape = sessionData?.totalIncomeYape || 0;
+    const totalExpenseYape = sessionData?.totalExpenseYape || 0;
+    const closingYape = sessionData?.closingYape || 0;
+    const expectedAmountYape = sessionData?.expectedAmountYape !== undefined
+      ? sessionData.expectedAmountYape
+      : (openingAmountYape + salesYape + totalIncomeYape - totalExpenseYape);
+    const differenceYape = sessionData?.differenceYape !== undefined
+      ? sessionData.differenceYape
+      : (closingYape - expectedAmountYape);
+    const hasYapeActivity = openingAmountYape > 0 || salesYape > 0 || totalIncomeYape > 0 || totalExpenseYape > 0 || closingYape > 0;
+
     // Helper para crear línea con valor alineado a la derecha
     const createLine = (label, value) => {
       const valueStr = value.toString();
@@ -3516,6 +3568,28 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .bold(false)
       .text(format.separator + '\n');
 
+    // ========== BLOQUE YAPE (sólo si hubo actividad en la billetera) ==========
+    if (hasYapeActivity) {
+      printer = printer
+        .bold(true)
+        .text('SALDO EN YAPE\n')
+        .bold(false);
+      if (openingAmountYape > 0) printer = printer.text(createLine('Inicial Yape:', formatCurrency(openingAmountYape)) + '\n');
+      if (salesYape > 0) printer = printer.text(createLine('+ Ventas Yape:', formatCurrency(salesYape)) + '\n');
+      if (totalIncomeYape > 0) printer = printer.text(createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape)) + '\n');
+      if (totalExpenseYape > 0) printer = printer.text(createLine('- Gastos Yape:', formatCurrency(totalExpenseYape)) + '\n');
+      printer = printer
+        .text(format.halfSeparator + '\n')
+        .text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n')
+        .text(createLine('Yape Real:', formatCurrency(closingYape)) + '\n');
+      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+      printer = printer
+        .bold(true)
+        .text(createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n')
+        .bold(false)
+        .text(format.separator + '\n');
+    }
+
     // ========== FOOTER ==========
     printer = printer
       .align('center')
@@ -3580,6 +3654,19 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       salesYape = 0, salesPlin = 0, expectedAmount = 0, closingCash = 0, closingCard = 0,
       closingTransfer = 0, closingAmount = 0 } = sessionData || {};
     const difference = sessionData?.difference || (closingAmount - expectedAmount);
+
+    // Yape: saldo paralelo en billetera digital
+    const openingAmountYape = sessionData?.openingAmountYape || 0;
+    const totalIncomeYape = sessionData?.totalIncomeYape || 0;
+    const totalExpenseYape = sessionData?.totalExpenseYape || 0;
+    const closingYape = sessionData?.closingYape || 0;
+    const expectedAmountYape = sessionData?.expectedAmountYape !== undefined
+      ? sessionData.expectedAmountYape
+      : (openingAmountYape + salesYape + totalIncomeYape - totalExpenseYape);
+    const differenceYape = sessionData?.differenceYape !== undefined
+      ? sessionData.differenceYape
+      : (closingYape - expectedAmountYape);
+    const hasYapeActivity = openingAmountYape > 0 || salesYape > 0 || totalIncomeYape > 0 || totalExpenseYape > 0 || closingYape > 0;
 
     const createLine = (label, value) => {
       const valueStr = value.toString();
@@ -3694,6 +3781,25 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       .text(format.separator)
       .newLine();
 
+    // Bloque Yape (sólo si hubo actividad en la billetera)
+    if (hasYapeActivity) {
+      builder.bold(true).text('SALDO EN YAPE').newLine().bold(false);
+      if (openingAmountYape > 0) builder.text(createLine('Inicial Yape:', formatCurrency(openingAmountYape))).newLine();
+      if (salesYape > 0) builder.text(createLine('+ Ventas Yape:', formatCurrency(salesYape))).newLine();
+      if (totalIncomeYape > 0) builder.text(createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape))).newLine();
+      if (totalExpenseYape > 0) builder.text(createLine('- Gastos Yape:', formatCurrency(totalExpenseYape))).newLine();
+      builder.text(format.halfSeparator).newLine()
+        .text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape))).newLine()
+        .text(createLine('Yape Real:', formatCurrency(closingYape))).newLine();
+      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+      builder.bold(true)
+        .text(createLine(diffYapeLabel, formatCurrency(differenceYape)))
+        .newLine()
+        .bold(false)
+        .text(format.separator)
+        .newLine();
+    }
+
     // Footer
     builder.alignCenter()
       .text('Documento interno')
@@ -3751,6 +3857,19 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
       salesYape = 0, salesPlin = 0, expectedAmount = 0, closingCash = 0, closingCard = 0,
       closingTransfer = 0, closingAmount = 0 } = sessionData || {};
     const difference = sessionData?.difference || (closingAmount - expectedAmount);
+
+    // Yape: saldo paralelo en billetera digital
+    const openingAmountYape = sessionData?.openingAmountYape || 0;
+    const totalIncomeYape = sessionData?.totalIncomeYape || 0;
+    const totalExpenseYape = sessionData?.totalExpenseYape || 0;
+    const closingYape = sessionData?.closingYape || 0;
+    const expectedAmountYape = sessionData?.expectedAmountYape !== undefined
+      ? sessionData.expectedAmountYape
+      : (openingAmountYape + salesYape + totalIncomeYape - totalExpenseYape);
+    const differenceYape = sessionData?.differenceYape !== undefined
+      ? sessionData.differenceYape
+      : (closingYape - expectedAmountYape);
+    const hasYapeActivity = openingAmountYape > 0 || salesYape > 0 || totalIncomeYape > 0 || totalExpenseYape > 0 || closingYape > 0;
 
     const createLine = (label, value) => {
       const valueStr = value.toString();
@@ -3837,6 +3956,21 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
     const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
     ticketText += createLine(diffLabel, formatCurrency(difference)) + '\n';
     ticketText += format.separator + '\n';
+
+    // Bloque Yape (sólo si hubo actividad en la billetera)
+    if (hasYapeActivity) {
+      ticketText += 'SALDO EN YAPE\n';
+      if (openingAmountYape > 0) ticketText += createLine('Inicial Yape:', formatCurrency(openingAmountYape)) + '\n';
+      if (salesYape > 0) ticketText += createLine('+ Ventas Yape:', formatCurrency(salesYape)) + '\n';
+      if (totalIncomeYape > 0) ticketText += createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape)) + '\n';
+      if (totalExpenseYape > 0) ticketText += createLine('- Gastos Yape:', formatCurrency(totalExpenseYape)) + '\n';
+      ticketText += format.halfSeparator + '\n';
+      ticketText += createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n';
+      ticketText += createLine('Yape Real:', formatCurrency(closingYape)) + '\n';
+      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+      ticketText += createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n';
+      ticketText += format.separator + '\n';
+    }
 
     // Footer
     ticketText += 'Documento interno\n';
@@ -4266,6 +4400,103 @@ export const printDeliveryTicket = async (delivery, business, paperWidth = 58) =
   }
 
   // BLE alternativo (iOS)
+  if (useAlternativeBLE) {
+    try {
+      return await BLEPrinter.printBLERawData(base64Data);
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Bluetooth Android — usar .raw() para enviar datos ESC/POS base64
+  try {
+    await CapacitorThermalPrinter.begin().raw(base64Data).write();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
+// IMPRESIÓN DE CÓDIGOS DE BARRA DE PRODUCTOS
+// ============================================
+
+/**
+ * Construir datos ESC/POS para imprimir una secuencia de códigos de barra
+ * de productos en una ticketera térmica (58 o 80 mm). Cada item emite su
+ * barcode (CODE128) con el código visible debajo, separado por una línea
+ * en blanco, ×N copias.
+ *
+ * @param {Array<{code: string, quantity?: number}>} items
+ * @param {number} paperWidth - 58 o 80
+ * @returns {string} base64
+ */
+const buildProductBarcodesEscPos = (items, paperWidth = 58) => {
+  const builder = new EscPosBuilder();
+  builder.init().alignCenter();
+
+  // En 80mm el barcode puede ser más ancho/alto
+  const barWidth = paperWidth === 80 ? 3 : 2;
+  const barHeight = paperWidth === 80 ? 100 : 80;
+
+  for (const item of items) {
+    const code = String(item.code || '').trim();
+    if (!code) continue;
+    const qty = Math.max(1, parseInt(item.quantity || 1, 10) || 1);
+    for (let i = 0; i < qty; i++) {
+      builder.barcode(code, 'CODE128', { height: barHeight, width: barWidth, hri: 'below' });
+      builder.newLine(2);
+    }
+  }
+
+  builder.feed(2).cut();
+  return builder.toBase64();
+};
+
+/**
+ * Imprime una secuencia de códigos de barra de productos en la ticketera
+ * térmica conectada. Sigue el mismo patrón de routing que printDeliveryTicket:
+ * impresora de documentos (network) → WiFi/interna → BLE alternativo → Bluetooth Android.
+ *
+ * @param {Array<{code: string, quantity?: number}>} items - items a imprimir
+ * @param {number} paperWidth - 58 o 80 (default 58)
+ */
+export const printProductBarcodes = async (items, paperWidth = 58) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { success: false, error: 'No hay items para imprimir' };
+  }
+
+  const isNative = Capacitor.isNativePlatform();
+
+  // Impresora de documentos tiene prioridad si está configurada
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildProductBarcodesEscPos(items, docPaperWidth);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Printer not connected' };
+  }
+
+  const base64Data = buildProductBarcodesEscPos(items, paperWidth);
+
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   if (useAlternativeBLE) {
     try {
       return await BLEPrinter.printBLERawData(base64Data);

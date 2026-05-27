@@ -39,6 +39,7 @@ import { uploadProductImage, deleteProductImage, createImagePreview, revokeImage
 import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 const UNITS = [
@@ -356,6 +357,9 @@ export default function Products() {
   const [labelModalOpen, setLabelModalOpen] = useState(false)
   const [labelQuantities, setLabelQuantities] = useState({}) // { productId: cantidad }
   const [labelSize, setLabelSize] = useState('30x20') // Tamaño de etiqueta seleccionado
+  // Estado para impresión en ticketera térmica (POS, 58/80mm con barcode nativo ESC/POS)
+  const [thermalPaperWidth, setThermalPaperWidth] = useState(58)
+  const [printingThermal, setPrintingThermal] = useState(false)
 
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
@@ -2999,6 +3003,41 @@ export default function Products() {
 
     setLabelModalOpen(false)
     toast.success('Preparando etiquetas para imprimir...')
+  }
+
+  // Imprimir los códigos de barra de los productos seleccionados directamente en
+  // la ticketera térmica conectada (POS 58/80mm) usando ESC/POS — la impresora
+  // genera el barcode nativamente, mucho más nítido y rápido que un bitmap.
+  const handlePrintBarcodesThermal = async () => {
+    if (!isPrinterReady()) {
+      toast.error('No hay ticketera térmica conectada. Conéctala desde Configuración.', 5000)
+      return
+    }
+    const selectedProds = products.filter(p => selectedProducts.has(p.id))
+    const items = selectedProds
+      .map(p => {
+        const rawCode = p.code || p.sku || p.id.slice(-8)
+        return { code: String(rawCode).replace(/-/g, ''), quantity: labelQuantities[p.id] || 1 }
+      })
+      .filter(it => it.code)
+    if (items.length === 0) {
+      toast.error('Ninguno de los productos seleccionados tiene código válido')
+      return
+    }
+    setPrintingThermal(true)
+    try {
+      const result = await printProductBarcodes(items, thermalPaperWidth)
+      if (result?.success) {
+        toast.success('Códigos enviados a la ticketera')
+        setLabelModalOpen(false)
+      } else {
+        toast.error(`Error al imprimir: ${result?.error || 'desconocido'}`, 5000)
+      }
+    } catch (error) {
+      toast.error(`Error al imprimir: ${error.message}`, 5000)
+    } finally {
+      setPrintingThermal(false)
+    }
   }
 
   const openBulkActionModal = (action) => {
@@ -8177,6 +8216,38 @@ export default function Products() {
           <p className="text-sm text-gray-700">
             Total: <strong>{Object.values(labelQuantities).reduce((a, b) => a + b, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
           </p>
+
+          {/* Bloque alternativo: imprimir en ticketera térmica POS (58/80mm) */}
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+            <p className="text-xs text-amber-800">
+              <strong>Ticketera térmica del POS</strong> — imprime los códigos en tira continua a la impresora ya conectada (Bluetooth/WiFi). El barcode lo genera la propia impresora (ESC/POS nativo). Sólo disponible en la app móvil.
+            </p>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-amber-800 font-medium">Ancho de papel:</label>
+              <select
+                value={thermalPaperWidth}
+                onChange={(e) => setThermalPaperWidth(Number(e.target.value))}
+                className="text-xs px-2 py-1 border border-amber-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value={58}>58 mm</option>
+                <option value={80}>80 mm</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handlePrintBarcodesThermal}
+                disabled={printingThermal || selectedProducts.size === 0}
+                className="ml-auto"
+              >
+                {printingThermal ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Printer className="w-4 h-4 mr-2" />
+                )}
+                Imprimir en ticketera
+              </Button>
+            </div>
+          </div>
 
           {/* Botones */}
           <div className="flex justify-end gap-3">
