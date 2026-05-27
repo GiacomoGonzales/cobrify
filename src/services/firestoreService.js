@@ -1884,7 +1884,7 @@ export const getOpenCashSessions = async (businessId, branchId = null) => {
  * @param {string|null} userUid - Firebase UID del usuario que abre la caja
  * @param {string|null} userName - Nombre del usuario que abre la caja
  */
-export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0) => {
+export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0, openingAmountYape = 0) => {
   try {
     // Verificar que no haya una caja abierta para esta sucursal Y este usuario
     const currentSession = await getCashRegisterSession(userId, branchId, userUid)
@@ -1905,6 +1905,13 @@ export const openCashRegister = async (userId, openingAmount, branchId = null, u
     // para mantener limpios los docs de cajas PEN-only.
     if (Number(openingAmountUSD) > 0) {
       sessionData.openingAmountUSD = Number(openingAmountUSD)
+    }
+
+    // Yape: monto inicial declarado en la billetera digital. Sólo se persiste
+    // si > 0 (negocios que no usan Yape no contaminan sus docs con el campo).
+    // Cajas legacy sin este campo → tratar como 0 al leer.
+    if (Number(openingAmountYape) > 0) {
+      sessionData.openingAmountYape = Number(openingAmountYape)
     }
 
     // Solo agregar branchId si no es null (sucursal adicional)
@@ -1944,7 +1951,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     const updateData = {
@@ -1978,6 +1985,15 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       // Pagos cobrados en esta sesión sobre comprobantes emitidos en sesiones previas
       deferredPayments: deferredPayments || [],
       deferredTotal: deferredTotal || 0,
+      // Yape: ingresos/gastos en la billetera y cálculo separado de cierre.
+      // Sólo se persiste si hay algún flujo Yape, para mantener limpios los
+      // docs de cajas que no usan Yape.
+      ...((totalIncomeYape || totalExpenseYape || expectedAmountYape || (yape || 0) > 0) ? {
+        totalIncomeYape: totalIncomeYape || 0,
+        totalExpenseYape: totalExpenseYape || 0,
+        expectedAmountYape: expectedAmountYape || 0,
+        differenceYape: differenceYape || 0,
+      } : {}),
     }
 
     // Multi-divisa: si vino bloque USD con datos, lo guardamos como objeto
@@ -2081,6 +2097,12 @@ export const addCashMovement = async (userId, sessionId, movementData) => {
     // (default implícito) para mantener compatibilidad con movimientos legacy.
     if (movementData.currency === 'USD') {
       payload.currency = 'USD'
+    }
+    // Método de fondo: 'cash' (default, efectivo) o 'yape'. Sólo se persiste
+    // si es distinto de 'cash' para que movimientos legacy sigan funcionando
+    // sin tocar (se interpretan como cash al leer).
+    if (movementData.method && movementData.method !== 'cash') {
+      payload.method = movementData.method
     }
     const docRef = await addDoc(collection(db, 'businesses', userId, 'cashMovements'), payload)
 
@@ -2333,14 +2355,21 @@ export const deleteFinancialMovement = async (userId, movementId) => {
  */
 export const updateCashMovement = async (userId, movementId, movementData) => {
   try {
-    await updateDoc(doc(db, 'businesses', userId, 'cashMovements', movementId), {
+    const updatePayload = {
       type: movementData.type,
       amount: movementData.amount,
       description: movementData.description,
       category: movementData.category || 'Otros',
       updatedAt: serverTimestamp(),
       updatedBy: userId,
-    })
+    }
+    // Método de fondo: persistir si vino y es distinto de 'cash'. Si vino 'cash'
+    // (o no vino), borrar el campo previo si existía con deleteField. Por
+    // simplicidad guardamos null en lugar de borrar — el reader trata null/missing como 'cash'.
+    if (movementData.method !== undefined) {
+      updatePayload.method = movementData.method && movementData.method !== 'cash' ? movementData.method : null
+    }
+    await updateDoc(doc(db, 'businesses', userId, 'cashMovements', movementId), updatePayload)
 
     return { success: true }
   } catch (error) {

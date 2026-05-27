@@ -111,6 +111,10 @@ export default function CashRegister() {
 
   // Form states
   const [openingAmount, setOpeningAmount] = useState('')
+  // Yape: monto inicial en la billetera digital al abrir caja (opcional).
+  // Paralelo a openingAmount (efectivo). El feature siempre está activo pero
+  // si vale 0 toda la UI/reportes Yape se ocultan (auto-hide).
+  const [openingAmountYape, setOpeningAmountYape] = useState('')
   const [closingCounts, setClosingCounts] = useState({
     cash: '',
     card: '',
@@ -141,6 +145,7 @@ export default function CashRegister() {
     description: '',
     category: '',
     currency: 'PEN', // Multi-divisa: solo aplica si cashMultiCurrencyOn
+    method: 'cash',  // 'cash' (default, efectivo) | 'yape' (billetera Yape)
   })
 
   // Estados para editar/eliminar movimientos
@@ -690,6 +695,9 @@ export default function CashRegister() {
           ...(cashMultiCurrencyOn && parseFloat(openingAmountUSD) > 0 && {
             openingAmountUSD: parseFloat(openingAmountUSD),
           }),
+          ...(parseFloat(openingAmountYape) > 0 && {
+            openingAmountYape: parseFloat(openingAmountYape),
+          }),
           openedAt: new Date(),
           openedBy: user.displayName,
           status: 'open'
@@ -700,6 +708,7 @@ export default function CashRegister() {
         setShowOpenModal(false)
         setOpeningAmount('')
         setOpeningAmountUSD('')
+        setOpeningAmountYape('')
         return
       }
 
@@ -714,12 +723,14 @@ export default function CashRegister() {
       // Multi-divisa: si la flag está activa y el cajero declaró un saldo
       // inicial en USD > 0, lo enviamos al servicio. Si no, parámetro 0.
       const openUSD = cashMultiCurrencyOn ? (parseFloat(openingAmountUSD) || 0) : 0
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName, openUSD)
+      const openYape = parseFloat(openingAmountYape) || 0
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName, openUSD, openYape)
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
         setOpeningAmount('')
         setOpeningAmountUSD('')
+        setOpeningAmountYape('')
         loadData()
         refreshOpenSessions()
       } else {
@@ -816,6 +827,13 @@ export default function CashRegister() {
         difference: cashUSD - (totals.usd.expected || 0),
       } : null
 
+      // Yape: cálculo paralelo del esperado y diferencia. Si no hubo actividad
+      // Yape, expectedAmountYape será 0 y differenceYape también, y al persistir
+      // se omite el campo (en firestoreService) para no contaminar el doc.
+      const openingAmountYape = currentSession.openingAmountYape || 0
+      const expectedAmountYape = openingAmountYape + totals.salesYape + (totals.incomeYape || 0) - (totals.expenseYape || 0)
+      const differenceYape = yape - expectedAmountYape
+
       // Guardar datos de la sesión cerrada con hora de cierre
       const closedData = {
         ...currentSession,
@@ -841,8 +859,12 @@ export default function CashRegister() {
         salesDiDiFood: totals.salesDiDiFood,
         totalIncome: totals.income,
         totalExpense: totals.expense,
+        totalIncomeYape: totals.incomeYape || 0,
+        totalExpenseYape: totals.expenseYape || 0,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
+        expectedAmountYape,
+        differenceYape,
         invoiceCount: sessionOnlyInvoicesCount,
         deferredPayments: totals.deferredPayments || [],
         deferredTotal: totals.deferredTotal || 0,
@@ -881,6 +903,13 @@ export default function CashRegister() {
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
+        // Yape: paralelos al cálculo de efectivo. firestoreService omite estos
+        // campos si todo es 0 + no hay closingYape, para mantener limpios los
+        // docs de cajas sin Yape.
+        totalIncomeYape: totals.incomeYape || 0,
+        totalExpenseYape: totals.expenseYape || 0,
+        expectedAmountYape,
+        differenceYape,
         invoiceCount: sessionOnlyInvoicesCount,
         deferredPayments: totals.deferredPayments || [],
         deferredTotal: totals.deferredTotal || 0,
@@ -1202,6 +1231,7 @@ export default function CashRegister() {
           amount: parseFloat(movementData.amount),
           description: movementData.description,
           category: movementData.category,
+          method: movementData.method || 'cash',
           createdAt: new Date(),
         }
 
@@ -1215,6 +1245,7 @@ export default function CashRegister() {
           amount: '',
           description: '',
           category: '',
+          method: 'cash',
         })
         return
       }
@@ -1226,6 +1257,8 @@ export default function CashRegister() {
         category: movementData.category,
         // Multi-divisa: pasa la moneda solo si la flag está activa
         currency: cashMultiCurrencyOn ? (movementData.currency || 'PEN') : 'PEN',
+        // Método de fondo: efectivo (default) o Yape
+        method: movementData.method || 'cash',
       })
 
       if (result.success) {
@@ -1237,6 +1270,7 @@ export default function CashRegister() {
           description: '',
           category: '',
           currency: 'PEN',
+          method: 'cash',
         })
         loadData()
       } else {
@@ -1255,6 +1289,7 @@ export default function CashRegister() {
       amount: movement.amount.toString(),
       description: movement.description,
       category: movement.category,
+      method: movement.method || 'cash',
     })
     setShowMovementModal(true)
   }
@@ -1286,7 +1321,7 @@ export default function CashRegister() {
         toast.success('Movimiento actualizado (DEMO)', { duration: 5000 })
         setShowMovementModal(false)
         setEditingMovement(null)
-        setMovementData({ type: 'income', amount: '', description: '', category: '' })
+        setMovementData({ type: 'income', amount: '', description: '', category: '', method: 'cash' })
         return
       }
 
@@ -1295,13 +1330,14 @@ export default function CashRegister() {
         amount: parseFloat(movementData.amount),
         description: movementData.description,
         category: movementData.category,
+        method: movementData.method || 'cash',
       })
 
       if (result.success) {
         toast.success('Movimiento actualizado correctamente')
         setShowMovementModal(false)
         setEditingMovement(null)
-        setMovementData({ type: 'income', amount: '', description: '', category: '' })
+        setMovementData({ type: 'income', amount: '', description: '', category: '', method: 'cash' })
         loadData()
       } else {
         toast.error(result.error || 'Error al actualizar el movimiento')
@@ -1358,6 +1394,8 @@ export default function CashRegister() {
       salesDiDiFood: 0,
       income: 0,
       expense: 0,
+      incomeYape: 0,
+      expenseYape: 0,
       expected: 0,
       difference: 0,
       pendingTotal: 0,
@@ -1365,6 +1403,7 @@ export default function CashRegister() {
       deferredPayments: [],
       deferredTotal: 0,
       usd: null,
+      yape: null,
     }
 
     const sessionOpenedAt = toDate(currentSession.openedAt)
@@ -1551,15 +1590,21 @@ export default function CashRegister() {
 
     // Ingresos / Egresos manuales. Multi-divisa: separar por movement.currency
     // (default PEN cuando no viene). Movimientos legacy todos PEN.
+    // Además separamos por método (cash vs yape) para el cierre paralelo de
+    // saldo en billetera digital. Movimientos legacy sin .method → 'cash'.
     let income = 0, expense = 0, incomeUSD = 0, expenseUSD = 0
+    let incomeYape = 0, expenseYape = 0
     movements.forEach(m => {
       const amt = Number(m.amount) || 0
       const isUSD = m.currency === 'USD'
+      const isYape = m.method === 'yape'
       if (m.type === 'income') {
         if (isUSD) incomeUSD += amt
+        else if (isYape) incomeYape += amt
         else income += amt
       } else if (m.type === 'expense') {
         if (isUSD) expenseUSD += amt
+        else if (isYape) expenseYape += amt
         else expense += amt
       }
     })
@@ -1571,6 +1616,9 @@ export default function CashRegister() {
     // Dinero esperado en caja (SOLO efectivo + ingresos - egresos)
     const expected = (currentSession.openingAmount || 0) + salesCash + income - expense
     const expectedUSD = (currentSession.openingAmountUSD || 0) + salesCashUSD + incomeUSD - expenseUSD
+    // Esperado Yape = apertura Yape + ventas Yape + ingresos Yape − gastos Yape
+    const openingYape = currentSession.openingAmountYape || 0
+    const expectedYape = openingYape + salesYape + incomeYape - expenseYape
 
     // Diferencia (si hay cierre)
     let difference = 0
@@ -1580,6 +1628,11 @@ export default function CashRegister() {
     let differenceUSD = 0
     if (currentSession.usd?.closingAmount !== undefined) {
       differenceUSD = (currentSession.usd.closingCash || 0) - expectedUSD
+    }
+    // Diferencia Yape: sólo aplica al cerrar (se compara closingYape vs expectedYape)
+    let differenceYape = 0
+    if (currentSession.closingYape !== undefined && currentSession.closingYape !== null) {
+      differenceYape = (currentSession.closingYape || 0) - expectedYape
     }
 
     const deferredTotal = deferredPayments
@@ -1613,6 +1666,20 @@ export default function CashRegister() {
       openingAmount: currentSession.openingAmountUSD || 0,
     } : null
 
+    // Bloque Yape: saldo paralelo de billetera digital. Sólo se incluye si
+    // hay actividad Yape (apertura, ventas, ingresos o gastos) para no
+    // contaminar visualmente cajas que no usan Yape.
+    const hasYapeActivity = openingYape > 0 || salesYape > 0 || incomeYape > 0 || expenseYape > 0
+    const yapeBlock = hasYapeActivity ? {
+      openingAmount: openingYape,
+      sales: salesYape,
+      income: incomeYape,
+      expense: expenseYape,
+      expected: expectedYape,
+      difference: differenceYape,
+      closing: currentSession.closingYape || 0,
+    } : null
+
     return {
       sales,
       salesCash,
@@ -1625,6 +1692,8 @@ export default function CashRegister() {
       salesDiDiFood,
       income,
       expense,
+      incomeYape,
+      expenseYape,
       expected,
       difference,
       pendingTotal,
@@ -1632,6 +1701,7 @@ export default function CashRegister() {
       deferredPayments,
       deferredTotal,
       usd: usdBlock,
+      yape: yapeBlock,
     }
   }
 
@@ -2114,6 +2184,49 @@ export default function CashRegister() {
                     )}
                   </div>
                 )}
+
+                {/* ===== BLOQUE YAPE ===== */}
+                {/* Saldo paralelo en la billetera digital. Sólo se muestra si */}
+                {/* hay actividad Yape (apertura, ventas o movimientos). */}
+                {totals.yape && (
+                  <div className="mt-5 pt-4 border-t-2 border-purple-200 space-y-3">
+                    <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded p-2.5">
+                      <span className="text-lg">📱</span>
+                      <p className="text-sm font-semibold text-purple-900">Saldo en Yape</p>
+                    </div>
+
+                    {totals.yape.openingAmount > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-gray-600">Monto Inicial Yape:</span>
+                        <span className="text-sm font-semibold">{formatCurrency(totals.yape.openingAmount)}</span>
+                      </div>
+                    )}
+                    {totals.yape.sales > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-gray-600">+ Ventas Yape:</span>
+                        <span className="text-sm font-semibold text-green-600">{formatCurrency(totals.yape.sales)}</span>
+                      </div>
+                    )}
+                    {totals.yape.income > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-blue-600">+ Otros Ingresos Yape:</span>
+                        <span className="text-sm font-semibold text-blue-600">{formatCurrency(totals.yape.income)}</span>
+                      </div>
+                    )}
+                    {totals.yape.expense > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-red-600">- Gastos Yape:</span>
+                        <span className="text-sm font-semibold text-red-600">{formatCurrency(totals.yape.expense)}</span>
+                      </div>
+                    )}
+                    {!hideExpectedForCashier && (
+                      <div className="flex justify-between items-center py-2.5 bg-purple-50 px-3 rounded-lg">
+                        <span className="text-sm font-semibold text-purple-900">Saldo Yape Esperado:</span>
+                        <span className="text-lg font-bold text-purple-700">{formatCurrency(totals.yape.expected)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2158,7 +2271,14 @@ export default function CashRegister() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{movement.description}</p>
-                            <p className="text-xs text-gray-500">{movement.category}</p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
+                              <span>{movement.category}</span>
+                              {movement.method === 'yape' && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold">
+                                  📱 Yape
+                                </span>
+                              )}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -3238,6 +3358,7 @@ export default function CashRegister() {
           setShowOpenModal(false)
           setOpeningAmount('')
           setOpeningAmountUSD('')
+          setOpeningAmountYape('')
         }}
         title="Abrir Caja"
       >
@@ -3269,6 +3390,19 @@ export default function CashRegister() {
               </p>
             </div>
           )}
+          <div>
+            <Input
+              label="Monto Inicial en Yape (S/) — opcional"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={openingAmountYape}
+              onChange={(e) => setOpeningAmountYape(e.target.value)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Saldo disponible en la billetera Yape al abrir. Déjalo vacío si no usas Yape.
+            </p>
+          </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button
               variant="outline"
@@ -3276,6 +3410,7 @@ export default function CashRegister() {
                 setShowOpenModal(false)
                 setOpeningAmount('')
                 setOpeningAmountUSD('')
+                setOpeningAmountYape('')
               }}
             >
               Cancelar
@@ -3421,16 +3556,39 @@ export default function CashRegister() {
             helperText="Suma de transferencias recibidas"
           />
 
-          {totals.salesYape > 0 && (
-            <Input
-              label="Total en Yape"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCounts.yape}
-              onChange={(e) => setClosingCounts({ ...closingCounts, yape: e.target.value })}
-              helperText="Suma de pagos recibidos por Yape"
-            />
+          {/* Yape: muestra el input si hay cualquier actividad Yape (apertura,
+              ventas, ingresos o gastos), no sólo ventas. El helper expone el
+              saldo esperado (inicial + ventas + ingresos − gastos) para que el
+              cajero compare contra el saldo real de la billetera. */}
+          {totals.yape && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+              <Input
+                label="Saldo real en Yape"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={closingCounts.yape}
+                onChange={(e) => setClosingCounts({ ...closingCounts, yape: e.target.value })}
+                helperText={!hideExpectedForCashier
+                  ? `Esperado: ${formatCurrency(totals.yape.expected)} — Inicial ${formatCurrency(totals.yape.openingAmount)} + Ventas ${formatCurrency(totals.yape.sales)}${totals.yape.income > 0 ? ` + Ingresos ${formatCurrency(totals.yape.income)}` : ''}${totals.yape.expense > 0 ? ` − Gastos ${formatCurrency(totals.yape.expense)}` : ''}`
+                  : 'Saldo actual de la billetera Yape al cierre'}
+              />
+              {!hideExpectedForCashier && parseFloat(closingCounts.yape) > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Diferencia:</span>
+                  <span className={`font-bold ${
+                    Math.abs(parseFloat(closingCounts.yape) - totals.yape.expected) < 0.01
+                      ? 'text-green-600'
+                      : parseFloat(closingCounts.yape) > totals.yape.expected
+                        ? 'text-blue-600'
+                        : 'text-red-600'
+                  }`}>
+                    {parseFloat(closingCounts.yape) >= totals.yape.expected ? '+' : ''}
+                    {formatCurrency(parseFloat(closingCounts.yape) - totals.yape.expected)}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
 
           {totals.salesPlin > 0 && (
@@ -3791,6 +3949,36 @@ export default function CashRegister() {
             </div>
           )}
 
+          {/* Selector de fondo: efectivo o Yape. Aplica a ingresos y gastos
+              para que el cálculo de saldo por fondo se mantenga separado. */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Método / Fondo</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMovementData({ ...movementData, method: 'cash' })}
+                className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  (movementData.method || 'cash') === 'cash'
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                💵 Efectivo
+              </button>
+              <button
+                type="button"
+                onClick={() => setMovementData({ ...movementData, method: 'yape' })}
+                className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  movementData.method === 'yape'
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                📱 Yape
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Categoría
@@ -3841,6 +4029,7 @@ export default function CashRegister() {
                   amount: '',
                   description: '',
                   category: '',
+                  method: 'cash',
                 })
               }}
             >

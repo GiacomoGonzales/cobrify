@@ -413,6 +413,49 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     usdDiffRow = aoa.length - 1
   }
 
+  // ========== BLOQUE YAPE (sólo si tuvo actividad en la billetera) ==========
+  let yapeSectionRow = -1, yapeKpiLabelRow = -1, yapeKpiValueRow = -1
+  let yapeExpectedRow = -1, yapeRealRow = -1, yapeDiffRow = -1
+  let yapeDiffOk = false
+
+  const yapeOpening = sessionData.openingAmountYape || 0
+  const yapeSales = sessionData.salesYape || 0
+  const yapeIncome = sessionData.totalIncomeYape || 0
+  const yapeExpense = sessionData.totalExpenseYape || 0
+  const yapeClosing = sessionData.closingYape || 0
+  const hasYapeActivity = yapeOpening > 0 || yapeSales > 0 || yapeIncome > 0 || yapeExpense > 0 || yapeClosing > 0
+
+  if (hasYapeActivity) {
+    aoa.push([])
+    aoa.push(['SALDO EN YAPE (BILLETERA DIGITAL)', '', '', ''])
+    yapeSectionRow = aoa.length - 1
+    aoa.push([])
+    aoa.push(['Inicial Yape', 'Ventas Yape', 'Ingresos Yape', 'Gastos Yape'])
+    yapeKpiLabelRow = aoa.length - 1
+    aoa.push([
+      Number(yapeOpening.toFixed(2)),
+      Number(yapeSales.toFixed(2)),
+      Number(yapeIncome.toFixed(2)),
+      Number(yapeExpense.toFixed(2)),
+    ])
+    yapeKpiValueRow = aoa.length - 1
+    aoa.push([])
+    const expectedYape = sessionData.expectedAmountYape !== undefined
+      ? sessionData.expectedAmountYape
+      : (yapeOpening + yapeSales + yapeIncome - yapeExpense)
+    aoa.push(['Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedYape.toFixed(2))])
+    yapeExpectedRow = aoa.length - 1
+    aoa.push(['Yape Real (al cierre)', '', '', Number(yapeClosing.toFixed(2))])
+    yapeRealRow = aoa.length - 1
+    const diffYape = sessionData.differenceYape !== undefined
+      ? sessionData.differenceYape
+      : (yapeClosing - expectedYape)
+    yapeDiffOk = diffYape >= 0
+    const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (yapeDiffOk ? 'Sobrante' : 'Faltante')
+    aoa.push([`DIFERENCIA YAPE — ${diffYapeLbl}`, '', '', Number(diffYape.toFixed(2))])
+    yapeDiffRow = aoa.length - 1
+  }
+
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = [{ wch: 35 }, { wch: 16 }, { wch: 28 }, { wch: 16 }]
   ws['!rows'] = []
@@ -431,6 +474,14 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
       { s: { r: usdTableSectionRow, c: 2 }, e: { r: usdTableSectionRow, c: 3 } },
       { s: { r: usdExpectedRow, c: 0 }, e: { r: usdExpectedRow, c: 2 } },
       { s: { r: usdDiffRow, c: 0 }, e: { r: usdDiffRow, c: 2 } },
+    )
+  }
+  if (hasYapeActivity) {
+    ws['!merges'].push(
+      { s: { r: yapeSectionRow, c: 0 }, e: { r: yapeSectionRow, c: 3 } },
+      { s: { r: yapeExpectedRow, c: 0 }, e: { r: yapeExpectedRow, c: 2 } },
+      { s: { r: yapeRealRow, c: 0 }, e: { r: yapeRealRow, c: 2 } },
+      { s: { r: yapeDiffRow, c: 0 }, e: { r: yapeDiffRow, c: 2 } },
     )
   }
 
@@ -503,6 +554,22 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     setS(ws, usdExpectedRow, 3, sTotalNumber('USD'))
     setS(ws, usdDiffRow, 0, sDifferenceLabel(usdDiffOk))
     setS(ws, usdDiffRow, 3, sDifferenceNumber(usdDiffOk, 'USD'))
+  }
+
+  // Bloque Yape
+  if (hasYapeActivity) {
+    for (let c = 0; c < 4; c++) setS(ws, yapeSectionRow, c, sSection)
+    for (let c = 0; c < 4; c++) {
+      setS(ws, yapeKpiLabelRow, c, sKpiLabel(kpiPalette[c].bg))
+      setS(ws, yapeKpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'PEN'))
+    }
+    ws['!rows'][yapeKpiValueRow] = { hpt: 26 }
+    setS(ws, yapeExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+    setS(ws, yapeExpectedRow, 3, sTotalNumber('PEN'))
+    setS(ws, yapeRealRow, 0, sMetaLabel)
+    setS(ws, yapeRealRow, 3, sTotalNumber('PEN'))
+    setS(ws, yapeDiffRow, 0, sDifferenceLabel(yapeDiffOk))
+    setS(ws, yapeDiffRow, 3, sDifferenceNumber(yapeDiffOk, 'PEN'))
   }
 
   XLSX.utils.book_append_sheet(workbook, ws, 'Resumen')
@@ -1144,6 +1211,96 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     doc.text(`DIFERENCIA EN EFECTIVO — ${diffUSDLbl}`, ML + 2, y + 5.5)
     doc.setFontSize(10)
     doc.text(fmt(diffUSD, 'USD'), RX - 2, y + 6, { align: 'right' })
+    y += 13
+  }
+
+  // ===== BLOQUE YAPE (sólo si la sesión tuvo actividad en la billetera) =====
+  // Saldo paralelo en Yape (apertura + ventas + ingresos − gastos vs real).
+  // No se muestra si todos los flujos Yape son 0 — cajas que no usan Yape
+  // mantienen el cierre limpio igual que hoy.
+  const openingYape = sessionData.openingAmountYape || 0
+  const salesYapeAmt = sessionData.salesYape || 0
+  const incomeYape = sessionData.totalIncomeYape || 0
+  const expenseYape = sessionData.totalExpenseYape || 0
+  const closingYape = sessionData.closingYape || 0
+  const hasYapeActivity = openingYape > 0 || salesYapeAmt > 0 || incomeYape > 0 || expenseYape > 0 || closingYape > 0
+  if (hasYapeActivity) {
+    if (y > PH - 50) { doc.addPage(); y = 10; }
+
+    // Color púrpura para Yape (similar al ACCENT pero distinto)
+    const YAPE = [142, 68, 173]
+    doc.setFillColor(...YAPE)
+    doc.rect(ML, y, CW, 0.6, 'F')
+    y += 4
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(...DARK)
+    doc.text('SALDO EN YAPE', ML, y)
+    const titleW = doc.getTextWidth('SALDO EN YAPE')
+    doc.setFillColor(235, 220, 245)
+    doc.roundedRect(ML + titleW + 2, y - 2.5, 11, 3.5, 0.5, 0.5, 'F')
+    doc.setFontSize(5.5)
+    doc.setTextColor(...YAPE)
+    doc.text('YAPE', ML + titleW + 7.5, y + 0.3, { align: 'center' })
+    doc.setTextColor(...DARK)
+    y += 5
+
+    // Líneas compactas con cada componente
+    const yapeRow = (label, value, color = DARK, bold = false) => {
+      doc.setFillColor(248, 245, 252)
+      doc.rect(ML, y, CW, 6, 'F')
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...MED)
+      doc.text(label, ML + 2, y + 4)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
+      doc.setTextColor(...color)
+      doc.text(fmt(value), RX - 2, y + 4.2, { align: 'right' })
+      y += 7
+    }
+
+    if (openingYape > 0) yapeRow('Saldo Inicial Yape', openingYape)
+    if (salesYapeAmt > 0) yapeRow('+ Ventas en Yape', salesYapeAmt, [5, 120, 80])
+    if (incomeYape > 0) yapeRow('+ Otros Ingresos Yape', incomeYape, [30, 80, 180])
+    if (expenseYape > 0) yapeRow('− Gastos en Yape', expenseYape, [180, 30, 30])
+
+    // Esperado
+    y += 1
+    doc.setFillColor(240, 230, 250)
+    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
+    doc.text('Saldo Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', ML + 2, y + 4.5)
+    const expectedYape = sessionData.expectedAmountYape !== undefined
+      ? sessionData.expectedAmountYape
+      : (openingYape + salesYapeAmt + incomeYape - expenseYape)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
+    doc.text(fmt(expectedYape), RX - 2, y + 4.8, { align: 'right' })
+    y += 9
+
+    // Real
+    doc.setFillColor(245, 245, 245)
+    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
+    doc.text('Saldo Real en Yape (al cierre)', ML + 2, y + 4.5)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
+    doc.text(fmt(closingYape), RX - 2, y + 4.8, { align: 'right' })
+    y += 9
+
+    // Diferencia Yape (mismo estilo que diferencia efectivo)
+    const diffYape = sessionData.differenceYape !== undefined
+      ? sessionData.differenceYape
+      : (closingYape - expectedYape)
+    const diffYapeOk = diffYape >= 0
+    const diffYapeBg = diffYapeOk ? [230, 250, 240] : [255, 235, 235]
+    const diffYapeTc = diffYapeOk ? [5, 120, 80] : [180, 30, 30]
+    const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (diffYapeOk ? 'Sobrante' : 'Faltante')
+    doc.setFillColor(...diffYapeBg)
+    doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffYapeTc)
+    doc.text(`DIFERENCIA EN YAPE — ${diffYapeLbl}`, ML + 2, y + 5.5)
+    doc.setFontSize(10)
+    doc.text(fmt(diffYape), RX - 2, y + 6, { align: 'right' })
     y += 13
   }
 

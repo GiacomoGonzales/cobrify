@@ -114,6 +114,18 @@ const CashClosureTicket = forwardRef(({
   const closingAmount = sessionData?.closingAmount || 0
   const difference = sessionData?.difference ?? (closingCash - expectedAmount)
 
+  // Yape: saldo paralelo en billetera digital
+  const openingAmountYape = sessionData?.openingAmountYape || 0
+  const totalIncomeYape = sessionData?.totalIncomeYape || 0
+  const totalExpenseYape = sessionData?.totalExpenseYape || 0
+  const expectedAmountYape = sessionData?.expectedAmountYape !== undefined
+    ? sessionData.expectedAmountYape
+    : (openingAmountYape + salesYape + totalIncomeYape - totalExpenseYape)
+  const differenceYape = sessionData?.differenceYape !== undefined
+    ? sessionData.differenceYape
+    : (closingYape - expectedAmountYape)
+  const hasYapeActivity = openingAmountYape > 0 || salesYape > 0 || totalIncomeYape > 0 || totalExpenseYape > 0 || closingYape > 0
+
   return (
     <div ref={ref} className="ticket-container">
       {/* Estilos de impresión */}
@@ -626,6 +638,59 @@ const CashClosureTicket = forwardRef(({
           <span>{formatCurrency(difference)}</span>
         </div>
       </div>
+
+      {/* ===== Bloque YAPE ===== */}
+      {/* Saldo paralelo en la billetera digital, sólo si hubo actividad Yape */}
+      {hasYapeActivity && (
+        <div className="ticket-section" style={{ borderTop: '2px solid #000', paddingTop: '6px', marginTop: '6px' }}>
+          <div className="section-title">SALDO EN YAPE</div>
+
+          {openingAmountYape > 0 && (
+            <div className="info-row">
+              <span>Inicial Yape:</span>
+              <span>{formatCurrency(openingAmountYape)}</span>
+            </div>
+          )}
+          {salesYape > 0 && (
+            <div className="info-row">
+              <span>+ Ventas Yape:</span>
+              <span>{formatCurrency(salesYape)}</span>
+            </div>
+          )}
+          {totalIncomeYape > 0 && (
+            <div className="info-row">
+              <span>+ Ingresos Yape:</span>
+              <span>{formatCurrency(totalIncomeYape)}</span>
+            </div>
+          )}
+          {totalExpenseYape > 0 && (
+            <div className="info-row">
+              <span>- Gastos Yape:</span>
+              <span>{formatCurrency(totalExpenseYape)}</span>
+            </div>
+          )}
+          <div className="separator" />
+          <div className="info-row">
+            <span>Yape Esperado:</span>
+            <span>{formatCurrency(expectedAmountYape)}</span>
+          </div>
+          <div className="info-row">
+            <span>Yape Real:</span>
+            <span>{formatCurrency(closingYape)}</span>
+          </div>
+          <div className={`total-row highlight ${
+            differenceYape > 0 ? 'difference-positive' :
+            differenceYape < 0 ? 'difference-negative' :
+            'difference-zero'
+          }`}>
+            <span>
+              Diferencia Yape:
+              {differenceYape > 0 ? ' (Sobrante)' : differenceYape < 0 ? ' (Faltante)' : ''}
+            </span>
+            <span>{formatCurrency(differenceYape)}</span>
+          </div>
+        </div>
+      )}
 
       {/* ===== Bloque USD ===== */}
       {/* Solo si la sesión tuvo actividad USD (session.usd guardado al cerrar) */}
