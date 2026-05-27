@@ -44,6 +44,7 @@ import {
   exportSalesReport,
   exportProductsReport,
   exportBrandsReport,
+  exportBrandDetailReport,
   exportCustomersReport,
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
@@ -186,6 +187,11 @@ export default function Reports() {
   const [brandSearch, setBrandSearch] = useState('')
   const [brandPage, setBrandPage] = useState(0)
   const BRANDS_PER_PAGE = 25
+  // Drill-down de marca: null = vista lista; string = vista detalle de esa marca
+  const [selectedBrandName, setSelectedBrandName] = useState(null)
+  const [brandDetailSearch, setBrandDetailSearch] = useState('')
+  const [brandDetailPage, setBrandDetailPage] = useState(0)
+  const BRAND_DETAIL_PER_PAGE = 25
 
   // Resetear paginación cuando cambian los filtros
   useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate])
@@ -706,21 +712,24 @@ export default function Reports() {
       .sort((a, b) => b.revenue - a.revenue)
   }, [filteredInvoices, products, recipes, productCategories])
 
+  // Resuelve el nombre de marca de un producto. Prefiere brandId (marca
+  // administrada en la tabla productBrands). Fallback al texto libre
+  // product.marca para productos legacy todavía no migrados. Si no hay
+  // producto o no tiene marca, devuelve 'Sin marca' como categoría virtual.
+  // Hoisteado al componente para que el drill-down de marca lo reuse.
+  const getBrandName = useCallback((product) => {
+    if (!product) return 'Sin marca'
+    if (product.brandId) {
+      const brand = productBrands.find(b => b.id === product.brandId)
+      if (brand) return brand.name
+    }
+    const raw = String(product.marca || '').trim()
+    return raw || 'Sin marca'
+  }, [productBrands])
+
   // Ventas por marca (mismo patrón que ventas por categoría).
-  // Prefiere brandId (marca administrada). Fallback al texto libre product.marca
-  // para productos legacy todavía no migrados.
   const salesByBrand = useMemo(() => {
     const brandStats = {}
-
-    const getBrandName = (product) => {
-      if (!product) return 'Sin marca'
-      if (product.brandId) {
-        const brand = productBrands.find(b => b.id === product.brandId)
-        if (brand) return brand.name
-      }
-      const raw = String(product.marca || '').trim()
-      return raw || 'Sin marca'
-    }
 
     filteredInvoices.forEach(invoice => {
       const invoiceSubtotal = invoice.items?.reduce((sum, item) => {
@@ -774,7 +783,7 @@ export default function Reports() {
         profitMargin: b.revenue > 0 ? ((b.revenue - b.cost) / b.revenue) * 100 : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [filteredInvoices, products, recipes, productBrands])
+  }, [filteredInvoices, products, recipes, getBrandName])
 
   // Top clientes
   const topCustomers = useMemo(() => {
@@ -1221,6 +1230,45 @@ export default function Reports() {
       avgMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
     }
   }, [salesByBrand])
+
+  // Drill-down de marca: data completa de la marca seleccionada en el detalle.
+  // Filtra topProducts por marca matcheada vía product master (productId).
+  // Calcula KPIs propios (revenue/units/profit/top/peor margen) y arma el dataset
+  // del chart top 5 productos. Si la marca no tiene ventas en el rango, todo
+  // queda en cero (la UI muestra estado vacío).
+  const selectedBrandData = useMemo(() => {
+    if (!selectedBrandName) return null
+    const brandSummary = salesByBrand.find(b => b.name === selectedBrandName) || null
+    const productsOfBrand = topProducts.filter(p => {
+      const productMaster = products.find(pm => pm.id === p.productId)
+      return getBrandName(productMaster) === selectedBrandName
+    })
+    const totalRevenue = productsOfBrand.reduce((s, p) => s + (p.revenue || 0), 0)
+    const totalUnits = productsOfBrand.reduce((s, p) => s + (p.quantity || 0), 0)
+    const totalCost = productsOfBrand.reduce((s, p) => s + (p.cost || 0), 0)
+    const totalProfit = totalRevenue - totalCost
+    const topProduct = productsOfBrand[0] || null  // ya viene ordenado por revenue desc en topProducts
+    const top5ChartData = productsOfBrand.slice(0, 5).map((p, i) => ({
+      name: p.name && p.name.length > 14 ? p.name.substring(0, 14) + '…' : (p.name || 'Producto'),
+      fullName: p.name || 'Producto',
+      ventas: p.revenue,
+      cantidad: p.quantity,
+      color: COLORS[i % COLORS.length],
+    }))
+    return {
+      brandName: selectedBrandName,
+      brandSummary,        // entrada de salesByBrand (puede ser null si la marca quedó sin ventas tras un cambio de rango)
+      products: productsOfBrand,
+      totalRevenue,
+      totalUnits,
+      totalCost,
+      totalProfit,
+      avgMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+      topProduct,
+      top5ChartData,
+      productCount: productsOfBrand.length,
+    }
+  }, [selectedBrandName, salesByBrand, topProducts, products, getBrandName])
 
   // ========== CÁLCULOS DE GASTOS ==========
 
@@ -3049,8 +3097,320 @@ export default function Reports() {
         </>
       )}
 
-      {/* Reporte de Marcas */}
-      {selectedReport === 'brands' && (
+      {/* Reporte de Marcas — DETALLE DE UNA MARCA (drill-down) */}
+      {selectedReport === 'brands' && selectedBrandName && selectedBrandData && (
+        <>
+          {/* Header con back button + selector de marca + export */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white border rounded-lg px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setSelectedBrandName(null); setBrandDetailSearch(''); setBrandDetailPage(0) }}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                title="Volver a la lista de marcas"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Todas las marcas
+              </button>
+              <div>
+                <p className="text-xs text-gray-500">Detalle de marca</p>
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-purple-600" />
+                  {selectedBrandData.brandName}
+                </h2>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Selector para cambiar de marca sin volver a la lista */}
+              <select
+                value={selectedBrandName}
+                onChange={(e) => { setSelectedBrandName(e.target.value); setBrandDetailSearch(''); setBrandDetailPage(0) }}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                title="Cambiar marca"
+              >
+                {salesByBrand.map(b => (
+                  <option key={b.name} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+                disabled={selectedBrandData.products.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                Exportar Excel
+              </button>
+            </div>
+          </div>
+
+          {/* KPIs de la marca */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500">Ingresos</p>
+                    <p className="text-xl font-bold text-gray-900">{formatCurrency(selectedBrandData.totalRevenue)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500">Unidades vendidas</p>
+                    <p className="text-xl font-bold text-gray-900">{selectedBrandData.totalUnits.toFixed(0)}</p>
+                    <p className="text-xs text-gray-500">{selectedBrandData.productCount} producto{selectedBrandData.productCount !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500">Utilidad bruta</p>
+                    <p className={`text-xl font-bold ${selectedBrandData.totalProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                      {formatCurrency(selectedBrandData.totalProfit)}
+                    </p>
+                    <p className={`text-xs font-medium ${
+                      selectedBrandData.avgMargin >= 30 ? 'text-green-600'
+                      : selectedBrandData.avgMargin >= 15 ? 'text-yellow-600'
+                      : 'text-red-600'
+                    }`}>Margen {selectedBrandData.avgMargin.toFixed(1)}%</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <Award className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500">Producto top</p>
+                    <p className="text-base font-bold text-gray-900 truncate" title={selectedBrandData.topProduct?.name || '-'}>
+                      {selectedBrandData.topProduct?.name || '-'}
+                    </p>
+                    {selectedBrandData.topProduct && (
+                      <p className="text-xs text-gray-500">{formatCurrency(selectedBrandData.topProduct.revenue)}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top 5 productos de la marca (chart) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 productos de {selectedBrandData.brandName}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedBrandData.top5ChartData.length === 0 ? (
+                <p className="text-center py-8 text-gray-500">
+                  Esta marca no tiene ventas en el período seleccionado
+                </p>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={selectedBrandData.top5ChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={80} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="ventas" name="Ingresos" radius={[8, 8, 0, 0]}>
+                      {selectedBrandData.top5ChartData.map((entry, index) => (
+                        <Cell key={`bd-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tabla completa de productos de la marca con búsqueda + paginación */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle>Productos de la marca ({selectedBrandData.products.length})</CardTitle>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar producto..."
+                    value={brandDetailSearch}
+                    onChange={(e) => { setBrandDetailSearch(e.target.value); setBrandDetailPage(0) }}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const filtered = brandDetailSearch.trim()
+                  ? selectedBrandData.products.filter(p =>
+                      p.name?.toLowerCase().includes(brandDetailSearch.toLowerCase()) ||
+                      p.sku?.toLowerCase().includes(brandDetailSearch.toLowerCase())
+                    )
+                  : selectedBrandData.products
+                const totalPages = Math.ceil(filtered.length / BRAND_DETAIL_PER_PAGE)
+                const paginated = filtered.slice(brandDetailPage * BRAND_DETAIL_PER_PAGE, (brandDetailPage + 1) * BRAND_DETAIL_PER_PAGE)
+                const brandTotal = selectedBrandData.totalRevenue
+
+                return (
+                  <>
+                    {/* Mobile cards */}
+                    <div className="lg:hidden space-y-3">
+                      {paginated.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">
+                          {brandDetailSearch ? 'No se encontraron productos' : 'Esta marca no tiene ventas en el período'}
+                        </p>
+                      ) : (
+                        paginated.map((p, i) => {
+                          const globalIndex = brandDetailPage * BRAND_DETAIL_PER_PAGE + i
+                          const pct = brandTotal > 0 ? (p.revenue / brandTotal) * 100 : 0
+                          return (
+                            <div key={globalIndex} className="bg-white border rounded-lg px-4 py-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${globalIndex === 0 ? 'bg-yellow-100 text-yellow-700' : globalIndex === 1 ? 'bg-gray-200 text-gray-700' : globalIndex === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    {globalIndex + 1}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">{p.name}</span>
+                                    {p.sku && <span className="block text-xs text-gray-400">SKU: {p.sku}</span>}
+                                  </div>
+                                </div>
+                                <span className="font-bold text-gray-900">{formatCurrency(p.revenue)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 text-sm">
+                                <span className="text-gray-500">{p.quantity.toFixed(0)} uds · {pct.toFixed(1)}%</span>
+                                <div className="flex items-center gap-3">
+                                  <span className={`font-medium ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    +{formatCurrency(p.profit)}
+                                  </span>
+                                  <span className={`font-medium ${p.profitMargin >= 30 ? 'text-green-600' : p.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {p.profitMargin.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+
+                    {/* Desktop table */}
+                    <div className="hidden lg:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Posición</TableHead>
+                            <TableHead>SKU</TableHead>
+                            <TableHead>Producto</TableHead>
+                            <TableHead className="text-right">Unidades</TableHead>
+                            <TableHead className="text-right">Ingresos</TableHead>
+                            <TableHead className="text-right">Costo</TableHead>
+                            <TableHead className="text-right">Utilidad</TableHead>
+                            <TableHead className="text-right">Margen</TableHead>
+                            <TableHead className="text-right">% Marca</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginated.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                                {brandDetailSearch ? 'No se encontraron productos' : 'Esta marca no tiene ventas en el período'}
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            paginated.map((p, i) => {
+                              const globalIndex = brandDetailPage * BRAND_DETAIL_PER_PAGE + i
+                              const pct = brandTotal > 0 ? (p.revenue / brandTotal) * 100 : 0
+                              return (
+                                <TableRow key={globalIndex}>
+                                  <TableCell>
+                                    <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                      globalIndex === 0 ? 'bg-yellow-100 text-yellow-700'
+                                      : globalIndex === 1 ? 'bg-gray-200 text-gray-700'
+                                      : globalIndex === 2 ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {globalIndex + 1}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-gray-500 text-sm">{p.sku || '-'}</TableCell>
+                                  <TableCell className="font-medium">{p.name}</TableCell>
+                                  <TableCell className="text-right">{p.quantity.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right font-semibold">{formatCurrency(p.revenue)}</TableCell>
+                                  <TableCell className="text-right text-gray-600">{formatCurrency(p.cost)}</TableCell>
+                                  <TableCell className={`text-right font-semibold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatCurrency(p.profit)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={`font-medium ${
+                                      p.profitMargin >= 30 ? 'text-green-600'
+                                      : p.profitMargin >= 15 ? 'text-yellow-600'
+                                      : 'text-red-600'
+                                    }`}>
+                                      {p.profitMargin.toFixed(1)}%
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right text-gray-700">{pct.toFixed(1)}%</TableCell>
+                                </TableRow>
+                              )
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Paginación */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <span className="text-sm text-gray-500">
+                          {brandDetailPage * BRAND_DETAIL_PER_PAGE + 1}-{Math.min((brandDetailPage + 1) * BRAND_DETAIL_PER_PAGE, filtered.length)} de {filtered.length} productos
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setBrandDetailPage(p => Math.max(0, p - 1))}
+                            disabled={brandDetailPage === 0}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-sm font-medium px-2">{brandDetailPage + 1} / {totalPages}</span>
+                          <button
+                            onClick={() => setBrandDetailPage(p => Math.min(totalPages - 1, p + 1))}
+                            disabled={brandDetailPage >= totalPages - 1}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Reporte de Marcas — LISTA (vista por defecto, sin marca seleccionada) */}
+      {selectedReport === 'brands' && !selectedBrandName && (
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
@@ -3221,7 +3581,12 @@ export default function Reports() {
                           const globalIndex = brandPage * BRANDS_PER_PAGE + i
                           const pct = totalRevenue > 0 ? (brand.revenue / totalRevenue) * 100 : 0
                           return (
-                            <div key={globalIndex} className="bg-white border rounded-lg px-4 py-3">
+                            <button
+                              key={globalIndex}
+                              type="button"
+                              onClick={() => { setSelectedBrandName(brand.name); setBrandDetailSearch(''); setBrandDetailPage(0) }}
+                              className="w-full text-left bg-white border rounded-lg px-4 py-3 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                            >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${globalIndex === 0 ? 'bg-yellow-100 text-yellow-700' : globalIndex === 1 ? 'bg-gray-200 text-gray-700' : globalIndex === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -3229,7 +3594,7 @@ export default function Reports() {
                                   </div>
                                   <div>
                                     <span className="font-medium text-gray-900">{brand.name}</span>
-                                    <span className="block text-xs text-gray-400">{pct.toFixed(1)}% del total</span>
+                                    <span className="block text-xs text-gray-400">{pct.toFixed(1)}% del total · Ver detalle →</span>
                                   </div>
                                 </div>
                                 <span className="font-bold text-gray-900">{formatCurrency(brand.revenue)}</span>
@@ -3245,7 +3610,7 @@ export default function Reports() {
                                   </span>
                                 </div>
                               </div>
-                            </div>
+                            </button>
                           )
                         })
                       )}
@@ -3279,7 +3644,12 @@ export default function Reports() {
                               const globalIndex = brandPage * BRANDS_PER_PAGE + i
                               const pct = totalRevenue > 0 ? (brand.revenue / totalRevenue) * 100 : 0
                               return (
-                                <TableRow key={globalIndex}>
+                                <TableRow
+                                  key={globalIndex}
+                                  onClick={() => { setSelectedBrandName(brand.name); setBrandDetailSearch(''); setBrandDetailPage(0) }}
+                                  className="cursor-pointer hover:bg-blue-50 transition-colors"
+                                  title={`Ver detalle de ${brand.name}`}
+                                >
                                   <TableCell>
                                     <div
                                       className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
@@ -3295,7 +3665,7 @@ export default function Reports() {
                                       {globalIndex + 1}
                                     </div>
                                   </TableCell>
-                                  <TableCell className="font-medium">{brand.name}</TableCell>
+                                  <TableCell className="font-medium text-blue-700">{brand.name}</TableCell>
                                   <TableCell className="text-right">{brand.itemCount}</TableCell>
                                   <TableCell className="text-right">{brand.quantity.toFixed(0)}</TableCell>
                                   <TableCell className="text-right font-semibold">{formatCurrency(brand.revenue)}</TableCell>

@@ -2142,6 +2142,139 @@ export const exportBrandsReport = async (data) => {
   })
 }
 
+/**
+ * Exporta el detalle de UNA marca específica (drill-down) a Excel.
+ *
+ * 2 hojas: Resumen (KPIs + top 5 productos) y Detalle completo de los
+ * productos de la marca con ranking y % del total dentro de la marca.
+ *
+ * brandData es el objeto producido por selectedBrandData en Reports.jsx
+ * (ya viene con products filtrados, totales, top, etc.).
+ */
+export const exportBrandDetailReport = async (data) => {
+  const {
+    brandData,
+    dateRange, customStartDate, customEndDate, branchLabel, businessData,
+  } = data
+  if (!brandData) return
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+  const safeBrandName = String(brandData.brandName || 'Marca').replace(/[^a-zA-Z0-9À-ſ-_ ]/g, '').trim() || 'Marca'
+
+  // ============== HOJA 1: RESUMEN ==============
+  {
+    const aoa = [[`MARCA: ${String(brandData.brandName || '').toUpperCase()}`], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      periodLabel,
+      branchLabel: branchLabel || 'Todas',
+    }))
+    const metaEnd = aoa.length - 1
+
+    const kpis = buildSection(aoa, {
+      subtitle: 'RESUMEN DE LA MARCA',
+      header: ['Indicador', 'Valor'],
+      rows: [
+        ['Productos vendidos', brandData.productCount],
+        ['Unidades vendidas', Number(brandData.totalUnits.toFixed(2))],
+        ['Ingresos totales', Number(brandData.totalRevenue.toFixed(2))],
+        ['Costo total', Number(brandData.totalCost.toFixed(2))],
+        ['Utilidad bruta', Number(brandData.totalProfit.toFixed(2))],
+        ['Margen promedio %', Number(brandData.avgMargin.toFixed(1))],
+        ['Producto top', brandData.topProduct ? brandData.topProduct.name : '-'],
+        ['Ingresos del producto top', Number((brandData.topProduct?.revenue || 0).toFixed(2))],
+      ],
+    })
+
+    const top5 = brandData.products.slice(0, 5).map((p, i) => [
+      `${i + 1}. ${p.name}`,
+      Number((p.quantity || 0).toFixed(2)),
+      Number((p.revenue || 0).toFixed(2)),
+      brandData.totalRevenue > 0 ? Number(((p.revenue / brandData.totalRevenue) * 100).toFixed(1)) : 0,
+    ])
+    const topProductsSection = top5.length > 0 ? buildSection(aoa, {
+      subtitle: 'TOP 5 PRODUCTOS DE LA MARCA',
+      header: ['Producto', 'Unidades', 'Ingresos', '% de la marca'],
+      rows: top5,
+    }) : null
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [44, 14, 16, 14])
+    applyTitleRow(ws, 0, 4)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applySection(ws, 4, kpis, { numericCols: [1] })
+    if (topProductsSection) applySection(ws, 4, topProductsSection, { numericCols: [1, 2, 3] })
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumen')
+  }
+
+  // ============== HOJA 2: DETALLE DE PRODUCTOS ==============
+  {
+    const headers = ['#', 'SKU', 'Producto', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', '% del Total Marca']
+    const totalCols = headers.length
+
+    const aoa = [[`DETALLE DE PRODUCTOS — ${String(brandData.brandName || '').toUpperCase()}`], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    brandData.products.forEach((p, idx) => {
+      const margen = p.revenue > 0 ? ((p.profit || 0) / p.revenue) * 100 : 0
+      const pct = brandData.totalRevenue > 0 ? (p.revenue / brandData.totalRevenue) * 100 : 0
+      aoa.push([
+        idx + 1,
+        p.sku || '',
+        p.name,
+        Number((p.quantity || 0).toFixed(2)),
+        Number((p.revenue || 0).toFixed(2)),
+        Number((p.cost || 0).toFixed(2)),
+        Number((p.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(pct.toFixed(1)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', '', 'TOTALES',
+      Number(brandData.totalUnits.toFixed(2)),
+      Number(brandData.totalRevenue.toFixed(2)),
+      Number(brandData.totalCost.toFixed(2)),
+      Number(brandData.totalProfit.toFixed(2)),
+      Number(brandData.avgMargin.toFixed(1)),
+      100.0,
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 16, 36, 12, 14, 12, 14, 12, 14])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < brandData.products.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, centerStyle(i))
+      setStyle(ws, r, 2, cellStyle(i))
+      for (let c = 3; c <= 8; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    for (let c = 0; c <= 2; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    for (let c = 3; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+  }
+
+  const fileName = buildExcelFileName(`Reporte_Marca_${safeBrandName.replace(/\s+/g, '_')}`, [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de marca ${brandData.brandName}: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
+}
+
 // =================== REPORTE DE CLIENTES ===================
 
 export const exportCustomersReport = async (data) => {
