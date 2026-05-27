@@ -148,6 +148,10 @@ const ProductFormModal = ({
   hideStockField = false,
   businessMode = null,
   laboratories = [],
+  // Marcas administradas (Productos → Marcas). Si se pasan, se renderiza un
+  // selector brandId que es el flujo preferido (estructurado). El input texto
+  // de "marca" sigue presente como fallback para escribir libremente.
+  brands = [],
 }) => {
   const { user, businessSettings, hasFeature, getBusinessId } = useAppContext()
   const appNavigate = useAppNavigate()
@@ -192,6 +196,8 @@ const ProductFormModal = ({
       stock: '',
       initialStock: '',
       expirationDate: '',
+      marca: '',
+      brandId: '',
     },
   })
 
@@ -242,6 +248,7 @@ const ProductFormModal = ({
     laboratoryId: '',
     laboratoryName: '',
     marca: '',
+    brandId: '',
     batchNumber: '',
     activeIngredient: '',
     therapeuticAction: '',
@@ -284,6 +291,8 @@ const ProductFormModal = ({
         stock: initialData.stock?.toString() || '',
         initialStock: initialData.initialStock?.toString() || '',
         expirationDate: initialData.expirationDate || '',
+        marca: initialData.marca || '',
+        brandId: initialData.brandId || '',
       })
       setNoStock(initialData.noStock || false)
       setAllowDecimalQuantity(initialData.allowDecimalQuantity || false)
@@ -341,6 +350,8 @@ const ProductFormModal = ({
         stock: '',
         initialStock: '',
         expirationDate: '',
+        marca: '',
+        brandId: '',
       })
       setNoStock(false)
       setAllowDecimalQuantity(false)
@@ -361,6 +372,7 @@ const ProductFormModal = ({
         laboratoryId: '',
         laboratoryName: '',
         marca: '',
+        brandId: '',
         batchNumber: '',
         activeIngredient: '',
         therapeuticAction: '',
@@ -559,6 +571,7 @@ const ProductFormModal = ({
       productData.presentation = pharmacyData.presentation || null
       productData.laboratoryId = pharmacyData.laboratoryId || null
       productData.laboratoryName = pharmacyData.laboratoryName || null
+      productData.brandId = pharmacyData.brandId || null
       productData.marca = pharmacyData.marca || null
       // batchNumber removido - los lotes se gestionan via Compras o ajustes de inventario
       productData.activeIngredient = pharmacyData.activeIngredient || null
@@ -708,13 +721,45 @@ const ProductFormModal = ({
               />
             </div>
 
-            {/* Marca - disponible en todos los modos */}
+            {/* Marca - disponible en todos los modos.
+                Si hay marcas administradas, mostrar selector brandId (preferido).
+                El input texto 'marca' queda como fallback para casos no listados. */}
             {businessMode !== 'pharmacy' && (
-              <Input
-                label="Marca (Opcional)"
-                placeholder="Ej: Esika, Nike, Samsung"
-                {...register('marca')}
-              />
+              <div>
+                {brands && brands.length > 0 ? (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Marca (Opcional)
+                    </label>
+                    <select
+                      {...register('brandId')}
+                      onChange={(e) => {
+                        setValue('brandId', e.target.value)
+                        // Limpiar el texto libre cuando se elige una marca administrada
+                        if (e.target.value) setValue('marca', '')
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white mb-2"
+                    >
+                      <option value="">Sin marca / Otra</option>
+                      {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                    {!watch('brandId') && (
+                      <Input
+                        placeholder="O escribe una marca nueva (Opcional)"
+                        {...register('marca')}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <Input
+                    label="Marca (Opcional)"
+                    placeholder="Ej: Esika, Nike, Samsung"
+                    {...register('marca')}
+                  />
+                )}
+              </div>
             )}
 
             {/* SKU */}
@@ -1169,18 +1214,47 @@ const ProductFormModal = ({
                 )}
               </div>
 
-              {/* Marca */}
+              {/* Marca - selector administrado (preferido) + texto libre como fallback */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Marca
                 </label>
-                <input
-                  type="text"
-                  value={pharmacyData.marca}
-                  onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
-                  placeholder="Ej: Panadol, Aspirina"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                />
+                {brands && brands.length > 0 ? (
+                  <>
+                    <select
+                      value={pharmacyData.brandId || ''}
+                      onChange={(e) => setPharmacyData({
+                        ...pharmacyData,
+                        brandId: e.target.value,
+                        // Limpiar texto libre al elegir una administrada
+                        marca: e.target.value ? '' : pharmacyData.marca,
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white mb-2"
+                    >
+                      <option value="">Sin marca / Otra</option>
+                      {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                    {!pharmacyData.brandId && (
+                      <input
+                        type="text"
+                        value={pharmacyData.marca}
+                        onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
+                        placeholder="O escribe una marca nueva (Opcional)"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                      />
+                    )}
+                  </>
+                ) : (
+                  <input
+                    type="text"
+                    value={pharmacyData.marca}
+                    onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
+                    placeholder="Ej: Panadol, Aspirina"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                )}
               </div>
 
               {/* Principio Activo */}

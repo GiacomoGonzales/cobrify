@@ -30,6 +30,7 @@ import {
   updateProductStockTransaction,
   createProduct,
   getProductCategories,
+  getProductBrands,
 } from '@/services/firestoreService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -93,6 +94,9 @@ export default function CreatePurchase() {
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [categories, setCategories] = useState([])
+  // Marcas administradas — necesarias para el selector brandId en el modal
+  // de crear-producto (sino marca tipeada nunca se asocia a la marca real).
+  const [brands, setBrands] = useState([])
   // Modo de items: 'products', 'ingredients', o 'all'
   const [itemMode, setItemMode] = useState('products')
   const [isLoading, setIsLoading] = useState(true)
@@ -329,13 +333,14 @@ export default function CreatePurchase() {
 
     setIsLoading(true)
     try {
-      const [suppliersResult, productsResult, categoriesResult, warehousesResult, ingredientsResult, branchesResult] = await Promise.all([
+      const [suppliersResult, productsResult, categoriesResult, warehousesResult, ingredientsResult, branchesResult, brandsResult] = await Promise.all([
         getSuppliers(businessId),
         getProducts(businessId),
         getProductCategories(businessId),
         getWarehouses(businessId),
         getIngredients(businessId),
         getActiveBranches(businessId),
+        getProductBrands(businessId),
       ])
 
       if (suppliersResult.success) {
@@ -348,6 +353,10 @@ export default function CreatePurchase() {
 
       if (categoriesResult.success) {
         setCategories(categoriesResult.data || [])
+      }
+
+      if (brandsResult?.success) {
+        setBrands(brandsResult.data || [])
       }
 
       let activeWarehouses = []
@@ -843,6 +852,13 @@ export default function CreatePurchase() {
     }
 
     try {
+      // Marca: para CUALQUIER modo, guardamos brandId (preferido) y marca texto.
+      // Si el usuario eligió una marca administrada, derivamos el texto del nombre
+      // de la marca para back-compat con reportes viejos. Si escribió texto libre
+      // sin elegir marca administrada, guardamos el texto y brandId queda null.
+      const selectedBrand = data.brandId ? brands.find(b => b.id === data.brandId) : null
+      const marcaText = selectedBrand ? selectedBrand.name : (data.marca || null)
+
       const productData = {
         code: data.code || '',
         sku: data.sku || '',
@@ -865,16 +881,17 @@ export default function CreatePurchase() {
         presentations: data.presentations || [],
         imageUrl: data.imageUrl || null,
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : (data.imageUrl ? [data.imageUrl] : []),
+        brandId: data.brandId || null,
+        marca: marcaText,
       }
 
-      // Include pharmacy fields if present
+      // Include pharmacy fields if present (la marca ya está arriba, no se duplica)
       if (businessMode === 'pharmacy') {
         productData.genericName = data.genericName || null
         productData.concentration = data.concentration || null
         productData.presentation = data.presentation || null
         productData.laboratoryId = data.laboratoryId || null
         productData.laboratoryName = data.laboratoryName || null
-        productData.marca = data.marca || null
         productData.batchNumber = data.batchNumber || null
         productData.activeIngredient = data.activeIngredient || null
         productData.therapeuticAction = data.therapeuticAction || null
@@ -3007,6 +3024,7 @@ export default function CreatePurchase() {
         hideStockField={true} // En compras, el stock se maneja con la cantidad del item, no aquí
         businessMode={businessMode}
         laboratories={laboratories}
+        brands={brands}
       />
 
       {/* Modal para crear ingrediente nuevo */}
