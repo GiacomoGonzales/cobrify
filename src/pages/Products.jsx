@@ -1948,6 +1948,66 @@ export default function Products() {
         }
       }
 
+      // Auto-crear MARCAS que no existen (todos los modos)
+      // Mismo patrón que laboratorios, pero las marcas viven como array en el
+      // doc del business (no en una colección), así que un solo save al final.
+      // El parser del Excel (ImportProductsModal) sólo asigna brandId si encuentra
+      // match exacto contra marcas existentes; los nombres nuevos quedan como
+      // texto en product.marca con brandId=null. Aquí los detectamos, creamos,
+      // y reinyectamos brandId para que el reporte de "Ventas por Marca" funcione
+      // sin necesidad de migración manual posterior.
+      {
+        const existingBrandsResult = await getProductBrands(getBusinessId())
+        const existingBrands = existingBrandsResult.success ? (existingBrandsResult.data || []) : []
+        const brandNameToId = new Map()
+        existingBrands.forEach(b => {
+          if (b.name) brandNameToId.set(String(b.name).toLowerCase().trim(), b.id)
+        })
+
+        // Identificar marcas nuevas en el import (texto sin brandId)
+        const newBrandNames = new Set()
+        for (const product of productsToImport) {
+          if (product.brandId) continue  // ya viene linkeada por el modal
+          const text = String(product.marca || '').trim()
+          if (text && !brandNameToId.has(text.toLowerCase())) {
+            newBrandNames.add(text)
+          }
+        }
+
+        if (newBrandNames.size > 0) {
+          // Generar IDs simples y construir el nuevo array
+          const newBrandEntries = Array.from(newBrandNames).map(name => ({
+            id: `brand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name,
+          }))
+          const updatedBrands = [...existingBrands, ...newBrandEntries]
+          const saveResult = await saveProductBrands(getBusinessId(), updatedBrands)
+          if (saveResult.success) {
+            newBrandEntries.forEach(b => brandNameToId.set(b.name.toLowerCase(), b.id))
+            setBrands(updatedBrands)
+            toast.info(`${newBrandNames.size} marca(s) creada(s) automáticamente`)
+          } else {
+            console.error('Error al guardar marcas nuevas:', saveResult.error)
+          }
+        }
+
+        // Inyectar brandId a cada producto importado (incluso los que ya tenían
+        // marca existente pero el modal no asignó brandId por algún motivo).
+        for (const product of productsToImport) {
+          if (product.brandId) continue
+          const text = String(product.marca || '').trim()
+          if (!text) continue
+          const brandId = brandNameToId.get(text.toLowerCase())
+          if (brandId) {
+            product.brandId = brandId
+            // Normalizar marca texto al nombre administrado por consistencia.
+            const found = existingBrands.find(b => b.id === brandId)
+              || Array.from(newBrandNames).map(n => ({ name: n })).find(b => b.name.toLowerCase() === text.toLowerCase())
+            if (found?.name) product.marca = found.name
+          }
+        }
+      }
+
       // Auto-crear laboratorios que no existen (solo modo farmacia)
       if (businessMode === 'pharmacy') {
         const labsRef = collection(db, 'businesses', getBusinessId(), 'laboratories')
@@ -2116,6 +2176,15 @@ export default function Products() {
             if (product.laboratoryId) {
               updates.laboratoryId = product.laboratoryId
               updates.laboratoryName = product.laboratoryName || ''
+            }
+            // Marca: si el reimport trae brandId (ya sea linkeada por el modal o
+            // recién auto-creada arriba), actualizamos en el producto existente.
+            // marca texto también se actualiza si vino, para mantener consistencia.
+            if (product.brandId) {
+              updates.brandId = product.brandId
+              if (product.marca) updates.marca = product.marca
+            } else if (product.marca) {
+              updates.marca = product.marca
             }
             // Código de barras (campo `code`) — también se actualiza en reimports
             if (product.code) updates.code = product.code
