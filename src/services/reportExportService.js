@@ -1993,6 +1993,155 @@ export const exportProductsReport = async (data) => {
   })
 }
 
+// =================== REPORTE DE MARCAS ===================
+
+/**
+ * Exporta el reporte dedicado de Ventas por Marca a Excel.
+ *
+ * Genera dos hojas:
+ *  - Resumen ejecutivo (KPIs + Top 10 marcas + Sin marca destacado)
+ *  - Detalle completo de todas las marcas con totales
+ *
+ * El cálculo (revenue, cost, profit, profitMargin) viene precomputado en
+ * salesByBrand desde Reports.jsx — esta función sólo agrega presentación.
+ */
+export const exportBrandsReport = async (data) => {
+  const {
+    salesByBrand,
+    dateRange, customStartDate, customEndDate, branchLabel, businessData,
+  } = data
+
+  const wb = XLSX.utils.book_new()
+  const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
+
+  // Totales
+  const totalIngresos = salesByBrand.reduce((s, b) => s + (b.revenue || 0), 0)
+  const totalCostos = salesByBrand.reduce((s, b) => s + (b.cost || 0), 0)
+  const totalUtilidad = totalIngresos - totalCostos
+  const totalUnidades = salesByBrand.reduce((s, b) => s + (b.quantity || 0), 0)
+  const totalVentas = salesByBrand.reduce((s, b) => s + (b.itemCount || 0), 0)
+  const margenPromedio = totalIngresos > 0 ? (totalUtilidad / totalIngresos) * 100 : 0
+  const topBrand = salesByBrand[0]
+  // "Sin marca" se trata aparte como referencia (saber cuánto se vende sin marca asignada)
+  const sinMarca = salesByBrand.find(b => b.name === 'Sin marca')
+
+  // ============== HOJA 1: RESUMEN EJECUTIVO ==============
+  {
+    const aoa = [['REPORTE DE VENTAS POR MARCA'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, {
+      periodLabel,
+      branchLabel: branchLabel || 'Todas',
+    }))
+    const metaEnd = aoa.length - 1
+
+    const kpis = buildSection(aoa, {
+      subtitle: 'RESUMEN EJECUTIVO',
+      header: ['Indicador', 'Valor'],
+      rows: [
+        ['Total de marcas con ventas', salesByBrand.length],
+        ['Marca más vendida', topBrand ? topBrand.name : '-'],
+        ['Ingresos de la marca top', Number((topBrand?.revenue || 0).toFixed(2))],
+        ['Unidades vendidas (todas las marcas)', Number(totalUnidades.toFixed(2))],
+        ['Ingresos totales', Number(totalIngresos.toFixed(2))],
+        ['Costos totales', Number(totalCostos.toFixed(2))],
+        ['Utilidad bruta', Number(totalUtilidad.toFixed(2))],
+        ['Margen promedio %', Number(margenPromedio.toFixed(1))],
+        ...(sinMarca
+          ? [['Ingresos de productos SIN marca', Number((sinMarca.revenue || 0).toFixed(2))]]
+          : []),
+      ],
+    })
+
+    const top10 = salesByBrand.slice(0, 10).map((b, i) => [
+      `${i + 1}. ${b.name}`,
+      Number((b.revenue || 0).toFixed(2)),
+      totalIngresos > 0 ? Number(((b.revenue / totalIngresos) * 100).toFixed(1)) : 0,
+    ])
+    const topBrandsSection = top10.length > 0 ? buildSection(aoa, {
+      subtitle: 'TOP 10 MARCAS POR INGRESOS',
+      header: ['Marca', 'Ingresos', '% del Total'],
+      rows: top10,
+    }) : null
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [44, 18, 14])
+    applyTitleRow(ws, 0, 3)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applySection(ws, 3, kpis, { numericCols: [1] })
+    if (topBrandsSection) applySection(ws, 3, topBrandsSection, { numericCols: [1, 2] })
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumen')
+  }
+
+  // ============== HOJA 2: DETALLE COMPLETO ==============
+  {
+    const headers = ['#', 'Marca', 'Ventas', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', '% del Total']
+    const totalCols = headers.length
+
+    const aoa = [['DETALLE DE VENTAS POR MARCA'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    salesByBrand.forEach((brand, idx) => {
+      const margen = brand.revenue > 0 ? ((brand.profit || 0) / brand.revenue) * 100 : 0
+      const porcentaje = totalIngresos > 0 ? (brand.revenue / totalIngresos) * 100 : 0
+      aoa.push([
+        idx + 1,
+        brand.name,
+        brand.itemCount || 0,
+        Number((brand.quantity || 0).toFixed(2)),
+        Number((brand.revenue || 0).toFixed(2)),
+        Number((brand.cost || 0).toFixed(2)),
+        Number((brand.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(porcentaje.toFixed(1)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', 'TOTALES', totalVentas,
+      Number(totalUnidades.toFixed(2)),
+      Number(totalIngresos.toFixed(2)),
+      Number(totalCostos.toFixed(2)),
+      Number(totalUtilidad.toFixed(2)),
+      Number(margenPromedio.toFixed(1)),
+      100.0,
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 26, 10, 12, 14, 12, 14, 12, 12])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < salesByBrand.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, intStyle(i))
+      for (let c = 3; c <= 8; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 1, totalLabelStyle)
+    setStyle(ws, totalRowIdx, 2, { ...totalNumberStyle, numFmt: '#,##0' })
+    for (let c = 3; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Marcas')
+  }
+
+  const fileName = buildExcelFileName('Reporte_Marcas', [periodLabel])
+  await saveAndShareExcel(wb, fileName, {
+    shareTitle: fileName,
+    shareText: `Reporte de Marcas: ${fileName}`,
+    subDirectory: 'Reportes',
+  })
+}
+
 // =================== REPORTE DE CLIENTES ===================
 
 export const exportCustomersReport = async (data) => {

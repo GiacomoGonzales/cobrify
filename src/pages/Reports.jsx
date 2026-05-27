@@ -25,6 +25,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Tag,
+  Award,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import RealEstateReports from './RealEstateReports'
@@ -41,6 +43,7 @@ import {
   exportGeneralReport,
   exportSalesReport,
   exportProductsReport,
+  exportBrandsReport,
   exportCustomersReport,
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
@@ -179,6 +182,10 @@ export default function Reports() {
   const [productSearch, setProductSearch] = useState('')
   const [productPage, setProductPage] = useState(0)
   const PRODUCTS_PER_PAGE = 25
+  // Tab Marcas: búsqueda y paginación independientes
+  const [brandSearch, setBrandSearch] = useState('')
+  const [brandPage, setBrandPage] = useState(0)
+  const BRANDS_PER_PAGE = 25
 
   // Resetear paginación cuando cambian los filtros
   useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate])
@@ -1167,6 +1174,54 @@ export default function Reports() {
     }))
   }, [salesByCategory])
 
+  // Datos para charts del tab Marcas:
+  // - top10BrandsChartData: barras horizontales con las 10 marcas top
+  // - brandsPieData: top 6 marcas + "Otros" agrupando el resto (mejor lectura)
+  const top10BrandsChartData = useMemo(() => {
+    return salesByBrand.slice(0, 10).map((brand, index) => ({
+      name: brand.name && brand.name.length > 14 ? brand.name.substring(0, 14) + '…' : (brand.name || 'Sin marca'),
+      fullName: brand.name || 'Sin marca',
+      ventas: brand.revenue,
+      cantidad: brand.quantity,
+      color: COLORS[index % COLORS.length],
+    }))
+  }, [salesByBrand])
+
+  const brandsPieData = useMemo(() => {
+    if (salesByBrand.length === 0) return []
+    const top = salesByBrand.slice(0, 6)
+    const rest = salesByBrand.slice(6)
+    const otherRevenue = rest.reduce((s, b) => s + (b.revenue || 0), 0)
+    const data = top.map((b, i) => ({
+      name: b.name || 'Sin marca',
+      value: Number((b.revenue || 0).toFixed(2)),
+      color: COLORS[i % COLORS.length],
+    }))
+    if (otherRevenue > 0) {
+      data.push({
+        name: `Otros (${rest.length})`,
+        value: Number(otherRevenue.toFixed(2)),
+        color: '#9ca3af',
+      })
+    }
+    return data
+  }, [salesByBrand])
+
+  // Totales agregados para los KPIs del tab Marcas
+  const brandsTotals = useMemo(() => {
+    const totalRevenue = salesByBrand.reduce((s, b) => s + (b.revenue || 0), 0)
+    const totalUnits = salesByBrand.reduce((s, b) => s + (b.quantity || 0), 0)
+    const totalProfit = salesByBrand.reduce((s, b) => s + (b.profit || 0), 0)
+    return {
+      count: salesByBrand.length,
+      topBrand: salesByBrand[0] || null,
+      totalRevenue,
+      totalUnits,
+      totalProfit,
+      avgMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+    }
+  }, [salesByBrand])
+
   // ========== CÁLCULOS DE GASTOS ==========
 
   // Filtrar gastos por rango de fecha
@@ -1911,6 +1966,17 @@ export default function Reports() {
         >
           <Package className="w-4 h-4 inline-block mr-2" />
           Productos
+        </button>
+        <button
+          onClick={() => setSelectedReport('brands')}
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
+            selectedReport === 'brands'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+          }`}
+        >
+          <Tag className="w-4 h-4 inline-block mr-2" />
+          Marcas
         </button>
         <button
           onClick={() => setSelectedReport('customers')}
@@ -2978,6 +3044,313 @@ export default function Reports() {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Reporte de Marcas */}
+      {selectedReport === 'brands' && (
+        <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={async () => await exportBrandsReport({ salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              disabled={salesByBrand.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Marcas (Excel)
+            </button>
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                    <Tag className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Marcas con ventas</p>
+                    <p className="text-2xl font-bold text-gray-900">{brandsTotals.count}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <Award className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500">Marca top</p>
+                    <p className="text-base font-bold text-gray-900 truncate" title={brandsTotals.topBrand?.name || '-'}>
+                      {brandsTotals.topBrand?.name || '-'}
+                    </p>
+                    {brandsTotals.topBrand && (
+                      <p className="text-xs text-gray-500">{formatCurrency(brandsTotals.topBrand.revenue)}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Ingresos totales</p>
+                    <p className="text-xl font-bold text-gray-900">{formatCurrency(brandsTotals.totalRevenue)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Unidades vendidas</p>
+                    <p className="text-xl font-bold text-gray-900">{brandsTotals.totalUnits.toFixed(0)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Charts: Bar top 10 + Pie distribución */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Top 10 marcas por ingresos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {top10BrandsChartData.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de marcas en este período</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart data={top10BrandsChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={90} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="ventas" name="Ingresos" radius={[8, 8, 0, 0]}>
+                        {top10BrandsChartData.map((entry, index) => (
+                          <Cell key={`b-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución de ventas por marca</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {brandsPieData.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos en este período</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <RePieChart>
+                      <Pie
+                        data={brandsPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={(entry) => entry.name}
+                      >
+                        {brandsPieData.map((entry, index) => (
+                          <Cell key={`pie-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabla completa con búsqueda + paginación + ranking */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle>Todas las marcas ({salesByBrand.length})</CardTitle>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar marca..."
+                    value={brandSearch}
+                    onChange={(e) => { setBrandSearch(e.target.value); setBrandPage(0) }}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const filtered = brandSearch.trim()
+                  ? salesByBrand.filter(b => b.name?.toLowerCase().includes(brandSearch.toLowerCase()))
+                  : salesByBrand
+                const totalPages = Math.ceil(filtered.length / BRANDS_PER_PAGE)
+                const paginated = filtered.slice(brandPage * BRANDS_PER_PAGE, (brandPage + 1) * BRANDS_PER_PAGE)
+                const totalRevenue = brandsTotals.totalRevenue
+
+                return (
+                  <>
+                    {/* Mobile cards */}
+                    <div className="lg:hidden space-y-3">
+                      {paginated.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">
+                          {brandSearch ? 'No se encontraron marcas' : 'No hay datos de marcas en este período'}
+                        </p>
+                      ) : (
+                        paginated.map((brand, i) => {
+                          const globalIndex = brandPage * BRANDS_PER_PAGE + i
+                          const pct = totalRevenue > 0 ? (brand.revenue / totalRevenue) * 100 : 0
+                          return (
+                            <div key={globalIndex} className="bg-white border rounded-lg px-4 py-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${globalIndex === 0 ? 'bg-yellow-100 text-yellow-700' : globalIndex === 1 ? 'bg-gray-200 text-gray-700' : globalIndex === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    {globalIndex + 1}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">{brand.name}</span>
+                                    <span className="block text-xs text-gray-400">{pct.toFixed(1)}% del total</span>
+                                  </div>
+                                </div>
+                                <span className="font-bold text-gray-900">{formatCurrency(brand.revenue)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 text-sm">
+                                <span className="text-gray-500">{brand.itemCount} ventas · {brand.quantity.toFixed(0)} uds</span>
+                                <div className="flex items-center gap-3">
+                                  <span className={`font-medium ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    +{formatCurrency(brand.profit)}
+                                  </span>
+                                  <span className={`font-medium ${brand.profitMargin >= 30 ? 'text-green-600' : brand.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {brand.profitMargin.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+
+                    {/* Desktop table */}
+                    <div className="hidden lg:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Posición</TableHead>
+                            <TableHead>Marca</TableHead>
+                            <TableHead className="text-right">Ventas</TableHead>
+                            <TableHead className="text-right">Unidades</TableHead>
+                            <TableHead className="text-right">Ingresos</TableHead>
+                            <TableHead className="text-right">Costo</TableHead>
+                            <TableHead className="text-right">Utilidad</TableHead>
+                            <TableHead className="text-right">Margen</TableHead>
+                            <TableHead className="text-right">% Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginated.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                                {brandSearch ? 'No se encontraron marcas' : 'No hay datos de marcas en este período'}
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            paginated.map((brand, i) => {
+                              const globalIndex = brandPage * BRANDS_PER_PAGE + i
+                              const pct = totalRevenue > 0 ? (brand.revenue / totalRevenue) * 100 : 0
+                              return (
+                                <TableRow key={globalIndex}>
+                                  <TableCell>
+                                    <div
+                                      className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                        globalIndex === 0
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : globalIndex === 1
+                                          ? 'bg-gray-200 text-gray-700'
+                                          : globalIndex === 2
+                                          ? 'bg-orange-100 text-orange-700'
+                                          : 'bg-gray-100 text-gray-600'
+                                      }`}
+                                    >
+                                      {globalIndex + 1}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-medium">{brand.name}</TableCell>
+                                  <TableCell className="text-right">{brand.itemCount}</TableCell>
+                                  <TableCell className="text-right">{brand.quantity.toFixed(0)}</TableCell>
+                                  <TableCell className="text-right font-semibold">{formatCurrency(brand.revenue)}</TableCell>
+                                  <TableCell className="text-right text-gray-600">{formatCurrency(brand.cost)}</TableCell>
+                                  <TableCell className={`text-right font-semibold ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatCurrency(brand.profit)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={`font-medium ${
+                                      brand.profitMargin >= 30
+                                        ? 'text-green-600'
+                                        : brand.profitMargin >= 15
+                                        ? 'text-yellow-600'
+                                        : 'text-red-600'
+                                    }`}>
+                                      {brand.profitMargin.toFixed(1)}%
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right text-gray-700">{pct.toFixed(1)}%</TableCell>
+                                </TableRow>
+                              )
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Paginación */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <span className="text-sm text-gray-500">
+                          {brandPage * BRANDS_PER_PAGE + 1}-{Math.min((brandPage + 1) * BRANDS_PER_PAGE, filtered.length)} de {filtered.length} marcas
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setBrandPage(p => Math.max(0, p - 1))}
+                            disabled={brandPage === 0}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-sm font-medium px-2">{brandPage + 1} / {totalPages}</span>
+                          <button
+                            onClick={() => setBrandPage(p => Math.min(totalPages - 1, p + 1))}
+                            disabled={brandPage >= totalPages - 1}
+                            className="p-1.5 rounded-lg border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </>
