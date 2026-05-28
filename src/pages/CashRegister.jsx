@@ -2190,8 +2190,7 @@ export default function CashRegister() {
                 {/* hay actividad Yape (apertura, ventas o movimientos). */}
                 {totals.yape && (
                   <div className="mt-5 pt-4 border-t-2 border-purple-200 space-y-3">
-                    <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded p-2.5">
-                      <span className="text-lg">📱</span>
+                    <div className="bg-purple-50 border border-purple-200 rounded p-2.5">
                       <p className="text-sm font-semibold text-purple-900">Saldo en Yape</p>
                     </div>
 
@@ -2274,8 +2273,8 @@ export default function CashRegister() {
                             <p className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
                               <span>{movement.category}</span>
                               {movement.method === 'yape' && (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold">
-                                  📱 Yape
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold">
+                                  Yape
                                 </span>
                               )}
                             </p>
@@ -3963,7 +3962,7 @@ export default function CashRegister() {
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                💵 Efectivo
+                Efectivo
               </button>
               <button
                 type="button"
@@ -3974,7 +3973,7 @@ export default function CashRegister() {
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                📱 Yape
+                Yape
               </button>
             </div>
           </div>
