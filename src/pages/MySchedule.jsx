@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Calendar, Clock, Palmtree, Plus, Loader2, MapPin, Coffee,
-  CheckCircle2, XCircle, AlertCircle, History,
+  CheckCircle2, XCircle, AlertCircle, History, Key, Eye, EyeOff,
 } from 'lucide-react'
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
@@ -25,6 +26,7 @@ import {
   getTimeOffStatusInfo,
   calcDaysBetween,
 } from '@/services/timeOffService'
+import { getActiveBranches } from '@/services/branchService'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -75,6 +77,17 @@ export default function MySchedule() {
   const [scheduleNext, setScheduleNext] = useState(null)
   const [requests, setRequests] = useState([])
   const [showCreateModal, setShowCreateModal] = useState(false)
+  // Mapa branchId → name para mostrar la sucursal de cada turno (los turnos
+  // guardan branchId pero el empleado no tiene la lista visible; la cargamos
+  // una vez al inicio).
+  const [branchMap, setBranchMap] = useState({})
+  // Modal de cambio de contraseña propia (el usuario reauth con su clave actual)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwShow, setPwShow] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
 
   const today = new Date()
   const isoCurrent = useMemo(() => getIsoWeek(today), [])
@@ -89,13 +102,23 @@ export default function MySchedule() {
       const userData = userSnap.exists() ? userSnap.data() : {}
       setPersonnel(userData.personnel || {})
 
-      // Horarios
-      const [curr, next] = await Promise.all([
+      // Horarios + sucursales (en paralelo)
+      const [curr, next, branchesRes] = await Promise.all([
         getWeekSchedule(businessId, uid, isoCurrent.isoYear, isoCurrent.isoWeek),
         getWeekSchedule(businessId, uid, isoNext.isoYear, isoNext.isoWeek),
+        getActiveBranches(businessId),
       ])
       setScheduleCurrent(curr.success ? curr.data : null)
       setScheduleNext(next.success ? next.data : null)
+      if (branchesRes?.success) {
+        // Construir mapa id → nombre para resolver branchId de cada celda.
+        // 'main' representa la sucursal principal (heredado del modelo).
+        const map = { main: 'Sucursal Principal' }
+        for (const b of (branchesRes.data || [])) {
+          if (b.id) map[b.id] = b.name || 'Sucursal'
+        }
+        setBranchMap(map)
+      }
 
       // Solicitudes propias
       const reqs = await listRequests(businessId, { userId: uid })
@@ -139,6 +162,53 @@ export default function MySchedule() {
   }
 
   const recentRequests = useMemo(() => requests.slice(0, 5), [requests])
+
+  // Cambiar la contraseña del propio usuario.
+  // Firebase exige reauth con la clave actual antes de updatePassword
+  // (operación sensible). Si la clave actual no coincide, falla con
+  // 'auth/wrong-password' o 'auth/invalid-credential'.
+  const closePasswordModal = () => {
+    setShowPasswordModal(false)
+    setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow(false); setPwLoading(false)
+  }
+  const handleChangePassword = async () => {
+    if (!user?.email) {
+      toast.error('No se puede cambiar la contraseña sin un email asociado')
+      return
+    }
+    if (!pwCurrent) {
+      toast.error('Ingresa tu contraseña actual')
+      return
+    }
+    if (!pwNew || pwNew.length < 6) {
+      toast.error('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    if (pwNew !== pwConfirm) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+    setPwLoading(true)
+    try {
+      const credential = EmailAuthProvider.credential(user.email, pwCurrent)
+      await reauthenticateWithCredential(user, credential)
+      await updatePassword(user, pwNew)
+      toast.success('Contraseña actualizada correctamente')
+      closePasswordModal()
+    } catch (error) {
+      const code = error?.code || ''
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        toast.error('Contraseña actual incorrecta')
+      } else if (code === 'auth/weak-password') {
+        toast.error('La nueva contraseña es muy débil')
+      } else if (code === 'auth/requires-recent-login') {
+        toast.error('Por seguridad, cerrá sesión y volvé a iniciar antes de cambiar la contraseña')
+      } else {
+        toast.error(error.message || 'Error al cambiar la contraseña')
+      }
+      setPwLoading(false)
+    }
+  }
 
   // ----- Render -----
 
@@ -257,6 +327,7 @@ export default function MySchedule() {
                     cell={cell}
                     approved={approved}
                     isToday={isHoy}
+                    branchMap={branchMap}
                   />
                 )
               })}
@@ -287,6 +358,21 @@ export default function MySchedule() {
               className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center justify-center gap-1.5"
             >
               <Plus className="w-4 h-4" /> Solicitar permiso / vacaciones
+            </button>
+          </div>
+
+          {/* Mi cuenta — cambio de contraseña por el propio usuario */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Key className="w-4 h-4 text-purple-600" />
+              Mi cuenta
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">Cambia tu contraseña de acceso al sistema.</p>
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center justify-center gap-1.5"
+            >
+              <Key className="w-4 h-4" /> Cambiar mi contraseña
             </button>
           </div>
 
@@ -359,19 +445,107 @@ export default function MySchedule() {
           }}
         />
       )}
+
+      {/* Modal cambio de contraseña propio. Flujo: reauth con clave actual
+          (requerido por Firebase para operaciones sensibles) + updatePassword. */}
+      <Modal
+        isOpen={showPasswordModal}
+        onClose={pwLoading ? undefined : closePasswordModal}
+        title="Cambiar mi contraseña"
+      >
+        <div className="space-y-4">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+            <p className="text-purple-900 flex items-center gap-2">
+              <Key className="w-4 h-4" />
+              <span className="font-medium">{user?.email}</span>
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
+            <div className="relative">
+              <input
+                type={pwShow ? 'text' : 'password'}
+                value={pwCurrent}
+                onChange={(e) => setPwCurrent(e.target.value)}
+                placeholder="Tu contraseña actual"
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setPwShow((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+              >
+                {pwShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+            <input
+              type={pwShow ? 'text' : 'password'}
+              value={pwNew}
+              onChange={(e) => setPwNew(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              autoComplete="new-password"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
+            <input
+              type={pwShow ? 'text' : 'password'}
+              value={pwConfirm}
+              onChange={(e) => setPwConfirm(e.target.value)}
+              placeholder="Repite la nueva contraseña"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={closePasswordModal}
+              disabled={pwLoading}
+              className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={pwLoading || !pwCurrent || !pwNew || pwNew.length < 6}
+              className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {pwLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Actualizando...</>
+              ) : (
+                <><Key className="w-4 h-4" /> Guardar nueva contraseña</>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
 
-function DayRow({ dayLabel, date, cell, approved, isToday }) {
+function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {} }) {
   // Prioridad visual: vacación aprobada > descanso > turno > sin asignar
   const isVacation = !!approved
   const isRest = cell?.rest && !isVacation
-  const isShift = !!(cell?.start && cell?.end) && !isVacation && !isRest
+  const isRecovery = cell?.recovery && !isVacation
+  const isShift = !!(cell?.start && cell?.end) && !isVacation && !isRest && !isRecovery
+  // Nombre legible de la sucursal del turno. 'main' (sin branchId) → "Sucursal
+  // Principal". Si el branchId no se encuentra en el mapa (sucursal eliminada
+  // o sin permiso de lectura), se omite la línea.
+  const branchKey = cell?.branchId || 'main'
+  const branchName = branchMap[branchKey] || (cell?.branchId ? 'Otra sucursal' : 'Sucursal Principal')
 
   let leftBorder = 'border-l-4 '
   if (isVacation) leftBorder += 'border-blue-400'
   else if (isRest) leftBorder += 'border-gray-300'
+  else if (isRecovery) leftBorder += 'border-orange-400'
   else if (isShift) leftBorder += 'border-amber-400'
   else leftBorder += 'border-transparent'
 
@@ -394,9 +568,18 @@ function DayRow({ dayLabel, date, cell, approved, isToday }) {
             <Coffee className="w-3.5 h-3.5" />
             Descanso libre
           </div>
+        ) : isRecovery ? (
+          <div className="text-sm flex items-center gap-1.5 text-orange-700">
+            <Coffee className="w-3.5 h-3.5" />
+            Recuperación
+          </div>
         ) : isShift ? (
           <div className="text-sm">
             <p className="font-medium text-gray-900">Turno {cell.start} – {cell.end}</p>
+            <p className="text-[11px] text-gray-600 flex items-center gap-1 mt-0.5">
+              <MapPin className="w-3 h-3 text-primary-500" />
+              {branchName}
+            </p>
             {cell.breakMinutes > 0 && (
               <p className="text-[11px] text-gray-500">Descanso interno: {cell.breakMinutes} min</p>
             )}
