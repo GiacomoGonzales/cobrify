@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key } from 'lucide-react'
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -18,6 +18,7 @@ import {
   updateUserPermissions,
   updateUserData,
   toggleUserStatus,
+  resetSubUserPassword,
   CATEGORY_NAMES,
 } from '@/services/userManagementService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -40,6 +41,12 @@ export default function Users() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
+  // Modal de reset de contraseña (admin → sub-usuario sin email real)
+  const [resetTargetUser, setResetTargetUser] = useState(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [showResetPassword, setShowResetPassword] = useState(false)
   const [selectedPages, setSelectedPages] = useState([])
   const [selectedWarehouses, setSelectedWarehouses] = useState([])
   const [selectedBranches, setSelectedBranches] = useState([])
@@ -297,6 +304,47 @@ export default function Users() {
       displayName: '',
     })
     setIsModalOpen(true)
+  }
+
+  // Abrir modal de reset de contraseña para un sub-usuario.
+  // Limpia el estado anterior y muestra el modal con el target seleccionado.
+  const openResetPasswordModal = (userToReset) => {
+    setResetTargetUser(userToReset)
+    setResetPassword('')
+    setResetPasswordConfirm('')
+    setShowResetPassword(false)
+  }
+  const closeResetPasswordModal = () => {
+    setResetTargetUser(null)
+    setResetPassword('')
+    setResetPasswordConfirm('')
+    setShowResetPassword(false)
+    setResetLoading(false)
+  }
+  const handleResetPassword = async () => {
+    if (!resetTargetUser) return
+    if (!resetPassword || resetPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+    setResetLoading(true)
+    try {
+      const result = await resetSubUserPassword(resetTargetUser.uid, resetPassword)
+      if (result.success) {
+        toast.success(`Contraseña actualizada para ${resetTargetUser.displayName || resetTargetUser.email}`)
+        closeResetPasswordModal()
+      } else {
+        toast.error(result.error || 'Error al resetear contraseña')
+        setResetLoading(false)
+      }
+    } catch (error) {
+      toast.error(error.message || 'Error al resetear contraseña')
+      setResetLoading(false)
+    }
   }
 
   const openEditModal = (userToEdit) => {
@@ -700,6 +748,13 @@ export default function Users() {
                       )}
                     </button>
                     <button
+                      onClick={() => openResetPasswordModal(userItem)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                      title="Resetear contraseña del usuario"
+                    >
+                      <Key className="w-3.5 h-3.5" /> Contraseña
+                    </button>
+                    <button
                       onClick={() => openEditModal(userItem)}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     >
@@ -788,6 +843,13 @@ export default function Users() {
                             ) : (
                               <Eye className="w-4 h-4" />
                             )}
+                          </button>
+                          <button
+                            onClick={() => openResetPasswordModal(userItem)}
+                            className="p-2 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors"
+                            title="Resetear contraseña"
+                          >
+                            <Key className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => openEditModal(userItem)}
@@ -1652,6 +1714,73 @@ export default function Users() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de reset de contraseña — el owner fija una nueva clave para un
+          sub-usuario sin necesidad de que reciba un email (útil cuando el
+          email del sub-usuario no es real). Vía Cloud Function con Admin SDK. */}
+      <Modal
+        isOpen={!!resetTargetUser}
+        onClose={resetLoading ? undefined : closeResetPasswordModal}
+        title="Resetear contraseña"
+      >
+        <div className="space-y-4">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <p className="text-sm text-purple-900 font-medium flex items-center gap-2">
+              <Key className="w-4 h-4" />
+              {resetTargetUser?.displayName || resetTargetUser?.email}
+            </p>
+            <p className="text-xs text-purple-700 mt-1">
+              {resetTargetUser?.email}
+            </p>
+          </div>
+          <p className="text-sm text-gray-600">
+            La nueva contraseña reemplazará la anterior. El usuario tendrá que iniciar sesión con esta nueva clave en su próxima entrada.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+            <div className="relative">
+              <input
+                type={showResetPassword ? 'text' : 'password'}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowResetPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+              >
+                {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contraseña</label>
+            <input
+              type={showResetPassword ? 'text' : 'password'}
+              value={resetPasswordConfirm}
+              onChange={(e) => setResetPasswordConfirm(e.target.value)}
+              placeholder="Repite la nueva contraseña"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={closeResetPasswordModal} disabled={resetLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleResetPassword} disabled={resetLoading || !resetPassword || resetPassword.length < 6}>
+              {resetLoading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Actualizando...</>
+              ) : (
+                <><Key className="w-4 h-4 mr-2" /> Guardar nueva contraseña</>
+              )}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

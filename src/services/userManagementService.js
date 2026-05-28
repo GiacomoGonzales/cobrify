@@ -10,8 +10,9 @@ import {
   where,
   serverTimestamp
 } from 'firebase/firestore'
-import { db, secondaryAuth } from '@/lib/firebase'
+import { db, secondaryAuth, functions } from '@/lib/firebase'
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
 
 /**
  * Servicio de gestión de usuarios con permisos personalizados
@@ -455,6 +456,32 @@ export const deleteManagedUser = async (userId) => {
   } catch (error) {
     console.error('Error al eliminar usuario:', error)
     return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Resetear la contraseña de un sub-usuario (el caller debe ser su owner).
+ *
+ * Llama a la Cloud Function `resetSubUserPassword` que valida la relación
+ * owner→sub-usuario y usa el Admin SDK para fijar la nueva contraseña sin
+ * necesidad de conocer la anterior. Útil cuando el sub-usuario olvidó su
+ * clave o cuando los emails de creación no son reales (no llega el email
+ * de password reset estándar de Firebase).
+ *
+ * @param {string} targetUid - UID del sub-usuario a resetear
+ * @param {string} newPassword - Nueva contraseña (mínimo 6 caracteres)
+ */
+export const resetSubUserPassword = async (targetUid, newPassword) => {
+  try {
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
+    }
+    const fn = httpsCallable(functions, 'resetSubUserPassword')
+    const result = await fn({ targetUid, newPassword })
+    return { success: !!result.data?.success }
+  } catch (error) {
+    console.error('Error al resetear contraseña:', error)
+    return { success: false, error: error.message || 'Error al resetear contraseña' }
   }
 }
 

@@ -10482,3 +10482,66 @@ export const pollShopifreeOrdersNow = onCall(
     return result
   }
 )
+
+/**
+ * Reset de contraseña de un sub-usuario por parte de su owner.
+ *
+ * Use case: cuando los sub-usuarios fueron creados con emails sintéticos
+ * (no reales) o el usuario olvidó su clave, el flujo de "enviar email de
+ * reset" no sirve. El owner del negocio necesita una forma de fijar una
+ * nueva contraseña directamente.
+ *
+ * Seguridad:
+ *  - El caller debe estar autenticado (request.auth).
+ *  - El usuario target debe existir en Firestore y su ownerId debe coincidir
+ *    con el uid del caller. Esto garantiza que un owner NO puede resetear
+ *    contraseñas de sub-usuarios de OTRO negocio.
+ *  - Validación mínima de longitud (Firebase Auth exige 6+ chars).
+ *
+ * Entrada: { targetUid: string, newPassword: string }
+ * Salida:  { success: true }
+ */
+export const resetSubUserPassword = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 30,
+    memory: '256MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const callerUid = request.auth.uid
+    const { targetUid, newPassword } = request.data || {}
+
+    if (!targetUid || typeof targetUid !== 'string') {
+      throw new HttpsError('invalid-argument', 'targetUid requerido')
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      throw new HttpsError('invalid-argument', 'La contraseña debe tener al menos 6 caracteres')
+    }
+    if (newPassword.length > 128) {
+      throw new HttpsError('invalid-argument', 'La contraseña es demasiado larga (max 128)')
+    }
+
+    // Verificar relación owner → sub-usuario en Firestore
+    const targetDoc = await db.collection('users').doc(targetUid).get()
+    if (!targetDoc.exists) {
+      throw new HttpsError('not-found', 'Usuario no encontrado')
+    }
+    const targetData = targetDoc.data()
+    if (targetData.ownerId !== callerUid) {
+      throw new HttpsError('permission-denied', 'No tienes permiso para resetear la contraseña de este usuario')
+    }
+
+    // Resetear vía Admin SDK
+    try {
+      await auth.updateUser(targetUid, { password: newPassword })
+      console.log(`🔐 Owner ${callerUid} reseteó contraseña de sub-usuario ${targetUid}`)
+      return { success: true }
+    } catch (error) {
+      console.error('Error al resetear contraseña:', error)
+      throw new HttpsError('internal', `Error al actualizar contraseña: ${error.message}`)
+    }
+  }
+)
