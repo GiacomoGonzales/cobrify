@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, Pill, Layers, Warehouse, Store } from 'lucide-react'
+import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Pill, Layers, Warehouse, Store } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -25,6 +25,10 @@ function BatchControl() {
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [filterWarehouse, setFilterWarehouse] = useState('all')
+  // Paginación: para negocios con miles de productos, renderizar todo de golpe
+  // hace que React tarde varios segundos. 25 por página es suficiente.
+  const [currentPage, setCurrentPage] = useState(0)
+  const PRODUCTS_PER_PAGE = 25
 
   // Modal para editar lote
   const [showEditModal, setShowEditModal] = useState(false)
@@ -39,6 +43,13 @@ function BatchControl() {
   const [syncingBatches, setSyncingBatches] = useState(false)
 
   const businessId = getBusinessId()
+
+  // Reset de paginación cuando cambian filtros / búsqueda.
+  // Sin esto, si estás en página 5 y buscás algo nuevo, queda mostrando
+  // página 5 de un resultado más chico (a veces vacía).
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [searchTerm, selectedFilter, filterBranch, filterWarehouse])
 
   useEffect(() => {
     if (isDemoMode) {
@@ -664,12 +675,22 @@ function BatchControl() {
         </CardContent>
       </Card>
 
-      {/* Lista de productos con lotes */}
+      {/* Lista de productos con lotes (paginada — 25 por página) */}
+      {(() => {
+        const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE))
+        const safePage = Math.min(currentPage, totalPages - 1)
+        const paginatedProducts = filteredProducts.slice(safePage * PRODUCTS_PER_PAGE, (safePage + 1) * PRODUCTS_PER_PAGE)
+        return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Pill className="w-5 h-5" />
             Productos y Lotes ({filteredProducts.length})
+            {filteredProducts.length > PRODUCTS_PER_PAGE && (
+              <span className="text-xs font-normal text-gray-500 ml-2">
+                · Mostrando {safePage * PRODUCTS_PER_PAGE + 1}-{Math.min((safePage + 1) * PRODUCTS_PER_PAGE, filteredProducts.length)}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -679,7 +700,7 @@ function BatchControl() {
                 No se encontraron productos
               </div>
             ) : (
-              filteredProducts.map((product) => (
+              paginatedProducts.map((product) => (
                 <div key={product.id} className="border-b last:border-b-0">
                   {/* Producto Header */}
                   <button
@@ -800,8 +821,35 @@ function BatchControl() {
               ))
             )}
           </div>
+          {/* Controles de paginación — solo si hay más de una página */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <span className="text-sm text-gray-500">
+                {safePage * PRODUCTS_PER_PAGE + 1}-{Math.min((safePage + 1) * PRODUCTS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length} productos
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                  className="p-1.5 rounded-lg border hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm font-medium px-2">{safePage + 1} / {totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={safePage >= totalPages - 1}
+                  className="p-1.5 rounded-lg border hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+        )
+      })()}
 
       {/* Modal de edición de lote */}
       <Modal
