@@ -1179,6 +1179,7 @@ export default function Attendance() {
                     selectedBranchName={
                       accessibleScheduleBranches.find(b => b.id === selectedScheduleBranch)?.name || ''
                     }
+                    branches={accessibleScheduleBranches}
                   />
                 </TabsContent>
               )}

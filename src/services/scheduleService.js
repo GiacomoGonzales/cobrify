@@ -108,7 +108,8 @@ export const calculateWeekHours = (daysObj) => {
   let total = 0
   for (const key of DAY_KEYS) {
     const d = daysObj[key]
-    if (!d || d.rest) continue
+    // Descansos y recuperaciones no suman horas semanales: solo turnos productivos.
+    if (!d || d.rest || d.recovery) continue
     if (d.start && d.end) {
       total += calcShiftHours(d.start, d.end, d.breakMinutes || 0)
     }
@@ -144,6 +145,9 @@ export const createShiftTemplate = async (businessId, data) => {
       breakMinutes: Number(data.breakMinutes) || 0,
       color: data.color || '#fbbf24',
       isRest: !!data.isRest,
+      // Sucursal por defecto al aplicar esta plantilla (opcional).
+      // null = usa la sucursal del filtro activo del planner.
+      defaultBranchId: data.defaultBranchId || null,
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

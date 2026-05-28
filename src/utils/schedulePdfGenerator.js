@@ -2,7 +2,12 @@ import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { DAY_KEYS, DAY_LABELS } from '@/services/scheduleService'
+import { DAY_KEYS, DAY_LABELS, calculateWeekHours } from '@/services/scheduleService'
+
+// Celdas viejas sin branchId se asumen como 'main' (sucursal principal),
+// coherente con el comportamiento previo al feature multi-sucursal.
+const MAIN_BRANCH_ID = 'main'
+const cellBranchId = (cell) => cell?.branchId || MAIN_BRANCH_ID
 
 /**
  * Genera un PDF horizontal con el horario semanal del equipo.
@@ -19,14 +24,59 @@ import { DAY_KEYS, DAY_LABELS } from '@/services/scheduleService'
  */
 export const generateSchedulePDF = async ({
   employees = [],
+  // Opcional. Cuando el caller agrupa por área, manda rows con headers de
+  // sección intercalados: [{type:'header', name, count}, {type:'employee', emp}, ...]
+  // Si no se pasa, se deriva de employees (sin headers, comportamiento legacy).
+  rows = null,
   schedules = {},
   weekDates = [],
   isoYear,
   isoWeek,
   businessInfo = {},
   branchName = '',
+  // Si se pasa branchId, sólo se renderizan las celdas de ese branch (las de
+  // otras sucursales aparecen vacías) y el total de horas se recalcula sobre
+  // los turnos filtrados. Sin él, comportamiento legacy: se renderiza todo
+  // y se usa sch.totalHours (suma global del doc).
+  branchId = null,
+  // Empleados con cero turnos en el branch filtrado se ocultan del PDF para
+  // no llenarlo de filas vacías. Sólo aplica cuando hay branchId.
+  hideEmptyEmployees = true,
   download = true,
 }) => {
+  // Filtrado por sucursal: oculta empleados sin actividad en el branch (no
+  // tiene sentido un PDF de "Cocina Mall" con cocineros que sólo trabajan
+  // en otra sucursal apareciendo todos vacíos).
+  let filteredEmployees = employees
+  let filteredRows = rows
+  if (branchId && hideEmptyEmployees) {
+    const hasShiftInBranch = (empId) => {
+      const days = schedules[empId]?.days
+      if (!days) return false
+      return DAY_KEYS.some(k => {
+        const c = days[k]
+        return c && cellBranchId(c) === branchId
+      })
+    }
+    filteredEmployees = employees.filter(e => hasShiftInBranch(e.id))
+    if (Array.isArray(rows) && rows.length > 0) {
+      // Conserva headers de sección sólo si quedan empleados después en su grupo
+      const out = []
+      let pendingHeader = null
+      for (const r of rows) {
+        if (r.type === 'header') { pendingHeader = r; continue }
+        if (r.type === 'employee' && hasShiftInBranch(r.emp.id)) {
+          if (pendingHeader) { out.push(pendingHeader); pendingHeader = null }
+          out.push(r)
+        }
+      }
+      filteredRows = out
+    }
+  }
+
+  const effectiveRows = Array.isArray(filteredRows) && filteredRows.length > 0
+    ? filteredRows
+    : filteredEmployees.map(e => ({ type: 'employee', emp: e }))
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -171,6 +221,20 @@ export const generateSchedulePDF = async ({
       return
     }
 
+    if (cell.recovery) {
+      // Estilo naranja para distinguir visualmente de descanso. No suma horas.
+      doc.setFillColor(255, 237, 213) // orange-100
+      doc.roundedRect(cellX, cellY, cellW, cellH, 1, 1, 'F')
+      doc.setTextColor(194, 65, 12) // orange-700
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7.5)
+      doc.text('RECUPERACIÓN', x + dayColWidth / 2, rowY + rowHeight / 2 + 1, { align: 'center' })
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(31, 41, 55)
+      return
+    }
+
     // Turno con horario
     const color = parseHex(cell.color || '#fbbf24')
     doc.setFillColor(color.r, color.g, color.b)
@@ -199,7 +263,39 @@ export const generateSchedulePDF = async ({
   }
 
   let zebra = false
-  employees.forEach((emp) => {
+  // Altura de la fila de header de sección (más baja que la fila de empleado)
+  const sectionHeaderHeight = 6
+  effectiveRows.forEach((row) => {
+    // Header de sección (sólo aparece si caller pasó rows con groupBy)
+    if (row.type === 'header') {
+      // Salto de página si no entra el header + al menos una fila después
+      if (y + sectionHeaderHeight + rowHeight > pageHeight - 12) {
+        drawFooter(doc, pageWidth, pageHeight, margin)
+        doc.addPage('a4', 'landscape')
+        y = margin
+        drawTableHeader(y)
+        y += headerHeight
+      }
+      // Banda gris con el nombre del área
+      doc.setFillColor(243, 244, 246)
+      doc.rect(margin, y, contentWidth, sectionHeaderHeight, 'F')
+      doc.setDrawColor(209, 213, 219)
+      doc.setLineWidth(0.2)
+      doc.line(margin, y + sectionHeaderHeight, margin + contentWidth, y + sectionHeaderHeight)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
+      doc.setTextColor(55, 65, 81)
+      const label = `${(row.name || '').toUpperCase()}  ·  ${row.count || 0} empleado${row.count !== 1 ? 's' : ''}`
+      doc.text(label, margin + 3, y + sectionHeaderHeight / 2 + 1.2)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(31, 41, 55)
+      y += sectionHeaderHeight
+      zebra = false  // reset zebra dentro de la sección para que la primer fila no tenga fondo
+      return
+    }
+
+    const emp = row.emp
     // Salto de página si no entra la fila siguiente
     if (y + rowHeight > pageHeight - 12) {
       // Pie con número de página
@@ -224,6 +320,20 @@ export const generateSchedulePDF = async ({
     doc.line(margin, y + rowHeight, margin + contentWidth, y + rowHeight)
 
     const sch = schedules[emp.id] || { days: {}, totalHours: 0 }
+    // Si hay filtro de sucursal, construir un sub-objeto days con sólo las
+    // celdas de esa sucursal para que renderCell vea null en las otras y el
+    // total se calcule sobre los turnos reales del PDF (no el total global).
+    let effectiveDays = sch.days || {}
+    let effectiveTotal = sch.totalHours
+    if (branchId) {
+      const filtered = {}
+      for (const k of DAY_KEYS) {
+        const c = sch.days?.[k]
+        if (c && cellBranchId(c) === branchId) filtered[k] = c
+      }
+      effectiveDays = filtered
+      effectiveTotal = calculateWeekHours(filtered)
+    }
 
     // Nombre + cargo
     doc.setFont('helvetica', 'bold')
@@ -241,7 +351,7 @@ export const generateSchedulePDF = async ({
     // Celdas por día
     let x = margin + employeeColWidth
     DAY_KEYS.forEach((dk) => {
-      const cell = sch.days?.[dk]
+      const cell = effectiveDays?.[dk] || null
       renderCell(cell, x, y)
       x += dayColWidth
     })
@@ -249,8 +359,8 @@ export const generateSchedulePDF = async ({
     // Total horas
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
-    doc.setTextColor((sch.totalHours > 0) ? 31 : 156, (sch.totalHours > 0) ? 41 : 163, (sch.totalHours > 0) ? 55 : 175)
-    doc.text(`${Number(sch.totalHours || 0).toFixed(1)}h`, x + totalColWidth - 3, y + rowHeight / 2 + 1, { align: 'right' })
+    doc.setTextColor((effectiveTotal > 0) ? 31 : 156, (effectiveTotal > 0) ? 41 : 163, (effectiveTotal > 0) ? 55 : 175)
+    doc.text(`${Number(effectiveTotal || 0).toFixed(1)}h`, x + totalColWidth - 3, y + rowHeight / 2 + 1, { align: 'right' })
     doc.setTextColor(31, 41, 55)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
@@ -258,12 +368,15 @@ export const generateSchedulePDF = async ({
     y += rowHeight
   })
 
-  // Si no hay empleados
-  if (employees.length === 0) {
+  // Si no hay empleados (considera filtro por branch si aplica)
+  if (effectiveRows.length === 0) {
     doc.setFont('helvetica', 'italic')
     doc.setFontSize(10)
     doc.setTextColor(107, 114, 128)
-    doc.text('No hay empleados asignados.', pageWidth / 2, y + 12, { align: 'center' })
+    const msg = branchId
+      ? 'Sin empleados con turnos en esta sucursal para la semana seleccionada.'
+      : 'No hay empleados asignados.'
+    doc.text(msg, pageWidth / 2, y + 12, { align: 'center' })
   }
 
   // ============= LEYENDA =============
@@ -278,7 +391,7 @@ export const generateSchedulePDF = async ({
   doc.setTextColor(75, 85, 99)
   doc.text('Leyenda:', margin, y)
   doc.setFont('helvetica', 'normal')
-  doc.text('— = sin turno asignado    |    DESCANSO = día libre    |    HH:MM - HH:MM = horario del turno', margin + 14, y)
+  doc.text('— = sin turno asignado    |    DESCANSO = día libre    |    RECUPERACIÓN = no suma horas    |    HH:MM - HH:MM = turno', margin + 14, y)
 
   drawFooter(doc, pageWidth, pageHeight, margin)
 

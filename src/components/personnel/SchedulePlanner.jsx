@@ -37,7 +37,7 @@ const formatDayShort = (d) =>
 const formatRange = (mon, sun) =>
   `${mon.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} – ${sun.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`.replace(/\./g, '')
 
-export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID, selectedBranchName = '' }) {
+export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID, selectedBranchName = '', branches = [] }) {
   const toast = useToast()
 
   // Semana ISO seleccionada (default: hoy)
@@ -58,6 +58,9 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   const [showTemplateManager, setShowTemplateManager] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState(null) // null o template existente o {} para nueva
   const [editingCell, setEditingCell] = useState(null) // { userId, dayKey, anchor }
+  // Ordenamiento de filas: 'name' (default, alfabético) o 'department'
+  // (agrupa por personnel.department con headers de sección entre grupos).
+  const [sortBy, setSortBy] = useState('name')
   const popoverRef = useRef(null)
   const [viewMode, setViewMode] = useState('weekly') // 'weekly' | 'daily'
   // Día seleccionado en modo diario: por defecto hoy si está en la semana, o lunes
@@ -145,8 +148,17 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   }
 
   const assignTemplate = (userId, dayKey, template) => {
+    // Si la plantilla tiene una sucursal por defecto (defaultBranchId),
+    // priorizarla sobre el filtro activo del planner. Permite plantillas
+    // tipo "Mañana Mall" que siempre quedan vinculadas a esa sucursal.
+    const effectiveBranchId = template.defaultBranchId || selectedBranchId
     if (template.isRest) {
-      setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
+      setCell(userId, dayKey, { rest: true, branchId: effectiveBranchId })
+    } else if (template.isRecovery) {
+      // Recuperación: día visible en el horario pero NO suma horas semanales.
+      // Útil para reponer un día perdido o cubrir una falta sin contabilizarlo
+      // como hora extra en el cómputo del salario.
+      setCell(userId, dayKey, { recovery: true, branchId: effectiveBranchId })
     } else {
       setCell(userId, dayKey, {
         templateId: template.id || null,
@@ -154,7 +166,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
         end: template.endTime,
         breakMinutes: template.breakMinutes || 0,
         color: template.color || '#fbbf24',
-        branchId: selectedBranchId,
+        branchId: effectiveBranchId,
       })
     }
     setEditingCell(null)
@@ -162,6 +174,10 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
 
   const setRest = (userId, dayKey) => {
     setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
+    setEditingCell(null)
+  }
+  const setRecovery = (userId, dayKey) => {
+    setCell(userId, dayKey, { recovery: true, branchId: selectedBranchId })
     setEditingCell(null)
   }
   const clearCell = (userId, dayKey) => {
@@ -259,17 +275,60 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     try {
       await generateSchedulePDF({
         employees,
+        // Pasamos las filas en el mismo orden y agrupamiento que muestra la UI
+        // (incluye headers de sección cuando sortBy === 'department').
+        rows: displayRows,
         schedules,
         weekDates,
         isoYear,
         isoWeek,
         businessInfo,
         branchName: selectedBranchName,
+        // Filtrar el PDF a la sucursal activa (antes el PDF mostraba todas
+        // las celdas sin importar el filtro de la UI — ahora coincide).
+        branchId: selectedBranchId,
       })
       toast.success('PDF generado')
     } catch (e) {
       console.error(e)
       toast.error('Error al generar PDF')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  // Genera un PDF por cada sucursal accesible. Cada PDF contiene SOLO los
+  // turnos de esa sucursal — los empleados que no tienen turnos en ella se
+  // ocultan; los que tienen en varias aparecen en cada PDF correspondiente
+  // con sólo sus turnos de esa sucursal.
+  const handlePrintPerBranch = async () => {
+    if (employees.length === 0) {
+      toast.error('No hay empleados para imprimir')
+      return
+    }
+    if (!branches || branches.length === 0) {
+      toast.error('No hay sucursales configuradas')
+      return
+    }
+    setPrinting(true)
+    try {
+      for (const branch of branches) {
+        await generateSchedulePDF({
+          employees,
+          rows: displayRows,
+          schedules,
+          weekDates,
+          isoYear,
+          isoWeek,
+          businessInfo,
+          branchName: branch.name || 'Sucursal',
+          branchId: branch.id,
+        })
+      }
+      toast.success(`${branches.length} PDF(s) generado(s)`)
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al generar PDFs')
     } finally {
       setPrinting(false)
     }
@@ -343,6 +402,42 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   const totalEmployees = employees.length
   const publishedCount = Object.values(schedules).filter((s) => s.publishedAt).length
 
+  // displayRows: array mixto de empleados + headers de sección por área cuando
+  // sortBy === 'department'. Cada item tiene { type: 'header'|'employee', ... }
+  // para que el tbody los renderice diferenciadamente. Empleados sin
+  // department van al final agrupados como "Sin área".
+  const displayRows = useMemo(() => {
+    if (sortBy !== 'department') {
+      return employees.map(emp => ({ type: 'employee', emp }))
+    }
+    // Agrupar
+    const byDept = new Map()
+    for (const emp of employees) {
+      const dept = (emp.department || '').trim()
+      const key = dept || '__NO_AREA__'
+      if (!byDept.has(key)) byDept.set(key, { name: dept || 'Sin área', items: [] })
+      byDept.get(key).items.push(emp)
+    }
+    // Ordenar grupos alfabéticamente (Sin área al final)
+    const groups = Array.from(byDept.entries())
+      .sort(([ka, ga], [kb, gb]) => {
+        if (ka === '__NO_AREA__') return 1
+        if (kb === '__NO_AREA__') return -1
+        return ga.name.localeCompare(gb.name, 'es', { sensitivity: 'base' })
+      })
+    // Aplanar a fila tipo header + empleados
+    const rows = []
+    for (const [, g] of groups) {
+      rows.push({ type: 'header', name: g.name, count: g.items.length })
+      // Empleados dentro de un grupo: alfabético por displayName
+      const sorted = [...g.items].sort((a, b) =>
+        (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'es', { sensitivity: 'base' })
+      )
+      for (const emp of sorted) rows.push({ type: 'employee', emp })
+    }
+    return rows
+  }, [employees, sortBy])
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -407,15 +502,36 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             <Copy className="w-3.5 h-3.5" />
             Copiar semana anterior
           </button>
+          {/* Selector de ordenamiento — agrupa por área si hay departamentos */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5"
+            title="Cómo ordenar los empleados en la tabla y el PDF"
+          >
+            <option value="name">Ordenar: Nombre</option>
+            <option value="department">Agrupar por área</option>
+          </select>
           <button
             onClick={handlePrintPdf}
             disabled={printing || employees.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            title="Descargar horario semanal en PDF horizontal"
+            title="PDF de esta sucursal solamente"
           >
             {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            Imprimir PDF
+            PDF (esta sucursal)
           </button>
+          {branches && branches.length > 1 && (
+            <button
+              onClick={handlePrintPerBranch}
+              disabled={printing || employees.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              title="Genera un PDF por cada sucursal; los empleados que trabajan en varias aparecen en cada uno con sólo los turnos de esa sucursal"
+            >
+              {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+              PDF por sucursal ({branches.length})
+            </button>
+          )}
           <button
             onClick={handlePublish}
             disabled={publishing || totalEmployees === 0}
@@ -469,6 +585,14 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                     <Coffee className="w-3 h-3" />{t.breakMinutes}m
                   </span>
                 )}
+                {t.defaultBranchId && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium"
+                    title="Sucursal por defecto al aplicar esta plantilla"
+                  >
+                    📍 {branches.find(b => b.id === t.defaultBranchId)?.name || 'Sucursal'}
+                  </span>
+                )}
                 <button
                   onClick={() => setEditingTemplate({ ...t })}
                   className="text-gray-400 hover:text-primary-600 ml-1"
@@ -490,6 +614,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           {editingTemplate && (
             <TemplateForm
               template={editingTemplate}
+              branches={branches}
               onSave={handleSaveTemplate}
               onCancel={() => setEditingTemplate(null)}
             />
@@ -521,6 +646,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           popoverRef={popoverRef}
           assignTemplate={assignTemplate}
           setRest={setRest}
+          setRecovery={setRecovery}
           clearCell={clearCell}
           setCustom={setCustom}
           updateCellTimes={updateCellTimes}
@@ -550,7 +676,18 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                 </tr>
               </thead>
               <tbody>
-                {employees.map((emp) => {
+                {displayRows.map((row, rowIdx) => {
+                  // Header de sección (sólo cuando sortBy === 'department')
+                  if (row.type === 'header') {
+                    return (
+                      <tr key={`hdr-${row.name}-${rowIdx}`} className="bg-gray-50 border-y border-gray-200">
+                        <td colSpan={DAY_KEYS.length + 2} className="sticky left-0 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 bg-gray-50">
+                          {row.name} <span className="text-gray-400 font-normal normal-case">· {row.count} empleado{row.count !== 1 ? 's' : ''}</span>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  const emp = row.emp
                   const sch = schedules[emp.id] || { days: {}, totalHours: 0 }
                   const isDirty = dirtyUsers.has(emp.id)
                   const initials = (emp.displayName || emp.email || '?')
@@ -591,6 +728,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                                 cell={cell}
                                 onPickTemplate={(t) => assignTemplate(emp.id, dk, t)}
                                 onRest={() => setRest(emp.id, dk)}
+                                onRecovery={() => setRecovery(emp.id, dk)}
                                 onClear={() => clearCell(emp.id, dk)}
                                 onCustom={(s, e, b) => setCustom(emp.id, dk, s, e, b)}
                                 onClose={() => setEditingCell(null)}
@@ -647,6 +785,17 @@ function ScheduleCell({ cell, onClick }) {
       </button>
     )
   }
+  if (cell.recovery) {
+    return (
+      <button
+        onClick={onClick}
+        className="w-full h-12 rounded-md border border-orange-200 bg-orange-50 text-orange-700 text-xs font-medium hover:bg-orange-100"
+        title="Día de recuperación (no suma a las horas semanales)"
+      >
+        Recuperación
+      </button>
+    )
+  }
   return (
     <button
       onClick={onClick}
@@ -665,10 +814,11 @@ function ScheduleCell({ cell, onClick }) {
   )
 }
 
-const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onClear, onCustom, onClose }, ref) => {
-  // Si ya hay un turno asignado (no descanso), abrimos directo en modo edición
-  // personalizado para que el usuario pueda ajustar tiempos y refrigerio en un click.
-  const hasExistingShift = !!(cell && cell.start && cell.end && !cell.rest)
+const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRecovery, onClear, onCustom, onClose }, ref) => {
+  // Si ya hay un turno asignado (no descanso ni recuperación), abrimos directo
+  // en modo edición personalizado para que el usuario pueda ajustar tiempos y
+  // refrigerio en un click.
+  const hasExistingShift = !!(cell && cell.start && cell.end && !cell.rest && !cell.recovery)
   const [customMode, setCustomMode] = useState(hasExistingShift)
   const [start, setStart] = useState(cell?.start || '08:00')
   const [end, setEnd] = useState(cell?.end || '17:00')
@@ -784,6 +934,13 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
             >
               <Coffee className="w-3.5 h-3.5" /> Descanso
             </button>
+            <button
+              onClick={onRecovery}
+              className="w-full px-3 py-1.5 hover:bg-orange-50 text-sm text-left flex items-center gap-2 text-orange-700"
+              title="No suma a las horas semanales, pero queda visible en el horario"
+            >
+              <Coffee className="w-3.5 h-3.5" /> Recuperación
+            </button>
             {cell && (
               <button
                 onClick={onClear}
@@ -801,7 +958,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
   )
 })
 
-function TemplateForm({ template, onSave, onCancel }) {
+function TemplateForm({ template, branches = [], onSave, onCancel }) {
   const [data, setData] = useState({
     id: template.id || null,
     name: template.name || '',
@@ -810,6 +967,9 @@ function TemplateForm({ template, onSave, onCancel }) {
     breakMinutes: template.breakMinutes || 0,
     color: template.color || PALETTE[0],
     isRest: template.isRest || false,
+    // Sucursal por defecto. Si está, se aplica al asignar la plantilla en vez
+    // del filtro activo del planner. '' = sin asignar (usa filtro activo).
+    defaultBranchId: template.defaultBranchId || '',
   })
 
   const submit = () => {
@@ -878,6 +1038,26 @@ function TemplateForm({ template, onSave, onCancel }) {
           ))}
         </div>
       </div>
+      {/* Sucursal por defecto (opcional). Si se elige, al aplicar la plantilla
+          se asigna esa sucursal automáticamente sin importar el filtro activo. */}
+      {branches && branches.length > 0 && (
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Sucursal por defecto (opcional)</label>
+          <select
+            value={data.defaultBranchId}
+            onChange={(e) => setData((p) => ({ ...p, defaultBranchId: e.target.value }))}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white"
+          >
+            <option value="">— Usar la sucursal del filtro activo —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-500 mt-1">
+            Útil para plantillas como "Mañana Mall" que siempre van a esa sucursal.
+          </p>
+        </div>
+      )}
       <div className="flex gap-2 pt-1">
         <button
           onClick={onCancel}
@@ -901,7 +1081,7 @@ function TemplateForm({ template, onSave, onCancel }) {
 function DailyTimeline({
   employees, schedules, dirtyUsers, weekDates, selectedDayKey, onSelectDay,
   templates, editingCell, setEditingCell, popoverRef,
-  assignTemplate, setRest, clearCell, setCustom, updateCellTimes, selectedBranchId,
+  assignTemplate, setRest, setRecovery, clearCell, setCustom, updateCellTimes, selectedBranchId,
 }) {
   // Rango horario fijo del timeline. Cubre desde 6 AM hasta 11 PM (configurable
   // a futuro). Si un turno cae fuera, se clampea visualmente.
@@ -1147,6 +1327,13 @@ function DailyTimeline({
                     >
                       Descanso
                     </div>
+                  ) : cell && cell.recovery ? (
+                    <div className="absolute inset-y-2 left-2 right-2 rounded bg-orange-50 border border-orange-200 flex items-center justify-center text-xs text-orange-700"
+                         onClick={(e) => { e.stopPropagation(); setEditingCell({ userId: emp.id, dayKey: selectedDayKey }) }}
+                         title="Recuperación (no suma a horas semanales)"
+                    >
+                      Recuperación
+                    </div>
                   ) : geo ? (
                     (() => {
                       // Franja del refrigerio: bloque dentro de la barra que indica visualmente
@@ -1229,6 +1416,7 @@ function DailyTimeline({
                         cell={cell}
                         onPickTemplate={(t) => assignTemplate(emp.id, selectedDayKey, t)}
                         onRest={() => setRest(emp.id, selectedDayKey)}
+                        onRecovery={() => setRecovery(emp.id, selectedDayKey)}
                         onClear={() => clearCell(emp.id, selectedDayKey)}
                         onCustom={(s, e, b) => setCustom(emp.id, selectedDayKey, s, e, b)}
                         onClose={() => setEditingCell(null)}
