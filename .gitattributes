@@ -1,0 +1,35 @@
+# Configuración de finales de línea (end-of-line) del repositorio.
+# Objetivo: guardar SIEMPRE en LF dentro del repo y normalizar el working dir,
+# para evitar los avisos "LF will be replaced by CRLF" en Windows y mantener
+# la consistencia entre Windows, macOS y Linux.
+
+# Por defecto: Git detecta los archivos de texto y usa LF (en el repo y al checkout).
+* text=auto eol=lf
+
+# --- Scripts que DEBEN conservar finales de línea específicos ---
+# Batch de Windows: requieren CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Shell y wrapper de Gradle (Android): requieren LF
+*.sh      text eol=lf
+gradlew   text eol=lf
+
+# --- Archivos binarios: nunca convertir finales de línea ---
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.ico      binary
+*.woff     binary
+*.woff2    binary
+*.ttf      binary
+*.otf      binary
+*.eot      binary
+*.pdf      binary
+*.zip      binary
+*.gz       binary
+*.jar      binary
+*.keystore binary
+*.jks      binary
