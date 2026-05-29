@@ -3,7 +3,6 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -183,19 +182,61 @@ export const getIngredient = async (businessId, ingredientId) => {
  */
 export const createIngredient = async (businessId, ingredientData) => {
   try {
+    const batch = writeBatch(db)
+
     const ingredientsRef = collection(db, 'businesses', businessId, 'ingredients')
+    const ingredientRef = doc(ingredientsRef)
+
+    const currentStock = ingredientData.currentStock || 0
 
     const newIngredient = {
       ...ingredientData,
-      currentStock: ingredientData.currentStock || 0,
+      currentStock,
       averageCost: ingredientData.averageCost || 0,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     }
 
-    const docRef = await addDoc(ingredientsRef, newIngredient)
+    batch.set(ingredientRef, newIngredient)
 
-    return { success: true, id: docRef.id }
+    // Registrar el stock inicial como movimiento(s) de entrada (igual que los productos).
+    // Sin esto, el stock inicial nunca aparece en el historial de movimientos del inventario.
+    const tracksStock = ingredientData.trackStock !== false
+    if (tracksStock) {
+      const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+
+      const addInitialMovement = (warehouseId, quantity) => {
+        if (!quantity || quantity <= 0) return
+        batch.set(doc(movementsRef), {
+          ingredientId: ingredientRef.id,
+          ingredientName: ingredientData.name || '',
+          isIngredient: true,
+          type: 'entry',
+          quantity,
+          unit: ingredientData.purchaseUnit || null,
+          warehouseId: warehouseId || null,
+          reason: 'Stock inicial',
+          referenceType: 'initial_stock',
+          referenceId: ingredientRef.id,
+          beforeStock: 0,
+          afterStock: quantity,
+          createdAt: Timestamp.now()
+        })
+      }
+
+      const warehouseStocks = Array.isArray(ingredientData.warehouseStocks) ? ingredientData.warehouseStocks : []
+      if (warehouseStocks.length > 0) {
+        // Un movimiento por almacén con stock inicial
+        warehouseStocks.forEach(ws => addInitialMovement(ws.warehouseId, ws.stock || 0))
+      } else {
+        // Sin almacenes: un solo movimiento con el stock total
+        addInitialMovement(null, currentStock)
+      }
+    }
+
+    await batch.commit()
+
+    return { success: true, id: ingredientRef.id }
   } catch (error) {
     console.error('Error al crear ingrediente:', error)
     return { success: false, error: error.message }
