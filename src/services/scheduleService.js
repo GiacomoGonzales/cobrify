@@ -224,6 +224,155 @@ export const getWeekScheduleAll = async (businessId, isoYear, isoWeek) => {
 }
 
 /**
+ * dateKey local de un Date → 'YYYY-MM-DD'. Sirve para indexar celdas por su
+ * fecha real (no por el dayKey relativo a la semana).
+ */
+export const dateKey = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * Lee el horario de UN colaborador para un mes calendario completo.
+ *
+ * Un mes calendario abarca varias semanas ISO (hasta 6). Se leen todas las
+ * semanas que tocan el mes y se mapea cada celda (dayKey lun..dom) a su fecha
+ * real, conservando sólo los días que caen dentro del mes solicitado.
+ *
+ * @param {string} businessId
+ * @param {string} userId
+ * @param {number} year        año calendario (ej. 2026)
+ * @param {number} monthIndex  0-11 (0 = enero)
+ * @returns {Promise<{ success, data: { cells, totalHours, publishedByDate } }>}
+ *   cells: { 'YYYY-MM-DD': cell }            sólo días con turno/descanso/recuperación
+ *   publishedByDate: { 'YYYY-MM-DD': bool }  si la semana de ese día está publicada
+ */
+export const getMonthSchedule = async (businessId, userId, year, monthIndex) => {
+  try {
+    const firstDay = new Date(year, monthIndex, 1)
+    const lastDay = new Date(year, monthIndex + 1, 0)
+
+    // Semanas ISO desde la del día 1 hasta la del último día (un mes toca máx ~6).
+    const endIso = getIsoWeek(lastDay)
+    const weeks = []
+    let cursor = getIsoWeek(firstDay)
+    let guard = 0
+    while (guard++ < 8) {
+      weeks.push({ ...cursor })
+      if (cursor.isoYear === endIso.isoYear && cursor.isoWeek === endIso.isoWeek) break
+      cursor = addWeeks(cursor.isoYear, cursor.isoWeek, 1)
+    }
+
+    const results = await Promise.all(
+      weeks.map((w) => getWeekSchedule(businessId, userId, w.isoYear, w.isoWeek))
+    )
+
+    const cells = {}
+    const publishedByDate = {}
+    let totalHours = 0
+
+    results.forEach((res, idx) => {
+      if (!res.success || !res.data) return
+      const w = weeks[idx]
+      const wkDates = getWeekDates(w.isoYear, w.isoWeek)
+      const isPublished = !!res.data.publishedAt
+      DAY_KEYS.forEach((dk, i) => {
+        const d = wkDates[i]
+        // Sólo los días que pertenecen al mes solicitado.
+        if (d.getFullYear() !== year || d.getMonth() !== monthIndex) return
+        const key = dateKey(d)
+        publishedByDate[key] = isPublished
+        const cell = res.data.days?.[dk]
+        if (cell) {
+          cells[key] = cell
+          if (!cell.rest && !cell.recovery && cell.start && cell.end) {
+            totalHours += calcShiftHours(cell.start, cell.end, cell.breakMinutes || 0)
+          }
+        }
+      })
+    })
+
+    return {
+      success: true,
+      data: { cells, totalHours: Math.round(totalHours * 100) / 100, publishedByDate },
+    }
+  } catch (error) {
+    console.error('Error leyendo horario mensual:', error)
+    return { success: false, error: error.message, data: { cells: {}, totalHours: 0, publishedByDate: {} } }
+  }
+}
+
+/**
+ * Lee el horario de TODO el equipo para un mes calendario completo.
+ *
+ * Igual que getMonthSchedule pero sin filtrar por usuario: devuelve las celdas
+ * de todos los empleados indexadas por usuario y por fecha real, para que la
+ * vista mensual del planner pueda agregar por día/área en el cliente (donde sí
+ * conoce el department de cada empleado y la sucursal activa).
+ *
+ * @param {string} businessId
+ * @param {number} year        año calendario (ej. 2026)
+ * @param {number} monthIndex  0-11 (0 = enero)
+ * @returns {Promise<{ success, data: { byUser, publishedByDate } }>}
+ *   byUser:          { [userId]: { 'YYYY-MM-DD': cell } }  sólo días con celda
+ *   publishedByDate: { 'YYYY-MM-DD': true }                si algún doc de esa fecha está publicado
+ */
+export const getMonthScheduleAll = async (businessId, year, monthIndex) => {
+  try {
+    const firstDay = new Date(year, monthIndex, 1)
+    const lastDay = new Date(year, monthIndex + 1, 0)
+
+    // Mismas semanas ISO que toca el mes (hasta ~6), igual que getMonthSchedule.
+    const endIso = getIsoWeek(lastDay)
+    const weeks = []
+    let cursor = getIsoWeek(firstDay)
+    let guard = 0
+    while (guard++ < 8) {
+      weeks.push({ ...cursor })
+      if (cursor.isoYear === endIso.isoYear && cursor.isoWeek === endIso.isoWeek) break
+      cursor = addWeeks(cursor.isoYear, cursor.isoWeek, 1)
+    }
+
+    const results = await Promise.all(
+      weeks.map((w) => getWeekScheduleAll(businessId, w.isoYear, w.isoWeek))
+    )
+
+    const byUser = {}
+    const publishedByDate = {}
+
+    results.forEach((res, idx) => {
+      if (!res.success || !res.data) return
+      const w = weeks[idx]
+      const wkDates = getWeekDates(w.isoYear, w.isoWeek)
+      // Pares (dayKey, fecha-real) que caen DENTRO del mes solicitado.
+      const inMonth = []
+      DAY_KEYS.forEach((dk, i) => {
+        const d = wkDates[i]
+        if (d.getFullYear() === year && d.getMonth() === monthIndex) {
+          inMonth.push({ dk, key: dateKey(d) })
+        }
+      })
+      res.data.forEach((doc) => {
+        const uid = doc.userId
+        if (!uid) return
+        const isPublished = !!doc.publishedAt
+        inMonth.forEach(({ dk, key }) => {
+          const cell = doc.days?.[dk]
+          if (cell) {
+            if (!byUser[uid]) byUser[uid] = {}
+            byUser[uid][key] = cell
+            if (isPublished) publishedByDate[key] = true
+          }
+        })
+      })
+    })
+
+    return { success: true, data: { byUser, publishedByDate } }
+  } catch (error) {
+    console.error('Error leyendo horario mensual del equipo:', error)
+    return { success: false, error: error.message, data: { byUser: {}, publishedByDate: {} } }
+  }
+}
+
+/**
  * Guarda (o sobreescribe) el horario semanal de un empleado.
  * @param {object} days  { mon: {start,end,...} | { rest: true } | null, ... }
  */

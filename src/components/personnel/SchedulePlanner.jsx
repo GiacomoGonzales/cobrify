@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import {
-  Calendar, ChevronLeft, ChevronRight, Plus, Loader2, Save,
-  Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown,
+  Calendar, ChevronLeft, ChevronRight, ChevronDown, Plus, Loader2, Save,
+  Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown, MoveHorizontal,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { generateSchedulePDF } from '@/utils/schedulePdfGenerator'
+import CollaboratorScheduleModal from '@/components/personnel/CollaboratorScheduleModal'
+import ScheduleMonthOverview from '@/components/personnel/ScheduleMonthOverview'
 import {
   listShiftTemplates,
   createShiftTemplate,
   updateShiftTemplate,
   deleteShiftTemplate,
   getWeekScheduleAll,
+  getMonthScheduleAll,
   saveWeekSchedule,
   publishWeekSchedules,
   copyPreviousWeek,
@@ -31,11 +34,30 @@ const cellBranchId = (cell) => cell?.branchId || MAIN_BRANCH_ID
 
 const PALETTE = ['#fbbf24', '#60a5fa', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#22d3ee', '#f472b6']
 
+const MONTHS_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
 const formatDayShort = (d) =>
   d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }).replace('.', '')
 
 const formatRange = (mon, sun) =>
   `${mon.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} – ${sun.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`.replace(/\./g, '')
+
+// ----- Escala de la cinta diaria continua (vista "Día" multi-jornada) -----
+// La vista diaria es una LÍNEA DE TIEMPO CONTINUA de los 7 días de la semana:
+// cada día ocupa 24 h en un eje horizontal único, así un turno que cruza la
+// medianoche (p. ej. 22:00–05:00) fluye sin cortes hacia el día siguiente. Se
+// recorre arrastrando con el mouse o deslizando (swipe) en táctil.
+const PX_PER_HOUR = 56                       // densidad horizontal (px por hora)
+const DAY_MIN = 24 * 60                      // minutos en un día
+const DAY_W = (DAY_MIN / 60) * PX_PER_HOUR   // ancho en px de un día completo (1344)
+const TL_NAME_W = 176                        // ancho de la columna de nombres (sticky)
+const xOfMin = (min) => (min / 60) * PX_PER_HOUR  // minutos absolutos → px
+const minOfX = (px) => (px / PX_PER_HOUR) * 60    // px → minutos absolutos
+const TL_HOUR_LINE = '#f1f5f9'               // línea de hora (tenue)
+const TL_DAY_LINE = '#cbd5e1'                // línea divisoria de día (marcada)
 
 export default function SchedulePlanner({ businessId, employees, currentUserUid, businessInfo = {}, selectedBranchId = MAIN_BRANCH_ID, selectedBranchName = '', branches = [] }) {
   const toast = useToast()
@@ -62,7 +84,22 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   // (agrupa por personnel.department con headers de sección entre grupos).
   const [sortBy, setSortBy] = useState('name')
   const popoverRef = useRef(null)
-  const [viewMode, setViewMode] = useState('weekly') // 'weekly' | 'daily'
+  // Dropdown de exportación PDF (agrupa "esta sucursal" y "por sucursal").
+  const pdfMenuRef = useRef(null)
+  const [showPdfMenu, setShowPdfMenu] = useState(false)
+  // 'weekly' = grid de edición de la semana actual (por defecto) · 'month' =
+  // overview mensual navegable · 'daily' = detalle de un día (es el "zoom" al
+  // que se entra tocando un día, no un toggle suelto).
+  const [viewMode, setViewMode] = useState('weekly')
+  // Vista desde la que se entró al detalle diario ('weekly' | 'month'), para que
+  // el botón de volver regrese al lugar correcto.
+  const [dailyOrigin, setDailyOrigin] = useState('weekly')
+  // Mes mostrado en la vista mensual (independiente de la semana ISO activa).
+  const [monthRef, setMonthRef] = useState(() => new Date())
+  const [monthData, setMonthData] = useState({ byUser: {}, publishedByDate: {} })
+  const [monthLoading, setMonthLoading] = useState(true)
+  // Colaborador cuyo horario mensual se está viendo (modal). null = cerrado.
+  const [detailEmployee, setDetailEmployee] = useState(null)
   // Día seleccionado en modo diario: por defecto hoy si está en la semana, o lunes
   const [selectedDayKey, setSelectedDayKey] = useState(() => {
     const todayDow = new Date().getDay()
@@ -72,6 +109,8 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   const weekDates = useMemo(() => getWeekDates(isoYear, isoWeek), [isoYear, isoWeek])
   const monday = weekDates[0]
   const sunday = weekDates[6]
+  const monthYear = monthRef.getFullYear()
+  const monthIndex = monthRef.getMonth()
 
   // ----- Cargar plantillas + horarios de la semana -----
   const loadAll = async () => {
@@ -108,6 +147,22 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, isoYear, isoWeek])
 
+  // ----- Cargar la vista mensual (todo el equipo) -----
+  // Se recarga al entrar a la vista mensual y al cambiar de mes, para reflejar
+  // ediciones hechas en las vistas Semanal/Diaria al volver al overview.
+  useEffect(() => {
+    if (!businessId || viewMode !== 'month') return
+    let cancelled = false
+    setMonthLoading(true)
+    getMonthScheduleAll(businessId, monthYear, monthIndex)
+      .then((res) => {
+        if (cancelled) return
+        setMonthData(res.success ? res.data : { byUser: {}, publishedByDate: {} })
+      })
+      .finally(() => { if (!cancelled) setMonthLoading(false) })
+    return () => { cancelled = true }
+  }, [businessId, viewMode, monthYear, monthIndex])
+
   // Cerrar popover con click fuera
   useEffect(() => {
     if (!editingCell) return
@@ -119,6 +174,18 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     setTimeout(() => document.addEventListener('mousedown', onClick), 0)
     return () => document.removeEventListener('mousedown', onClick)
   }, [editingCell])
+
+  // Cerrar el menú PDF al hacer click fuera (mismo patrón que el popover de celda).
+  useEffect(() => {
+    if (!showPdfMenu) return
+    const onClick = (e) => {
+      if (pdfMenuRef.current && !pdfMenuRef.current.contains(e.target)) {
+        setShowPdfMenu(false)
+      }
+    }
+    setTimeout(() => document.addEventListener('mousedown', onClick), 0)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showPdfMenu])
 
   // ----- Navegación semanas -----
   const goPrev = () => {
@@ -132,6 +199,37 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   const goThis = () => {
     const t = getIsoWeek(new Date())
     setIsoYear(t.isoYear); setIsoWeek(t.isoWeek)
+  }
+
+  // ----- Navegación meses (vista mensual) -----
+  const goPrevMonth = () => setMonthRef(new Date(monthYear, monthIndex - 1, 1))
+  const goNextMonth = () => setMonthRef(new Date(monthYear, monthIndex + 1, 1))
+  const goThisMonth = () => setMonthRef(new Date())
+
+  // "Zoom" a un día: ajusta la semana ISO y el día seleccionado, y entra al
+  // detalle diario. Es el gesto principal de la vista mensual.
+  const zoomToDay = (date, from = 'month') => {
+    const iso = getIsoWeek(date)
+    setIsoYear(iso.isoYear)
+    setIsoWeek(iso.isoWeek)
+    setSelectedDayKey(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][date.getDay()])
+    setDailyOrigin(from)
+    setViewMode('daily')
+  }
+
+  // Volver del detalle diario al mes. Sincroniza el mes mostrado con el día que
+  // se estaba viendo (por si se navegó de semana dentro del detalle).
+  const backToMonth = () => {
+    const idx = DAY_KEYS.indexOf(selectedDayKey)
+    const d = weekDates[idx] || weekDates[0]
+    if (d) setMonthRef(new Date(d.getFullYear(), d.getMonth(), 1))
+    setViewMode('month')
+  }
+
+  // Salir del detalle diario hacia la vista de origen (semanal o mensual).
+  const backFromDaily = () => {
+    if (dailyOrigin === 'weekly') setViewMode('weekly')
+    else backToMonth()
   }
 
   // ----- Mutaciones de celdas -----
@@ -438,53 +536,120 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     return rows
   }, [employees, sortBy])
 
+  // Etiquetas de cabecera según la vista.
+  const monthLabel = `${MONTHS_ES[monthIndex]} ${monthYear}`
+  const selDate = weekDates[DAY_KEYS.indexOf(selectedDayKey)] || weekDates[0]
+  const selectedDayLabel = selDate
+    ? selDate.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'short' }).replace('.', '')
+    : ''
+
+  const emptyEmployeesBlock = (
+    <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-sm text-gray-500">
+      No hay empleados. Agregá personal desde &quot;Gestión de Usuarios&quot; para asignarles horarios.
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-white border border-gray-200 rounded-xl p-3">
-        <div className="flex items-center gap-2">
-          <button onClick={goPrev} className="p-2 rounded-lg hover:bg-gray-100" title="Semana anterior">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <div className="flex items-center gap-2 px-3">
-            <Calendar className="w-4 h-4 text-primary-600" />
-            <div className="text-sm">
-              <div className="font-semibold text-gray-900">Semana {isoWeek} · {isoYear}</div>
-              <div className="text-xs text-gray-500">{formatRange(monday, sunday)}</div>
-            </div>
-          </div>
-          <button onClick={goNext} className="p-2 rounded-lg hover:bg-gray-100" title="Semana siguiente">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={goThis}
-            className="ml-2 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
-          >
-            Hoy
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {viewMode === 'daily' ? (
+            <>
+              {/* Detalle de un día (zoom): volver a la vista de origen + navegación de semana */}
+              <button
+                onClick={backFromDaily}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
+                title={dailyOrigin === 'weekly' ? 'Volver a la vista semanal' : 'Volver a la vista mensual'}
+              >
+                <ChevronLeft className="w-4 h-4" /> {dailyOrigin === 'weekly' ? 'Semana' : 'Mes'}
+              </button>
+              <div className="flex items-center gap-2 px-2">
+                <Calendar className="w-4 h-4 text-primary-600" />
+                <div className="text-sm">
+                  <div className="font-semibold text-gray-900 capitalize">{selectedDayLabel}</div>
+                  <div className="text-xs text-gray-500">Semana {isoWeek} · {isoYear}</div>
+                </div>
+              </div>
+              <button onClick={goPrev} className="p-2 rounded-lg hover:bg-gray-100" title="Semana anterior">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button onClick={goNext} className="p-2 rounded-lg hover:bg-gray-100" title="Semana siguiente">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : viewMode === 'month' ? (
+            <>
+              {/* Navegación de mes */}
+              <button onClick={goPrevMonth} className="p-2 rounded-lg hover:bg-gray-100" title="Mes anterior">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2 px-3">
+                <Calendar className="w-4 h-4 text-primary-600" />
+                <div className="text-sm font-semibold text-gray-900 min-w-[120px]">{monthLabel}</div>
+              </div>
+              <button onClick={goNextMonth} className="p-2 rounded-lg hover:bg-gray-100" title="Mes siguiente">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={goThisMonth}
+                className="ml-1 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
+              >
+                Hoy
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Navegación de semana (vista semanal) */}
+              <button onClick={goPrev} className="p-2 rounded-lg hover:bg-gray-100" title="Semana anterior">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2 px-3">
+                <Calendar className="w-4 h-4 text-primary-600" />
+                <div className="text-sm">
+                  <div className="font-semibold text-gray-900">Semana {isoWeek} · {isoYear}</div>
+                  <div className="text-xs text-gray-500">{formatRange(monday, sunday)}</div>
+                </div>
+              </div>
+              <button onClick={goNext} className="p-2 rounded-lg hover:bg-gray-100" title="Semana siguiente">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={goThis}
+                className="ml-2 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
+              >
+                Hoy
+              </button>
+            </>
+          )}
 
-          {/* Toggle vista Diaria/Semanal */}
-          <div className="ml-2 flex bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('weekly')}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                viewMode === 'weekly' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Semanal
-            </button>
-            <button
-              onClick={() => setViewMode('daily')}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                viewMode === 'daily' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Diaria
-            </button>
-          </div>
+          {/* Toggle Mes / Semana — oculto en el detalle diario (es un zoom, se sale con "Mes") */}
+          {viewMode !== 'daily' && (
+            <div className="ml-2 flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  viewMode === 'month' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Mes
+              </button>
+              <button
+                onClick={() => setViewMode('weekly')}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  viewMode === 'weekly' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Semana
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* Herramientas de edición (semana/día). En la vista mensual (overview) se
+            ocultan: el mes es sólo para navegar, se edita al hacer zoom a un día. */}
+        {viewMode !== 'month' && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowTemplateManager((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border ${
@@ -512,26 +677,62 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             <option value="name">Ordenar: Nombre</option>
             <option value="department">Agrupar por área</option>
           </select>
-          <button
-            onClick={handlePrintPdf}
-            disabled={printing || employees.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            title="PDF de esta sucursal solamente"
-          >
-            {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            PDF (esta sucursal)
-          </button>
-          {branches && branches.length > 1 && (
+          {/* PDF: con una sola sucursal es un botón directo; con varias se
+              convierte en un menú que agrupa las dos formas de exportar. */}
+          {branches && branches.length > 1 ? (
+            <div className="relative" ref={pdfMenuRef}>
+              <button
+                onClick={() => setShowPdfMenu((v) => !v)}
+                disabled={printing || employees.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                title="Exportar horario a PDF"
+              >
+                {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                PDF
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showPdfMenu ? 'rotate-180' : ''}`} />
+              </button>
+              {showPdfMenu && (
+                <div className="absolute right-0 z-50 mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                  <button
+                    onClick={() => { setShowPdfMenu(false); handlePrintPdf() }}
+                    disabled={printing || employees.length === 0}
+                    className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <FileDown className="w-3.5 h-3.5 mt-0.5 text-gray-400 flex-shrink-0" />
+                    <span>
+                      <span className="block font-medium">Esta sucursal</span>
+                      <span className="block text-[11px] text-gray-400">Solo {selectedBranchName || 'la sucursal actual'}</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setShowPdfMenu(false); handlePrintPerBranch() }}
+                    disabled={printing || employees.length === 0}
+                    className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <FileDown className="w-3.5 h-3.5 mt-0.5 text-gray-400 flex-shrink-0" />
+                    <span>
+                      <span className="block font-medium">Una por sucursal</span>
+                      <span className="block text-[11px] text-gray-400">Genera {branches.length} PDFs separados</span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
             <button
-              onClick={handlePrintPerBranch}
+              onClick={handlePrintPdf}
               disabled={printing || employees.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              title="Genera un PDF por cada sucursal; los empleados que trabajan en varias aparecen en cada uno con sólo los turnos de esa sucursal"
+              title="Descargar el horario en PDF"
             >
               {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-              PDF por sucursal ({branches.length})
+              PDF
             </button>
           )}
+
+          {/* Separador: herramientas (izq.) vs. acciones principales (der.) */}
+          <div className="hidden sm:block w-px h-6 bg-gray-200 mx-1" />
+
           <button
             onClick={handlePublish}
             disabled={publishing || totalEmployees === 0}
@@ -549,6 +750,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             Guardar {totalDirty > 0 && <span className="bg-white text-primary-700 text-[10px] px-1.5 rounded-full">{totalDirty}</span>}
           </button>
         </div>
+        )}
       </div>
 
       {/* Plantillas (collapsable) */}
@@ -622,19 +824,30 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
         </div>
       )}
 
-      {/* Loading */}
-      {loading ? (
+      {/* Vistas */}
+      {viewMode === 'month' ? (
+        /* Vista mensual (overview navegable): tocar un día hace zoom al detalle */
+        employees.length === 0 ? emptyEmployeesBlock : (
+          <ScheduleMonthOverview
+            year={monthYear}
+            monthIndex={monthIndex}
+            employees={employees}
+            selectedBranchId={selectedBranchId}
+            data={monthData}
+            loading={monthLoading}
+            onSelectDay={zoomToDay}
+          />
+        )
+      ) : loading ? (
         <div className="flex items-center justify-center py-16 text-gray-500">
           <Loader2 className="w-5 h-5 animate-spin mr-2" /> Cargando horarios...
         </div>
       ) : employees.length === 0 ? (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-sm text-gray-500">
-          No hay empleados. Agregá personal desde "Gestión de Usuarios" para asignarles horarios.
-        </div>
+        emptyEmployeesBlock
       ) : viewMode === 'daily' ? (
         /* Vista timeline diaria */
         <DailyTimeline
-          employees={employees}
+          rows={displayRows}
           schedules={schedules}
           dirtyUsers={dirtyUsers}
           weekDates={weekDates}
@@ -651,6 +864,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           setCustom={setCustom}
           updateCellTimes={updateCellTimes}
           selectedBranchId={selectedBranchId}
+          onEmployeeClick={setDetailEmployee}
         />
       ) : (
         /* Grid semanal */
@@ -666,9 +880,16 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                     const date = weekDates[i]
                     const isToday = date.toDateString() === new Date().toDateString()
                     return (
-                      <th key={dk} className={`text-center px-2 sm:px-3 py-3 font-medium text-xs uppercase min-w-[100px] sm:min-w-[120px] ${isToday ? 'bg-primary-50 text-primary-700' : 'text-gray-600'}`}>
-                        <div>{DAY_LABELS[dk]}</div>
-                        <div className="text-[10px] text-gray-400 normal-case font-normal">{formatDayShort(date)}</div>
+                      <th key={dk} className={`px-1 py-1 min-w-[100px] sm:min-w-[120px] ${isToday ? 'bg-primary-50' : ''}`}>
+                        <button
+                          type="button"
+                          onClick={() => zoomToDay(date, 'weekly')}
+                          title={`Ver el ${DAY_LABELS[dk]} ${formatDayShort(date)} en detalle`}
+                          className={`w-full text-center px-1 sm:px-2 py-2 rounded-lg font-medium text-xs uppercase transition-colors hover:bg-primary-100/70 focus:bg-primary-100/70 focus:outline-none ${isToday ? 'text-primary-700' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                          <div>{DAY_LABELS[dk]}</div>
+                          <div className="text-[10px] text-gray-400 normal-case font-normal">{formatDayShort(date)}</div>
+                        </button>
                       </th>
                     )
                   })}
@@ -700,9 +921,16 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                             {initials || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium text-gray-900 truncate max-w-[90px] sm:max-w-[140px] text-xs sm:text-sm">
-                              {emp.displayName || 'Sin nombre'}
-                              {isDirty && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar" />}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setDetailEmployee(emp)}
+                                className="font-medium text-gray-900 hover:text-primary-700 hover:underline truncate max-w-[90px] sm:max-w-[140px] text-xs sm:text-sm text-left"
+                                title="Ver horario del mes"
+                              >
+                                {emp.displayName || 'Sin nombre'}
+                              </button>
+                              {isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" title="Cambios sin guardar" />}
                             </div>
                             {emp.jobTitle && <div className="hidden sm:block text-[11px] text-gray-500 truncate max-w-[140px]">{emp.jobTitle}</div>}
                           </div>
@@ -758,6 +986,15 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           </div>
         </div>
       )}
+
+      {/* Modal: horario mensual de un colaborador (se abre al click en su nombre) */}
+      <CollaboratorScheduleModal
+        isOpen={!!detailEmployee}
+        onClose={() => setDetailEmployee(null)}
+        businessId={businessId}
+        employee={detailEmployee}
+        branches={branches}
+      />
     </div>
   )
 }
@@ -840,6 +1077,15 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
     return () => document.removeEventListener('keydown', handleKey)
   }, [cell, onClear])
 
+  // Resumen en vivo del turno personalizado. Soporta turnos que cruzan la
+  // medianoche (fin <= inicio, p. ej. 22:00–05:00): se interpretan como que
+  // terminan al día siguiente, y así el usuario ve la duración real y un aviso.
+  const sMin = timeToMinutes(start)
+  let eMin = timeToMinutes(end)
+  const crossesMidnight = eMin <= sMin
+  if (crossesMidnight) eMin += 24 * 60
+  const shiftNetHours = Math.max(0, eMin - sMin - (breakMin || 0)) / 60
+
   return (
     <div
       ref={ref}
@@ -889,6 +1135,19 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
             />
           </div>
+
+          {/* Resumen en vivo: duración + aviso de cruce de medianoche */}
+          <div className="flex items-center justify-between text-[11px] pt-0.5">
+            <span className="text-gray-500">Duración</span>
+            <span className="font-semibold text-gray-900">{shiftNetHours.toFixed(1)} h</span>
+          </div>
+          {crossesMidnight && (
+            <div className="flex items-center gap-1.5 text-[11px] text-primary-700 bg-primary-50 border border-primary-100 rounded px-2 py-1">
+              <ChevronRight className="w-3 h-3 flex-shrink-0" />
+              <span>Cruza la medianoche · termina al día siguiente <span className="font-semibold">(+1)</span></span>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => setCustomMode(false)}
@@ -1076,87 +1335,120 @@ function TemplateForm({ template, branches = [], onSave, onCancel }) {
   )
 }
 
-// ===================== Vista timeline diaria =====================
+// ===================== Vista timeline diaria (cinta continua) =====================
+// La vista "Día" es una LÍNEA DE TIEMPO CONTINUA de los 7 días de la semana. Cada
+// día ocupa 24 h sobre un mismo eje horizontal, de modo que un turno que cruza la
+// medianoche (p. ej. 22:00–05:00) fluye sin cortes hacia el día siguiente. Se recorre
+// arrastrando con el mouse (drag-to-pan) o deslizando en táctil; las flechas del
+// encabezado cambian de semana. La edición (asignar, mover, redimensionar) se conserva
+// por día: cada acción se mapea al dayKey correspondiente según la posición horizontal.
 
 function DailyTimeline({
-  employees, schedules, dirtyUsers, weekDates, selectedDayKey, onSelectDay,
+  rows, schedules, dirtyUsers, weekDates, selectedDayKey, onSelectDay,
   templates, editingCell, setEditingCell, popoverRef,
   assignTemplate, setRest, setRecovery, clearCell, setCustom, updateCellTimes, selectedBranchId,
+  onEmployeeClick,
 }) {
-  // Rango horario fijo del timeline. Cubre desde 6 AM hasta 11 PM (configurable
-  // a futuro). Si un turno cae fuera, se clampea visualmente.
-  const MIN_HOUR = 6
-  const MAX_HOUR = 23
-  const HOURS = MAX_HOUR - MIN_HOUR
-  const TOTAL_MIN = HOURS * 60
+  const scrollRef = useRef(null)
+  // Evita re-centrar el scroll en cada edición: sólo se reposiciona cuando cambia
+  // la semana, el día ancla o la sucursal (no al mover/editar una celda).
+  const lastScrollKeyRef = useRef('')
 
-  // ----- Drag & drop de la barra del turno -----
-  // dragState: { userId, dayKey, start, end } durante el arrastre activo.
-  // Mientras existe, la barra de ese empleado se renderiza con los tiempos del preview
-  // (no los de la celda guardada) para feedback visual en tiempo real.
+  const isToday = (d) => d && d.toDateString() === new Date().toDateString()
+  const todayIdx = weekDates.findIndex((d) => isToday(d))
+  const anchorIdx = Math.max(0, DAY_KEYS.indexOf(selectedDayKey))
+  // Clave estable de la semana (cambia al navegar de semana) → re-centra el scroll.
+  const weekKey = weekDates[0]?.toDateString() || ''
+
+  // Cola overnight del domingo: cuánto se extiende el último turno más allá del fin
+  // de la semana, para no recortarlo (tope 12 h).
+  const tailMin = useMemo(() => {
+    let tail = 0
+    for (const row of rows) {
+      if (row?.type !== 'employee') continue
+      const c = schedules[row.emp.id]?.days?.sun
+      if (!c || c.rest || c.recovery || !c.start || !c.end) continue
+      if (cellBranchId(c) !== selectedBranchId) continue
+      const s = timeToMinutes(c.start)
+      const e = timeToMinutes(c.end)
+      if (e <= s) tail = Math.max(tail, e) // 'e' = minutos dentro del lunes siguiente
+    }
+    return Math.min(tail, 12 * 60)
+  }, [rows, schedules, selectedBranchId])
+
+  const totalMin = 7 * DAY_MIN + tailMin
+  const canvasW = xOfMin(totalMin)
+  const hourTicks = Math.ceil(totalMin / 60)
+
+  // ----- Auto-scroll al día ancla (mostrando sus horas de trabajo, no la madrugada) -----
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const key = `${weekKey}|${selectedDayKey}|${selectedBranchId}`
+    if (lastScrollKeyRef.current === key) return // ya centrado para esta semana/día/sucursal
+    lastScrollKeyRef.current = key
+    let earliest = 7 * 60 // fallback 07:00 si el día no tiene turnos
+    for (const row of rows) {
+      if (row?.type !== 'employee') continue
+      const c = schedules[row.emp.id]?.days?.[selectedDayKey]
+      if (!c || c.rest || c.recovery || !c.start) continue
+      if (cellBranchId(c) !== selectedBranchId) continue
+      earliest = Math.min(earliest, timeToMinutes(c.start))
+    }
+    const idx = Math.max(0, DAY_KEYS.indexOf(selectedDayKey))
+    el.scrollLeft = Math.max(0, xOfMin(idx * DAY_MIN + Math.max(0, earliest - 60)))
+  }, [schedules, rows, selectedDayKey, weekKey, selectedBranchId])
+
+  // ----- Drag de la barra (mover / redimensionar) sobre el eje continuo -----
   const [dragState, setDragState] = useState(null)
   const dragStateRef = useRef(null)
   dragStateRef.current = dragState
-  // Marca puesta al final de un drag con movimiento real, para que el onClick
-  // posterior (que dispara el browser) no abra el popover por error.
   const wasDraggedRef = useRef(false)
-
-  const SNAP_MIN = 30 // snap a 30 min al arrastrar
-  const HANDLE_PX = 8 // ancho de las "manijas" de redimensionado en cada borde
+  const SNAP_MIN = 30
+  const HANDLE_PX = 10
 
   const minutesToTime = (mins) => {
-    const total = ((mins % (24 * 60)) + 24 * 60) % (24 * 60)
+    const total = ((mins % DAY_MIN) + DAY_MIN) % DAY_MIN
     const h = Math.floor(total / 60)
     const m = total % 60
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
-  const beginDrag = (e, emp, cell, mode) => {
+  const beginDrag = (e, emp, dk, di, cell, mode) => {
     e.stopPropagation()
     e.preventDefault()
-    const trackEl = e.currentTarget.closest('[data-role="track"]')
-    if (!trackEl) return
-    const trackRect = trackEl.getBoundingClientRect()
     const startX = e.clientX
-    const origStart = timeToMinutes(cell.start)
-    let origEnd = timeToMinutes(cell.end)
-    if (origEnd <= origStart) origEnd += 24 * 60
+    const dayBase = di * DAY_MIN
+    const origStart = dayBase + timeToMinutes(cell.start)
+    let origEnd = dayBase + timeToMinutes(cell.end)
+    if (origEnd <= origStart) origEnd += DAY_MIN // cruza medianoche
     let didMove = false
-
-    // Pointer capture: garantiza que pointermove/pointerup lleguen al mismo
-    // elemento aunque el dedo/cursor salga del rectángulo de la barra.
-    // Crítico para touch porque iOS Safari pierde el track sin esto.
     const captureTarget = e.currentTarget
     const pointerId = e.pointerId
-    try { captureTarget.setPointerCapture(pointerId) } catch {}
+    try { captureTarget.setPointerCapture(pointerId) } catch { /* pointer capture opcional */ }
 
     const compute = (clientX) => {
-      const dxPx = clientX - startX
-      const dxMin = (dxPx / trackRect.width) * TOTAL_MIN
-      const dxSnap = Math.round(dxMin / SNAP_MIN) * SNAP_MIN
-      let newStart = origStart
-      let newEnd = origEnd
-      if (mode === 'move') { newStart = origStart + dxSnap; newEnd = origEnd + dxSnap }
-      else if (mode === 'resize-left') { newStart = Math.min(origStart + dxSnap, origEnd - SNAP_MIN) }
-      else if (mode === 'resize-right') { newEnd = Math.max(origEnd + dxSnap, origStart + SNAP_MIN) }
-      const minBound = MIN_HOUR * 60
-      const maxBound = (MAX_HOUR + 1) * 60
-      if (newStart < minBound) {
-        const shift = minBound - newStart
-        newStart += shift
-        if (mode === 'move') newEnd += shift
+      const dxSnap = Math.round(minOfX(clientX - startX) / SNAP_MIN) * SNAP_MIN
+      let s = origStart
+      let en = origEnd
+      if (mode === 'move') {
+        s = origStart + dxSnap; en = origEnd + dxSnap
+        // El turno se mantiene en SU día: el inicio no sale de [00:00, 24:00) de ese día.
+        const lo = dayBase
+        const hiStart = dayBase + DAY_MIN - SNAP_MIN
+        if (s < lo) { const d = lo - s; s += d; en += d }
+        if (s > hiStart) { const d = s - hiStart; s -= d; en -= d }
+      } else if (mode === 'resize-left') {
+        s = Math.max(dayBase, Math.min(origStart + dxSnap, origEnd - SNAP_MIN))
+      } else if (mode === 'resize-right') {
+        en = Math.min(dayBase + DAY_MIN + 12 * 60, Math.max(origEnd + dxSnap, origStart + SNAP_MIN))
       }
-      if (newEnd > maxBound) {
-        const shift = newEnd - maxBound
-        newEnd -= shift
-        if (mode === 'move') newStart -= shift
-      }
-      return { start: minutesToTime(newStart), end: minutesToTime(newEnd) }
+      return { start: minutesToTime(s), end: minutesToTime(en) }
     }
 
     const onMove = (mv) => {
       if (!didMove && Math.abs(mv.clientX - startX) > 3) didMove = true
-      setDragState({ userId: emp.id, dayKey: selectedDayKey, ...compute(mv.clientX) })
+      setDragState({ userId: emp.id, dayKey: dk, ...compute(mv.clientX) })
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -1164,10 +1456,10 @@ function DailyTimeline({
       window.removeEventListener('pointercancel', onUp)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
-      try { captureTarget.releasePointerCapture(pointerId) } catch {}
+      try { captureTarget.releasePointerCapture(pointerId) } catch { /* pointer capture opcional */ }
       const latest = dragStateRef.current
       if (didMove && latest && updateCellTimes) {
-        updateCellTimes(emp.id, selectedDayKey, latest.start, latest.end)
+        updateCellTimes(emp.id, dk, latest.start, latest.end)
         wasDraggedRef.current = true
         setTimeout(() => { wasDraggedRef.current = false }, 0)
       }
@@ -1180,245 +1472,295 @@ function DailyTimeline({
     window.addEventListener('pointercancel', onUp)
   }
 
-  // Mapeo de dayKey al date correspondiente de la semana
-  const dayDate = useMemo(() => {
-    const idx = DAY_KEYS.indexOf(selectedDayKey)
-    return weekDates[idx] || weekDates[0]
-  }, [selectedDayKey, weekDates])
+  // ----- Pan con mouse: arrastrar el fondo para recorrer el tiempo -----
+  // En táctil se usa el scroll nativo (swipe), por eso el pan manual es sólo mouse.
+  const didPanRef = useRef(false)
+  const beginPan = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return
+    if (e.target.closest('[data-bar="1"]')) return // las barras manejan su propio drag
+    const el = scrollRef.current
+    if (!el) return
+    const startX = e.clientX
+    const startScroll = el.scrollLeft
+    didPanRef.current = false
+    const onMove = (mv) => {
+      const dx = mv.clientX - startX
+      if (Math.abs(dx) > 3) didPanRef.current = true
+      el.scrollLeft = startScroll - dx
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setTimeout(() => { didPanRef.current = false }, 0)
+    }
+    document.body.style.cursor = 'grabbing'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
-  const isToday = (d) => d.toDateString() === new Date().toDateString()
+  // Abre el popover de una celda anclando su posición horizontal (clamp para no salir).
+  const openCell = (emp, dk, leftPx) => {
+    setEditingCell({ userId: emp.id, dayKey: dk, leftPx: Math.max(140, Math.min(leftPx, canvasW - 140)) })
+  }
 
-  // Calcula porcentajes left/width para una celda con start/end
-  const cellGeometry = (cell) => {
-    if (!cell || cell.rest || !cell.start || !cell.end) return null
-    let s = timeToMinutes(cell.start)
-    let e = timeToMinutes(cell.end)
-    if (e <= s) e += 24 * 60 // cruza medianoche
-    const minStart = MIN_HOUR * 60
-    const maxEnd = (MAX_HOUR + 1) * 60 // permitir tocar el límite derecho
-    const sClamped = Math.max(minStart, s)
-    const eClamped = Math.min(maxEnd, e)
-    if (eClamped <= sClamped) return null
-    const leftPct = ((sClamped - minStart) / TOTAL_MIN) * 100
-    const widthPct = ((eClamped - sClamped) / TOTAL_MIN) * 100
-    return { leftPct, widthPct }
+  // Click en zona vacía del track → asigna turno al día correspondiente a esa x.
+  const handleTrackClick = (e, emp) => {
+    if (didPanRef.current) return
+    if (e.target.dataset.role !== 'track') return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const di = Math.min(6, Math.max(0, Math.floor(minOfX(e.clientX - rect.left) / DAY_MIN)))
+    openCell(emp, DAY_KEYS[di], di * DAY_W + DAY_W / 2)
+  }
+
+  // Rejilla de fondo (sin DOM extra): línea marcada por día + línea tenue por hora.
+  const gridStyle = {
+    backgroundImage:
+      `repeating-linear-gradient(to right, ${TL_DAY_LINE} 0, ${TL_DAY_LINE} 1px, transparent 1px, transparent ${DAY_W}px),` +
+      `repeating-linear-gradient(to right, ${TL_HOUR_LINE} 0, ${TL_HOUR_LINE} 1px, transparent 1px, transparent ${PX_PER_HOUR}px)`,
   }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      {/* Day picker */}
-      <div className="border-b border-gray-100 p-3 flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-gray-500 mr-2 uppercase font-semibold">Día:</span>
+      {/* Chips de día — saltan (auto-scroll) a ese día dentro de la cinta */}
+      <div className="border-b border-gray-100 p-2.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] text-gray-500 mr-1 uppercase font-semibold hidden sm:inline">Ir a:</span>
         {DAY_KEYS.map((dk, i) => {
           const date = weekDates[i]
           const isSel = selectedDayKey === dk
-          const isHoy = isToday(date)
+          const hoy = isToday(date)
           return (
             <button
               key={dk}
               onClick={() => onSelectDay(dk)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors flex items-center gap-1 ${
-                isSel
-                  ? 'bg-primary-600 text-white border-primary-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors flex items-center gap-1 ${
+                isSel ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
               <span>{DAY_LABELS[dk]}</span>
               <span className={`text-[10px] ${isSel ? 'opacity-90' : 'text-gray-500'}`}>
                 {date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }).replace('.', '')}
               </span>
-              {isHoy && (
-                <span className={`ml-0.5 text-[9px] uppercase font-bold ${isSel ? 'text-white' : 'text-primary-600'}`}>
-                  HOY
-                </span>
-              )}
+              {hoy && <span className={`text-[9px] uppercase font-bold ${isSel ? 'text-white' : 'text-primary-600'}`}>HOY</span>}
             </button>
           )
         })}
+        <span className="ml-auto hidden md:flex items-center gap-1 text-[11px] text-gray-400">
+          <MoveHorizontal className="w-3.5 h-3.5" /> Arrastra para recorrer los días
+        </span>
       </div>
 
-      {/* Timeline */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[640px] sm:min-w-[800px] md:min-w-[900px] relative">
-          {/* Header de horas */}
-          <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
-            <div className="w-28 sm:w-40 md:w-48 flex-shrink-0 px-2 sm:px-4 py-2 text-xs font-medium text-gray-600 uppercase">
+      {/* Cinta continua (scroll horizontal + drag-to-pan) */}
+      <div ref={scrollRef} className="overflow-x-auto timeline-scrollbar" onPointerDown={beginPan}>
+        <div className="relative" style={{ width: TL_NAME_W + canvasW }}>
+          {/* Encabezado pegajoso: banda de días (arriba) + horas (abajo) */}
+          <div className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-200" style={{ height: 40 }}>
+            <div
+              className="flex-shrink-0 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 flex items-end px-3 pb-1 text-[11px] font-medium text-gray-600 uppercase"
+              style={{ width: TL_NAME_W }}
+            >
               Empleado
             </div>
-            <div className="flex-1 relative h-9">
-              {Array.from({ length: HOURS + 1 }, (_, i) => {
-                const hour = MIN_HOUR + i
-                const leftPct = (i / HOURS) * 100
+            <div className="relative flex-shrink-0" style={{ width: canvasW }}>
+              {DAY_KEYS.map((dk, i) => {
+                const date = weekDates[i]
+                const hoy = isToday(date)
+                const isAnchor = i === anchorIdx
                 return (
                   <div
-                    key={hour}
-                    className="absolute top-0 bottom-0 flex items-center text-[10px] text-gray-500 -translate-x-1/2"
-                    style={{ left: `${leftPct}%` }}
+                    key={dk}
+                    className={`absolute top-0 h-5 flex items-center gap-1 px-2 text-[10px] font-semibold border-r border-gray-200 overflow-hidden ${
+                      hoy ? 'text-primary-700 bg-primary-50/70' : isAnchor ? 'text-gray-900 bg-amber-50/60' : 'text-gray-500'
+                    }`}
+                    style={{ left: i * DAY_W, width: DAY_W }}
                   >
-                    {String(hour).padStart(2, '0')}:00
+                    <span className="capitalize truncate">{date.toLocaleDateString('es-PE', { weekday: 'long' })}</span>
+                    <span className="text-gray-400 font-normal">{date.getDate()}</span>
+                    {hoy && <span className="text-[8px] uppercase font-bold text-primary-600">HOY</span>}
+                  </div>
+                )
+              })}
+              {Array.from({ length: hourTicks + 1 }, (_, h) => {
+                if (h % 2 !== 0) return null // etiqueta cada 2 h para no saturar
+                const boundary = h % 24 === 0
+                return (
+                  <div
+                    key={h}
+                    className={`absolute bottom-0.5 -translate-x-1/2 text-[9px] whitespace-nowrap ${boundary ? 'text-gray-500 font-semibold' : 'text-gray-400'}`}
+                    style={{ left: xOfMin(h * 60) }}
+                  >
+                    {String(h % 24).padStart(2, '0')}:00
                   </div>
                 )
               })}
             </div>
           </div>
 
-          {/* Filas de empleados */}
-          {employees.map((emp) => {
-            const sch = schedules[emp.id] || { days: {}, totalHours: 0 }
-            const rawCell = sch.days?.[selectedDayKey]
-            // Filtrar por sucursal activa: si la celda no pertenece a la sucursal
-            // seleccionada, la mostramos como vacía. La data subyacente queda intacta.
-            const cell = (rawCell && cellBranchId(rawCell) === selectedBranchId) ? rawCell : null
-            // Durante un drag activo sobre esta misma celda, renderizamos con los
-            // tiempos del preview para que el usuario vea la barra moverse en vivo.
-            const isDragging = dragState && dragState.userId === emp.id && dragState.dayKey === selectedDayKey
-            const previewCell = isDragging ? { ...cell, start: dragState.start, end: dragState.end } : cell
-            const geo = cellGeometry(previewCell)
+          {/* Filas (con headers de sección si se agrupa por área) */}
+          {rows.map((row, rowIdx) => {
+            if (row.type === 'header') {
+              return (
+                <div key={`hdr-${row.name}-${rowIdx}`} className="flex border-y border-gray-200 bg-gray-50">
+                  <div className="flex-shrink-0 sticky left-0 z-10 bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600" style={{ width: TL_NAME_W }}>
+                    {row.name}
+                    <span className="text-gray-400 font-normal normal-case"> · {row.count}</span>
+                  </div>
+                  <div className="flex-shrink-0" style={{ width: canvasW }} />
+                </div>
+              )
+            }
+            const emp = row.emp
+            const sch = schedules[emp.id] || { days: {} }
             const isDirty = dirtyUsers.has(emp.id)
             const initials = (emp.displayName || emp.email || '?')
               .split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
-            const isEditingThis = editingCell?.userId === emp.id && editingCell?.dayKey === selectedDayKey
+            const editDk = editingCell?.userId === emp.id ? editingCell.dayKey : null
+            const editRaw = editDk ? sch.days?.[editDk] : null
+            const editCell = (editRaw && cellBranchId(editRaw) === selectedBranchId) ? editRaw : null
 
             return (
-              <div key={emp.id} className="flex border-b border-gray-100 hover:bg-gray-50/50">
-                {/* Nombre del empleado */}
-                <div className="w-28 sm:w-40 md:w-48 flex-shrink-0 px-2 sm:px-4 py-3 flex items-center gap-2">
+              <div key={emp.id} className="flex border-b border-gray-100 hover:bg-gray-50/40">
+                {/* Nombre (columna pegajosa) */}
+                <div className="flex-shrink-0 sticky left-0 z-10 bg-white border-r border-gray-200 px-2 sm:px-3 py-3 flex items-center gap-2" style={{ width: TL_NAME_W }}>
                   <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                     {initials || '?'}
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-gray-900 truncate text-sm">
-                      {emp.displayName || 'Sin nombre'}
-                      {isDirty && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar" />}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onEmployeeClick?.(emp)}
+                        className="font-medium text-gray-900 hover:text-primary-700 hover:underline truncate text-sm text-left"
+                        title="Ver horario del mes"
+                      >
+                        {emp.displayName || 'Sin nombre'}
+                      </button>
+                      {isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" title="Cambios sin guardar" />}
                     </div>
                     {emp.jobTitle && <div className="hidden sm:block text-[10px] text-gray-500 truncate">{emp.jobTitle}</div>}
                   </div>
                 </div>
 
-                {/* Track de horas */}
+                {/* Track continuo de los 7 días */}
                 <div
-                  className="flex-1 relative cursor-pointer"
-                  style={{ height: 56 }}
-                  onClick={(e) => {
-                    // Click en el track (no en una barra) → abre popover de creación
-                    if (e.target.dataset.role === 'track') {
-                      setEditingCell({ userId: emp.id, dayKey: selectedDayKey })
-                    }
-                  }}
+                  className="relative flex-shrink-0 cursor-pointer"
+                  style={{ width: canvasW, height: 56, ...gridStyle }}
                   data-role="track"
+                  onClick={(e) => handleTrackClick(e, emp)}
                 >
-                  {/* Líneas verticales por hora */}
-                  {Array.from({ length: HOURS + 1 }, (_, i) => {
-                    const leftPct = (i / HOURS) * 100
+                  {/* Resaltado del día de hoy y del día ancla */}
+                  {todayIdx >= 0 && (
+                    <div className="absolute inset-y-0 bg-primary-50/50 pointer-events-none" style={{ left: todayIdx * DAY_W, width: DAY_W }} />
+                  )}
+                  {anchorIdx !== todayIdx && (
+                    <div className="absolute inset-y-0 bg-amber-50/40 pointer-events-none" style={{ left: anchorIdx * DAY_W, width: DAY_W }} />
+                  )}
+
+                  {/* Barras: una por día con turno (los overnight se dibujan contiguos) */}
+                  {DAY_KEYS.map((dk, di) => {
+                    const raw = sch.days?.[dk]
+                    const cell = (raw && cellBranchId(raw) === selectedBranchId) ? raw : null
+                    if (!cell) return null
+                    const dayLeft = di * DAY_W
+                    if (cell.rest || cell.recovery) {
+                      const isRest = !!cell.rest
+                      return (
+                        <div
+                          key={dk}
+                          className="absolute inset-y-3 flex items-center justify-center pointer-events-none"
+                          style={{ left: dayLeft, width: DAY_W }}
+                        >
+                          <button
+                            type="button"
+                            data-bar="1"
+                            onClick={(ev) => { ev.stopPropagation(); openCell(emp, dk, dayLeft + DAY_W / 2) }}
+                            className={`pointer-events-auto px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 border ${
+                              isRest ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-orange-50 border-orange-200 text-orange-700'
+                            }`}
+                          >
+                            <Coffee className="w-3 h-3" /> {isRest ? 'Descanso' : 'Recup.'}
+                          </button>
+                        </div>
+                      )
+                    }
+                    if (!cell.start || !cell.end) return null
+                    const isDraggingThis = dragState?.userId === emp.id && dragState?.dayKey === dk
+                    const pc = isDraggingThis ? { ...cell, start: dragState.start, end: dragState.end } : cell
+                    const sMin = timeToMinutes(pc.start)
+                    let eMin = timeToMinutes(pc.end)
+                    if (eMin <= sMin) eMin += DAY_MIN // cruza medianoche
+                    const left = xOfMin(di * DAY_MIN + sMin)
+                    const width = xOfMin(eMin - sMin)
+                    const dur = eMin - sMin
+                    const breakMin = cell.breakMinutes || 0
+                    const hasBreak = breakMin > 0 && breakMin < dur
+                    const breakLeftPct = hasBreak ? ((dur - breakMin) / 2) / dur * 100 : 0
+                    const breakWidthPct = hasBreak ? breakMin / dur * 100 : 0
                     return (
                       <div
-                        key={i}
-                        className="absolute top-0 bottom-0 border-l border-gray-100"
-                        style={{ left: `${leftPct}%` }}
-                        data-role="track"
-                      />
+                        key={dk}
+                        data-bar="1"
+                        role="button"
+                        tabIndex={0}
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          if (wasDraggedRef.current) return
+                          openCell(emp, dk, left)
+                        }}
+                        onPointerDown={(ev) => {
+                          if (ev.pointerType === 'mouse' && ev.button !== 0) return
+                          const r = ev.currentTarget.getBoundingClientRect()
+                          const rel = ev.clientX - r.left
+                          let mode = 'move'
+                          if (rel < HANDLE_PX) mode = 'resize-left'
+                          else if (rel > r.width - HANDLE_PX) mode = 'resize-right'
+                          beginDrag(ev, emp, dk, di, pc, mode)
+                        }}
+                        onMouseMove={(ev) => {
+                          if (dragStateRef.current) return
+                          const r = ev.currentTarget.getBoundingClientRect()
+                          const rel = ev.clientX - r.left
+                          ev.currentTarget.style.cursor = (rel < HANDLE_PX || rel > r.width - HANDLE_PX) ? 'ew-resize' : 'grab'
+                        }}
+                        className="absolute top-2 bottom-2 rounded-md border-2 flex items-center text-xs font-semibold transition-shadow hover:shadow-md select-none overflow-hidden touch-none"
+                        style={{
+                          left,
+                          width,
+                          background: (cell.color || '#fbbf24') + '40',
+                          borderColor: (cell.color || '#fbbf24'),
+                          color: '#1f2937',
+                          cursor: 'grab',
+                        }}
+                      >
+                        <span className="px-2 truncate pointer-events-none">{pc.start} – {pc.end}</span>
+                        {hasBreak && (
+                          <div
+                            className="absolute top-0 bottom-0 bg-gray-900/25 border-l border-r border-gray-700/40 flex items-center justify-center text-[10px] text-gray-900 pointer-events-none overflow-hidden gap-0.5"
+                            style={{ left: `${breakLeftPct}%`, width: `${breakWidthPct}%` }}
+                            title={`Refrigerio: ${breakMin} min`}
+                          >
+                            <Coffee className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="whitespace-nowrap font-medium">{breakMin}m</span>
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
 
-                  {/* Barra del turno */}
-                  {cell && cell.rest ? (
-                    <div className="absolute inset-y-2 left-2 right-2 rounded bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-gray-500"
-                         onClick={(e) => { e.stopPropagation(); setEditingCell({ userId: emp.id, dayKey: selectedDayKey }) }}
-                    >
-                      Descanso
-                    </div>
-                  ) : cell && cell.recovery ? (
-                    <div className="absolute inset-y-2 left-2 right-2 rounded bg-orange-50 border border-orange-200 flex items-center justify-center text-xs text-orange-700"
-                         onClick={(e) => { e.stopPropagation(); setEditingCell({ userId: emp.id, dayKey: selectedDayKey }) }}
-                         title="Recuperación (no suma a horas semanales)"
-                    >
-                      Recuperación
-                    </div>
-                  ) : geo ? (
-                    (() => {
-                      // Franja del refrigerio: bloque dentro de la barra que indica visualmente
-                      // dónde (centrado) y por cuánto tiempo es el descanso. Solo si el modelo
-                      // tiene breakMinutes > 0 y entra dentro del turno.
-                      const cellStartMin = timeToMinutes(previewCell.start)
-                      let cellEndMin = timeToMinutes(previewCell.end)
-                      if (cellEndMin <= cellStartMin) cellEndMin += 24 * 60
-                      const shiftDuration = cellEndMin - cellStartMin
-                      const breakMin = cell.breakMinutes || 0
-                      const hasBreak = breakMin > 0 && breakMin < shiftDuration
-                      const breakLeftPct = hasBreak ? ((shiftDuration - breakMin) / 2) / shiftDuration * 100 : 0
-                      const breakWidthPct = hasBreak ? breakMin / shiftDuration * 100 : 0
-                      return (
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (wasDraggedRef.current) return
-                            setEditingCell({ userId: emp.id, dayKey: selectedDayKey })
-                          }}
-                          onPointerDown={(e) => {
-                            // Solo procesar primary pointer (descarta clicks derechos, multi-touch)
-                            if (e.pointerType === 'mouse' && e.button !== 0) return
-                            const r = e.currentTarget.getBoundingClientRect()
-                            const rel = e.clientX - r.left
-                            let mode = 'move'
-                            if (rel < HANDLE_PX) mode = 'resize-left'
-                            else if (rel > r.width - HANDLE_PX) mode = 'resize-right'
-                            beginDrag(e, emp, previewCell, mode)
-                          }}
-                          onMouseMove={(e) => {
-                            // Solo aplica a mouse — en touch no hay hover, el cursor visual es irrelevante
-                            if (dragStateRef.current) return
-                            const r = e.currentTarget.getBoundingClientRect()
-                            const rel = e.clientX - r.left
-                            e.currentTarget.style.cursor = (rel < HANDLE_PX || rel > r.width - HANDLE_PX) ? 'ew-resize' : 'grab'
-                          }}
-                          className="absolute top-2 bottom-2 rounded-md border-2 flex items-center text-xs font-semibold transition-shadow hover:shadow-md select-none overflow-hidden touch-none"
-                          style={{
-                            left: `${geo.leftPct}%`,
-                            width: `${geo.widthPct}%`,
-                            background: (cell.color || '#fbbf24') + '40',
-                            borderColor: (cell.color || '#fbbf24'),
-                            color: '#1f2937',
-                            cursor: 'grab',
-                          }}
-                        >
-                          <span className="px-2 truncate pointer-events-none">
-                            {previewCell.start} – {previewCell.end}
-                          </span>
-                          {hasBreak && (
-                            <div
-                              className="absolute top-0 bottom-0 bg-gray-900/25 border-l border-r border-gray-700/40 flex items-center justify-center text-[10px] text-gray-900 pointer-events-none overflow-hidden gap-0.5"
-                              style={{ left: `${breakLeftPct}%`, width: `${breakWidthPct}%` }}
-                              title={`Refrigerio: ${breakMin} min`}
-                            >
-                              <Coffee className="w-2.5 h-2.5 flex-shrink-0" />
-                              <span className="whitespace-nowrap font-medium">{breakMin}m</span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()
-                  ) : (
-                    !cell && (
-                      <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-300 hover:text-primary-600 transition-colors" data-role="track">
-                        + Asignar turno
-                      </div>
-                    )
-                  )}
-
-                  {/* Popover */}
-                  {isEditingThis && (
-                    <div className="absolute left-1/2 top-full mt-1 z-30 -translate-x-1/2">
+                  {/* Popover de edición (anclado a la posición del día/celda) */}
+                  {editDk && (
+                    <div className="absolute top-full mt-1 z-30 -translate-x-1/2" style={{ left: editingCell.leftPx ?? (anchorIdx * DAY_W + DAY_W / 2) }}>
                       <CellPopover
                         ref={popoverRef}
                         templates={templates}
-                        cell={cell}
-                        onPickTemplate={(t) => assignTemplate(emp.id, selectedDayKey, t)}
-                        onRest={() => setRest(emp.id, selectedDayKey)}
-                        onRecovery={() => setRecovery(emp.id, selectedDayKey)}
-                        onClear={() => clearCell(emp.id, selectedDayKey)}
-                        onCustom={(s, e, b) => setCustom(emp.id, selectedDayKey, s, e, b)}
+                        cell={editCell}
+                        onPickTemplate={(t) => assignTemplate(emp.id, editDk, t)}
+                        onRest={() => setRest(emp.id, editDk)}
+                        onRecovery={() => setRecovery(emp.id, editDk)}
+                        onClear={() => clearCell(emp.id, editDk)}
+                        onCustom={(s, e, b) => setCustom(emp.id, editDk, s, e, b)}
                         onClose={() => setEditingCell(null)}
                       />
                     </div>
@@ -1430,11 +1772,15 @@ function DailyTimeline({
         </div>
       </div>
 
-      {/* Footer: leyenda */}
-      <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500 flex flex-wrap items-center gap-3">
-        <span>Horario: {String(MIN_HOUR).padStart(2,'0')}:00 – {String(MAX_HOUR).padStart(2,'0')}:00</span>
-        <span className="text-gray-300">·</span>
-        <span>Click en una barra para editar · Arrastra el centro para mover · Arrastra los bordes para redimensionar · Click en el espacio vacío para asignar</span>
+      {/* Footer: leyenda + ayuda */}
+      <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="flex items-center gap-1">
+          <MoveHorizontal className="w-3.5 h-3.5 text-gray-400" /> Arrastra o desliza para recorrer los días · los turnos cruzan la medianoche sin cortes
+        </span>
+        <span className="text-gray-300 hidden sm:inline">·</span>
+        <span className="hidden sm:inline">Toca un espacio vacío para asignar · arrastra una barra para mover o redimensionar</span>
+        <span className="text-gray-300 hidden lg:inline">·</span>
+        <span className="hidden lg:inline">Usa las flechas de arriba para cambiar de semana</span>
       </div>
     </div>
   )
