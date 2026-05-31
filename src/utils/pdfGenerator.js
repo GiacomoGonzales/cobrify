@@ -209,6 +209,28 @@ export const preloadLogo = async (logoUrl) => {
 }
 
 /**
+ * jsPDF NO soporta WebP (ni AVIF). Las fotos nuevas se suben en WebP, así que
+ * sin esto el logo no aparece en el PDF. Esta función toma una imagen ya
+ * cargada (<img>) y la "redibuja" en un canvas para devolverla como PNG, que
+ * jsPDF sí entiende. Si por algo falla, devuelve null y se usa la original.
+ */
+const imageElementToPng = (img) => {
+  try {
+    const w = img.naturalWidth || img.width
+    const h = img.naturalHeight || img.height
+    if (!w || !h) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    return canvas.toDataURL('image/png')
+  } catch (e) {
+    console.warn('⚠️ No se pudo normalizar la imagen del logo a PNG:', e?.message || e)
+    return null
+  }
+}
+
+/**
  * Carga imagen con reintentos
  * Retorna null si falla (no lanza error para no bloquear la generación del PDF)
  */
@@ -325,12 +347,17 @@ const loadImageAsBase64 = async (url) => {
       })
     }
 
-    // Fallback: intentar con fetch directo
+    // Fallback: intentar con fetch directo.
+    // cache:'reload' fuerza descargar de la red SIN usar la copia guardada en
+    // el navegador. Esto evita el caso en que el navegador tenía guardada una
+    // copia vieja del logo (sin el permiso CORS, de cuando se cargó por un <img>)
+    // y la reusaba por 1 año (Cache-Control: immutable), haciendo fallar el
+    // fetch con CORS aunque el servidor ya devuelva el permiso correcto.
     console.log('🔄 Fallback: Intentando fetch directo')
     const response = await fetch(url, {
       mode: 'cors',
       credentials: 'omit',
-      cache: 'default'
+      cache: 'reload'
     })
 
     if (!response.ok) {
@@ -507,6 +534,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
           img.onerror = (err) => reject(err)
         })
 
+        // jsPDF no soporta WebP: convertimos a PNG antes de dibujar.
+        const pngData = imageElementToPng(img)
+        const drawData = pngData || imgData
+        const drawFormat = pngData ? 'PNG' : format
+
         const aspectRatio = img.width / img.height
         const maxLogoHeight = headerHeight - 15
         // Ancho máximo: hasta donde empieza el recuadro del documento menos margen
@@ -574,7 +606,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
         actualLogoWidth = logoWidth // Guardar el ancho real para posicionar el texto
         const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
-        doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
+        doc.addImage(drawData, drawFormat, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
       }
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo:', error.message)
@@ -2556,10 +2588,14 @@ export const generateExitNotePDF = async (invoice, companySettings) => {
         const img = new Image()
         img.src = imgData
         await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve })
+        // jsPDF no soporta WebP: convertimos a PNG antes de dibujar.
+        const pngData = imageElementToPng(img)
+        const drawData = pngData || imgData
+        const drawFormat = pngData ? 'PNG' : format
         const aspectRatio = img.width / img.height
         const logoHeight = 50
         const logoWidth = Math.min(logoHeight * aspectRatio, 150)
-        doc.addImage(imgData, format, MARGIN_LEFT, currentY, logoWidth, logoHeight)
+        doc.addImage(drawData, drawFormat, MARGIN_LEFT, currentY, logoWidth, logoHeight)
       }
     } catch (e) { /* Continuar sin logo */ }
   }

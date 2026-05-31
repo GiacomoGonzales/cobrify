@@ -368,3 +368,127 @@ export async function migrateAllBusinessImages(onProgress) {
     perBusiness,
   }
 }
+
+/**
+ * Inventario (solo lectura) de imágenes que AÚN están en Cloudinary, por negocio.
+ * Pensado para la migración Cloudinary → Cloudflare R2: cuenta cuántos assets de
+ * res.cloudinary.com referencia cada negocio (productos + logos/portadas del negocio),
+ * para poder elegir el negocio más pequeño como piloto. NO descarga, sube ni modifica nada.
+ *
+ * Campos revisados:
+ *  - Productos (businesses/{id}/products): `imageUrl` (legacy) + `imageUrls[]`
+ *  - Negocio (businesses/{id}): logoUrl, catalogLogoUrl, catalogLogoLandscape,
+ *    catalogCoverImage, catalogCoverImageMobile
+ *
+ * @param {function} onProgress - callback({ businessIndex, totalBusinesses, businessName })
+ * @returns {Promise<{
+ *   totalBusinesses: number,
+ *   businessesWithCloudinary: number,
+ *   totalCloudinaryImages: number,
+ *   totalProductImages: number,
+ *   totalBusinessImages: number,
+ *   perBusiness: Array<{
+ *     businessId, businessName, totalProducts,
+ *     productImages, businessImages, cloudinaryImages,
+ *     failed?: boolean, errorMessage?: string
+ *   }>
+ * }>}
+ */
+export async function analyzeCloudinaryAssets(onProgress) {
+  const { collection, getDocs, doc, getDoc } = await import('firebase/firestore')
+  const { db } = await import('@/lib/firebase')
+
+  const isCloudinary = (url) => typeof url === 'string' && url.includes('res.cloudinary.com')
+  const BUSINESS_IMAGE_FIELDS = [
+    'logoUrl',
+    'catalogLogoUrl',
+    'catalogLogoLandscape',
+    'catalogCoverImage',
+    'catalogCoverImageMobile',
+  ]
+
+  const usersSnapshot = await getDocs(collection(db, 'users'))
+  const businessOwners = usersSnapshot.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(u => !u.ownerId) // sólo negocios (no sub-usuarios)
+
+  const totalBusinesses = businessOwners.length
+  let totalCloudinaryImages = 0
+  let totalProductImages = 0
+  let totalBusinessImages = 0
+  const perBusiness = []
+
+  for (let bi = 0; bi < businessOwners.length; bi++) {
+    const owner = businessOwners[bi]
+    const businessId = owner.id
+    const businessName = owner.businessName || owner.razonSocial || owner.email || businessId
+
+    onProgress?.({ businessIndex: bi + 1, totalBusinesses, businessName })
+
+    try {
+      // Imágenes a nivel de negocio (doc businesses/{id})
+      let businessImages = 0
+      const bizSnap = await getDoc(doc(db, 'businesses', businessId))
+      if (bizSnap.exists()) {
+        const b = bizSnap.data()
+        for (const field of BUSINESS_IMAGE_FIELDS) {
+          if (isCloudinary(b[field])) businessImages++
+        }
+      }
+
+      // Imágenes de productos
+      let productImages = 0
+      const productsSnap = await getDocs(collection(db, 'businesses', businessId, 'products'))
+      for (const pd of productsSnap.docs) {
+        const p = pd.data()
+        if (isCloudinary(p.imageUrl)) productImages++
+        if (Array.isArray(p.imageUrls)) {
+          for (const u of p.imageUrls) if (isCloudinary(u)) productImages++
+        }
+      }
+
+      const cloudinaryImages = businessImages + productImages
+      totalCloudinaryImages += cloudinaryImages
+      totalProductImages += productImages
+      totalBusinessImages += businessImages
+
+      perBusiness.push({
+        businessId,
+        businessName,
+        totalProducts: productsSnap.size,
+        productImages,
+        businessImages,
+        cloudinaryImages,
+      })
+    } catch (err) {
+      console.error(`Error analizando negocio ${businessName} (${businessId}):`, err)
+      perBusiness.push({
+        businessId,
+        businessName,
+        totalProducts: 0,
+        productImages: 0,
+        businessImages: 0,
+        cloudinaryImages: 0,
+        failed: true,
+        errorMessage: err.message,
+      })
+    }
+  }
+
+  // Orden: negocios con menos assets en Cloudinary primero (mejores candidatos a piloto),
+  // dejando al final los que ya no tienen nada en Cloudinary (cloudinaryImages === 0).
+  perBusiness.sort((a, b) => {
+    if (a.cloudinaryImages === 0 && b.cloudinaryImages > 0) return 1
+    if (b.cloudinaryImages === 0 && a.cloudinaryImages > 0) return -1
+    return a.cloudinaryImages - b.cloudinaryImages
+  })
+
+  return {
+    totalBusinesses,
+    businessesWithCloudinary: perBusiness.filter(b => b.cloudinaryImages > 0).length,
+    totalCloudinaryImages,
+    totalProductImages,
+    totalBusinessImages,
+    perBusiness,
+  }
+}

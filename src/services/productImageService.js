@@ -1,6 +1,6 @@
 import { storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { uploadToCloudinary } from '@/utils/cloudinary'
+import { uploadImage } from '@/services/imageUploadService'
 
 // Detección única de soporte WebP en el navegador
 const supportsWebP = (() => {
@@ -149,11 +149,11 @@ export const uploadProductImage = async (businessId, productId, file) => {
       )
     }
 
-    console.log('☁️ Subiendo imagen a Cloudinary...')
-    const cloudinaryUrl = await uploadToCloudinary(compressed)
-    console.log('✅ Imagen subida exitosamente:', cloudinaryUrl)
+    console.log('☁️ Subiendo imagen...')
+    const url = await uploadImage(compressed, { folder: 'cobrify/products', businessId })
+    console.log('✅ Imagen subida exitosamente:', url)
 
-    return cloudinaryUrl
+    return url
   } catch (error) {
     console.error('❌ Error al subir imagen:', error)
     throw error

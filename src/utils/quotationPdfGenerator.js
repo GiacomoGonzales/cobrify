@@ -202,7 +202,7 @@ const loadImageAsBase64 = async (url) => {
     const response = await fetch(url, {
       mode: 'cors',
       credentials: 'omit',
-      cache: 'default'
+      cache: 'reload'
     })
 
     if (!response.ok) {
@@ -272,7 +272,7 @@ const loadProductImageAsBase64 = async (url, timeout = 8000) => {
         })
       }
 
-      const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'default' })
+      const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const blob = await response.blob()
       return await new Promise((resolve, reject) => {

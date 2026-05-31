@@ -26,6 +26,7 @@ import {
   deleteResources,
   listResources,
 } from './src/services/cloudinaryAdmin.js'
+import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -9742,6 +9743,271 @@ export const migrateCloudinaryImages = onCall(
       return stats
     } catch (err) {
       console.error('migrateCloudinaryImages error:', err)
+      stats.errors++
+      throw new HttpsError('internal', err.message || String(err))
+    }
+  }
+)
+
+/**
+ * Sube UNA imagen NUEVA directo a Cloudflare R2 (egress $0 desde el día uno).
+ *
+ * La app manda la imagen ya comprimida en base64; acá se decodifica y se sube
+ * al bucket con una key namespaceada por usuario. Devuelve la URL pública de R2.
+ *
+ * Es el "proxy" de subida: el navegador no puede subir sin firma a R2, así que
+ * pasa por esta función. El egress de ESTA subida es ínfimo; el ahorro real es
+ * en las VISTAS (que ya no salen de Cloudinary).
+ *
+ * Requiere R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY (Secret Manager).
+ */
+export const uploadImageToR2 = onCall(
+  {
+    region: 'us-central1',
+    cors: true,
+    timeoutSeconds: 60,
+    memory: '512MiB',
+    secrets: ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado para subir imágenes')
+    }
+    const { dataBase64, contentType, folder } = request.data || {}
+    if (!dataBase64 || typeof dataBase64 !== 'string') {
+      throw new HttpsError('invalid-argument', 'Falta la imagen (dataBase64)')
+    }
+    const ct = String(contentType || 'image/webp').toLowerCase()
+    const EXT_BY_TYPE = {
+      'image/webp': 'webp',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/avif': 'avif',
+    }
+    const ext = EXT_BY_TYPE[ct]
+    if (!ext) {
+      throw new HttpsError('invalid-argument', 'Tipo de imagen no soportado: ' + ct)
+    }
+    const buffer = Buffer.from(dataBase64, 'base64')
+    if (!buffer.length) {
+      throw new HttpsError('invalid-argument', 'Imagen vacía')
+    }
+    if (buffer.length > 10 * 1024 * 1024) {
+      throw new HttpsError('invalid-argument', 'Imagen demasiado grande (máx 10MB)')
+    }
+    // Sanitiza la carpeta y arma una key única bajo el uid del usuario.
+    const safeFolder =
+      String(folder || 'uploads')
+        .replace(/[^a-zA-Z0-9/_-]/g, '')
+        .replace(/\/+/g, '/')
+        .replace(/^\/|\/$/g, '') || 'uploads'
+    const rand = Math.random().toString(36).slice(2, 10)
+    const key = `${safeFolder}/${request.auth.uid}/${Date.now()}-${rand}.${ext}`
+    const { url } = await putObjectToR2({ key, body: buffer, contentType: ct })
+    return { url, key }
+  }
+)
+
+/**
+ * Migración Cloudinary → Cloudflare R2, UN negocio a la vez (modelo piloto).
+ *
+ * Copia FIEL (sin transformar) cada imagen del negocio que aún viva en
+ * res.cloudinary.com hacia el bucket R2 (cobrify-media), conservando la misma
+ * ruta, y reescribe la URL en Firestore para que la app la sirva desde R2
+ * (egress $0). Guarda un BACKUP de cada URL original para poder revertir:
+ *   - campos escalares: `<campo>_r2Backup`
+ *   - arreglo imageUrls: `imageUrls_r2Backup`
+ *
+ * NUNCA borra de Cloudinary — el original queda intacto como respaldo hasta
+ * que se verifique todo y se haga el cleanup en un paso separado.
+ *
+ * Es idempotente: las URLs que ya apuntan a R2 se saltan, así que se puede
+ * reapretar sin duplicar trabajo. Soporta reanudación por timeout vía
+ * resumeFrom.{productId}.
+ *
+ * Requiere R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY (Secret Manager).
+ */
+export const migrateBusinessImagesToR2 = onCall(
+  {
+    region: 'us-central1',
+    cors: true,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists) {
+      throw new HttpsError('permission-denied', 'Solo administradores')
+    }
+
+    const businessId = request.data?.businessId
+    if (!businessId) {
+      throw new HttpsError('invalid-argument', 'Falta businessId (se migra un negocio a la vez)')
+    }
+    const dryRun = request.data?.dryRun !== false // default true por seguridad
+    const resumeFrom = request.data?.resumeFrom || null
+
+    const startMs = Date.now()
+    const TIME_BUDGET_MS = 8 * 60 * 1000 // 8 min, margen vs timeout de 9
+
+    const stats = {
+      dryRun,
+      businessId,
+      scanned: 0,
+      candidates: 0,
+      migrated: 0,
+      errors: 0,
+      bytes: 0,
+      sampleCandidates: [],
+      lastProcessed: null,
+      resumeFrom: null,
+      doneAt: null,
+    }
+
+    const BUSINESS_FIELDS = [
+      'logoUrl',
+      'catalogLogoUrl',
+      'catalogLogoLandscape',
+      'catalogCoverImage',
+      'catalogCoverImageMobile',
+    ]
+
+    const timeUp = () => Date.now() - startMs > TIME_BUDGET_MS
+
+    // Cache dentro del run: una misma URL se copia a R2 una sola vez.
+    const urlMap = new Map()
+
+    async function copyOnce(oldUrl) {
+      if (urlMap.has(oldUrl)) return urlMap.get(oldUrl)
+      try {
+        const result = await migrateUrlToR2(oldUrl)
+        urlMap.set(oldUrl, result.newUrl)
+        stats.migrated++
+        stats.bytes += result.bytes || 0
+        return result.newUrl
+      } catch (err) {
+        stats.errors++
+        if (stats.errors <= 5) {
+          console.error(`[r2] copia falló para ${oldUrl}: ${err.message}`)
+        }
+        urlMap.set(oldUrl, null)
+        return null
+      }
+    }
+
+    // Candidata = vive en Cloudinary o Firebase Storage y todavía no está en R2.
+    const isCandidate = (url) =>
+      (isCloudinaryUrl(url) || isFirebaseStorageUrl(url)) && !isR2Url(url)
+    const noteCandidate = (url) => {
+      stats.candidates++
+      if (stats.sampleCandidates.length < 10) stats.sampleCandidates.push(url)
+    }
+
+    // Procesa un doc (business o product): copia sus URLs Cloudinary a R2 y
+    // arma un único update con las nuevas URLs + backups. Devuelve true si
+    // escribió algo en Firestore.
+    async function processDoc(docRef, data, scalarFields) {
+      const updates = {}
+
+      // Campos escalares
+      for (const field of scalarFields) {
+        const val = data[field]
+        if (typeof val !== 'string' || !val) continue
+        stats.scanned++
+        if (!isCandidate(val)) continue
+        noteCandidate(val)
+        if (dryRun) continue
+        const newUrl = await copyOnce(val)
+        if (!newUrl) continue
+        updates[field] = newUrl
+        // Backup de la URL original (solo si no existe ya, para no pisarlo en reruns)
+        if (data[`${field}_r2Backup`] === undefined) {
+          updates[`${field}_r2Backup`] = val
+        }
+      }
+
+      // Arreglo imageUrls (solo productos lo tienen)
+      if (Array.isArray(data.imageUrls)) {
+        let changed = false
+        const newArr = [...data.imageUrls]
+        for (let i = 0; i < newArr.length; i++) {
+          const val = newArr[i]
+          if (typeof val !== 'string' || !val) continue
+          stats.scanned++
+          if (!isCandidate(val)) continue
+          noteCandidate(val)
+          if (dryRun) continue
+          const newUrl = await copyOnce(val)
+          if (!newUrl) continue
+          newArr[i] = newUrl
+          changed = true
+        }
+        if (changed) {
+          updates.imageUrls = newArr
+          if (data.imageUrls_r2Backup === undefined) {
+            updates.imageUrls_r2Backup = data.imageUrls
+          }
+        }
+      }
+
+      if (Object.keys(updates).length === 0) return false
+      try {
+        await docRef.update(updates)
+        return true
+      } catch (err) {
+        stats.errors++
+        console.error(`[r2] Firestore update falló (${docRef.path}):`, err.message)
+        return false
+      }
+    }
+
+    try {
+      const businessRef = db.collection('businesses').doc(businessId)
+
+      // Fase 1: campos del business (logos/portadas). Se salta si reanudamos
+      // dentro de los productos.
+      const resumingInProducts = !!resumeFrom?.productId
+      if (!resumingInProducts) {
+        const businessSnap = await businessRef.get()
+        if (!businessSnap.exists) {
+          throw new HttpsError('not-found', `No existe el negocio ${businessId}`)
+        }
+        await processDoc(businessRef, businessSnap.data(), BUSINESS_FIELDS)
+      }
+
+      // Fase 2: productos (ordenados por id, con startAt para reanudar).
+      if (timeUp()) {
+        // Se acabó el tiempo en la fase de business: reanudar desde el primer producto.
+        stats.resumeFrom = { productId: '' }
+      } else {
+        let productsQuery = businessRef.collection('products').orderBy('__name__')
+        if (resumeFrom?.productId) {
+          productsQuery = productsQuery.startAt(resumeFrom.productId)
+        }
+        const productsSnap = await productsQuery.get()
+
+        for (const prodDoc of productsSnap.docs) {
+          if (timeUp()) {
+            stats.resumeFrom = { productId: prodDoc.id }
+            break
+          }
+          // imageUrl (legacy escalar) + imageUrls (arreglo, manejado dentro)
+          await processDoc(prodDoc.ref, prodDoc.data(), ['imageUrl'])
+          stats.lastProcessed = { productId: prodDoc.id }
+        }
+      }
+
+      stats.doneAt = stats.resumeFrom ? null : new Date().toISOString()
+      return stats
+    } catch (err) {
+      if (err instanceof HttpsError) throw err
+      console.error('migrateBusinessImagesToR2 error:', err)
       stats.errors++
       throw new HttpsError('internal', err.message || String(err))
     }

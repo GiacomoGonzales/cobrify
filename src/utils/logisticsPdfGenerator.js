@@ -19,8 +19,9 @@ const loadLogo = async (logoUrl) => {
       const { url, data, timestamp } = JSON.parse(cached)
       if (url === logoUrl && Date.now() - timestamp < 24 * 60 * 60 * 1000) return data
     }
-    // Descargar
-    const response = await fetch(logoUrl)
+    // Descargar (cache:'reload' = no usar la copia vieja del navegador, para
+    // que el logo migrado a R2 baje fresco y con permiso CORS)
+    const response = await fetch(logoUrl, { mode: 'cors', credentials: 'omit', cache: 'reload' })
     const blob = await response.blob()
     return new Promise((resolve) => {
       const reader = new FileReader()

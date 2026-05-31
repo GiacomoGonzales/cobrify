@@ -107,7 +107,7 @@ const loadImageAsBase64 = async (url) => {
     const response = await fetch(url, {
       mode: 'cors',
       credentials: 'omit',
-      cache: 'default'
+      cache: 'reload'
     })
 
     if (!response.ok) {

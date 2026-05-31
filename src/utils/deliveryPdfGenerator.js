@@ -52,7 +52,7 @@ const loadImageAsBase64 = async (url) => {
       })
     }
 
-    const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'default' })
+    const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' })
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`)
     const blob = await response.blob()
     return new Promise((resolve, reject) => {

@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
-import { uploadToCloudinary } from '@/utils/cloudinary'
+import { uploadImage } from '@/services/imageUploadService'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
@@ -6514,7 +6514,7 @@ export default function Settings() {
                                     if (!file) return
                                     setUploadingCatalogLogo(true)
                                     try {
-                                      const url = await uploadToCloudinary(await compressForLogoSquare(file))
+                                      const url = await uploadImage(await compressForLogoSquare(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                       setCatalogLogoUrl(url)
                                       toast.success('Logo cuadrado subido')
                                     } catch (err) {
@@ -6572,7 +6572,7 @@ export default function Settings() {
                                     if (!file) return
                                     setUploadingCatalogLogoLandscape(true)
                                     try {
-                                      const url = await uploadToCloudinary(await compressForLogoLandscape(file))
+                                      const url = await uploadImage(await compressForLogoLandscape(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                       setCatalogLogoLandscape(url)
                                       toast.success('Logo horizontal subido')
                                     } catch (err) {
@@ -6773,7 +6773,7 @@ export default function Settings() {
                                       if (!file) return
                                       setUploadingCover(true)
                                       try {
-                                        const url = await uploadToCloudinary(await compressForCoverDesktop(file))
+                                        const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                         setCatalogCoverImage(url)
                                         toast.success('Portada desktop subida')
                                       } catch (err) {
@@ -6820,7 +6820,7 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCover(true)
                                   try {
-                                    const url = await uploadToCloudinary(await compressForCoverDesktop(file))
+                                    const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                     setCatalogCoverImage(url)
                                     toast.success('Portada desktop subida')
                                   } catch (err) {
@@ -6857,7 +6857,7 @@ export default function Settings() {
                                       if (!file) return
                                       setUploadingCoverMobile(true)
                                       try {
-                                        const url = await uploadToCloudinary(await compressForCoverMobile(file))
+                                        const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                         setCatalogCoverImageMobile(url)
                                         toast.success('Portada móvil subida')
                                       } catch (err) {
@@ -6904,7 +6904,7 @@ export default function Settings() {
                                   if (!file) return
                                   setUploadingCoverMobile(true)
                                   try {
-                                    const url = await uploadToCloudinary(await compressForCoverMobile(file))
+                                    const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                     setCatalogCoverImageMobile(url)
                                     toast.success('Portada móvil subida')
                                   } catch (err) {

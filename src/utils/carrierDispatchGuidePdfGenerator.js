@@ -123,7 +123,9 @@ const loadImageAsBase64 = async (url) => {
         resolve(canvas.toDataURL('image/png'))
       }
       img.onerror = reject
-      img.src = url
+      // Rompe-caché: forzamos descargar el logo fresco (y con permiso CORS),
+      // evitando que el navegador reuse una copia vieja sin permiso.
+      img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now()
     })
   } catch (error) {
     console.error('Error cargando imagen:', error)

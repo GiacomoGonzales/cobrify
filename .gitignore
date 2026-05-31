@@ -28,6 +28,10 @@ dist-ssr
 .env.local
 .env.production
 
+# R2 / Cloudflare credentials (migracion de imagenes) - NUNCA subir
+.r2.env
+*.r2.env
+
 # Setup and admin scripts with credentials
 setup-admin*.js
 setup-admin*.cjs
