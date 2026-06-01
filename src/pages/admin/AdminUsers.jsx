@@ -628,12 +628,27 @@ export default function AdminUsers() {
     }
 
     // Ordenar
-    result.sort((a, b) => {
-      let aVal = a[sortField]
-      let bVal = b[sortField]
+    // Para la columna "Uso" ordenamos por qué tan LLENO está el cupo de
+    // comprobantes (usados / límite), no por la cantidad bruta. Así, al ordenar
+    // de mayor a menor, aparecen primero a quienes se les están acabando los
+    // comprobantes (ej: 95/100 = 95% va antes que 400/500 = 80%), sin importar
+    // que sus planes sean de distinto tamaño. Los planes ilimitados (∞) reciben
+    // un valor muy bajo para que queden al final: nunca se quedan sin cupo.
+    const getSortValue = (u) => {
+      if (sortField === 'usage') {
+        const lim = u.limit
+        if (lim === -1 || lim === 0) return -1 // ilimitado (∞) → al final
+        const used = u.usage?.invoicesThisMonth || 0
+        return used / lim
+      }
+      let val = u[sortField]
+      if (val instanceof Date) val = val.getTime()
+      return val
+    }
 
-      if (aVal instanceof Date) aVal = aVal.getTime()
-      if (bVal instanceof Date) bVal = bVal.getTime()
+    result.sort((a, b) => {
+      const aVal = getSortValue(a)
+      const bVal = getSortValue(b)
 
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
