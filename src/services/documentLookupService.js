@@ -240,8 +240,13 @@ export const consultarEstablecimientos = async (ruc) => {
     const response = await httpRequest(url, options)
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'No se pudieron consultar los establecimientos')
+      const errorData = await response.json().catch(() => ({}))
+      const detalle = errorData.error || errorData.message || `HTTP ${response.status}`
+      // 401/402/403 normalmente = el plan/token de apiperu no incluye este endpoint
+      if ([401, 402, 403].includes(response.status)) {
+        throw new Error(`Tu plan de apiperu.dev no incluye la consulta de establecimientos (${detalle})`)
+      }
+      throw new Error(`No se pudieron consultar los establecimientos: ${detalle}`)
     }
 
     const result = await response.json()
@@ -249,7 +254,7 @@ export const consultarEstablecimientos = async (ruc) => {
     if (!result || result.success === false) {
       return {
         success: false,
-        error: result.message || 'No se encontraron establecimientos para este RUC'
+        error: result.message || result.error || 'No se encontraron establecimientos para este RUC'
       }
     }
 

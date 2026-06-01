@@ -57,12 +57,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({ ruc })
     })
 
-    if (!apiResponse.ok) {
-      console.error(`❌ Error de API Perú (establecimientos): ${apiResponse.status}`)
-      throw new Error('Error al consultar API Perú')
-    }
+    // Leer el cuerpo siempre (apiperu manda JSON con el detalle, incluso en error)
+    const result = await apiResponse.json().catch(() => null)
 
-    const result = await apiResponse.json()
+    if (!apiResponse.ok) {
+      console.error(`❌ Error de API Perú (establecimientos): ${apiResponse.status}`, result)
+      // Reenviar el estado y el mensaje REAL de apiperu para poder diagnosticar
+      // (p.ej. 401/403 = el plan/token no incluye este endpoint).
+      return res.status(apiResponse.status).json({
+        success: false,
+        error: result?.message || result?.error || `API Perú respondió ${apiResponse.status}`,
+        apiStatus: apiResponse.status
+      })
+    }
 
     // Devolver respuesta tal cual ({ success, data: [...] })
     return res.status(200).json(result)
