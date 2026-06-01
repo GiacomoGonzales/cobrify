@@ -43,6 +43,13 @@ export const LOGO_SPECS = {
  * @returns {Promise<string>} Base64 string (sin esquema data:image)
  */
 export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
+  // Cache-busting: fuerza una descarga FRESCA del logo para no reusar una copia
+  // vieja cacheada sin permiso CORS (mismo problema que se arregló en los PDF tras
+  // migrar a Cloudflare R2, que manda Cache-Control: immutable). Solo http(s).
+  const freshUrl = /^https?:\/\//i.test(url)
+    ? `${url}${url.includes('?') ? '&' : '?'}_cb=${Date.now()}`
+    : url
+
   // Si estamos en plataforma nativa, usar Capacitor HTTP para evitar CORS
   if (Capacitor.isNativePlatform()) {
     console.log('📱 Plataforma nativa detectada, usando Capacitor HTTP para evitar CORS');
@@ -56,7 +63,7 @@ export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
     try {
       // Descargar imagen con Capacitor HTTP (bypasses CORS)
       const response = await CapacitorHttp.get({
-        url: url,
+        url: freshUrl,
         responseType: 'blob'
       });
 
@@ -132,7 +139,7 @@ export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
       reject(new Error('Error al cargar imagen desde URL'));
     };
 
-    img.src = url;
+    img.src = freshUrl;
   });
 }
 
