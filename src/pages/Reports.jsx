@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   TrendingUp,
   DollarSign,
@@ -192,6 +192,12 @@ export default function Reports() {
   const [brandDetailSearch, setBrandDetailSearch] = useState('')
   const [brandDetailPage, setBrandDetailPage] = useState(0)
   const BRAND_DETAIL_PER_PAGE = 25
+  // Gráfico "evolución por mes" de un producto: nombre seleccionado + métrica.
+  const [productChartName, setProductChartName] = useState('')
+  const [productChartMetric, setProductChartMetric] = useState('revenue') // 'revenue' | 'quantity'
+  const [productChartSearch, setProductChartSearch] = useState('') // texto del buscador de producto
+  const [productChartOpen, setProductChartOpen] = useState(false)   // dropdown del buscador abierto
+  const productChartRef = useRef(null)
 
   // Resetear paginación cuando cambian los filtros
   useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate])
@@ -641,6 +647,60 @@ export default function Reports() {
       .sort((a, b) => b.revenue - a.revenue)
       // Sin límite - mostrar todos los productos
   }, [filteredInvoices, products, recipes])
+
+  // Evolución mensual del producto seleccionado (ventas S/ y cantidad).
+  // Arma la línea de tiempo con TODOS los meses con actividad en el rango y suma
+  // las ventas del producto en cada uno (0 en los meses sin ese producto).
+  const productMonthlyData = useMemo(() => {
+    if (!productChartName) return []
+    const byMonth = {}
+    filteredInvoices.forEach(invoice => {
+      const d = getInvoiceDate(invoice)
+      if (!d) return
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      if (!byMonth[key]) byMonth[key] = { revenue: 0, quantity: 0, date: new Date(d.getFullYear(), d.getMonth(), 1) }
+      // Descuento global distribuido proporcionalmente (igual que topProducts).
+      const invoiceSubtotal = invoice.items?.reduce((s, it) => s + (it.subtotal || ((it.quantity || 0) * (it.unitPrice || it.price || 0))), 0) || 0
+      const invoiceTotal = invoice.total || invoiceSubtotal
+      const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
+      invoice.items?.forEach(item => {
+        if ((item.name || item.description) !== productChartName) return
+        const qty = item.quantity || 0
+        const itemSubtotal = item.subtotal || (qty * (item.unitPrice || item.price || 0))
+        byMonth[key].revenue = Number((byMonth[key].revenue + itemSubtotal * discountFactor).toFixed(2))
+        byMonth[key].quantity += qty
+      })
+    })
+    return Object.entries(byMonth)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, v]) => ({
+        month: v.date.toLocaleDateString('es-PE', { month: 'short', year: '2-digit' }).replace('.', ''),
+        ventas: v.revenue,
+        cantidad: v.quantity,
+      }))
+  }, [filteredInvoices, productChartName])
+
+  // Resultados del buscador de producto del gráfico. Limitado a 50 para que
+  // funcione fluido en negocios con miles de productos.
+  const productChartResults = useMemo(() => {
+    const q = productChartSearch.trim().toLowerCase()
+    const base = q ? topProducts.filter(p => (p.name || '').toLowerCase().includes(q)) : topProducts
+    return base.slice(0, 50)
+  }, [topProducts, productChartSearch])
+
+  // Cierra el dropdown del buscador al hacer click fuera. Si el usuario escribió
+  // algo pero no eligió, revierte el texto al producto seleccionado.
+  useEffect(() => {
+    if (!productChartOpen) return
+    const onClick = (e) => {
+      if (productChartRef.current && !productChartRef.current.contains(e.target)) {
+        setProductChartOpen(false)
+        setProductChartSearch(productChartName)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [productChartOpen, productChartName])
 
   // Ventas por categoría
   const salesByCategory = useMemo(() => {
@@ -2742,6 +2802,114 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Evolución por mes de un producto (selector + toggle Ventas/Cantidad) */}
+          <Card>
+            <CardHeader>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary-600" />
+                  <CardTitle>Evolución por mes</CardTitle>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  {/* Buscador libre de producto: escribí y elegí (como en Compras) */}
+                  <div className="relative flex-1 sm:max-w-md" ref={productChartRef}>
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={productChartSearch}
+                      onChange={(e) => { setProductChartSearch(e.target.value); setProductChartOpen(true) }}
+                      onFocus={(e) => { setProductChartOpen(true); e.target.select() }}
+                      placeholder="Buscar producto por nombre..."
+                      className="w-full text-sm border border-gray-300 rounded-lg pl-9 pr-3 py-2 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    {productChartOpen && productChartSearch.trim() && (
+                      <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                        {productChartResults.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">No se encontró ningún producto</div>
+                        ) : (
+                          productChartResults.map((p) => (
+                            <button
+                              key={p.name}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); setProductChartName(p.name); setProductChartSearch(p.name); setProductChartOpen(false) }}
+                              className={`w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 ${p.name === productChartName ? 'bg-primary-50' : ''}`}
+                            >
+                              <span className="block text-sm text-gray-900">{p.name}</span>
+                              {p.sku && <span className="block text-xs text-gray-400">{p.sku}</span>}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex bg-gray-100 rounded-lg p-0.5 self-start sm:self-auto flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setProductChartMetric('revenue')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${productChartMetric === 'revenue' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      Ventas (S/)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProductChartMetric('quantity')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${productChartMetric === 'quantity' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      Cantidad
+                    </button>
+                  </div>
+                </div>
+                {productChartName && (
+                  <p className="text-sm text-gray-600">
+                    Mostrando: <span className="font-semibold text-gray-900">{productChartName}</span>
+                  </p>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!productChartName ? (
+                <div className="h-[300px] flex flex-col items-center justify-center text-center text-sm text-gray-500 gap-2">
+                  <Search className="w-6 h-6 text-gray-300" />
+                  Buscá y elegí un producto arriba para ver su evolución por mes.
+                </div>
+              ) : productMonthlyData.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center text-sm text-gray-500">
+                  No hay ventas de este producto en el período seleccionado.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={productMonthlyData} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorProductoMes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
+                    <YAxis stroke="#6b7280" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                      formatter={(value) => productChartMetric === 'revenue'
+                        ? [`S/ ${Number(value).toFixed(2)}`, 'Ventas']
+                        : [`${Number(value)} u.`, 'Cantidad']}
+                      labelStyle={{ fontWeight: 'bold' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={productChartMetric === 'revenue' ? 'ventas' : 'cantidad'}
+                      stroke="#3b82f6"
+                      strokeWidth={2.5}
+                      fill="url(#colorProductoMes)"
+                      dot={{ fill: '#3b82f6', r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Tabla de productos */}
           <Card>
