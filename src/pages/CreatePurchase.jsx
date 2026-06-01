@@ -1073,6 +1073,24 @@ export default function CreatePurchase() {
         return false
       }
 
+      // Validar lote y vencimiento: deben ir juntos (ambos llenos o ambos vacíos)
+      const hasBatch = (item.batchNumber || '').trim() !== ''
+      const hasExpiry = (item.expirationDate || '').trim() !== ''
+      if (hasExpiry && !hasBatch) {
+        setMessage({
+          type: 'error',
+          text: `El producto "${item.productName}" tiene fecha de vencimiento pero falta el número de lote`,
+        })
+        return false
+      }
+      if (hasBatch && !hasExpiry) {
+        setMessage({
+          type: 'error',
+          text: `El producto "${item.productName}" tiene número de lote pero falta la fecha de vencimiento`,
+        })
+        return false
+      }
+
       // Validar números de serie completos
       if (item.trackSerials && item.serialNumbers?.length > 0) {
         const emptySerials = item.serialNumbers.filter(sn => !sn.trim())

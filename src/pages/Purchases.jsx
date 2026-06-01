@@ -24,11 +24,17 @@ import {
   Store,
   MoreVertical,
   FileText,
+  Printer,
+  Receipt,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
+import { generatePurchasePDF } from '@/utils/purchasePdfGenerator'
+import { printPurchaseTicket } from '@/utils/printPurchaseTicket'
+import { preloadLogo } from '@/utils/pdfGenerator'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -36,7 +42,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
-import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction } from '@/services/firestoreService'
+import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction, getCompanySettings } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
@@ -73,7 +79,10 @@ export default function Purchases() {
   const toast = useToast()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
+  const { branding } = useBranding()
   const [purchases, setPurchases] = useState([])
+  const [companySettings, setCompanySettings] = useState(null)
+  const [downloadingPdf, setDownloadingPdf] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [viewingPurchase, setViewingPurchase] = useState(null)
@@ -125,7 +134,24 @@ export default function Purchases() {
     loadPurchases()
     loadBranches()
     loadWarehouses()
+    loadCompanySettings()
   }, [user])
+
+  const loadCompanySettings = async () => {
+    if (!user?.uid) return
+    // MODO DEMO: usar los datos del negocio de ejemplo
+    if (isDemoMode && demoData) {
+      setCompanySettings(demoData.business || null)
+      return
+    }
+    const result = await getCompanySettings(getBusinessId())
+    if (result.success) {
+      setCompanySettings(result.data)
+      if (result.data?.logoUrl) {
+        preloadLogo(result.data.logoUrl).catch(() => {})
+      }
+    }
+  }
 
   const loadBranches = async () => {
     if (!user?.uid || isDemoMode) return
@@ -256,6 +282,30 @@ export default function Purchases() {
       console.error('Error:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDownloadPdf = async (purchase) => {
+    if (!purchase) return
+    setDownloadingPdf(purchase.id)
+    try {
+      await generatePurchasePDF(purchase, companySettings, true, branding)
+      toast.success('PDF generado correctamente')
+    } catch (error) {
+      console.error('Error al generar PDF:', error)
+      toast.error('Error al generar el PDF')
+    } finally {
+      setDownloadingPdf(null)
+    }
+  }
+
+  const handlePrintTicket = (purchase) => {
+    if (!purchase) return
+    try {
+      printPurchaseTicket(purchase, companySettings || {})
+    } catch (error) {
+      console.error('Error al imprimir ticket:', error)
+      toast.error('Error al imprimir el ticket')
     }
   }
 
@@ -1492,6 +1542,25 @@ export default function Purchases() {
                       <Eye className="w-4 h-4 text-gray-500" />
                       Ver detalles
                     </button>
+                    <button
+                      onClick={() => { handleDownloadPdf(menuPurchase); setOpenMenuId(null) }}
+                      disabled={downloadingPdf === menuPurchase.id}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {downloadingPdf === menuPurchase.id ? (
+                        <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                      ) : (
+                        <Printer className="w-4 h-4 text-gray-500" />
+                      )}
+                      Imprimir PDF
+                    </button>
+                    <button
+                      onClick={() => { handlePrintTicket(menuPurchase); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Receipt className="w-4 h-4 text-gray-500" />
+                      Imprimir ticket
+                    </button>
                     {!menuPurchase._isIngredientPurchase && (
                       <button
                         onClick={() => { appNavigate(`compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
@@ -1729,9 +1798,35 @@ export default function Purchases() {
                   </>
                 )}
               </button>
-              <Button variant="outline" onClick={() => setViewingPurchase(null)}>
-                Cerrar
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => handleDownloadPdf(viewingPurchase)}
+                  disabled={downloadingPdf === viewingPurchase.id}
+                >
+                  {downloadingPdf === viewingPurchase.id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4 mr-2" />
+                      Imprimir PDF
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handlePrintTicket(viewingPurchase)}
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Imprimir ticket
+                </Button>
+                <Button variant="outline" onClick={() => setViewingPurchase(null)}>
+                  Cerrar
+                </Button>
+              </div>
             </div>
           </div>
         )}
