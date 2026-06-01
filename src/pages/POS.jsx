@@ -567,6 +567,9 @@ export default function POS() {
   const [showModifierModal, setShowModifierModal] = useState(false)
   const [productForModifiers, setProductForModifiers] = useState(null)
 
+  // Aviso de insumos insuficientes (recetas): bloquea la venta con un modal claro
+  const [missingIngredientsAlert, setMissingIngredientsAlert] = useState(null)
+
   // Custom product modal
   const [showCustomProductModal, setShowCustomProductModal] = useState(false)
   const [customProduct, setCustomProduct] = useState({
@@ -4405,20 +4408,27 @@ export default function POS() {
           return acc
         }, {})
 
-        const missingList = Object.entries(ingredientSummary)
-          .map(([name, data]) => `${name} (necesitas ${data.needed.toFixed(2)} ${data.unit}, disponible ${data.available.toFixed(2)})`)
-          .join(' · ')
+        // Lista de insumos faltantes para mostrar en el modal de aviso
+        const missingItems = Object.entries(ingredientSummary).map(([name, data]) => ({
+          name,
+          needed: data.needed,
+          available: data.available,
+          unit: data.unit,
+        }))
 
-        // Log explícito en consola para depurar cuando el toast pase desapercibido.
+        // Log explícito en consola para depurar.
         console.error('🛑 Venta abortada: faltan ingredientes de receta', {
           ingredientes: ingredientSummary,
           detalle: allMissingIngredients,
         })
 
-        abortCheckout(
-          `No hay suficiente stock para procesar la venta. Faltan ingredientes: ${missingList}`,
-          { duration: 7000 }
-        )
+        // Aviso bien visible: modal que no se pierde + toast de respaldo.
+        // NOTA: la duración del toast debe ser un NÚMERO (ms), no un objeto;
+        // antes se pasaba { duration: 7000 } y el toast se cerraba al instante.
+        setMissingIngredientsAlert({ items: missingItems })
+        toast.error('No hay suficiente stock de insumos para procesar la venta', 7000)
+        setIsProcessing(false)
+        checkoutGuardRef.current = false
         return
       } else {
         console.log('✅ Validación de ingredientes OK')
@@ -9728,6 +9738,50 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         product={productForModifiers}
         onConfirm={addToCartWithModifiers}
       />
+
+      {/* Aviso: faltan insumos (ingredientes de receta) para procesar la venta */}
+      <Modal
+        isOpen={!!missingIngredientsAlert}
+        onClose={() => setMissingIngredientsAlert(null)}
+        title="Faltan insumos para la venta"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-700">
+              No se puede procesar la venta porque no hay suficiente stock de algunos
+              insumos de la receta. Registra una compra o ajusta el stock de estos
+              insumos e inténtalo de nuevo:
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {(missingIngredientsAlert?.items || []).map((ing, idx) => {
+              const faltan = Math.max(0, Number(ing.needed || 0) - Number(ing.available || 0))
+              return (
+                <div key={idx} className="flex items-center justify-between gap-3 p-3">
+                  <span className="text-sm font-medium text-gray-900">{ing.name}</span>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-red-600">
+                      Faltan {faltan.toFixed(2)} {ing.unit}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Necesitas {Number(ing.needed || 0).toFixed(2)} · Tienes {Number(ing.available || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={() => setMissingIngredientsAlert(null)}>
+              Entendido
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (
