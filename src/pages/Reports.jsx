@@ -648,18 +648,59 @@ export default function Reports() {
       // Sin límite - mostrar todos los productos
   }, [filteredInvoices, products, recipes])
 
-  // Evolución mensual del producto seleccionado (ventas S/ y cantidad).
-  // Arma la línea de tiempo con TODOS los meses con actividad en el rango y suma
-  // las ventas del producto en cada uno (0 en los meses sin ese producto).
-  const productMonthlyData = useMemo(() => {
+  // Evolución del producto seleccionado por período (POR DÍA o POR MES según el
+  // rango, con el MISMO criterio que el gráfico general salesByPeriod): rangos
+  // cortos (hoy/semana/mes/custom<=60d) -> por día; el resto -> por mes. Rellena
+  // todos los períodos del rango (0 donde no se vendió) para ver bien la curva.
+  const productPeriodData = useMemo(() => {
     if (!productChartName) return []
-    const byMonth = {}
+    const now = new Date()
+    const periodsData = {}
+    let groupBy = 'month'
+    const dKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const mKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const dLabel = (d) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+    const mLabel = (d) => d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
+    const addBucket = (key, label) => { if (!periodsData[key]) periodsData[key] = { period: label, ventas: 0, cantidad: 0 } }
+
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) return []
+      const startDate = parseLocalDate(customStartDate)
+      const endDate = parseLocalDate(customEndDate)
+      const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+      if (diffDays <= 60) {
+        groupBy = 'day'
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) { const x = new Date(d); addBucket(dKey(x), dLabel(x)) }
+      } else {
+        const c = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+        const last = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+        while (c <= last) { addBucket(mKey(c), mLabel(c)); c.setMonth(c.getMonth() + 1) }
+      }
+    } else if (dateRange === 'today') {
+      groupBy = 'day'
+      const x = new Date(now.getFullYear(), now.getMonth(), now.getDate()); addBucket(dKey(x), dLabel(x))
+    } else if (dateRange === 'week') {
+      groupBy = 'day'
+      for (let i = 6; i >= 0; i--) { const x = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); addBucket(dKey(x), dLabel(x)) }
+    } else if (dateRange === 'month') {
+      groupBy = 'day'
+      const today = now.getDate()
+      for (let i = 1; i <= today; i++) { const x = new Date(now.getFullYear(), now.getMonth(), i); addBucket(dKey(x), dLabel(x)) }
+    } else if (dateRange === 'quarter') {
+      for (let i = 2; i >= 0; i--) { const x = new Date(now.getFullYear(), now.getMonth() - i, 1); addBucket(mKey(x), mLabel(x)) }
+    } else if (dateRange === 'year') {
+      for (let i = 11; i >= 0; i--) { const x = new Date(now.getFullYear(), now.getMonth() - i, 1); addBucket(mKey(x), mLabel(x)) }
+    } else {
+      // 'all': meses con actividad
+      invoices.forEach(invoice => { const d = getInvoiceDate(invoice); if (d) addBucket(mKey(d), mLabel(d)) })
+    }
+
+    // Sumar las ventas del producto seleccionado en cada período (descuento global
+    // distribuido proporcionalmente, igual que topProducts).
     filteredInvoices.forEach(invoice => {
-      const d = getInvoiceDate(invoice)
-      if (!d) return
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      if (!byMonth[key]) byMonth[key] = { revenue: 0, quantity: 0, date: new Date(d.getFullYear(), d.getMonth(), 1) }
-      // Descuento global distribuido proporcionalmente (igual que topProducts).
+      const d = getInvoiceDate(invoice); if (!d) return
+      const key = groupBy === 'day' ? dKey(d) : mKey(d)
+      if (!periodsData[key]) return
       const invoiceSubtotal = invoice.items?.reduce((s, it) => s + (it.subtotal || ((it.quantity || 0) * (it.unitPrice || it.price || 0))), 0) || 0
       const invoiceTotal = invoice.total || invoiceSubtotal
       const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
@@ -667,18 +708,13 @@ export default function Reports() {
         if ((item.name || item.description) !== productChartName) return
         const qty = item.quantity || 0
         const itemSubtotal = item.subtotal || (qty * (item.unitPrice || item.price || 0))
-        byMonth[key].revenue = Number((byMonth[key].revenue + itemSubtotal * discountFactor).toFixed(2))
-        byMonth[key].quantity += qty
+        periodsData[key].ventas = Number((periodsData[key].ventas + itemSubtotal * discountFactor).toFixed(2))
+        periodsData[key].cantidad += qty
       })
     })
-    return Object.entries(byMonth)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([, v]) => ({
-        month: v.date.toLocaleDateString('es-PE', { month: 'short', year: '2-digit' }).replace('.', ''),
-        ventas: v.revenue,
-        cantidad: v.quantity,
-      }))
-  }, [filteredInvoices, productChartName])
+
+    return Object.entries(periodsData).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v)
+  }, [filteredInvoices, productChartName, dateRange, customStartDate, customEndDate, invoices])
 
   // Resultados del buscador de producto del gráfico. Limitado a 50 para que
   // funcione fluido en negocios con miles de productos.
@@ -2809,7 +2845,7 @@ export default function Reports() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary-600" />
-                  <CardTitle>Evolución por mes</CardTitle>
+                  <CardTitle>Evolución de ventas</CardTitle>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   {/* Buscador libre de producto: escribí y elegí (como en Compras) */}
@@ -2863,6 +2899,7 @@ export default function Reports() {
                 {productChartName && (
                   <p className="text-sm text-gray-600">
                     Mostrando: <span className="font-semibold text-gray-900">{productChartName}</span>
+                    <span className="text-gray-400"> · por día o por mes según el rango de fecha de arriba</span>
                   </p>
                 )}
               </div>
@@ -2873,13 +2910,13 @@ export default function Reports() {
                   <Search className="w-6 h-6 text-gray-300" />
                   Buscá y elegí un producto arriba para ver su evolución por mes.
                 </div>
-              ) : productMonthlyData.length === 0 ? (
+              ) : productPeriodData.length === 0 ? (
                 <div className="h-[300px] flex items-center justify-center text-sm text-gray-500">
                   No hay ventas de este producto en el período seleccionado.
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={productMonthlyData} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+                  <AreaChart data={productPeriodData} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorProductoMes" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -2887,7 +2924,7 @@ export default function Reports() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
+                    <XAxis dataKey="period" stroke="#6b7280" fontSize={12} interval="preserveStartEnd" minTickGap={20} />
                     <YAxis stroke="#6b7280" fontSize={12} />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
