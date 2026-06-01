@@ -333,19 +333,26 @@ export default function CreateQuotation() {
     const notesIn = prefilledFromState?.prefilledNotes
     if (!Array.isArray(items) || items.length === 0) return
 
-    setQuotationItems(items.map(it => ({
-      productId: it.productId || '',
-      name: it.name || '',
-      quantity: it.quantity != null ? String(it.quantity) : '',
-      unitPrice: Number(it.price ?? it.unitPrice ?? 0) || 0,
-      unit: it.unit || 'UNIDAD',
-      searchTerm: '',
-      ...(it.isVariant && {
-        isVariant: true,
-        variantSku: it.variantSku,
-        variantAttributes: it.variantAttributes,
-      }),
-    })))
+    setQuotationItems(items.map(it => {
+      // Incluir la variante (color, etc.) en el nombre para que se vea en el
+      // formulario, el PDF y la cotización guardada (igual que en el pedido online).
+      const attrs = it.isVariant && it.variantAttributes
+        ? Object.entries(it.variantAttributes).map(([k, v]) => `${k}: ${v}`).join(', ')
+        : ''
+      return {
+        productId: it.productId || '',
+        name: attrs ? `${it.name || ''} (${attrs})` : (it.name || ''),
+        quantity: it.quantity != null ? String(it.quantity) : '',
+        unitPrice: Number(it.price ?? it.unitPrice ?? 0) || 0,
+        unit: it.unit || 'UNIDAD',
+        searchTerm: '',
+        ...(it.isVariant && {
+          isVariant: true,
+          variantSku: it.variantSku,
+          variantAttributes: it.variantAttributes,
+        }),
+      }
+    }))
     if (cust && (cust.name || cust.email || cust.phone)) {
       setCustomerMode('manual')
       setManualCustomer((prev) => ({
