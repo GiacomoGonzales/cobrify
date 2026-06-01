@@ -310,7 +310,7 @@ export async function getAnalyticsData() {
     const subscriptionsRef = collection(db, 'subscriptions')
     const subscriptionsSnapshot = await getDocs(subscriptionsRef)
 
-    const emissionMethods = { qpse: 0, sunat_direct: 0, nubefact: 0, none: 0 }
+    const emissionMethods = { qpse: 0, sunat_direct: 0, none: 0 }
     const businessModes = { retail: 0, restaurant: 0, unknown: 0 }
     const documentsByUser = []
     let totalDocuments = 0
@@ -387,7 +387,6 @@ function formatMethodName(method) {
   const names = {
     qpse: 'QPse',
     sunat_direct: 'SUNAT Directo',
-    nubefact: 'NubeFact',
     none: 'Sin configurar'
   }
   return names[method] || method

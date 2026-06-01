@@ -3,8 +3,6 @@ import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
 import { sendDispatchGuideToSunat } from '../utils/sunatClientGRE.js'
 import { sendDispatchGuideToSunatREST, hasAPICredentials } from '../utils/sunatClientGRE_REST.js'
-import { sendToNubefact, parseNubefactResponse } from './nubefactService.js'
-import { convertInvoiceToNubefactJSON } from '../utils/invoiceToNubefactJSON.js'
 import { sendToQPse } from './qpseService.js'
 
 /**
@@ -12,7 +10,6 @@ import { sendToQPse } from './qpseService.js'
  *
  * Decide si enviar el comprobante vía:
  * - SUNAT DIRECTO (con certificado propio)
- * - NUBEFACT OSE (usando su API JSON)
  * - QPSE (Proveedor de Servicios de Firma)
  *
  * Según la configuración del usuario
@@ -68,9 +65,7 @@ export async function emitirComprobante(invoiceData, businessData) {
     // Ejecutar el método correspondiente
     let result
 
-    if (emissionMethod === 'nubefact') {
-      result = await emitViaNubefact(invoiceData, businessData)
-    } else if (emissionMethod === 'qpse') {
+    if (emissionMethod === 'qpse') {
       result = await emitViaQPse(invoiceData, businessData)
     } else {
       result = await emitViaSunatDirect(invoiceData, businessData)
@@ -96,15 +91,13 @@ export async function emitirComprobante(invoiceData, businessData) {
  * Orden de prioridad:
  * 1. Si emissionMethod está definido, usar ese
  * 2. Si qpse.enabled = true, usar QPse
- * 3. Si nubefact.enabled = true, usar NubeFact
- * 4. Si sunat.enabled = true, usar SUNAT directo
- * 5. Default: SUNAT directo
+ * 3. Si sunat.enabled = true, usar SUNAT directo
+ * 4. Default: SUNAT directo
  */
 function determineEmissionMethod(businessData) {
   console.log('🔍 Determinando método de emisión...')
   console.log('   - emissionMethod:', businessData.emissionMethod)
   console.log('   - qpse:', JSON.stringify(businessData.qpse))
-  console.log('   - nubefact:', JSON.stringify(businessData.nubefact))
   console.log('   - sunat:', JSON.stringify(businessData.sunat))
 
   // Opción 1: Método explícito configurado (puede estar en emissionMethod o emissionConfig.method)
@@ -122,14 +115,7 @@ function determineEmissionMethod(businessData) {
     return 'qpse'
   }
 
-  // Opción 3: NubeFact habilitado
-  const nubefactEnabled = businessData.nubefact?.enabled
-  if (nubefactEnabled === true || nubefactEnabled === 'true' || nubefactEnabled === 1 || nubefactEnabled === '1') {
-    console.log('   ✓ NubeFact está habilitado')
-    return 'nubefact'
-  }
-
-  // Opción 4: SUNAT directo habilitado
+  // Opción 3: SUNAT directo habilitado
   const sunatEnabled = businessData.sunat?.enabled
   if (sunatEnabled === true || sunatEnabled === 'true' || sunatEnabled === 1 || sunatEnabled === '1') {
     console.log('   ✓ SUNAT directo está habilitado')
@@ -208,73 +194,6 @@ async function emitViaSunatDirect(invoiceData, businessData) {
     return {
       success: false,
       method: 'sunat_direct',
-      error: error.message,
-      errorDetails: error
-    }
-  }
-}
-
-/**
- * Emite comprobante vía NUBEFACT (API JSON)
- *
- * Pasos:
- * 1. Convertir datos a JSON NubeFact
- * 2. Enviar a NubeFact API
- * 3. Procesar respuesta
- */
-async function emitViaNubefact(invoiceData, businessData) {
-  console.log('📤 Emitiendo vía NUBEFACT API JSON...')
-
-  try {
-    // Validar configuración NubeFact
-    if (!businessData.nubefact || !businessData.nubefact.enabled) {
-      throw new Error('NubeFact no está habilitado para este negocio')
-    }
-
-    if (!businessData.nubefact.ruta || !businessData.nubefact.token) {
-      throw new Error('Configuración de NubeFact incompleta (ruta y token requeridos)')
-    }
-
-    // 1. Convertir a JSON NubeFact
-    console.log('🔄 Convirtiendo datos a formato JSON NubeFact...')
-    const nubefactJSON = convertInvoiceToNubefactJSON(invoiceData, businessData)
-
-    console.log('📦 JSON generado:', JSON.stringify(nubefactJSON, null, 2))
-
-    // 2. Enviar a NubeFact
-    console.log('📡 Enviando a NubeFact API...')
-    const nubefactResult = await sendToNubefact(nubefactJSON, businessData.nubefact)
-
-    if (!nubefactResult.success) {
-      throw new Error(nubefactResult.error || 'Error al enviar a NubeFact')
-    }
-
-    // 3. Parsear respuesta
-    const parsedResponse = parseNubefactResponse(nubefactResult.nubefactResponse)
-
-    return {
-      success: parsedResponse.accepted,
-      method: 'nubefact',
-      accepted: parsedResponse.accepted,
-      responseCode: parsedResponse.responseCode,
-      description: parsedResponse.description,
-      notes: parsedResponse.notes,
-      pdfUrl: parsedResponse.pdfUrl,
-      xmlUrl: parsedResponse.xmlUrl,
-      cdrUrl: parsedResponse.cdrUrl,
-      qrCode: parsedResponse.qrCode,
-      hash: parsedResponse.hash,
-      enlace: parsedResponse.enlace,
-      soapError: parsedResponse.soapError,
-      nubefactResponse: parsedResponse.rawResponse
-    }
-
-  } catch (error) {
-    console.error('❌ Error en emisión vía NubeFact:', error)
-
-    return {
-      success: false,
-      method: 'nubefact',
       error: error.message,
       errorDetails: error
     }
@@ -419,8 +338,7 @@ export async function emitirNotaCredito(creditNoteData, businessData) {
     } else if (emissionMethod === 'sunat_direct') {
       result = await emitCreditNoteViaSunatDirect(creditNoteData, businessData)
     } else {
-      // NubeFact no soportado por ahora para NC
-      throw new Error('NubeFact no está soportado para notas de crédito. Use QPse o SUNAT directo.')
+      throw new Error('Método de emisión no soportado para notas de crédito. Use QPse o SUNAT directo.')
     }
 
     return result
@@ -609,8 +527,7 @@ export async function emitirNotaDebito(debitNoteData, businessData) {
     } else if (emissionMethod === 'sunat_direct') {
       result = await emitDebitNoteViaSunatDirect(debitNoteData, businessData)
     } else {
-      // NubeFact no soportado por ahora para ND
-      throw new Error('NubeFact no está soportado para notas de débito. Use QPse o SUNAT directo.')
+      throw new Error('Método de emisión no soportado para notas de débito. Use QPse o SUNAT directo.')
     }
 
     return result
@@ -790,7 +707,7 @@ export async function emitirGuiaRemision(guideData, businessData) {
     console.log(`📡 Método de emisión seleccionado: ${emissionMethod}`)
 
     // Por ahora solo soportamos SUNAT directo para GRE
-    // QPse y NubeFact pueden agregarse después
+    // QPse puede agregarse después
     let result
 
     if (emissionMethod === 'qpse') {

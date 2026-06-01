@@ -369,7 +369,6 @@ export default function BusinessManagement() {
                           <Badge variant="primary">
                             {business.emissionConfig.method === 'qpse' && 'QPse'}
                             {business.emissionConfig.method === 'sunat_direct' && 'SUNAT Directo'}
-                            {business.emissionConfig.method === 'nubefact' && 'NubeFact'}
                           </Badge>
                         ) : (
                           <span className="text-xs text-gray-500">No configurado</span>
@@ -462,18 +461,6 @@ export default function BusinessManagement() {
               >
                 <p className="font-semibold">SUNAT Directo</p>
                 <p className="text-xs text-gray-600">CDT propio</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEmissionConfig({ ...emissionConfig, method: 'nubefact' })}
-                className={`p-4 border-2 rounded-lg transition-all ${
-                  emissionConfig.method === 'nubefact'
-                    ? 'border-primary-600 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="font-semibold">NubeFact</p>
-                <p className="text-xs text-gray-600">PSE alternativo</p>
               </button>
             </div>
           </div>

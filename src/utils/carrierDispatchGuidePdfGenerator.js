@@ -1132,7 +1132,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // OSE Info
   if (companySettings?.oseProvider || guide.oseCode) {
-    doc.text(`OSE: ${companySettings?.oseProvider || 'NUBEFACT'} - ${guide.oseCode || 'Código de envío'}`, legalX, footerY + 36)
+    doc.text(`OSE: ${companySettings?.oseProvider || 'SUNAT'} - ${guide.oseCode || 'Código de envío'}`, legalX, footerY + 36)
   }
 
   // Hash si existe

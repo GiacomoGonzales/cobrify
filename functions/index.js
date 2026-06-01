@@ -540,7 +540,6 @@ export const sendInvoiceToSunat = onRequest(
             firmasUsadas: config.qpse.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          businessData.nubefact = { enabled: false }
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
             enabled: config.sunat.enabled !== false,
@@ -553,18 +552,16 @@ export const sendInvoiceToSunat = onRequest(
             homologated: config.sunat.homologated || false
           }
           businessData.qpse = { enabled: false }
-          businessData.nubefact = { enabled: false }
         }
       }
 
-      // Validar que al menos un método esté habilitado (SUNAT directo, QPse o NubeFact)
+      // Validar que al menos un método esté habilitado (SUNAT directo o QPse)
       const sunatEnabled = businessData.sunat?.enabled === true
       const qpseEnabled = businessData.qpse?.enabled === true
-      const nubefactEnabled = businessData.nubefact?.enabled === true
 
-      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
+      if (!sunatEnabled && !qpseEnabled) {
         res.status(400).json({
-          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse en Configuración.'
         })
         return
       }
@@ -618,7 +615,7 @@ export const sendInvoiceToSunat = onRequest(
         }
       }
 
-      // 3. Emitir comprobante usando el router (decide automáticamente SUNAT, QPse o NubeFact)
+      // 3. Emitir comprobante usando el router (decide automáticamente SUNAT o QPse)
       console.log('📨 Emitiendo comprobante electrónico...')
 
       const emissionResult = await emitirComprobante(invoiceData, businessData)
@@ -811,8 +808,7 @@ export const sendInvoiceToSunat = onRequest(
       // Validar que existe prueba del CDR antes de marcar como aceptado
       const hasCDRProof = !!(
         emissionResult.cdrData ||           // SUNAT Directo - CDR en respuesta
-        emissionResult.cdrUrl ||            // QPSE/NubeFact - URL al CDR
-        emissionResult.nubefactResponse?.enlace_del_cdr ||  // NubeFact alternativo
+        emissionResult.cdrUrl ||            // QPse - URL al CDR
         emissionResult.qpseResponse?.cdrUrl                 // QPse alternativo
       )
 
@@ -838,7 +834,6 @@ export const sendInvoiceToSunat = onRequest(
         // Re-evaluar si ahora tenemos CDR
         const hasCDRProofNow = !!(
           emissionResult.cdrData || emissionResult.cdrUrl ||
-          emissionResult.nubefactResponse?.enlace_del_cdr ||
           emissionResult.qpseResponse?.cdrUrl
         )
         if (!hasCDRProofNow) {
@@ -972,34 +967,6 @@ export const sendInvoiceToSunat = onRequest(
             }
           }
 
-          // NUBEFACT: Descargar XML y CDR desde URLs externas y guardar localmente
-          if (emissionResult.method === 'nubefact') {
-            // Descargar y guardar XML
-            if (emissionResult.xmlUrl) {
-              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
-              if (xmlContent) {
-                xmlStorageUrl = await saveToStorage(
-                  userId,
-                  invoiceId,
-                  `${documentNumber}.xml`,
-                  xmlContent
-                )
-              }
-            }
-            // Descargar y guardar CDR
-            if (emissionResult.cdrUrl) {
-              const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
-              if (cdrContent) {
-                cdrStorageUrl = await saveToStorage(
-                  userId,
-                  invoiceId,
-                  `${documentNumber}-CDR.xml`,
-                  cdrContent
-                )
-              }
-            }
-          }
-
           console.log(`✅ Archivos guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
         } catch (storageError) {
           console.error('⚠️ Error guardando archivos en Storage (no crítico):', storageError)
@@ -1009,18 +976,7 @@ export const sendInvoiceToSunat = onRequest(
 
       // Agregar datos específicos según el método, filtrando undefined y sanitizando
       let methodSpecificData = {}
-      if (emissionResult.method === 'nubefact') {
-        methodSpecificData = sanitizeForFirestore(removeUndefined({
-          pdfUrl: emissionResult.pdfUrl,
-          xmlUrl: emissionResult.xmlUrl,
-          cdrUrl: emissionResult.cdrUrl,
-          xmlStorageUrl: xmlStorageUrl,  // URL en Firebase Storage
-          cdrStorageUrl: cdrStorageUrl,  // URL en Firebase Storage
-          qrCode: emissionResult.qrCode,
-          hash: emissionResult.hash,
-          enlace: emissionResult.enlace
-        }))
-      } else if (emissionResult.method === 'qpse') {
+      if (emissionResult.method === 'qpse') {
         methodSpecificData = sanitizeForFirestore(removeUndefined({
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
@@ -1107,11 +1063,6 @@ export const sendInvoiceToSunat = onRequest(
         status: finalStatus,
         message: emissionResult.description,
         method: emissionResult.method,
-        ...(emissionResult.method === 'nubefact' && {
-          pdfUrl: emissionResult.pdfUrl,
-          xmlUrl: emissionResult.xmlUrl,
-          enlace: emissionResult.enlace
-        }),
         ...(emissionResult.method === 'qpse' && {
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
@@ -1383,7 +1334,6 @@ export const sendCreditNoteToSunat = onRequest(
             firmasUsadas: config.qpse.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          businessData.nubefact = { enabled: false }
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
             enabled: config.sunat.enabled !== false,
@@ -1396,7 +1346,6 @@ export const sendCreditNoteToSunat = onRequest(
             homologated: config.sunat.homologated || false
           }
           businessData.qpse = { enabled: false }
-          businessData.nubefact = { enabled: false }
         }
       }
 
@@ -2064,7 +2013,6 @@ export const sendDebitNoteToSunat = onRequest(
             firmasUsadas: config.qpse.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          businessData.nubefact = { enabled: false }
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
             enabled: config.sunat.enabled !== false,
@@ -2077,7 +2025,6 @@ export const sendDebitNoteToSunat = onRequest(
             homologated: config.sunat.homologated || false
           }
           businessData.qpse = { enabled: false }
-          businessData.nubefact = { enabled: false }
         }
       }
 
@@ -3394,7 +3341,6 @@ export const sendDispatchGuideToSunatFn = onRequest(
             firmasUsadas: config.qpse?.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          businessData.nubefact = { enabled: false }
           console.log('✅ [GRE] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
@@ -3410,7 +3356,6 @@ export const sendDispatchGuideToSunatFn = onRequest(
             homologated: config.sunat?.homologated || false
           }
           businessData.qpse = { enabled: false }
-          businessData.nubefact = { enabled: false }
           console.log('✅ [GRE] SUNAT configurado desde emissionConfig')
           console.log('🔑 [GRE] Client ID presente:', !!config.sunat?.clientId)
         }
@@ -3419,12 +3364,11 @@ export const sendDispatchGuideToSunatFn = onRequest(
       // Validar que al menos un método esté habilitado
       const sunatEnabled = businessData.sunat?.enabled === true
       const qpseEnabled = businessData.qpse?.enabled === true
-      const nubefactEnabled = businessData.nubefact?.enabled === true
 
-      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
+      if (!sunatEnabled && !qpseEnabled) {
         console.log('❌ [GRE] Ningún método de emisión habilitado')
         res.status(400).json({
-          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse en Configuración.'
         })
         return
       }
@@ -3720,7 +3664,6 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
             firmasUsadas: config.qpse?.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          businessData.nubefact = { enabled: false }
           console.log('✅ [GRE-T] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
@@ -3736,7 +3679,6 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
             homologated: config.sunat?.homologated || false
           }
           businessData.qpse = { enabled: false }
-          businessData.nubefact = { enabled: false }
           console.log('✅ [GRE-T] SUNAT configurado desde emissionConfig')
           console.log('🔑 [GRE-T] Client ID presente:', !!config.sunat?.clientId)
         }
@@ -3745,12 +3687,11 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
       // Validar que al menos un método esté habilitado
       const sunatEnabled = businessData.sunat?.enabled === true
       const qpseEnabled = businessData.qpse?.enabled === true
-      const nubefactEnabled = businessData.nubefact?.enabled === true
 
-      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
+      if (!sunatEnabled && !qpseEnabled) {
         console.log('❌ [GRE-T] Ningún método de emisión habilitado')
         res.status(400).json({
-          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse en Configuración.'
         })
         return
       }

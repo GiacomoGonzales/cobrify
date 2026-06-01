@@ -2521,12 +2521,10 @@ export default function AdminUsers() {
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                             user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                             user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
-                            user.emissionMethod === 'nubefact' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
                             'bg-gray-50 text-gray-600 border border-gray-200'
                           }`}>
                             {user.emissionMethod === 'qpse' ? 'QPse' :
-                             user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
-                             user.emissionMethod === 'nubefact' ? 'Nubefact' : user.emissionMethod}
+                             user.emissionMethod === 'sunat_direct' ? 'SUNAT' : user.emissionMethod}
                           </span>
                         ) : (
                           <span className="text-[10px] text-gray-400">—</span>
@@ -2755,8 +2753,7 @@ export default function AdminUsers() {
                   </div>
                   <p className="font-medium text-xs sm:text-base">
                     {selectedUser.emissionMethod === 'qpse' ? 'QPse' :
-                     selectedUser.emissionMethod === 'sunat_direct' ? 'SUNAT' :
-                     selectedUser.emissionMethod === 'nubefact' ? 'NubeFact' : 'Sin config.'}
+                     selectedUser.emissionMethod === 'sunat_direct' ? 'SUNAT' : 'Sin config.'}
                   </p>
                 </div>
 
