@@ -307,6 +307,9 @@ export default function Settings() {
   const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
   const [allowPartialPayments, setAllowPartialPayments] = useState(false)
   const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
+  // Comisión por pago con tarjeta (solo notas de venta): activación + porcentaje.
+  const [cardCommissionEnabled, setCardCommissionEnabled] = useState(false)
+  const [cardCommissionRate, setCardCommissionRate] = useState(5)
 
   // Estados para configuración de comprobantes
   const [allowDeleteInvoices, setAllowDeleteInvoices] = useState(false)
@@ -1097,6 +1100,8 @@ export default function Settings() {
         setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
         setAllowPartialPayments(businessData.allowPartialPayments || false)
         setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
+        setCardCommissionEnabled(businessData.cardCommissionEnabled || false)
+        setCardCommissionRate(Number(businessData.cardCommissionRate) || 5)
 
         // Cargar configuración de comprobantes
         setAllowDeleteInvoices(businessData.allowDeleteInvoices || false)
@@ -5071,6 +5076,55 @@ export default function Settings() {
                       </div>
                     </div>
                   </label>
+
+                  {/* Comisión por pago con tarjeta (solo notas de venta) */}
+                  <div className={`p-4 border rounded-lg transition-colors ${
+                    cardCommissionEnabled
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
+                  }`}>
+                    <label className="flex items-start space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={cardCommissionEnabled}
+                        onChange={(e) => setCardCommissionEnabled(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-900">
+                          Cobrar comisión por pago con tarjeta
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          {cardCommissionEnabled
+                            ? `✓ Habilitado: cuando el pago sea 100% con tarjeta, se sube el precio ${cardCommissionRate || 0}% (queda incluido en boletas, facturas y notas de venta). El cliente paga el total con el recargo ya incluido, sin una línea aparte.`
+                            : '✗ Deshabilitado: no se agrega recargo por pagos con tarjeta.'}
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Porcentaje (solo si está habilitado) */}
+                    {cardCommissionEnabled && (
+                      <div className="mt-3 ml-7 flex items-center gap-3">
+                        <label className="text-sm text-gray-700">Porcentaje:</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="20"
+                            step="0.1"
+                            value={cardCommissionRate}
+                            onChange={(e) => {
+                              const value = Math.min(20, Math.max(0, parseFloat(e.target.value) || 0))
+                              setCardCommissionRate(value)
+                            }}
+                            className="w-20 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                        <span className="text-xs text-gray-500">se suma al total al pagar con tarjeta</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -5212,6 +5266,8 @@ export default function Settings() {
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
                       requireOpenCashRegister: requireOpenCashRegister,
+                      cardCommissionEnabled: cardCommissionEnabled,
+                      cardCommissionRate: Number(cardCommissionRate) || 0,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,

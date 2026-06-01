@@ -313,6 +313,13 @@ export default function POS() {
   const [companySettings, setCompanySettings] = useState(null)
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
+  // Recargo por pago con tarjeta (Configuración > Ventas). Cuando aplica, SUBE el
+  // precio de los productos (no se muestra como línea); el comprobante sale como
+  // una venta normal a ese precio, así el IGV queda correcto sin tocar SUNAT.
+  const [cardCommissionConfig, setCardCommissionConfig] = useState({ enabled: false, rate: 5 })
+  // Marca para autocompletar el monto del único pago tras cambiar de método (el
+  // total puede subir por el recargo de tarjeta, que se sabe recién al elegir Tarjeta).
+  const pendingAmountSyncRef = useRef(false)
   const [cart, setCart] = useState([])
 
   // ===== Multi-divisa (USD) — solo en modo retail con flag activa ======
@@ -2150,6 +2157,12 @@ export default function POS() {
           }
           setRecargoConsumoConfig(rcConfig)
         }
+
+        // Cargar configuración de Recargo por pago con tarjeta (Configuración > Ventas)
+        setCardCommissionConfig({
+          enabled: businessData.cardCommissionEnabled ?? false,
+          rate: Number(businessData.cardCommissionRate) || 5,
+        })
 
         // Verificar si la caja diaria está abierta (si el setting lo requiere)
         // Nota: calcular branchId aquí porque selectedBranch aún no se ha establecido en el estado
@@ -4063,15 +4076,42 @@ export default function POS() {
     setDiscountPercentage('')
   }
 
+  // Recargo por pago con tarjeta: cuando el pago es 100% con tarjeta y el feature
+  // está activo (Configuración > Ventas), se SUBE el precio de cada ítem por el %.
+  // No es una línea aparte: el comprobante (incluida boleta/factura a SUNAT) sale
+  // con el precio ya recargado, como una venta normal. Así el IGV queda correcto
+  // sobre el total y no hay que declarar ningún "cargo" especial.
+  const cardSurchargeFactor = React.useMemo(() => {
+    if (!cardCommissionConfig.enabled) return 1
+    const rate = Number(cardCommissionConfig.rate) || 0
+    if (rate <= 0) return 1
+    const isCardOnly = payments.length > 0 && payments.every(p => p.method === 'CARD')
+    return isCardOnly ? 1 + rate / 100 : 1
+  }, [cardCommissionConfig, payments])
+
+  // Carrito "efectivo": el mismo carrito pero con los precios escalados por el
+  // recargo de tarjeta (cuando aplica). Se usa para los totales y para los ítems
+  // del comprobante, así todo queda consistente con lo que se envía a SUNAT.
+  const effectiveCart = React.useMemo(() => {
+    if (cardSurchargeFactor === 1) return cart
+    const scale = (v) => Math.round((Number(v) || 0) * cardSurchargeFactor * 100) / 100
+    return cart.map(item => ({
+      ...item,
+      price: scale(item.price),
+      ...(item.basePrice != null ? { basePrice: scale(item.basePrice) } : {}),
+      ...(item.itemDiscount ? { itemDiscount: scale(item.itemDiscount) } : {}),
+    }))
+  }, [cart, cardSurchargeFactor])
+
   // Calcular montos sin descuento (optimizado con useMemo)
   const amounts = React.useMemo(() => {
     // Calcular total de descuentos por ítem
-    const totalItemDiscounts = cart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0)
+    const totalItemDiscounts = effectiveCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0)
 
     // Usar calculateMixedInvoiceAmounts para manejar productos con diferentes taxAffectation
     // Aplicamos el precio efectivo considerando el descuento por ítem
     const baseAmounts = calculateMixedInvoiceAmounts(
-      cart.map(item => {
+      effectiveCart.map(item => {
         const lineTotal = item.price * item.quantity
         const itemDiscount = item.itemDiscount || 0
         // Calcular precio efectivo por unidad después del descuento del ítem
@@ -4141,15 +4181,15 @@ export default function POS() {
     //
     // Si no hay basePrice (carrito legacy o PEN puro), conversión directa.
     const allItemsHaveBase = currency === 'USD'
-      && cart.length > 0
-      && cart.every(item => Number(item.basePrice) > 0)
+      && effectiveCart.length > 0
+      && effectiveCart.every(item => Number(item.basePrice) > 0)
 
     let subtotalInBase, igvInBase, totalInBase
     if (allItemsHaveBase) {
       // Recalcular en PEN base usando basePrices (sin pérdida de precisión).
       // Los itemDiscount y globalDiscount están en USD → convertir a PEN.
       const baseAmountsInPEN = calculateMixedInvoiceAmounts(
-        cart.map(item => {
+        effectiveCart.map(item => {
           const basePriceVal = Number(item.basePrice) || 0
           const lineTotalPEN = basePriceVal * item.quantity
           const itemDiscountInPEN = (item.itemDiscount || 0) > 0
@@ -4200,7 +4240,7 @@ export default function POS() {
       exonerado: baseAmounts.exonerado,
       inafecto: baseAmounts.inafecto,
     }
-  }, [cart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
+  }, [effectiveCart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
 
   // Actualizar pantalla de cliente cuando cambia el carrito
   useEffect(() => {
@@ -4259,9 +4299,12 @@ export default function POS() {
     const newPayments = [...payments]
     newPayments[index].method = method
 
-    // Auto-fill amount if it's empty and this is the first or only payment
-    if (!newPayments[index].amount && payments.length === 1) {
-      newPayments[index].amount = amounts.total.toString()
+    // Auto-fill del monto. Para UN solo pago dejamos el monto vacío y marcamos
+    // para que un efecto lo complete con el total YA recalculado (que incluye el
+    // recargo por tarjeta si el método es Tarjeta). Para pagos múltiples, el saldo.
+    if (newPayments.length === 1) {
+      newPayments[index].amount = ''
+      pendingAmountSyncRef.current = true
     } else if (!newPayments[index].amount && payments.length > 1) {
       newPayments[index].amount = remaining.toString()
     }
@@ -4275,6 +4318,18 @@ export default function POS() {
       checkoutButtonRef.current?.focus()
     }, 0)
   }
+
+  // Tras cambiar el método de un único pago, completa el monto con el total ya
+  // recalculado (que incluye el recargo por tarjeta). Se dispara solo cuando lo
+  // marca handlePaymentMethodChange, así no molesta si el cajero borra el campo.
+  useEffect(() => {
+    if (!pendingAmountSyncRef.current) return
+    pendingAmountSyncRef.current = false
+    if (payments.length !== 1) return
+    if (amounts.total > 0) {
+      setPayments(prev => (prev.length === 1 ? [{ ...prev[0], amount: amounts.total.toString() }] : prev))
+    }
+  }, [amounts.total, payments])
 
   // Actualizar monto de pago
   const handlePaymentAmountChange = (index, amount) => {
@@ -4571,8 +4626,8 @@ export default function POS() {
         // Simular un delay para hacer más realista
         await new Promise(resolve => setTimeout(resolve, 1000))
 
-        // Preparar items de la factura
-        const items = cart.map(item => ({
+        // Preparar items de la factura (effectiveCart = precios con recargo de tarjeta si aplica)
+        const items = effectiveCart.map(item => ({
           productId: item.id,
           code: item.sku || item.code || '',
           name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
@@ -4689,6 +4744,11 @@ export default function POS() {
           // Recargo al Consumo (para restaurantes)
           recargoConsumo: amounts.recargoConsumo || 0,
           recargoConsumoRate: amounts.recargoConsumoRate || 0,
+          // Recargo por pago con tarjeta — dato interno (los precios ya vienen
+          // recargados; esto es solo para reportes, no se muestra en el comprobante).
+          cardCommissionApplied: cardSurchargeFactor > 1,
+          cardCommissionRate: cardSurchargeFactor > 1 ? (Number(cardCommissionConfig.rate) || 0) : 0,
+          cardCommissionAmount: cardSurchargeFactor > 1 ? Number((amounts.total - amounts.total / cardSurchargeFactor).toFixed(2)) : 0,
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
           // Vuelto (cambio que se devuelve al cliente). Solo aplica a pagos al contado.
@@ -4771,8 +4831,8 @@ export default function POS() {
       }
       // NOTA: En modo normal, el número se genera atómicamente con createInvoiceWithNumber más adelante
 
-      // 2. Preparar items de la factura
-      const items = cart.map(item => ({
+      // 2. Preparar items de la factura (effectiveCart = precios con recargo de tarjeta si aplica)
+      const items = effectiveCart.map(item => ({
         productId: item.id,
         code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
         name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
@@ -4946,6 +5006,11 @@ export default function POS() {
         // Recargo al Consumo (para restaurantes)
         recargoConsumo: amounts.recargoConsumo || 0,
         recargoConsumoRate: amounts.recargoConsumoRate || 0,
+        // Recargo por pago con tarjeta — dato interno (los precios ya vienen
+        // recargados; esto es solo para reportes, no se muestra en el comprobante).
+        cardCommissionApplied: cardSurchargeFactor > 1,
+        cardCommissionRate: cardSurchargeFactor > 1 ? (Number(cardCommissionConfig.rate) || 0) : 0,
+        cardCommissionAmount: cardSurchargeFactor > 1 ? Number((amounts.total - amounts.total / cardSurchargeFactor).toFixed(2)) : 0,
         // Guardar los métodos de pago
         payments: allPayments,
         // Guardar el primer método como principal para compatibilidad
