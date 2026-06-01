@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS, suspendUser, registerPayment } from '@/services/subscriptionService'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Clock,
-  AlertTriangle,
   RefreshCw,
   Search,
   MessageCircle,
   Ban,
   CreditCard,
   CalendarDays,
-  Users,
   CheckCircle,
   XCircle,
   Loader2,
@@ -20,7 +18,18 @@ import {
   ArchiveRestore
 } from 'lucide-react'
 
-const WHATSAPP_NUMBER = '51900434988'
+// Normaliza un teléfono guardado en businesses/{uid}.phone a formato wa.me
+// (solo dígitos, con código de país de Perú).
+function buildPeruWhatsappNumber(rawPhone) {
+  if (!rawPhone) return null
+  let digits = String(rawPhone).replace(/\D/g, '')
+  if (digits.startsWith('00')) digits = digits.slice(2) // prefijo de salida internacional
+  if (!digits) return null
+  // Si ya incluye el código de país de Perú, usarlo tal cual
+  if (digits.startsWith('51') && digits.length >= 11) return digits
+  // Número local (móvil de 9 dígitos o fijo): anteponer 51
+  return '51' + digits
+}
 
 function getDaysUntilExpiry(periodEnd) {
   if (!periodEnd) return null
@@ -208,11 +217,39 @@ export default function AdminExpirations() {
     }
   }
 
-  function openWhatsApp(sub) {
-    const message = encodeURIComponent(
-      `Hola ${sub.businessName || ''}, te escribimos de Cobrify. Tu suscripción ${sub.email ? `(${sub.email})` : ''} está por vencer. ¿Deseas renovar?`
-    )
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank')
+  async function openWhatsApp(sub) {
+    // Abrimos la pestaña dentro del gesto del clic para que el navegador no
+    // bloquee el popup tras el await de Firestore; luego la redirigimos.
+    const win = window.open('', '_blank')
+    try {
+      // El teléfono se guarda en businesses/{uid}; la suscripción usa el mismo
+      // uid como id de documento, así que sub.id sirve para ubicar el negocio.
+      const bizSnap = await getDoc(doc(db, 'businesses', sub.id))
+      const phone = bizSnap.exists() ? bizSnap.data().phone : ''
+      const number = buildPeruWhatsappNumber(phone)
+
+      if (!number) {
+        win?.close()
+        alert('Este usuario no tiene un teléfono registrado.')
+        return
+      }
+
+      const days = getDaysUntilExpiry(sub.currentPeriodEnd)
+      const vencida = (days !== null && days < 0) || sub.accessBlocked || sub.status === 'suspended'
+      const estado = vencida ? 'venció' : 'está por vencer'
+      const detalle = sub.email ? ` (${sub.email})` : ''
+      const message = encodeURIComponent(
+        `Hola ${sub.businessName || ''}, te escribimos de Cobrify. Tu suscripción${detalle} ${estado}. ¿Deseas renovar?`
+      )
+      const url = `https://wa.me/${number}?text=${message}`
+
+      if (win) win.location.href = url
+      else window.open(url, '_blank')
+    } catch (error) {
+      console.error('Error al abrir WhatsApp:', error)
+      win?.close()
+      alert('No se pudo obtener el teléfono del usuario.')
+    }
   }
 
   const counts = {
