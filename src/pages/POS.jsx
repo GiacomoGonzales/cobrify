@@ -4299,11 +4299,11 @@ export default function POS() {
     const newPayments = [...payments]
     newPayments[index].method = method
 
-    // Auto-fill del monto. Para UN solo pago dejamos el monto vacío y marcamos
-    // para que un efecto lo complete con el total YA recalculado (que incluye el
-    // recargo por tarjeta si el método es Tarjeta). Para pagos múltiples, el saldo.
+    // Auto-fill del monto. Para UN solo pago NO tocamos el monto acá (evita el
+    // parpadeo del botón): solo marcamos para que un layout-effect lo complete con
+    // el total YA recalculado (incluye el recargo por tarjeta), antes del paint.
+    // Para pagos múltiples mantenemos el autocompletado con el saldo.
     if (newPayments.length === 1) {
-      newPayments[index].amount = ''
       pendingAmountSyncRef.current = true
     } else if (!newPayments[index].amount && payments.length > 1) {
       newPayments[index].amount = remaining.toString()
@@ -4320,15 +4320,19 @@ export default function POS() {
   }
 
   // Tras cambiar el método de un único pago, completa el monto con el total ya
-  // recalculado (que incluye el recargo por tarjeta). Se dispara solo cuando lo
-  // marca handlePaymentMethodChange, así no molesta si el cajero borra el campo.
-  useEffect(() => {
+  // recalculado (incluye el recargo por tarjeta). Se usa useLayoutEffect (no
+  // useEffect) para que el monto se actualice ANTES del paint y NO se vea el
+  // parpadeo del botón. Solo actúa cuando lo marca handlePaymentMethodChange.
+  React.useLayoutEffect(() => {
     if (!pendingAmountSyncRef.current) return
     pendingAmountSyncRef.current = false
     if (payments.length !== 1) return
-    if (amounts.total > 0) {
-      setPayments(prev => (prev.length === 1 ? [{ ...prev[0], amount: amounts.total.toString() }] : prev))
-    }
+    if (!(amounts.total > 0)) return
+    const next = amounts.total.toString()
+    setPayments(prev => {
+      if (prev.length !== 1 || prev[0].amount === next) return prev
+      return [{ ...prev[0], amount: next }]
+    })
   }, [amounts.total, payments])
 
   // Actualizar monto de pago
