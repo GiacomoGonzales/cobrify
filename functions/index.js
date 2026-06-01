@@ -1524,6 +1524,10 @@ export const sendCreditNoteToSunat = onRequest(
             updatedAt: FieldValue.serverTimestamp(),
           })
 
+          // SUNAT ya tenía la NC: se acepta por esta vía y la rama de éxito normal
+          // (que cuenta el comprobante) NO se ejecutó. Contamos aquí para no perderla.
+          await incrementInvoiceUsage(userId)
+
           res.status(200).json({
             success: true,
             message: 'La nota de crédito ya fue aceptada por SUNAT previamente',
@@ -2200,6 +2204,10 @@ export const sendDebitNoteToSunat = onRequest(
             sunatSentAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
           })
+
+          // SUNAT ya tenía la ND: se acepta por esta vía y la rama de éxito normal
+          // (que cuenta el comprobante) NO se ejecutó. Contamos aquí para no perderla.
+          await incrementInvoiceUsage(userId)
 
           res.status(200).json({
             success: true,
@@ -3975,6 +3983,48 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
 // ========================================
 
 /**
+ * Incrementa el contador mensual de comprobantes emitidos (usage.invoicesThisMonth)
+ * para un negocio. El ID del negocio coincide con el ID de la suscripción/usuario
+ * (los comprobantes viven en businesses/{userId} y la suscripción en subscriptions/{userId}).
+ *
+ * Se usa cuando un documento que estaba 'pending' se acepta de forma DIFERIDA
+ * (por el reintento automático o por verificación en SUNAT), para que la columna
+ * USO refleje el comprobante igual que cuando se acepta en el primer envío.
+ *
+ * Es seguro frente a doble conteo: los reintentos solo procesan documentos en
+ * estado 'pending'/'sending' (nunca 'accepted'), por lo que cada documento se
+ * cuenta una sola vez, justo al pasar a 'accepted'.
+ *
+ * No es crítico: si falla, se registra el error pero NO se rompe la emisión.
+ */
+async function incrementInvoiceUsage(businessId) {
+  try {
+    const subscriptionRef = db.collection('subscriptions').doc(businessId)
+    const subscriptionDoc = await subscriptionRef.get()
+
+    if (!subscriptionDoc.exists) {
+      console.warn(`⚠️ [USAGE] No existe suscripción para: ${businessId} - no se incrementa contador`)
+      return
+    }
+
+    const subscriptionData = subscriptionDoc.data()
+    if (!subscriptionData.usage) {
+      await subscriptionRef.update({
+        usage: { invoicesThisMonth: 1, totalCustomers: 0, totalProducts: 0 }
+      })
+      console.log(`📊 [USAGE] Campo usage inicializado y contador en 1 - Negocio: ${businessId}`)
+    } else {
+      await subscriptionRef.update({
+        'usage.invoicesThisMonth': FieldValue.increment(1)
+      })
+      console.log(`📊 [USAGE] Contador de comprobantes incrementado - Negocio: ${businessId}`)
+    }
+  } catch (counterError) {
+    console.error('⚠️ [USAGE] Error al incrementar contador (no crítico):', counterError)
+  }
+}
+
+/**
  * Cron Job: Reenviar documentos pendientes a SUNAT
  *
  * Se ejecuta cada 2 horas y busca:
@@ -4181,6 +4231,10 @@ export const retryPendingInvoices = onSchedule(
                     updatedAt: FieldValue.serverTimestamp()
                   })
 
+                  // Contar el comprobante en el USO mensual: este documento estaba
+                  // 'pending' y nunca se contó; ahora confirmamos que SUNAT lo aceptó.
+                  await incrementInvoiceUsage(businessId)
+
                   totalSuccess++
                   totalProcessed++
                   console.log(`✅ [RETRY] ${docNumber}: accepted (verificado sin reenvío)`)
@@ -4251,6 +4305,12 @@ export const retryPendingInvoices = onSchedule(
             }
 
             await invoicesRef.doc(invoiceId).update(updateData)
+
+            // Si quedó aceptado, contar el comprobante en el USO mensual (igual que
+            // en el primer envío). Los transitorios/rechazados NO cuentan.
+            if (result.accepted) {
+              await incrementInvoiceUsage(businessId)
+            }
 
             console.log(`✅ [RETRY] ${docNumber}: ${finalStatus}`)
             totalProcessed++
@@ -4448,6 +4508,11 @@ export const resendPendingBoletas = onRequest(
               retryCount: FieldValue.increment(1),
               updatedAt: FieldValue.serverTimestamp()
             })
+
+            // Si quedó aceptada, contar la boleta en el USO mensual.
+            if (result.accepted) {
+              await incrementInvoiceUsage(businessId)
+            }
 
             console.log(`${result.accepted ? '✅' : '❌'} [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
 
@@ -4691,6 +4756,12 @@ export const testRetryPendingInvoices = onRequest(
             }
 
             await invoicesRef.doc(invoiceId).update(updateData)
+
+            // Si quedó aceptado, contar el comprobante en el USO mensual.
+            if (result.accepted) {
+              await incrementInvoiceUsage(businessId)
+            }
+
             console.log(`✅ [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
             totalProcessed++
 
