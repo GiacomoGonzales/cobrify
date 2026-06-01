@@ -397,7 +397,13 @@ export const saveWeekSchedule = async (businessId, userId, isoYear, isoWeek, day
       updatedAt: serverTimestamp(),
     }
 
-    await setDoc(scheduleDoc(businessId, userId, isoYear, isoWeek), payload, { merge: true })
+    // OJO: sin { merge: true } a propósito. El planner siempre manda el objeto
+    // `days` COMPLETO de la semana, así que esto debe ser un reemplazo total.
+    // Con merge, Firestore hace merge PROFUNDO del mapa `days`: al cambiar un día
+    // de Descanso ({rest:true}) a un turno ({start,end}), el `rest:true` viejo no
+    // se borra — queda fusionado y la celda se sigue pintando como Descanso al
+    // recargar (se ve "bien" en memoria, pero al publicar/recargar revierte).
+    await setDoc(scheduleDoc(businessId, userId, isoYear, isoWeek), payload)
     return { success: true }
   } catch (error) {
     console.error('Error guardando horario:', error)

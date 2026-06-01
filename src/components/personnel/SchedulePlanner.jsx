@@ -18,6 +18,7 @@ import {
   publishWeekSchedules,
   copyPreviousWeek,
   calculateWeekHours,
+  calcShiftHours,
   getIsoWeek,
   addWeeks,
   getWeekDates,
@@ -274,15 +275,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
     setEditingCell(null)
   }
-  const setRecovery = (userId, dayKey) => {
-    setCell(userId, dayKey, { recovery: true, branchId: selectedBranchId })
-    setEditingCell(null)
-  }
   const clearCell = (userId, dayKey) => {
     setCell(userId, dayKey, null)
     setEditingCell(null)
   }
-  const setCustom = (userId, dayKey, start, end, breakMin = 0) => {
+  const setCustom = (userId, dayKey, start, end, breakMin = 0, isRecovery = false) => {
     setSchedules((prev) => {
       const userSch = prev[userId] || { days: {}, totalHours: 0, publishedAt: null }
       const existing = userSch.days?.[dayKey] || {}
@@ -290,14 +287,31 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
       // y no preservar nada. Evita sobrescribir datos de otra sucursal por accidente.
       const sameBranch = !existing.branchId || existing.branchId === selectedBranchId
       const base = sameBranch ? existing : {}
-      const newDays = { ...userSch.days, [dayKey]: {
-        ...base,
-        start,
-        end,
-        breakMinutes: breakMin,
-        color: base.color || '#94a3b8',
-        branchId: selectedBranchId,
-      } }
+      // Recuperación = turno con horario pero marcado como recuperación: muestra su
+      // duración pero NO suma a las horas productivas de la semana (igual que el
+      // descanso). En ambos casos limpiamos rest/recovery explícitamente para no
+      // arrastrar marcas viejas (la celda se reemplaza por completo al guardar).
+      const newCell = isRecovery
+        ? {
+            recovery: true,
+            rest: false,
+            start,
+            end,
+            breakMinutes: breakMin,
+            color: '#fb923c',
+            branchId: selectedBranchId,
+          }
+        : {
+            ...base,
+            recovery: false,
+            rest: false,
+            start,
+            end,
+            breakMinutes: breakMin,
+            color: (base.color && !base.rest && !base.recovery) ? base.color : '#94a3b8',
+            branchId: selectedBranchId,
+          }
+      const newDays = { ...userSch.days, [dayKey]: newCell }
       return {
         ...prev,
         [userId]: { ...userSch, days: newDays, totalHours: calculateWeekHours(newDays) },
@@ -427,6 +441,35 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     } catch (e) {
       console.error(e)
       toast.error('Error al generar PDFs')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  // PDF "por usuario" (integrado): una sola tabla con TODAS las sucursales,
+  // mostrando la sucursal en cada recuadro y el total combinado por empleado.
+  const handlePrintIntegrated = async () => {
+    if (employees.length === 0) {
+      toast.error('No hay empleados para imprimir')
+      return
+    }
+    setPrinting(true)
+    try {
+      await generateSchedulePDF({
+        employees,
+        rows: displayRows,
+        schedules,
+        weekDates,
+        isoYear,
+        isoWeek,
+        businessInfo,
+        showBranchInCell: true,
+        branches,
+      })
+      toast.success('PDF por usuario generado')
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al generar PDF')
     } finally {
       setPrinting(false)
     }
@@ -715,6 +758,17 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                       <span className="block text-[11px] text-gray-400">Genera {branches.length} PDFs separados</span>
                     </span>
                   </button>
+                  <button
+                    onClick={() => { setShowPdfMenu(false); handlePrintIntegrated() }}
+                    disabled={printing || employees.length === 0}
+                    className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50 border-t border-gray-100"
+                  >
+                    <FileDown className="w-3.5 h-3.5 mt-0.5 text-gray-400 flex-shrink-0" />
+                    <span>
+                      <span className="block font-medium">Por usuario (integrado)</span>
+                      <span className="block text-[11px] text-gray-400">Todas las sucursales, con su nombre en cada turno y total combinado</span>
+                    </span>
+                  </button>
                 </div>
               )}
             </div>
@@ -859,7 +913,6 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           popoverRef={popoverRef}
           assignTemplate={assignTemplate}
           setRest={setRest}
-          setRecovery={setRecovery}
           clearCell={clearCell}
           setCustom={setCustom}
           updateCellTimes={updateCellTimes}
@@ -956,9 +1009,8 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                                 cell={cell}
                                 onPickTemplate={(t) => assignTemplate(emp.id, dk, t)}
                                 onRest={() => setRest(emp.id, dk)}
-                                onRecovery={() => setRecovery(emp.id, dk)}
                                 onClear={() => clearCell(emp.id, dk)}
-                                onCustom={(s, e, b) => setCustom(emp.id, dk, s, e, b)}
+                                onCustom={(s, e, b, rec) => setCustom(emp.id, dk, s, e, b, rec)}
                                 onClose={() => setEditingCell(null)}
                               />
                             )}
@@ -1023,13 +1075,18 @@ function ScheduleCell({ cell, onClick }) {
     )
   }
   if (cell.recovery) {
+    const hasTimes = cell.start && cell.end
+    const recHours = hasTimes ? calcShiftHours(cell.start, cell.end, cell.breakMinutes || 0) : null
     return (
       <button
         onClick={onClick}
-        className="w-full h-12 rounded-md border border-orange-200 bg-orange-50 text-orange-700 text-xs font-medium hover:bg-orange-100"
-        title="Día de recuperación (no suma a las horas semanales)"
+        className="w-full h-12 rounded-md border border-orange-200 bg-orange-50 text-orange-700 text-xs font-medium hover:bg-orange-100 flex flex-col items-center justify-center px-1 leading-tight"
+        title="Recuperación (no suma a las horas de la semana)"
       >
-        Recuperación
+        <span>Recuperación</span>
+        {hasTimes && (
+          <span className="text-[10px] font-normal">{cell.start}–{cell.end} · {recHours}h</span>
+        )}
       </button>
     )
   }
@@ -1051,12 +1108,15 @@ function ScheduleCell({ cell, onClick }) {
   )
 }
 
-const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRecovery, onClear, onCustom, onClose }, ref) => {
-  // Si ya hay un turno asignado (no descanso ni recuperación), abrimos directo
-  // en modo edición personalizado para que el usuario pueda ajustar tiempos y
-  // refrigerio en un click.
+const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onClear, onCustom, onClose }, ref) => {
+  // Si ya hay un turno (o una recuperación con horario) asignado, abrimos directo
+  // en modo edición personalizado para ajustar tiempos y refrigerio en un click.
   const hasExistingShift = !!(cell && cell.start && cell.end && !cell.rest && !cell.recovery)
-  const [customMode, setCustomMode] = useState(hasExistingShift)
+  const hasExistingRecovery = !!(cell && cell.recovery && cell.start && cell.end)
+  const [customMode, setCustomMode] = useState(hasExistingShift || hasExistingRecovery)
+  // isRecovery: el editor de horario está en modo "recuperación" (turno marcado
+  // como recuperación; muestra su duración pero no suma a las horas productivas).
+  const [isRecovery, setIsRecovery] = useState(hasExistingRecovery)
   const [start, setStart] = useState(cell?.start || '08:00')
   const [end, setEnd] = useState(cell?.end || '17:00')
   const [breakMin, setBreakMin] = useState(cell?.breakMinutes || 0)
@@ -1101,6 +1161,12 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
 
       {customMode ? (
         <div className="p-3 space-y-2">
+          {isRecovery && (
+            <div className="flex items-center gap-1.5 text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+              <Coffee className="w-3 h-3 flex-shrink-0" />
+              <span>Recuperación · no suma a las horas de la semana</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] text-gray-500 uppercase mb-0.5">Inicio</label>
@@ -1150,14 +1216,14 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
 
           <div className="flex gap-2 pt-1">
             <button
-              onClick={() => setCustomMode(false)}
+              onClick={() => { setCustomMode(false); setIsRecovery(false) }}
               className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-50"
             >
               Volver
             </button>
             <button
-              onClick={() => onCustom(start, end, breakMin)}
-              className="flex-1 px-3 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+              onClick={() => onCustom(start, end, breakMin, isRecovery)}
+              className={`flex-1 px-3 py-1.5 text-xs text-white rounded ${isRecovery ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary-600 hover:bg-primary-700'}`}
             >
               Aplicar
             </button>
@@ -1182,7 +1248,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
           )}
           <div className="border-t border-gray-100 py-1">
             <button
-              onClick={() => setCustomMode(true)}
+              onClick={() => { setIsRecovery(false); setCustomMode(true) }}
               className="w-full px-3 py-1.5 hover:bg-gray-50 text-sm text-left flex items-center gap-2 text-primary-700"
             >
               <Edit2 className="w-3.5 h-3.5" /> Turno personalizado
@@ -1194,9 +1260,9 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onRec
               <Coffee className="w-3.5 h-3.5" /> Descanso
             </button>
             <button
-              onClick={onRecovery}
+              onClick={() => { setIsRecovery(true); setCustomMode(true) }}
               className="w-full px-3 py-1.5 hover:bg-orange-50 text-sm text-left flex items-center gap-2 text-orange-700"
-              title="No suma a las horas semanales, pero queda visible en el horario"
+              title="Turno marcado como recuperación: muestra su duración pero no suma a las horas de la semana"
             >
               <Coffee className="w-3.5 h-3.5" /> Recuperación
             </button>
@@ -1346,7 +1412,7 @@ function TemplateForm({ template, branches = [], onSave, onCancel }) {
 function DailyTimeline({
   rows, schedules, dirtyUsers, weekDates, selectedDayKey, onSelectDay,
   templates, editingCell, setEditingCell, popoverRef,
-  assignTemplate, setRest, setRecovery, clearCell, setCustom, updateCellTimes, selectedBranchId,
+  assignTemplate, setRest, clearCell, setCustom, updateCellTimes, selectedBranchId,
   onEmployeeClick,
 }) {
   const scrollRef = useRef(null)
@@ -1664,7 +1730,9 @@ function DailyTimeline({
                     const cell = (raw && cellBranchId(raw) === selectedBranchId) ? raw : null
                     if (!cell) return null
                     const dayLeft = di * DAY_W
-                    if (cell.rest || cell.recovery) {
+                    // Descanso, o recuperación SIN horario (legacy): chip centrado.
+                    // La recuperación CON horario cae al render de barra (naranja) de abajo.
+                    if (cell.rest || (cell.recovery && (!cell.start || !cell.end))) {
                       const isRest = !!cell.rest
                       return (
                         <div
@@ -1734,7 +1802,7 @@ function DailyTimeline({
                           cursor: 'grab',
                         }}
                       >
-                        <span className="px-2 truncate pointer-events-none">{pc.start} – {pc.end}</span>
+                        <span className="px-2 truncate pointer-events-none">{cell.recovery ? 'Recup. ' : ''}{pc.start} – {pc.end}</span>
                         {hasBreak && (
                           <div
                             className="absolute top-0 bottom-0 bg-gray-900/25 border-l border-r border-gray-700/40 flex items-center justify-center text-[10px] text-gray-900 pointer-events-none overflow-hidden gap-0.5"
@@ -1758,9 +1826,8 @@ function DailyTimeline({
                         cell={editCell}
                         onPickTemplate={(t) => assignTemplate(emp.id, editDk, t)}
                         onRest={() => setRest(emp.id, editDk)}
-                        onRecovery={() => setRecovery(emp.id, editDk)}
                         onClear={() => clearCell(emp.id, editDk)}
-                        onCustom={(s, e, b) => setCustom(emp.id, editDk, s, e, b)}
+                        onCustom={(s, e, b, rec) => setCustom(emp.id, editDk, s, e, b, rec)}
                         onClose={() => setEditingCell(null)}
                       />
                     </div>

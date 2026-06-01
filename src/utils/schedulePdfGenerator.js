@@ -34,6 +34,11 @@ export const generateSchedulePDF = async ({
   isoWeek,
   businessInfo = {},
   branchName = '',
+  // Modo "por usuario / integrado": NO filtra por sucursal, muestra el nombre de
+  // la sucursal dentro de cada recuadro y el total por empleado es la suma de
+  // TODAS las sucursales (sch.totalHours). Requiere `branches` para los nombres.
+  showBranchInCell = false,
+  branches = [],
   // Si se pasa branchId, sólo se renderizan las celdas de ese branch (las de
   // otras sucursales aparecen vacías) y el total de horas se recalcula sobre
   // los turnos filtrados. Sin él, comportamiento legacy: se renderiza todo
@@ -112,6 +117,12 @@ export const generateSchedulePDF = async ({
     doc.setTextColor(55, 65, 81)
     doc.text(`Sucursal: ${branchName}`, pageWidth / 2, y + 4, { align: 'center' })
     y += 5
+  } else if (showBranchInCell) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(55, 65, 81)
+    doc.text('Todas las sucursales · vista por usuario', pageWidth / 2, y + 4, { align: 'center' })
+    y += 5
   }
 
   // Rango de fechas
@@ -143,7 +154,9 @@ export const generateSchedulePDF = async ({
   const dayColWidth = (contentWidth - employeeColWidth - totalColWidth) / 7
 
   const headerHeight = 10
-  const rowHeight = 13
+  // En modo integrado cada celda lleva una línea extra (sucursal), así que la
+  // fila necesita un poco más de alto.
+  const rowHeight = showBranchInCell ? 16 : 13
 
   const drawTableHeader = (startY) => {
     // Fondo header
@@ -187,6 +200,28 @@ export const generateSchedulePDF = async ({
   doc.setTextColor(31, 41, 55)
   doc.setFontSize(9)
 
+  // Nombre legible de la sucursal de una celda (modo integrado por usuario).
+  const branchNameOf = (cell) => {
+    const id = cellBranchId(cell)
+    if (id === MAIN_BRANCH_ID) return 'Principal'
+    const b = (branches || []).find((x) => x.id === id)
+    return b?.name || 'Sucursal'
+  }
+  const resetCellText = () => {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(31, 41, 55)
+  }
+  // Línea inferior con la sucursal (y opcionalmente el refrigerio), modo integrado.
+  const drawBranchLine = (label, cx, rowY, breakMin = 0) => {
+    if (!label) return
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.setTextColor(107, 114, 128)
+    const txt = breakMin > 0 ? `${label} · −${breakMin}m` : label
+    doc.text(truncate(txt, 24), cx, rowY + rowHeight - 1.8, { align: 'center' })
+  }
+
   const renderCell = (cell, x, rowY) => {
     const cellW = dayColWidth - 1.5
     const cellH = rowHeight - 1.5
@@ -208,30 +243,43 @@ export const generateSchedulePDF = async ({
       return
     }
 
+    // Etiqueta de sucursal al pie de la celda (sólo en modo integrado por usuario).
+    const branchLabel = showBranchInCell ? branchNameOf(cell) : null
+    const cx = x + dayColWidth / 2
+    // Si hay etiqueta de sucursal, subimos el contenido para dejarle lugar abajo.
+    const contentY = branchLabel ? rowY + rowHeight / 2 - 1 : rowY + rowHeight / 2 + 1
+
     if (cell.rest) {
       doc.setFillColor(243, 244, 246) // gray-100
       doc.roundedRect(cellX, cellY, cellW, cellH, 1, 1, 'F')
       doc.setTextColor(107, 114, 128)
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(8)
-      doc.text('DESCANSO', x + dayColWidth / 2, rowY + rowHeight / 2 + 1, { align: 'center' })
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.setTextColor(31, 41, 55)
+      doc.text('DESCANSO', cx, contentY, { align: 'center' })
+      drawBranchLine(branchLabel, cx, rowY)
+      resetCellText()
       return
     }
 
     if (cell.recovery) {
-      // Estilo naranja para distinguir visualmente de descanso. No suma horas.
+      // Naranja para distinguir de descanso. No suma horas. Si tiene horario
+      // (modelo nuevo), muestra el rango + la etiqueta "recuperación".
       doc.setFillColor(255, 237, 213) // orange-100
       doc.roundedRect(cellX, cellY, cellW, cellH, 1, 1, 'F')
       doc.setTextColor(194, 65, 12) // orange-700
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(7.5)
-      doc.text('RECUPERACIÓN', x + dayColWidth / 2, rowY + rowHeight / 2 + 1, { align: 'center' })
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.setTextColor(31, 41, 55)
+      if (cell.start && cell.end) {
+        doc.setFontSize(8)
+        doc.text(`${cell.start} - ${cell.end}`, cx, contentY - 1, { align: 'center' })
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(6.5)
+        doc.text('recuperación', cx, contentY + 2.6, { align: 'center' })
+      } else {
+        doc.setFontSize(7.5)
+        doc.text('RECUPERACIÓN', cx, contentY, { align: 'center' })
+      }
+      drawBranchLine(branchLabel, cx, rowY)
+      resetCellText()
       return
     }
 
@@ -249,17 +297,18 @@ export const generateSchedulePDF = async ({
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     const timeText = `${cell.start || ''} - ${cell.end || ''}`
-    doc.text(timeText, x + dayColWidth / 2, rowY + rowHeight / 2 + 0.5, { align: 'center' })
+    doc.text(timeText, cx, contentY, { align: 'center' })
 
-    if (cell.breakMinutes > 0) {
+    if (branchLabel) {
+      // Modo integrado: el refrigerio va junto a la sucursal en la línea inferior.
+      drawBranchLine(branchLabel, cx, rowY, cell.breakMinutes || 0)
+    } else if (cell.breakMinutes > 0) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
       doc.setTextColor(107, 114, 128)
-      doc.text(`break ${cell.breakMinutes}m`, x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' })
+      doc.text(`break ${cell.breakMinutes}m`, cx, rowY + rowHeight - 2, { align: 'center' })
     }
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(31, 41, 55)
+    resetCellText()
   }
 
   let zebra = false
@@ -391,13 +440,16 @@ export const generateSchedulePDF = async ({
   doc.setTextColor(75, 85, 99)
   doc.text('Leyenda:', margin, y)
   doc.setFont('helvetica', 'normal')
-  doc.text('— = sin turno asignado    |    DESCANSO = día libre    |    RECUPERACIÓN = no suma horas    |    HH:MM - HH:MM = turno', margin + 14, y)
+  {
+    const legendText = '— = sin turno asignado    |    DESCANSO = día libre    |    RECUPERACIÓN = no suma horas    |    HH:MM - HH:MM = turno'
+    doc.text(showBranchInCell ? `${legendText}    |    Línea inferior = sucursal` : legendText, margin + 14, y)
+  }
 
   drawFooter(doc, pageWidth, pageHeight, margin)
 
   // ============= SALIDA =============
   if (download) {
-    const fileName = `Horario_S${isoWeek}_${isoYear}.pdf`
+    const fileName = `${showBranchInCell ? 'Horario_PorUsuario' : 'Horario'}_S${isoWeek}_${isoYear}.pdf`
     const isNative = Capacitor.isNativePlatform()
 
     if (isNative) {

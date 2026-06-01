@@ -222,8 +222,17 @@ function DayCell({ date, cell, isToday, multiBranch, branchMap }) {
           <Coffee className="w-3 h-3" /> Descanso
         </div>
       ) : isRecovery ? (
-        <div className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-1 text-[10px] text-orange-700 flex items-center gap-1">
-          <Coffee className="w-3 h-3" /> Recup.
+        <div className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-1 text-[10px] sm:text-[11px] text-orange-700 leading-tight">
+          <div className="flex items-center gap-1 font-medium"><Coffee className="w-3 h-3" /> Recup.</div>
+          {cell.start && cell.end && (
+            <div className="text-orange-600">{cell.start}–{cell.end} · {calcShiftHours(cell.start, cell.end, cell.breakMinutes || 0)}h</div>
+          )}
+          {multiBranch && branchName && (
+            <div className="mt-0.5 flex items-center gap-0.5 text-[9px] text-gray-500">
+              <MapPin className="w-2.5 h-2.5 text-primary-500 flex-shrink-0" />
+              <span className="truncate">{branchName}</span>
+            </div>
+          )}
         </div>
       ) : null}
     </div>
