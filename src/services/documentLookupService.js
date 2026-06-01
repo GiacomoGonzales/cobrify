@@ -239,9 +239,18 @@ export const consultarEstablecimientos = async (ruc) => {
 
     const response = await httpRequest(url, options)
 
+    // apiperu responde con ERROR cuando el RUC no tiene LOCALES ANEXOS (solo el
+    // domicilio fiscal) — le pasa a la mayoría de RUCs de un solo local. Eso NO es
+    // un fallo: lo tratamos como "sin anexos" (lista vacía).
+    const esSinAnexos = (txt) =>
+      /anexos/i.test(txt || '') && /(no se encontr|no hay|sin |no tiene|not found)/i.test(txt || '')
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       const detalle = errorData.error || errorData.message || `HTTP ${response.status}`
+      if (esSinAnexos(detalle)) {
+        return { success: true, data: [] }
+      }
       // 401/402/403 normalmente = el plan/token de apiperu no incluye este endpoint
       if ([401, 402, 403].includes(response.status)) {
         throw new Error(`Tu plan de apiperu.dev no incluye la consulta de establecimientos (${detalle})`)
@@ -252,9 +261,13 @@ export const consultarEstablecimientos = async (ruc) => {
     const result = await response.json()
 
     if (!result || result.success === false) {
+      const msg = result?.message || result?.error || ''
+      if (esSinAnexos(msg)) {
+        return { success: true, data: [] }
+      }
       return {
         success: false,
-        error: result.message || result.error || 'No se encontraron establecimientos para este RUC'
+        error: msg || 'No se encontraron establecimientos para este RUC'
       }
     }
 

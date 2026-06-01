@@ -4088,7 +4088,7 @@ export default function POS() {
       }
       const list = res.data || []
       if (list.length === 0) {
-        toast.info('Este RUC no tiene establecimientos registrados en SUNAT')
+        toast.info('Este RUC no tiene locales anexos en SUNAT — se mantiene el domicilio fiscal')
         return
       }
       if (list.length === 1) {
