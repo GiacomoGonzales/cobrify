@@ -609,7 +609,9 @@ export default function Reports() {
           productSales[key] = {
             name: itemName,
             productId: productId,
-            sku: item.sku || productData?.sku || '',
+            // SKU del producto; si no tiene, cae al código de barras (como el
+            // reporte detallado de ventas). Busca en el item y en el maestro.
+            sku: item.sku || productData?.sku || item.code || productData?.code || '',
             quantity: 0,
             revenue: 0,
             cost: 0,
