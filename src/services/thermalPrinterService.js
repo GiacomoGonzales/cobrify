@@ -1973,7 +1973,7 @@ export const testPrinter = async (paperWidth = 58) => {
       // Construir test page con EscPosBuilder
       const builder = new EscPosBuilder();
       builder.init()
-        .align('center')
+        .alignCenter()
         .bold(true)
         .text('PRUEBA WIFI/LAN')
         .newLine()
@@ -2629,7 +2629,9 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       }
     }
 
-    builder.feed(3)
+    // Avance antes del corte configurable (Configuración > Impresora). Antes estaba
+    // fijo en 3, por eso el ajuste no afectaba al ticket por WiFi/documentos.
+    builder.feed(getCutFeedLines())
       .cut();
 
     return builder.toBase64();
