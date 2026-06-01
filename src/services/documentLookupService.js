@@ -197,6 +197,88 @@ export const consultarRUC = async (ruc) => {
 }
 
 /**
+ * Consultar los ESTABLECIMIENTOS (anexos) de un RUC en SUNAT.
+ * Es una consulta APARTE de consultarRUC (consume un crédito adicional de apiperu).
+ * Útil para RUCs con varios locales: devuelve la lista para que el usuario elija.
+ * @param {string} ruc - Número de RUC (11 dígitos)
+ * @returns {Promise<Object>} - { success, data: [{ codigo, tipo, direccion, direccionCompleta, departamento, provincia, distrito, ubigeo }] }
+ */
+export const consultarEstablecimientos = async (ruc) => {
+  try {
+    // Validar formato
+    if (!ruc || ruc.length !== 11 || !/^\d{11}$/.test(ruc)) {
+      return {
+        success: false,
+        error: 'RUC debe tener 11 dígitos numéricos'
+      }
+    }
+
+    // Validar que existe el token
+    if (!APIPERU_TOKEN) {
+      return {
+        success: false,
+        error: 'Token de API no configurado. Verifica tu archivo .env.local'
+      }
+    }
+
+    const isNative = Capacitor.isNativePlatform()
+
+    // Web: usa el proxy /api/ruc-establecimientos. Nativo: directo a apiperu.dev.
+    const url = isNative
+      ? `${API_BASE_URL}/api/ruc-establecimientos-anexos`
+      : '/api/ruc-establecimientos'
+    const options = {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${APIPERU_TOKEN}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ruc })
+    }
+
+    const response = await httpRequest(url, options)
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'No se pudieron consultar los establecimientos')
+    }
+
+    const result = await response.json()
+
+    if (!result || result.success === false) {
+      return {
+        success: false,
+        error: result.message || 'No se encontraron establecimientos para este RUC'
+      }
+    }
+
+    // La data es un array de establecimientos
+    const list = Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : [])
+
+    const data = list.map(e => ({
+      codigo: e.codigo || '',
+      tipo: e.tipo_de_establecimiento || '',
+      actividad: e.actividad_economica || '',
+      direccion: e.direccion || '',
+      direccionCompleta: e.direccion_completa || e.direccion || '',
+      departamento: e.departamento || '',
+      provincia: e.provincia || '',
+      distrito: e.distrito || '',
+      ubigeo: e.ubigeo || e.ubigeo_sunat || ''
+    }))
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error al consultar establecimientos:', error)
+    return {
+      success: false,
+      error: error.message || 'Error al consultar establecimientos. Verifique su conexión a internet.'
+    }
+  }
+}
+
+/**
  * Consultar documento (DNI o RUC) automáticamente según longitud
  * @param {string} documento - Número de documento
  * @returns {Promise<Object>} - Datos del documento

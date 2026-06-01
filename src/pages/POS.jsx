@@ -84,7 +84,7 @@ import {
   getCashRegisterSession,
 } from '@/services/firestoreService'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
-import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
@@ -345,6 +345,11 @@ export default function POS() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const searchInputRef = useRef(null)
+  // Detección de escaneo de pistola "copiar/pegar/Enter": momento del último pegado
+  // en el buscador, y bandera de escaneo desde el detector global de pistola. Sirven
+  // para avisar (modal) cuando el código escaneado no está registrado.
+  const lastSearchPasteRef = useRef(0)
+  const scanSubmitRef = useRef(false)
   const cartScrollRef = useRef(null)
   const cartSectionRef = useRef(null)
   // Detecta si estamos en la app nativa (móvil/tablet vía Capacitor). En web/desktop
@@ -369,6 +374,10 @@ export default function POS() {
   // Ref del botón "Procesar Venta". Cuando el usuario selecciona un método de pago,
   // movemos el focus aquí para que pueda apretar Enter y procesar sin usar el mouse.
   const checkoutButtonRef = useRef(null)
+  // Ref del input de monto del primer pago. Al elegir "Efectivo" enfocamos y
+  // seleccionamos este campo para que el cajero tipee el monto recibido (vuelto)
+  // y luego procese con Enter.
+  const cashAmountInputRef = useRef(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState(() => {
     if (allowedDocumentTypes && allowedDocumentTypes.length > 0) {
@@ -406,6 +415,10 @@ export default function POS() {
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
   const [isLookingUp, setIsLookingUp] = useState(false)
+  // Establecimientos (anexos) de un RUC con varios locales: lista + modal para elegir.
+  const [establishments, setEstablishments] = useState([])
+  const [showEstablishmentsModal, setShowEstablishmentsModal] = useState(false)
+  const [loadingEstablishments, setLoadingEstablishments] = useState(false)
   const [customerSearchTerm, setCustomerSearchTerm] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
 
@@ -579,6 +592,9 @@ export default function POS() {
 
   // Aviso de insumos insuficientes (recetas): bloquea la venta con un modal claro
   const [missingIngredientsAlert, setMissingIngredientsAlert] = useState(null)
+
+  // Aviso (modal) cuando se escanea/pega un código que no existe en el sistema.
+  const [unknownScanCode, setUnknownScanCode] = useState(null)
 
   // Custom product modal
   const [showCustomProductModal, setShowCustomProductModal] = useState(false)
@@ -2495,6 +2511,9 @@ export default function POS() {
           if (avgPerChar < 50) {
             e.preventDefault()
             setSearchTerm(buffer)
+            // Marca que esto vino de la pistola (detector global): si el código no
+            // existe, el auto-agregado mostrará el aviso de "no registrado".
+            scanSubmitRef.current = true
             // En desktop con mouse, llevar el foco al buscador para que el
             // cajero pueda continuar editando con teclado. En tablets evitar
             // el focus para no abrir el teclado virtual — la pistola escribe
@@ -2538,6 +2557,9 @@ export default function POS() {
     if (!searchTerm || searchTerm.length < 3) return
 
     const timer = setTimeout(() => {
+      // ¿Vino de la pistola (detector global)? Consumimos la bandera.
+      const wasGunScan = scanSubmitRef.current
+      scanSubmitRef.current = false
       // Buscar productos que coincidan exactamente con el código de barras o SKU
       // También comparar sin guiones para compatibilidad con pistola lectora
       const searchLower = searchTerm.toLowerCase()
@@ -2620,10 +2642,43 @@ export default function POS() {
           setSearchTerm('')
         }
       }
+
+      // No se encontró ningún producto con ese código. Si vino de la pistola
+      // (detector global), avisar con un modal para que el cajero se detenga.
+      if (exactMatches.length === 0 && !variantMatch && wasGunScan && products.length > 0) {
+        setUnknownScanCode(searchTerm)
+        setSearchTerm('')
+      }
     }, 500)
 
     return () => clearTimeout(timer)
   }, [searchTerm, products, companySettings, selectedWarehouse])
+
+  // ¿Existe algún producto/variante con este código EXACTO (code/SKU/barcode)?
+  // Se usa para avisar cuando la pistola pega/escanea un código no registrado.
+  const codeExists = (term) => {
+    const searchLower = String(term || '').toLowerCase().trim()
+    if (!searchLower) return false
+    const searchNoHyphens = searchLower.replace(/-/g, '')
+    return products.some(p => {
+      if (p.isActive === false) return false
+      const code = p.code?.toLowerCase() || ''
+      const sku = p.sku?.toLowerCase() || ''
+      if (code === searchLower || sku === searchLower ||
+        code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens) return true
+      if (Array.isArray(p.barcodes) && p.barcodes.some(bc => {
+        const b = String(bc || '').toLowerCase()
+        return b === searchLower || b.replace(/-/g, '') === searchNoHyphens
+      })) return true
+      if (p.hasVariants && Array.isArray(p.variants) && p.variants.some(v => {
+        if (!v) return false
+        const vSku = (v.sku || '').toLowerCase()
+        const vBarcode = (v.barcode || '').toLowerCase()
+        return vSku === searchLower || vBarcode === searchLower || vSku.replace(/-/g, '') === searchNoHyphens
+      })) return true
+      return false
+    })
+  }
 
   // Función para escanear código de barras
   const handleScanBarcode = async () => {
@@ -4015,6 +4070,51 @@ export default function POS() {
     }
   }
 
+  // Consultar los establecimientos (anexos) del RUC. Si hay varios, abre un modal
+  // para elegir la dirección; si hay uno solo, la aplica directo. Es una consulta
+  // aparte a la API (1 crédito), por eso va con botón explícito.
+  const handleViewEstablishments = async () => {
+    const ruc = (customerData.documentNumber || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('Ingresa un RUC válido (11 dígitos) primero')
+      return
+    }
+    setLoadingEstablishments(true)
+    try {
+      const res = await consultarEstablecimientos(ruc)
+      if (!res.success) {
+        toast.error(res.error || 'No se pudieron obtener los establecimientos', 5000)
+        return
+      }
+      const list = res.data || []
+      if (list.length === 0) {
+        toast.info('Este RUC no tiene establecimientos registrados en SUNAT')
+        return
+      }
+      if (list.length === 1) {
+        const dir = list[0].direccionCompleta || list[0].direccion || ''
+        if (dir) setCustomerData(prev => ({ ...prev, address: dir }))
+        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        return
+      }
+      setEstablishments(list)
+      setShowEstablishmentsModal(true)
+    } catch (error) {
+      console.error('Error al consultar establecimientos:', error)
+      toast.error('Error al consultar establecimientos. Verifique su conexión.', 5000)
+    } finally {
+      setLoadingEstablishments(false)
+    }
+  }
+
+  // Elegir un establecimiento del modal → poner su dirección en el cliente.
+  const handleSelectEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setCustomerData(prev => ({ ...prev, address: dir }))
+    setShowEstablishmentsModal(false)
+    toast.success('Dirección del establecimiento aplicada')
+  }
+
   // Actualizar tipo de documento del cliente cuando cambia el tipo de comprobante
   useEffect(() => {
     // Solo forzar RUC en facturas, en boletas mantener el tipo seleccionado o default DNI
@@ -4314,11 +4414,19 @@ export default function POS() {
 
     setPayments(newPayments)
 
-    // UX: mover el foco al botón "Procesar Venta" así el usuario puede apretar
-    // Enter para procesar la venta sin tener que mover el mouse.
-    // setTimeout(0) deja que React termine el re-render antes del focus.
+    // UX: tras elegir el método, mover el foco para poder procesar con Enter sin
+    // usar el mouse. Si es EFECTIVO y hay un solo pago, enfocamos y SELECCIONAMOS
+    // el campo del monto (el cajero suele tipear lo que recibe para dar vuelto),
+    // así sobrescribe el total y aprieta Enter. Para el resto, foco al botón.
+    // setTimeout(0) deja que React termine el re-render (y el autollenado del
+    // monto) antes de aplicar el focus.
     setTimeout(() => {
-      checkoutButtonRef.current?.focus()
+      if (method === 'CASH' && newPayments.length === 1 && cashAmountInputRef.current) {
+        cashAmountInputRef.current.focus()
+        try { cashAmountInputRef.current.select() } catch (_) {}
+      } else {
+        checkoutButtonRef.current?.focus()
+      }
     }, 0)
   }
 
@@ -6294,7 +6402,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 type="text"
                 placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={e => {
+                  // Edición manual: cancela la bandera de escaneo de pistola.
+                  scanSubmitRef.current = false
+                  setSearchTerm(e.target.value)
+                }}
+                onPaste={() => { lastSearchPasteRef.current = Date.now() }}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  const term = searchTerm.trim()
+                  // Solo tratamos el Enter como "escaneo" si el código se PEGÓ recién
+                  // (pistola: copiar/pegar/Enter). Si el usuario tipeó un nombre a mano,
+                  // no mostramos error (puede estar buscando por nombre).
+                  const wasPaste = Date.now() - lastSearchPasteRef.current < 1500
+                  if (term.length >= 1 && wasPaste && products.length > 0 && !codeExists(term)) {
+                    setUnknownScanCode(term)
+                    setSearchTerm('')
+                  }
+                }}
                 disabled={saleCompleted}
                 className="flex-1 min-w-0 text-base sm:text-lg border-none bg-transparent focus:ring-0 focus:outline-none disabled:cursor-not-allowed"
               />
@@ -7236,6 +7362,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       placeholder="Dirección"
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
+                    {customerData.documentNumber?.length === 11 && (
+                      <button
+                        type="button"
+                        onClick={handleViewEstablishments}
+                        disabled={loadingEstablishments}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
+                        title="Ver los establecimientos (anexos) registrados en SUNAT para elegir la dirección"
+                      >
+                        {loadingEstablishments
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Store className="w-3.5 h-3.5" />}
+                        Ver establecimientos (SUNAT)
+                      </button>
+                    )}
                     <div className="flex gap-2 min-w-0">
                       <input
                         type="email"
@@ -8875,11 +9015,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center gap-2">
                         {/* Monto */}
                         <input
+                          ref={index === 0 ? cashAmountInputRef : null}
                           type="number"
                           step="0.01"
                           min="0"
                           value={payment.amount}
                           onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
+                          onKeyDown={(e) => {
+                            // Enter en el monto = procesar la venta (haya o no
+                            // modificado el número). Respeta el estado del botón.
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              if (cart.length > 0 && !isProcessing && !saleCompleted && !isLoading && lastInvoiceData === null) {
+                                handleCheckout()
+                              }
+                            }
+                          }}
                           placeholder="0.00"
                           disabled={!payment.method || lastInvoiceData !== null}
                           className="w-24 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
@@ -9851,6 +10002,75 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             <Button onClick={() => setMissingIngredientsAlert(null)}>
               Entendido
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Aviso: código escaneado/pegado que no está registrado en el sistema */}
+      <Modal
+        isOpen={!!unknownScanCode}
+        onClose={() => setUnknownScanCode(null)}
+        title="Código no registrado"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm text-gray-700">
+                Este código no está registrado en el sistema:
+              </p>
+              <p className="mt-1 font-mono text-base font-semibold text-gray-900 break-all">
+                {unknownScanCode}
+              </p>
+              <p className="mt-2 text-sm text-gray-600">
+                No se agregó ningún producto. Verifícalo antes de seguir escaneando.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => { setUnknownScanCode(null); searchInputRef.current?.focus() }}>
+              Entendido
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: elegir establecimiento (anexo) cuando el RUC tiene varios locales */}
+      <Modal
+        isOpen={showEstablishmentsModal}
+        onClose={() => setShowEstablishmentsModal(false)}
+        title="Elegir establecimiento"
+        size="md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Este RUC tiene varios establecimientos en SUNAT. Elige la dirección que corresponde:
+          </p>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {establishments.map((est, idx) => (
+              <button
+                key={`${est.codigo}-${idx}`}
+                type="button"
+                onClick={() => handleSelectEstablishment(est)}
+                className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-1.5 py-0.5">
+                    {est.codigo || '—'}
+                  </span>
+                  {est.tipo && <span className="text-xs text-gray-500">{est.tipo}</span>}
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  {est.direccionCompleta || est.direccion || 'Sin dirección'}
+                </p>
+                {(est.distrito || est.provincia || est.departamento) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[est.distrito, est.provincia, est.departamento].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </Modal>
