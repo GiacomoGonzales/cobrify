@@ -224,11 +224,14 @@ const migrateLegacyCategories = (cats) => {
 }
 
 const getRootCategories = (categories) => {
-  return categories.filter(cat => cat.parentId === null)
+  // Ordenar por `order` (mismo criterio que la vista de Productos, que persiste el
+  // orden alfabético al usar "Ordenar alfabéticamente"). Antes el POS no ordenaba y
+  // las mostraba en orden de creación.
+  return categories.filter(cat => cat.parentId === null).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
 
 const getSubcategories = (categories, parentId) => {
-  return categories.filter(cat => cat.parentId === parentId)
+  return categories.filter(cat => cat.parentId === parentId).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
 
 const getCategoryById = (categories, id) => {
