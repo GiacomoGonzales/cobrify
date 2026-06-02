@@ -4241,9 +4241,10 @@ export default function Products() {
                 const stockDisplay = product.hasVariants
                   ? product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
                   : realStock
+                const isInactive = product.isActive === false
 
                 return (
-                  <div key={product.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div key={product.id} className={`rounded-xl border shadow-sm overflow-hidden ${isInactive ? 'bg-gray-100 border-gray-300 opacity-60' : 'bg-white border-gray-200'}`}>
                     <div className="flex">
                       {/* Checkbox + Imagen */}
                       <div className="flex-shrink-0 p-3 flex items-start gap-2 bg-gray-50">
@@ -4273,7 +4274,14 @@ export default function Products() {
                       <div className="flex-1 p-3 min-w-0 flex flex-col justify-between">
                         {/* Nombre y acciones */}
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{product.name}</h3>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{product.name}</h3>
+                            {isInactive && (
+                              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 font-semibold tracking-wide" title="Producto inactivo: oculto del POS y del catálogo">
+                                INACTIVO
+                              </span>
+                            )}
+                          </div>
                           <div className="relative flex-shrink-0">
                             <button
                               onClick={(e) => {
