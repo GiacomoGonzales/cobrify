@@ -5137,44 +5137,24 @@ export default function Settings() {
                 </div>
 
                 {/* Espaciado amplio en PDF */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={pdfSpacious}
-                    onChange={(e) => setPdfSpacious(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Espaciado amplio en PDF
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {pdfSpacious
-                        ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
-                        : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
-                    </p>
-                  </div>
-                </label>
+                <SettingToggle
+                  checked={pdfSpacious}
+                  onChange={(e) => setPdfSpacious(e.target.checked)}
+                  title="Espaciado amplio en PDF"
+                  description={pdfSpacious
+                    ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
+                    : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
+                />
 
                 {/* PDF en formato A5 */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={pdfA5}
-                    onChange={(e) => setPdfA5(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      PDF en formato A5
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {pdfA5
-                        ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
-                        : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
-                    </p>
-                  </div>
-                </label>
+                <SettingToggle
+                  checked={pdfA5}
+                  onChange={(e) => setPdfA5(e.target.checked)}
+                  title="PDF en formato A5"
+                  description={pdfA5
+                    ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
+                    : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
+                />
               </div>
 
               {/* Divider */}
@@ -5188,84 +5168,52 @@ export default function Settings() {
                 </p>
 
                 {/* Códigos de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
+                <div className="mb-3">
+                  <SettingToggle
                     checked={showProductCodeInQuotation}
                     onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    title="Mostrar códigos de producto en cotizaciones"
+                    description={showProductCodeInQuotation
+                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
                   />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar códigos de producto en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductCodeInQuotation
-                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
-                    </p>
-                  </div>
-                </label>
+                </div>
 
                 {/* Códigos de producto en comprobantes (boletas/facturas/notas) */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
+                <div className="mb-3">
+                  <SettingToggle
                     checked={showProductCodeInInvoices}
                     onChange={(e) => setShowProductCodeInInvoices(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    title="Mostrar códigos de producto en comprobantes"
+                    description={showProductCodeInInvoices
+                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
                   />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar códigos de producto en comprobantes
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductCodeInInvoices
-                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
-                    </p>
-                  </div>
-                </label>
+                </div>
 
                 {/* Descripción de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
+                <div className="mb-3">
+                  <SettingToggle
                     checked={showProductDescriptionInQuotation}
                     onChange={(e) => setShowProductDescriptionInQuotation(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    title="Mostrar descripción del producto en cotizaciones"
+                    description={showProductDescriptionInQuotation
+                      ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
                   />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar descripción del producto en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductDescriptionInQuotation
-                        ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
-                    </p>
-                  </div>
-                </label>
+                </div>
 
                 {/* Imágenes de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
+                <div className="mb-3">
+                  <SettingToggle
                     checked={showImagesInQuotations}
                     onChange={(e) => setShowImagesInQuotations(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    title="Habilitar imágenes en cotizaciones"
+                    description={showImagesInQuotations
+                      ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
+                      : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
                   />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Habilitar imágenes en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showImagesInQuotations
-                        ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
-                        : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
-                    </p>
-                  </div>
-                </label>
+                </div>
 
                 {/* Ocultar lote y vencimiento en comprobantes */}
                 <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
@@ -5328,22 +5276,12 @@ export default function Settings() {
 
                 {/* QR personalizado al pie del ticket térmico */}
                 <div>
-                  <label className="flex items-start space-x-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={ticketQrEnabled}
-                      onChange={(e) => setTicketQrEnabled(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-semibold text-gray-900 group-hover:text-primary-900">
-                        Imprimir código QR al pie del ticket
-                      </span>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Generá el QR a partir de un enlace, o subí tu propia imagen (por ejemplo, el QR oficial de Yape o Plin).
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={ticketQrEnabled}
+                    onChange={(e) => setTicketQrEnabled(e.target.checked)}
+                    title="Imprimir código QR al pie del ticket"
+                    description="Generá el QR a partir de un enlace, o subí tu propia imagen (por ejemplo, el QR oficial de Yape o Plin)."
+                  />
 
                   {ticketQrEnabled && (
                     <div className="mt-3 ml-7">
@@ -5519,47 +5457,27 @@ export default function Settings() {
               {/* Guías de Remisión */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Guías de Remisión</h3>
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={dispatchGuidesEnabled}
-                    onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Habilitar Guías de Remisión Electrónicas
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {dispatchGuidesEnabled
-                        ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
-                        : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
-                    </p>
-                  </div>
-                </label>
+                <SettingToggle
+                  checked={dispatchGuidesEnabled}
+                  onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
+                  title="Habilitar Guías de Remisión Electrónicas"
+                  description={dispatchGuidesEnabled
+                    ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
+                    : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
+                />
               </div>
 
               {/* Nota de Salida */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Nota de Salida</h3>
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={exitNoteEnabled}
-                    onChange={(e) => setExitNoteEnabled(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Habilitar Nota de Salida (Almacén)
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {exitNoteEnabled
-                        ? '✓ Habilitado: Podrás generar notas de salida desde tus comprobantes. Muestra solo cantidades sin precios, ideal para el encargado de almacén.'
-                        : '✗ Deshabilitado: No se mostrará la opción de generar notas de salida en tus comprobantes.'}
-                    </p>
-                  </div>
-                </label>
+                <SettingToggle
+                  checked={exitNoteEnabled}
+                  onChange={(e) => setExitNoteEnabled(e.target.checked)}
+                  title="Habilitar Nota de Salida (Almacén)"
+                  description={exitNoteEnabled
+                    ? '✓ Habilitado: Podrás generar notas de salida desde tus comprobantes. Muestra solo cantidades sin precios, ideal para el encargado de almacén.'
+                    : '✗ Deshabilitado: No se mostrará la opción de generar notas de salida en tus comprobantes.'}
+                />
               </div>
 
               {/* Divider */}
