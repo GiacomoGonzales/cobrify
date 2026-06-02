@@ -3311,6 +3311,7 @@ export default function Settings() {
                     <>
                       {[
                         { title: 'Ventas y cobro', items: [
+                          { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                           { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
                           { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
                           { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
@@ -3387,6 +3388,7 @@ export default function Settings() {
                   {businessMode === 'restaurant' && (
                     <>
                       {[
+                        { id: 'public-catalog', label: 'Mi Carta Digital', description: 'Carta digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
                         { id: 'orders', label: 'Órdenes', description: 'Listado de órdenes activas' },
                         { id: 'tables', label: 'Mesas', description: 'Gestión de mesas del local' },
@@ -3442,6 +3444,7 @@ export default function Settings() {
                   {businessMode === 'pharmacy' && (
                     <>
                       {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja' },
                         { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
@@ -3495,6 +3498,7 @@ export default function Settings() {
                   {businessMode === 'hotel' && (
                     <>
                       {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
                         { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
                         { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
@@ -3545,6 +3549,7 @@ export default function Settings() {
                   {businessMode === 'transport' && (
                     <>
                       {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
                         { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
@@ -3652,6 +3657,7 @@ export default function Settings() {
                   {businessMode === 'veterinary' && (
                     <>
                       {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
                         { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'sellers', label: 'Veterinarios', description: 'Gestión de veterinarios' },
