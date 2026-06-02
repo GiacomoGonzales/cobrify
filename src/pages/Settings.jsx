@@ -2616,7 +2616,8 @@ export default function Settings() {
   })()
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    /* zoom: 0.8 = todo el contenido de Configuración 20% más chico (no afecta sidebar/topbar) */
+    <div className="space-y-6 animate-fade-in" style={{ zoom: 0.8 }}>
       {/* Header */}
       <div>
         {isStandaloneCatalog ? (
