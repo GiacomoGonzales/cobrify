@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { getInvoices, getRecentInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
 import { getExpenses, getExpenseCategories, DEFAULT_EXPENSE_CATEGORIES } from '@/services/expenseService'
@@ -192,6 +193,7 @@ const PAYMENT_METHODS = [
 export default function CashFlow() {
   const { user, isDemoMode, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
+  const hidePrivateData = useHidePrivateData()
 
   // Estados
   const [loading, setLoading] = useState(true)
@@ -908,13 +910,15 @@ export default function CashFlow() {
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={exportToExcel}
-              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
+            {!hidePrivateData && (
+              <button
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Exportar</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

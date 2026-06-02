@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight, FolderPlus, ChevronUp, ChevronDown, SortAsc, Check, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -56,6 +57,7 @@ export default function Ingredients() {
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
+  const hidePrivateData = useHidePrivateData()
 
   // Textos condicionales según el modo de negocio
   const isRestaurantMode = businessMode === 'restaurant'
@@ -669,15 +671,17 @@ export default function Ingredients() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportExcel}
-            className="w-full sm:w-auto"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
+          {!hidePrivateData && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              className="w-full sm:w-auto"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

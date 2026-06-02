@@ -488,14 +488,16 @@ export default function Customers() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            onClick={handleExportToExcel}
-            className="w-full sm:w-auto"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
+          {!hidePrivateData && (
+            <Button
+              variant="outline"
+              onClick={handleExportToExcel}
+              className="w-full sm:w-auto"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
           <Button onClick={openCreateModal} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Cliente

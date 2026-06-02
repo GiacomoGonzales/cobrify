@@ -3,6 +3,7 @@ import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangl
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -39,6 +40,7 @@ const MONTHS = [
 
 export default function Accounting() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const { branding } = useBranding()
 
@@ -696,15 +698,17 @@ export default function Accounting() {
             {/* Botones de descarga rápida */}
             <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
               <span className="text-sm text-gray-500 hidden sm:inline">Descargar:</span>
-              <Button
-                onClick={handleExportExcel}
-                variant="outline"
-                size="sm"
-                disabled={downloadingAll || filtered.length === 0}
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1" />
-                Excel
-              </Button>
+              {!hidePrivateData && (
+                <Button
+                  onClick={handleExportExcel}
+                  variant="outline"
+                  size="sm"
+                  disabled={downloadingAll || filtered.length === 0}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-1" />
+                  Excel
+                </Button>
+              )}
               <Button
                 onClick={handleDownloadAllXml}
                 variant="outline"

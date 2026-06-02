@@ -2313,14 +2313,16 @@ Gracias por tu preferencia.`
             <Archive className="w-4 h-4 mr-2" />
             XML/CDR
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowExportModal(true)}
-            className="w-full sm:w-auto"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
+          {!hidePrivateData && (
+            <Button
+              variant="outline"
+              onClick={() => setShowExportModal(true)}
+              className="w-full sm:w-auto"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
         </div>
       </div>
 

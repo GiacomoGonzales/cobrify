@@ -1985,14 +1985,16 @@ export default function Inventory() {
             <History className="w-4 h-4 mr-2" />
             Historial
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenExportModal}
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
+          {!hidePrivateData && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenExportModal}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
         </div>
       </div>
 

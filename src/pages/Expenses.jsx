@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import Button from '@/components/ui/Button'
@@ -145,6 +146,7 @@ const getLocalDateString = (date = new Date()) => {
 
 export default function Expenses() {
   const { user, isDemoMode, hasMainBranchAccess, businessSettings } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const expenseMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const toast = useToast()
   const { isOffline } = useOnlineStatus()
@@ -710,10 +712,12 @@ export default function Expenses() {
             <Tag className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Categorías</span>
           </Button>
-          <Button variant="success" onClick={exportToExcel} className="flex-1 sm:flex-none">
-            <Download className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Excel</span>
-          </Button>
+          {!hidePrivateData && (
+            <Button variant="success" onClick={exportToExcel} className="flex-1 sm:flex-none">
+              <Download className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Excel</span>
+            </Button>
+          )}
           <Button variant="danger" onClick={openCreateModal} className="flex-1 sm:flex-none">
             <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Nuevo Gasto</span>

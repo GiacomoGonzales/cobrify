@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -21,6 +22,7 @@ import {
 
 export default function Commissions() {
   const { getBusinessId } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
   const { user, isBusinessOwner } = useAuth()
   const toast = useToast()
 
@@ -225,13 +227,15 @@ export default function Commissions() {
               : 'Resumen de ganancias por operaciones cerradas'}
           </p>
         </div>
-        <button
-          onClick={exportToCSV}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <Download className="w-5 h-5" />
-          <span>Exportar</span>
-        </button>
+        {!hidePrivateData && (
+          <button
+            onClick={exportToCSV}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            <span>Exportar</span>
+          </button>
+        )}
       </div>
 
       {/* Banner para agente */}

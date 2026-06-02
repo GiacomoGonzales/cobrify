@@ -29,6 +29,7 @@ import {
   Award,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import RealEstateReports from './RealEstateReports'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -155,6 +156,7 @@ const getInvoiceDate = (invoice) => {
 
 export default function Reports() {
   const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const hidePrivateData = useHidePrivateData()
 
   // Si estamos en modo inmobiliaria, renderizar el componente especializado
   if (businessMode === 'real_estate') {
@@ -2206,6 +2208,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -2213,6 +2216,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte General (Excel)
             </button>
+            )}
           </div>
 
           {/* KPIs principales */}
@@ -2425,6 +2429,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -2432,6 +2437,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Ventas (Excel)
             </button>
+            )}
           </div>
 
           {/* Resumen de Ventas */}
@@ -2785,6 +2791,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -2792,6 +2799,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Productos (Excel)
             </button>
+            )}
           </div>
 
           {/* Gráficos de Top 5 Productos y Categorías */}
@@ -3338,6 +3346,7 @@ export default function Reports() {
                   <option key={b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
+              {!hidePrivateData && (
               <button
                 onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
                 disabled={selectedBrandData.products.length === 0}
@@ -3346,6 +3355,7 @@ export default function Reports() {
                 <Download className="w-4 h-4" />
                 Exportar Excel
               </button>
+              )}
             </div>
           </div>
 
@@ -3621,6 +3631,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={async () => await exportBrandsReport({ salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               disabled={salesByBrand.length === 0}
@@ -3629,6 +3640,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Marcas (Excel)
             </button>
+            )}
           </div>
 
           {/* KPI cards */}
@@ -3938,6 +3950,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={async () => await exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -3945,6 +3958,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Clientes (Excel)
             </button>
+            )}
           </div>
 
           {/* Gráfico de Top 10 Clientes */}
@@ -4404,6 +4418,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={exportExpensesReport}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -4411,6 +4426,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Gastos (Excel)
             </button>
+            )}
           </div>
 
           {/* KPIs de Gastos */}
@@ -4706,6 +4722,7 @@ export default function Reports() {
         <>
           {/* Botón de exportación */}
           <div className="flex justify-end">
+            {!hidePrivateData && (
             <button
               onClick={exportProfitabilityReport}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -4713,6 +4730,7 @@ export default function Reports() {
               <Download className="w-4 h-4" />
               Descargar Reporte de Rentabilidad (Excel)
             </button>
+            )}
           </div>
 
           {/* KPIs de Rentabilidad - Fórmula: Ventas - Costo de Ventas - Gastos = Utilidad Neta */}

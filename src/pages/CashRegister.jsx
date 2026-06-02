@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -37,6 +38,7 @@ export default function CashRegister() {
   // no es dueño/admin, escondemos el monto esperado y la diferencia para que el cajero
   // no lo vea — solo cuente y reporte. El dueño podrá comparar después.
   const hideExpectedForCashier = !isAdmin && !isBusinessOwner && !!businessSettings?.hideCashExpectedFromCashier
+  const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -3293,25 +3295,27 @@ export default function CashRegister() {
                 <Download className="w-4 h-4 mr-1" />
                 PDF
               </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    const businessResult = await getCompanySettings(getBusinessId())
-                    const businessData = businessResult.success ? businessResult.data : null
-                    const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
-                    await generateCashReportExcel(selectedHistorySession, historyMovements, sessionInvoices, businessData, deferred)
-                    toast.success('Excel descargado')
-                  } catch (error) {
-                    toast.error('Error al generar Excel')
-                  }
-                }}
-                className="flex-1 min-w-[80px]"
-                size="sm"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1" />
-                Excel
-              </Button>
+              {!hidePrivateData && (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const businessResult = await getCompanySettings(getBusinessId())
+                      const businessData = businessResult.success ? businessResult.data : null
+                      const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
+                      await generateCashReportExcel(selectedHistorySession, historyMovements, sessionInvoices, businessData, deferred)
+                      toast.success('Excel descargado')
+                    } catch (error) {
+                      toast.error('Error al generar Excel')
+                    }
+                  }}
+                  className="flex-1 min-w-[80px]"
+                  size="sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-1" />
+                  Excel
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={handlePrintHistoryTicket}
@@ -3811,15 +3815,17 @@ export default function CashRegister() {
             <div className="space-y-3">
               <p className="text-sm text-gray-600 text-center">Descarga o imprime el reporte de cierre:</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleDownloadExcel}
-                  className="w-full"
-                  size="sm"
-                >
-                  <FileSpreadsheet className="w-4 h-4 mr-1" />
-                  Excel
-                </Button>
+                {!hidePrivateData && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDownloadExcel}
+                    className="w-full"
+                    size="sm"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-1" />
+                    Excel
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleDownloadPDF}

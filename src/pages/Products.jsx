@@ -3773,14 +3773,16 @@ export default function Products() {
               <Upload className="w-4 h-4 mr-2" />
               Importar
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportToExcel}
-              className="flex-1 sm:flex-initial"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
+            {!hidePrivateData && (
+              <Button
+                variant="outline"
+                onClick={handleExportToExcel}
+                className="flex-1 sm:flex-initial"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Exportar
+              </Button>
+            )}
             {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
               <Button
                 variant="outline"
