@@ -239,21 +239,29 @@ export const consultarEstablecimientos = async (ruc) => {
 
     const response = await httpRequest(url, options)
 
-    // apiperu responde con ERROR cuando el RUC no tiene LOCALES ANEXOS (solo el
-    // domicilio fiscal) — le pasa a la mayoría de RUCs de un solo local. Eso NO es
-    // un fallo: lo tratamos como "sin anexos" (lista vacía).
-    const esSinAnexos = (txt) =>
-      /anexos/i.test(txt || '') && /(no se encontr|no hay|sin |no tiene|not found)/i.test(txt || '')
+    // apiperu responde con "error" cuando el RUC no tiene LOCALES ANEXOS (solo el
+    // domicilio fiscal) — le pasa a la mayoría de RUCs de un solo local. Puede venir
+    // como 404 o con mensajes variados ("No se encontró información para locales
+    // anexos", "Recurso no encontrado"). Como el endpoint y el token están
+    // confirmados, un "no encontrado" aquí = sin anexos (NO es un fallo).
+    const esSinAnexos = (txt, status) => {
+      if (status === 404) return true
+      const t = String(txt || '').toLowerCase()
+      if (/anexos/.test(t) && /(no se encontr|no hay|sin |no tiene|not found)/.test(t)) return true
+      if (/recurso no encontrad|resource not found|no se encontr.*informaci/.test(t)) return true
+      return false
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       const detalle = errorData.error || errorData.message || `HTTP ${response.status}`
-      if (esSinAnexos(detalle)) {
-        return { success: true, data: [] }
-      }
-      // 401/402/403 normalmente = el plan/token de apiperu no incluye este endpoint
+      // 401/402/403 = el plan/token de apiperu no incluye este endpoint
       if ([401, 402, 403].includes(response.status)) {
         throw new Error(`Tu plan de apiperu.dev no incluye la consulta de establecimientos (${detalle})`)
+      }
+      // 404 / "recurso no encontrado" / "sin anexos" = el RUC solo tiene domicilio fiscal
+      if (esSinAnexos(detalle, response.status)) {
+        return { success: true, data: [] }
       }
       throw new Error(`No se pudieron consultar los establecimientos: ${detalle}`)
     }
