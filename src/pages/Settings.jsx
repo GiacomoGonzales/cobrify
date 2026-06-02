@@ -69,7 +69,7 @@ import {
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
 // Toggle de configuración con estilo unificado (checkbox a la izquierda).
-function SettingToggle({ checked, onChange, title, description, disabled = false }) {
+function SettingToggle({ checked, onChange, title, description, disabled = false, children }) {
   return (
     <label className={`flex items-start gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${
       checked ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
@@ -84,6 +84,7 @@ function SettingToggle({ checked, onChange, title, description, disabled = false
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium text-gray-900 block">{title}</span>
         {description && <span className="text-xs text-gray-500 block mt-0.5 leading-relaxed">{description}</span>}
+        {children}
       </div>
     </label>
   )
@@ -4802,59 +4803,41 @@ export default function Settings() {
                       : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
                   />
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowPartialPayments}
-                      onChange={(e) => setAllowPartialPayments(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir pagos parciales en Notas de Venta
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                  <SettingToggle
+                    checked={allowPartialPayments}
+                    onChange={(e) => setAllowPartialPayments(e.target.checked)}
+                    title="Permitir pagos parciales en Notas de Venta"
+                    description={allowPartialPayments
+                      ? '✓ Habilitado: Podrás registrar pagos parciales en las notas de venta. El sistema mostrará el monto pagado y el saldo pendiente. Útil para adelantos o pagos en cuotas.'
+                      : '✗ Deshabilitado: Las notas de venta solo se pueden emitir con pago completo. No se mostrarán opciones de pago parcial en el punto de venta.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                      <Info className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs text-amber-700 font-medium">
                         {allowPartialPayments
-                          ? '✓ Habilitado: Podrás registrar pagos parciales en las notas de venta. El sistema mostrará el monto pagado y el saldo pendiente. Útil para adelantos o pagos en cuotas.'
-                          : '✗ Deshabilitado: Las notas de venta solo se pueden emitir con pago completo. No se mostrarán opciones de pago parcial en el punto de venta.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
-                        <Info className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs text-amber-700 font-medium">
-                          {allowPartialPayments
-                            ? 'Los clientes pueden adelantar o pagar en cuotas'
-                            : 'Solo pagos completos'}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={requireOpenCashRegister}
-                      onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Requerir caja diaria abierta para vender
+                          ? 'Los clientes pueden adelantar o pagar en cuotas'
+                          : 'Solo pagos completos'}
                       </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {requireOpenCashRegister
-                          ? '✓ Habilitado: No se podrán emitir ventas en el POS si la caja diaria no está aperturada. El usuario deberá abrir caja antes de realizar ventas.'
-                          : '✗ Deshabilitado: Se pueden emitir ventas sin necesidad de tener la caja diaria abierta.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
-                        <Info className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs text-amber-700 font-medium">
-                          {requireOpenCashRegister
-                            ? 'Caja diaria obligatoria para emitir ventas'
-                            : 'Ventas sin restricción de caja'}
-                        </span>
-                      </div>
                     </div>
-                  </label>
+                  </SettingToggle>
+
+                  <SettingToggle
+                    checked={requireOpenCashRegister}
+                    onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
+                    title="Requerir caja diaria abierta para vender"
+                    description={requireOpenCashRegister
+                      ? '✓ Habilitado: No se podrán emitir ventas en el POS si la caja diaria no está aperturada. El usuario deberá abrir caja antes de realizar ventas.'
+                      : '✗ Deshabilitado: Se pueden emitir ventas sin necesidad de tener la caja diaria abierta.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                      <Info className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs text-amber-700 font-medium">
+                        {requireOpenCashRegister
+                          ? 'Caja diaria obligatoria para emitir ventas'
+                          : 'Ventas sin restricción de caja'}
+                      </span>
+                    </div>
+                  </SettingToggle>
 
                   {/* Comisión por pago con tarjeta (solo notas de venta) */}
                   <div className={`p-4 border rounded-lg transition-colors ${
@@ -4919,30 +4902,21 @@ export default function Settings() {
                 </p>
 
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={multiCurrencyEnabled}
-                      onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900">
-                        Activar soporte multi-divisa
+                  <SettingToggle
+                    checked={multiCurrencyEnabled}
+                    onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
+                    title="Activar soporte multi-divisa"
+                    description={multiCurrencyEnabled
+                      ? '✓ Activado: podrás elegir PEN o USD en compras y facturas (los selectores aparecerán cuando se publiquen las próximas fases del módulo).'
+                      : '✗ Desactivado: todo el sistema opera 100% en Soles (PEN), como hasta ahora.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Las boletas (B001) siempre serán en Soles — SUNAT no admite USD.
                       </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {multiCurrencyEnabled
-                          ? '✓ Activado: podrás elegir PEN o USD en compras y facturas (los selectores aparecerán cuando se publiquen las próximas fases del módulo).'
-                          : '✗ Desactivado: todo el sistema opera 100% en Soles (PEN), como hasta ahora.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                        <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                        <span className="text-xs text-blue-700 font-medium">
-                          Las boletas (B001) siempre serán en Soles — SUNAT no admite USD.
-                        </span>
-                      </div>
                     </div>
-                  </label>
+                  </SettingToggle>
 
                   {multiCurrencyEnabled && (
                     <div className="mt-4 pl-7 space-y-3">
@@ -5216,30 +5190,21 @@ export default function Settings() {
                 </div>
 
                 {/* Ocultar lote y vencimiento en comprobantes */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hideBatchAndExpiryInDocuments}
-                    onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Ocultar lote y vencimiento en comprobantes
+                <SettingToggle
+                  checked={hideBatchAndExpiryInDocuments}
+                  onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
+                  title="Ocultar lote y vencimiento en comprobantes"
+                  description={hideBatchAndExpiryInDocuments
+                    ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
+                    : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
+                >
+                  <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                    <Info className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs text-blue-700 font-medium">
+                      Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
                     </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {hideBatchAndExpiryInDocuments
-                        ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
-                        : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
-                    </p>
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-blue-700 font-medium">
-                        Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
-                      </span>
-                    </div>
                   </div>
-                </label>
+                </SettingToggle>
               </div>
 
               {/* Divider */}
@@ -5574,29 +5539,21 @@ export default function Settings() {
                 </p>
 
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoSendToSunat}
-                      onChange={e => setAutoSendToSunat(e.target.checked)}
-                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">Envío automático a SUNAT desde el POS</div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta.
-                        Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes.
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
-                        <Info className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-blue-700">
-                          {autoSendToSunat
-                            ? 'Los comprobantes se enviarán automáticamente'
-                            : 'Los comprobantes requerirán envío manual'}
-                        </span>
-                      </div>
+                  <SettingToggle
+                    checked={autoSendToSunat}
+                    onChange={e => setAutoSendToSunat(e.target.checked)}
+                    title="Envío automático a SUNAT desde el POS"
+                    description="Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta. Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes."
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700">
+                        {autoSendToSunat
+                          ? 'Los comprobantes se enviarán automáticamente'
+                          : 'Los comprobantes requerirán envío manual'}
+                      </span>
                     </div>
-                  </label>
+                  </SettingToggle>
                 </div>
               </div>
 
@@ -5611,59 +5568,41 @@ export default function Settings() {
                 </p>
 
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowDeleteInvoices}
-                      onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir eliminar comprobantes
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                  <SettingToggle
+                    checked={allowDeleteInvoices}
+                    onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
+                    title="Permitir eliminar comprobantes"
+                    description={allowDeleteInvoices
+                      ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
+                      : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs text-amber-700 font-medium">
                         {allowDeleteInvoices
-                          ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
-                          : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
-                        <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs text-amber-700 font-medium">
-                          {allowDeleteInvoices
-                            ? 'Mayor flexibilidad, menor control'
-                            : 'Mayor control y trazabilidad'}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowCustomEmissionDate}
-                      onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir seleccionar fecha de emisión en el POS
+                          ? 'Mayor flexibilidad, menor control'
+                          : 'Mayor control y trazabilidad'}
                       </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowCustomEmissionDate
-                          ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
-                          : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                        <Info className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-blue-700 font-medium">
-                          {allowCustomEmissionDate
-                            ? 'Útil para regularizar ventas de días anteriores'
-                            : 'Emisión con fecha actual solamente'}
-                        </span>
-                      </div>
                     </div>
-                  </label>
+                  </SettingToggle>
+
+                  <SettingToggle
+                    checked={allowCustomEmissionDate}
+                    onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
+                    title="Permitir seleccionar fecha de emisión en el POS"
+                    description={allowCustomEmissionDate
+                      ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
+                      : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        {allowCustomEmissionDate
+                          ? 'Útil para regularizar ventas de días anteriores'
+                          : 'Emisión con fecha actual solamente'}
+                      </span>
+                    </div>
+                  </SettingToggle>
                 </div>
               </div>
 
@@ -5678,62 +5617,44 @@ export default function Settings() {
                 </p>
 
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={hideDashboardDataFromSecondary}
-                      onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
-                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar totales y datos sensibles a usuarios secundarios
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
-                        {hideDashboardDataFromSecondary
-                          ? '✓ Habilitado: Los usuarios secundarios no verán los datos del dashboard, ni los totales sumados en Ventas (montos, comprobantes pagados/pendientes, total de ventas) ni los valores de venta y costo del Inventario y Productos. Solo el propietario y administradores tendrán acceso a la información financiera agregada.'
-                          : '✗ Deshabilitado: Todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario, etc.'}
-                      </p>
-                      <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
-                        <div className="flex items-start gap-2">
-                          <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                          <div className="text-xs text-purple-800 space-y-1">
-                            <p className="font-medium">Control de información sensible</p>
-                            <p>
-                              Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
-                              Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
-                            </p>
-                          </div>
+                  <SettingToggle
+                    checked={hideDashboardDataFromSecondary}
+                    onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
+                    title="Ocultar totales y datos sensibles a usuarios secundarios"
+                    description={hideDashboardDataFromSecondary
+                      ? '✓ Habilitado: Los usuarios secundarios no verán los datos del dashboard, ni los totales sumados en Ventas (montos, comprobantes pagados/pendientes, total de ventas) ni los valores de venta y costo del Inventario y Productos. Solo el propietario y administradores tendrán acceso a la información financiera agregada.'
+                      : '✗ Deshabilitado: Todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario, etc.'}
+                  >
+                    <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
+                      <div className="flex items-start gap-2">
+                        <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs text-purple-800 space-y-1">
+                          <p className="font-medium">Control de información sensible</p>
+                          <p>
+                            Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
+                            Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
+                          </p>
                         </div>
                       </div>
                     </div>
-                  </label>
+                  </SettingToggle>
 
                   {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
-                    <input
-                      type="checkbox"
-                      checked={hideCashExpectedFromCashier}
-                      onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios
+                  <SettingToggle
+                    checked={hideCashExpectedFromCashier}
+                    onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
+                    title={'Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios'}
+                    description={hideCashExpectedFromCashier
+                      ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
+                      : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
                       </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {hideCashExpectedFromCashier
-                          ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
-                          : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
-                      </p>
-                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                        <Info className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs text-blue-700 font-medium">
-                          Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
-                        </span>
-                      </div>
                     </div>
-                  </label>
+                  </SettingToggle>
                 </div>
               </div>
 
