@@ -3905,43 +3905,37 @@ export default function Settings() {
                       />
 
                       {/* Recargo al Consumo (Decreto Ley N° 25988) */}
-                      <div className={`p-4 border rounded-lg transition-colors ${
-                        restaurantConfig.recargoConsumoEnabled
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
-                      }`}>
-                        <SettingToggle
-                          checked={restaurantConfig.recargoConsumoEnabled || false}
-                          onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
-                          title="Recargo al Consumo"
-                          description={restaurantConfig.recargoConsumoEnabled
-                            ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
-                            : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
-                        />
+                      <SettingToggle
+                        checked={restaurantConfig.recargoConsumoEnabled || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
+                        title="Recargo al Consumo"
+                        description={restaurantConfig.recargoConsumoEnabled
+                          ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
+                          : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
+                      />
 
-                        {/* Configuración del porcentaje (solo si está habilitado) */}
-                        {restaurantConfig.recargoConsumoEnabled && (
-                          <div className="mt-3 ml-7 flex items-center gap-3">
-                            <label className="text-sm text-gray-700">Porcentaje:</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="1"
-                                max="13"
-                                step="1"
-                                value={restaurantConfig.recargoConsumoRate || 10}
-                                onChange={(e) => {
-                                  const value = Math.min(13, Math.max(1, parseInt(e.target.value) || 10))
-                                  setRestaurantConfig({...restaurantConfig, recargoConsumoRate: value})
-                                }}
-                                className="w-16 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                              />
-                              <span className="text-sm text-gray-600">%</span>
-                            </div>
-                            <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
+                      {/* Configuración del porcentaje (solo si está habilitado) */}
+                      {restaurantConfig.recargoConsumoEnabled && (
+                        <div className="mt-3 ml-7 flex items-center gap-3">
+                          <label className="text-sm text-gray-700">Porcentaje:</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="13"
+                              step="1"
+                              value={restaurantConfig.recargoConsumoRate || 10}
+                              onChange={(e) => {
+                                const value = Math.min(13, Math.max(1, parseInt(e.target.value) || 10))
+                                setRestaurantConfig({...restaurantConfig, recargoConsumoRate: value})
+                              }}
+                              className="w-16 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <span className="text-sm text-gray-600">%</span>
                           </div>
-                        )}
-                      </div>
+                          <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
+                        </div>
+                      )}
 
                       {/* Modo Multi-Estación de Cocina */}
                       <SettingToggle
@@ -4510,7 +4504,7 @@ export default function Settings() {
                   Configura hasta 3 precios diferentes por producto (ej: Público, Mayorista, VIP)
                 </p>
                 <div className="space-y-4">
-                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <div>
                     <SettingToggle
                       checked={multiplePricesEnabled}
                       onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
@@ -4726,7 +4720,7 @@ export default function Settings() {
                   Permite vender productos en diferentes presentaciones (Unidad, Pack, Caja, etc.)
                 </p>
                 <div className="space-y-4">
-                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <div>
                     <SettingToggle
                       checked={presentationsEnabled}
                       onChange={(e) => setPresentationsEnabled(e.target.checked)}
