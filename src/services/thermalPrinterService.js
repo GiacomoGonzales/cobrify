@@ -4360,6 +4360,323 @@ export const printDispatchGuideTicket = async (guide, business, paperWidth = 58)
 };
 
 // ============================================
+// IMPRESIÓN DE COTIZACIÓN (TICKET TÉRMICO)
+// ============================================
+
+/**
+ * Construir datos ESC/POS para ticket de cotización.
+ * Espeja el estilo de buildTicketEscPos/buildDispatchGuideEscPos pero adaptado a
+ * cotizaciones (NO es comprobante electrónico: sin QR de SUNAT ni leyenda de
+ * "representación impresa").
+ * @param {Object} quotation - Datos de la cotización (mismos campos que usa quotationPdfGenerator)
+ * @param {Object} business - Datos del negocio / companySettings
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ * @returns {string} Datos en base64
+ */
+const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
+  const format = getFormat(paperWidth);
+  const builder = new EscPosBuilder();
+  const sep = format.separator;
+  const lineWidth = format.charsPerLine;
+
+  // Multi-divisa: símbolo según la moneda de la cotización
+  const currencySymbol = quotation.currency === 'USD' ? '$' : 'S/';
+
+  const formatQuotationDate = (dateValue) => {
+    if (!dateValue) return '-';
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      const [y, m, d] = dateValue.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    const d = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // Fila etiqueta/valor alineada a los extremos (igual patrón que las guías)
+  const addRow = (label, value) => {
+    const l = convertSpanishText(label);
+    const v = convertSpanishText(value || '-');
+    const space = lineWidth - l.length - v.length;
+    builder.alignLeft().text(l + (space > 0 ? ' '.repeat(space) : ' ') + v + '\n');
+  };
+
+  // Header: datos del negocio
+  builder.init()
+    .alignCenter()
+    .bold().text(convertSpanishText(business.tradeName || business.name || business.businessName || 'MI EMPRESA') + '\n').clearFormatting()
+    .alignCenter().text('RUC: ' + (business.ruc || '00000000000') + '\n');
+
+  const displayAddr = quotation.branchAddress || business.address;
+  if (displayAddr) builder.alignCenter().text(convertSpanishText(displayAddr) + '\n');
+  if (business.phone) builder.alignCenter().text('Tel: ' + business.phone + '\n');
+
+  // Título: COTIZACION + número
+  builder.newLine()
+    .alignCenter().bold().text('COTIZACION\n').clearFormatting()
+    .alignCenter().bold().text((quotation.number || '-') + '\n').clearFormatting()
+    .alignLeft().text(sep + '\n');
+
+  // Fecha de emisión y validez
+  addRow('Fecha:', formatQuotationDate(quotation.issueDate || quotation.createdAt));
+  if (quotation.expiryDate) {
+    addRow('Valido hasta:', formatQuotationDate(quotation.expiryDate));
+  } else if (quotation.validityDays) {
+    addRow('Valido por:', `${quotation.validityDays} dias`);
+  }
+  builder.text(sep + '\n');
+
+  // Datos del cliente
+  builder.bold().text('DATOS DEL CLIENTE\n').clearFormatting();
+  const customer = quotation.customer || {};
+  const rawDocType = customer.documentType;
+  const docTypeLabel = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC'
+    : (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI'
+    : 'Doc';
+  addRow('Cliente:', customer.name || customer.businessName || 'Cliente');
+  if (customer.documentNumber && customer.documentNumber !== '00000000') {
+    addRow(docTypeLabel + ':', customer.documentNumber);
+  }
+  if (customer.address) {
+    builder.alignLeft().text(convertSpanishText('Direccion: ' + customer.address) + '\n');
+  }
+  if (customer.phone) addRow('Telefono:', customer.phone);
+  if (quotation.recipientName) addRow('Atencion:', quotation.recipientName);
+  if (quotation.sellerName) addRow('Vendedor:', quotation.sellerName);
+  builder.text(sep + '\n');
+
+  // Detalle de items
+  builder.bold().text('DETALLE\n').clearFormatting();
+  for (const item of quotation.items || []) {
+    const itemName = item.name || item.description || '';
+    const unitPrice = item.unitPrice || item.price || 0;
+    const itemTotal = item.quantity * unitPrice;
+    const qtyFormatted = Number.isInteger(item.quantity)
+      ? item.quantity.toString()
+      : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+
+    builder.alignLeft().text(convertSpanishText(itemName) + '\n')
+      .text(`${qtyFormatted} x ${currencySymbol} ${unitPrice.toFixed(2)}`)
+      .text(`  ${currencySymbol} ${itemTotal.toFixed(2)}`)
+      .newLine();
+  }
+  builder.text(sep + '\n');
+
+  // Totales
+  builder.alignRight();
+  if (!quotation.hideIgv) {
+    const igvRate = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18;
+    builder.text(`Subtotal: ${currencySymbol} ${(quotation.discountedSubtotal || quotation.subtotal || 0).toFixed(2)}`).newLine()
+      .text(`IGV (${igvRate}%): ${currencySymbol} ${(quotation.igv || 0).toFixed(2)}`).newLine();
+  }
+  builder.bold()
+    .text(`TOTAL: ${currencySymbol} ${(quotation.total || 0).toFixed(2)}`)
+    .newLine()
+    .clearFormatting();
+
+  // Términos y condiciones
+  if (quotation.terms && quotation.terms.trim()) {
+    builder.alignLeft().text(sep + '\n')
+      .bold().text('TERMINOS Y CONDICIONES\n').clearFormatting()
+      .alignLeft().text(convertSpanishText(quotation.terms.trim()) + '\n');
+  }
+
+  // Observaciones generales (si existen)
+  if (quotation.notes && quotation.notes.trim()) {
+    builder.alignLeft().text(sep + '\n')
+      .bold().text('OBSERVACIONES\n').clearFormatting()
+      .alignLeft().text(convertSpanishText(quotation.notes.trim()) + '\n');
+  }
+
+  builder.feed(getCutFeedLines()).cut();
+  return builder.toBase64();
+};
+
+/**
+ * Imprimir cotización en impresora térmica.
+ * Sigue el mismo patrón de routing que printDispatchGuideTicket:
+ * impresora de documentos (network) → WiFi/interna → BLE alternativo (iOS) → Bluetooth Android.
+ * @param {Object} quotation - Datos de la cotización
+ * @param {Object} business - Datos del negocio / companySettings
+ * @param {number} paperWidth - 58 o 80 (default 58)
+ */
+export const printQuotationTicket = async (quotation, business, paperWidth = 58) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  // Verificar si hay impresora de documentos configurada (prioridad)
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        console.log(`📄 Usando impresora de documentos (${docPrinter.ip}) para cotización...`);
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildQuotationEscPos(quotation, business, docPaperWidth);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        console.error('Error printing quotation to document printer:', error);
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Printer not connected' };
+  }
+
+  // WiFi o interna: usar ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      console.log(`📶 Usando impresión ${connectionType} para cotización...`);
+      const base64Data = buildQuotationEscPos(quotation, business, paperWidth);
+      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      return { success: true };
+    } catch (error) {
+      console.error('Error WiFi printing quotation:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // BLE alternativo (iOS)
+  if (useAlternativeBLE) {
+    try {
+      console.log('🔵 iOS: Usando impresión BLE para cotización...');
+      const base64Data = buildQuotationEscPos(quotation, business, paperWidth);
+      return await BLEPrinter.printBLERawData(base64Data);
+    } catch (error) {
+      console.error('Error BLE printing quotation:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Bluetooth Android (inline con la API de begin())
+  try {
+    console.log('🔵 Android: Usando impresión Bluetooth para cotización...');
+    const format = getFormat(paperWidth);
+    const sep = format.separator;
+    const lineWidth = format.charsPerLine;
+
+    const currencySymbol = quotation.currency === 'USD' ? '$' : 'S/';
+
+    const formatQuotationDate = (dateValue) => {
+      if (!dateValue) return '-';
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const [y, m, d] = dateValue.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      const d = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+      return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
+    const createLine = (left, right) => {
+      const l = convertSpanishText(left);
+      const r = convertSpanishText(right || '-');
+      const space = lineWidth - l.length - r.length;
+      return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+    };
+
+    let printer = CapacitorThermalPrinter.begin();
+
+    // Header
+    printer = printer
+      .align('center')
+      .bold()
+      .text(convertSpanishText(business.tradeName || business.name || business.businessName || 'MI EMPRESA') + '\n')
+      .clearFormatting()
+      .align('center').text('RUC: ' + (business.ruc || '00000000000') + '\n');
+
+    const displayAddr = quotation.branchAddress || business.address;
+    if (displayAddr) printer = printer.align('center').text(convertSpanishText(displayAddr) + '\n');
+    if (business.phone) printer = printer.align('center').text('Tel: ' + business.phone + '\n');
+
+    // Título
+    printer = printer
+      .text('\n')
+      .align('center').bold().text('COTIZACION\n').clearFormatting()
+      .align('center').bold().text((quotation.number || '-') + '\n').clearFormatting()
+      .align('left').text(sep + '\n');
+
+    // Fechas
+    printer = printer
+      .align('left')
+      .text(createLine('Fecha:', formatQuotationDate(quotation.issueDate || quotation.createdAt)) + '\n');
+    if (quotation.expiryDate) {
+      printer = printer.text(createLine('Valido hasta:', formatQuotationDate(quotation.expiryDate)) + '\n');
+    } else if (quotation.validityDays) {
+      printer = printer.text(createLine('Valido por:', `${quotation.validityDays} dias`) + '\n');
+    }
+    printer = printer.text(sep + '\n');
+
+    // Cliente
+    const customer = quotation.customer || {};
+    const rawDocType = customer.documentType;
+    const docTypeLabel = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC'
+      : (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI'
+      : 'Doc';
+    printer = printer
+      .bold().text('DATOS DEL CLIENTE\n').clearFormatting()
+      .text(createLine('Cliente:', convertSpanishText(customer.name || customer.businessName || 'Cliente')) + '\n');
+    if (customer.documentNumber && customer.documentNumber !== '00000000') {
+      printer = printer.text(createLine(docTypeLabel + ':', customer.documentNumber) + '\n');
+    }
+    if (customer.address) printer = printer.text(convertSpanishText('Direccion: ' + customer.address) + '\n');
+    if (customer.phone) printer = printer.text(createLine('Telefono:', customer.phone) + '\n');
+    if (quotation.recipientName) printer = printer.text(createLine('Atencion:', convertSpanishText(quotation.recipientName)) + '\n');
+    if (quotation.sellerName) printer = printer.text(createLine('Vendedor:', convertSpanishText(quotation.sellerName)) + '\n');
+    printer = printer.text(sep + '\n');
+
+    // Items
+    printer = printer.bold().text('DETALLE\n').clearFormatting();
+    for (const item of quotation.items || []) {
+      const itemName = item.name || item.description || '';
+      const unitPrice = item.unitPrice || item.price || 0;
+      const itemTotal = item.quantity * unitPrice;
+      const qtyFormatted = Number.isInteger(item.quantity)
+        ? item.quantity.toString()
+        : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+      printer = printer
+        .align('left').text(convertSpanishText(itemName) + '\n')
+        .text(`${qtyFormatted} x ${currencySymbol} ${unitPrice.toFixed(2)}  ${currencySymbol} ${itemTotal.toFixed(2)}\n`);
+    }
+    printer = printer.text(sep + '\n');
+
+    // Totales
+    printer = printer.align('right');
+    if (!quotation.hideIgv) {
+      const igvRate = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18;
+      printer = printer
+        .text(`Subtotal: ${currencySymbol} ${(quotation.discountedSubtotal || quotation.subtotal || 0).toFixed(2)}\n`)
+        .text(`IGV (${igvRate}%): ${currencySymbol} ${(quotation.igv || 0).toFixed(2)}\n`);
+    }
+    printer = printer
+      .bold().text(`TOTAL: ${currencySymbol} ${(quotation.total || 0).toFixed(2)}\n`).clearFormatting();
+
+    // Términos y condiciones
+    if (quotation.terms && quotation.terms.trim()) {
+      printer = printer
+        .align('left').text(sep + '\n')
+        .bold().text('TERMINOS Y CONDICIONES\n').clearFormatting()
+        .align('left').text(convertSpanishText(quotation.terms.trim()) + '\n');
+    }
+
+    // Observaciones
+    if (quotation.notes && quotation.notes.trim()) {
+      printer = printer
+        .align('left').text(sep + '\n')
+        .bold().text('OBSERVACIONES\n').clearFormatting()
+        .align('left').text(convertSpanishText(quotation.notes.trim()) + '\n');
+    }
+
+    printer = printer.align('left').text('\n\n\n');
+
+    const result = await printer.write();
+    return { success: result?.printed !== false, ...result };
+
+  } catch (error) {
+    console.error('Error printing quotation ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
 // IMPRESIÓN DE GUÍA DE ENVÍO (TICKET TÉRMICO)
 // ============================================
 

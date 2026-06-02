@@ -24,7 +24,9 @@ import {
   Truck,
   FileSpreadsheet,
   Calendar,
+  Printer,
 } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -44,6 +46,7 @@ import {
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
+import { printQuotationTicket } from '@/services/thermalPrinterService'
 import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
@@ -404,6 +407,41 @@ export default function Quotations() {
     } catch (error) {
       console.error('Error al generar vista previa:', error)
       toast.error('Error al generar la vista previa')
+    }
+  }
+
+  // Imprimir cotización en ticketera térmica (solo app nativa)
+  const handlePrintTicket = async (quotation) => {
+    if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
+      toast.error(
+        'Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa',
+        5000
+      )
+      return
+    }
+
+    // Leer ancho de papel guardado por el dispositivo (58 o 80mm)
+    let paperWidth = 58
+    try {
+      const saved = localStorage.getItem('factuya_printerConfig')
+      if (saved) {
+        const cfg = JSON.parse(saved)
+        if (cfg.paperWidth === 58 || cfg.paperWidth === 80) paperWidth = cfg.paperWidth
+      }
+    } catch { /* usar default */ }
+
+    try {
+      const result = await printQuotationTicket(quotation, companySettings, paperWidth)
+      if (result?.success) {
+        toast.success('Cotización enviada a la ticketera')
+      } else if (result?.error === 'Printer not connected') {
+        toast.error('No hay una impresora conectada. Conéctala desde Configuración > Impresora.', 5000)
+      } else {
+        toast.error(result?.error || 'No se pudo imprimir la cotización')
+      }
+    } catch (error) {
+      console.error('Error al imprimir cotización en ticketera:', error)
+      toast.error('Error al imprimir en la ticketera')
     }
   }
 
@@ -873,6 +911,15 @@ export default function Quotations() {
                           <Download className="w-4 h-4 text-green-600" />
                           <span>Descargar PDF</span>
                         </button>
+                        {Capacitor.isNativePlatform() && (
+                          <button
+                            onClick={() => { setOpenMenuId(null); handlePrintTicket(quotation) }}
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <Printer className="w-4 h-4 text-gray-700" />
+                            <span>Imprimir en ticketera</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/nueva?clone=${quotation.id}`) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
@@ -1067,6 +1114,20 @@ export default function Quotations() {
                                   <Download className="w-4 h-4 text-green-600" />
                                   <span>Descargar PDF</span>
                                 </button>
+
+                                {/* Imprimir en ticketera (solo app nativa) */}
+                                {Capacitor.isNativePlatform() && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      handlePrintTicket(quotation)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                  >
+                                    <Printer className="w-4 h-4 text-gray-700" />
+                                    <span>Imprimir en ticketera</span>
+                                  </button>
+                                )}
 
                                 {/* Duplicar cotización */}
                                 <button
