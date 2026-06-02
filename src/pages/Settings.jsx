@@ -3423,60 +3423,78 @@ export default function Settings() {
                   {businessMode === 'retail' && (
                     <>
                       {[
-                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
-                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
-                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
-                        { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
-                        { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
-                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
-                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
-                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
-                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
-                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
-                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
-                        { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
-                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
-                        { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
-                        { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
-                        { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
-                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
-                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
-                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
-                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
-                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
-                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
-                        { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
-                        { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
-                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
-
-                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
-                      ].map((item) => (
-                        <label
-                          key={item.id}
-                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
-                            !hiddenMenuItems.includes(item.id)
-                              ? 'border-primary-200 bg-primary-50/50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!hiddenMenuItems.includes(item.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
-                              } else {
-                                setHiddenMenuItems([...hiddenMenuItems, item.id])
-                              }
-                            }}
-                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
-                            <span className="text-xs text-gray-500">{item.description}</span>
-                          </div>
-                        </label>
-                      ))}
+                        { title: 'Ventas y cobro', items: [
+                          { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
+                          { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                          { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                          { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        ] },
+                        { title: 'Inventario y almacenes', items: [
+                          { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                          { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                          { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        ] },
+                        { title: 'Compras y proveedores', items: [
+                          { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                          { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                          { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                          { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        ] },
+                        { title: 'Producción', items: [
+                          { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
+                          { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
+                          { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
+                        ] },
+                        { title: 'Guías y envíos', items: [
+                          { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                          { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                          { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
+                        ] },
+                        { title: 'Finanzas', items: [
+                          { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                          { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                          { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                          { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                          { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        ] },
+                        { title: 'Operación y otros', items: [
+                          { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
+                          { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
+                          { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+                          { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                        ] },
+                      ].flatMap((group) => [
+                        <div key={`hdr-${group.title}`} className="sm:col-span-2">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">{group.title}</h4>
+                        </div>,
+                        ...group.items.map((item) => (
+                          <label
+                            key={item.id}
+                            className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                              !hiddenMenuItems.includes(item.id)
+                                ? 'border-primary-200 bg-primary-50/50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!hiddenMenuItems.includes(item.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                                } else {
+                                  setHiddenMenuItems([...hiddenMenuItems, item.id])
+                                }
+                              }}
+                              className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                              <span className="text-xs text-gray-500">{item.description}</span>
+                            </div>
+                          </label>
+                        ))
+                      ])}
                     </>
                   )}
                   {businessMode === 'restaurant' && (
