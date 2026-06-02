@@ -3955,7 +3955,7 @@ export default function Settings() {
 
                       {/* Configuración de Estaciones (solo si está habilitado) */}
                       {restaurantConfig.enableKitchenStations && (
-                        <div className="ml-7 mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="ml-7 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
                           <div className="flex items-center justify-between mb-4">
                             <div>
                               <h4 className="text-sm font-semibold text-gray-900">Estaciones de Cocina</h4>
@@ -3978,7 +3978,7 @@ export default function Settings() {
                                   kitchenStations: [...(restaurantConfig.kitchenStations || []), newStation]
                                 })
                               }}
-                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
+                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               Agregar Estación
@@ -3991,7 +3991,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={restaurantConfig.autoPrintByStation || false}
                               onChange={(e) => setRestaurantConfig({...restaurantConfig, autoPrintByStation: e.target.checked})}
-                              className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                             />
                             <div>
                               <span className="text-sm font-medium text-gray-900">
@@ -4041,7 +4041,7 @@ export default function Settings() {
                                           setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
                                         }}
                                         placeholder="Nombre de la estación (ej: Cocina Caliente)"
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                       />
 
                                       {/* Selector de categorías */}
@@ -4089,7 +4089,7 @@ export default function Settings() {
                                                   }}
                                                   className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                                                     isSelected
-                                                      ? 'bg-orange-600 text-white'
+                                                      ? 'bg-primary-600 text-white'
                                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                                   }`}
                                                 >
@@ -4111,7 +4111,7 @@ export default function Settings() {
                                             updated[index] = { ...station, isPase: e.target.checked }
                                             setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
                                           }}
-                                          className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                         />
                                         <span className="text-xs text-gray-700">
                                           Estación de Pase/Despacho (ve todos los items para consolidar)
@@ -4129,7 +4129,7 @@ export default function Settings() {
                                               updated[index] = { ...station, useBuiltInPrinter: e.target.checked, ...(e.target.checked ? { printerIp: '' } : {}) }
                                               setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
                                             }}
-                                            className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                           />
                                           <span className="text-xs text-gray-700">
                                             Usar impresora integrada del dispositivo (iMin)
@@ -4149,7 +4149,7 @@ export default function Settings() {
                                                 setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
                                               }}
                                               placeholder="Ej: 192.168.1.100"
-                                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                             />
                                           </>
                                         )}
@@ -4200,8 +4200,8 @@ export default function Settings() {
                     {/* Gestión de Marcas (Multi-marca / Dark Kitchen) */}
                     <div className={`p-4 border rounded-lg transition-colors ${
                       (restaurantConfig.brands || []).length > 0
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'
+                        ? 'border-gray-300 bg-gray-50'
+                        : 'border-gray-200 hover:border-gray-300'
                     }`}>
                       <div className="flex items-center justify-between mb-3">
                         <div>
@@ -4226,7 +4226,7 @@ export default function Settings() {
                               brands: [...(restaurantConfig.brands || []), newBrand]
                             })
                           }}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           Agregar
@@ -4264,7 +4264,7 @@ export default function Settings() {
                                   setRestaurantConfig({ ...restaurantConfig, brands: updated })
                                 }}
                                 placeholder="Nombre de la marca"
-                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                               />
                               <label className="flex items-center gap-1 cursor-pointer">
                                 <input
@@ -4275,7 +4275,7 @@ export default function Settings() {
                                     updated[index] = { ...brand, active: e.target.checked }
                                     setRestaurantConfig({ ...restaurantConfig, brands: updated })
                                   }}
-                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                 />
                                 <span className="text-xs text-gray-600">Activa</span>
                               </label>
