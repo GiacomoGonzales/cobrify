@@ -5358,9 +5358,9 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
-              {/* Formato PDF */}
+              {/* Apariencia del PDF */}
               <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Formato PDF</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Apariencia del PDF</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Personaliza la apariencia de tus comprobantes en PDF
                 </p>
@@ -5417,6 +5417,174 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {/* Espaciado amplio en PDF */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={pdfSpacious}
+                    onChange={(e) => setPdfSpacious(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Espaciado amplio en PDF
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {pdfSpacious
+                        ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
+                        : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* PDF en formato A5 */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={pdfA5}
+                    onChange={(e) => setPdfA5(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      PDF en formato A5
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {pdfA5
+                        ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
+                        : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Contenido de comprobantes y cotizaciones */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Contenido de comprobantes y cotizaciones</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Define qué datos de tus productos se muestran en los PDF
+                </p>
+
+                {/* Códigos de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductCodeInQuotation}
+                    onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar códigos de producto en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductCodeInQuotation
+                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Códigos de producto en comprobantes (boletas/facturas/notas) */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductCodeInInvoices}
+                    onChange={(e) => setShowProductCodeInInvoices(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar códigos de producto en comprobantes
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductCodeInInvoices
+                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Descripción de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showProductDescriptionInQuotation}
+                    onChange={(e) => setShowProductDescriptionInQuotation(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Mostrar descripción del producto en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showProductDescriptionInQuotation
+                        ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
+                        : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Imágenes de producto en cotizaciones */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={showImagesInQuotations}
+                    onChange={(e) => setShowImagesInQuotations(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Habilitar imágenes en cotizaciones
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {showImagesInQuotations
+                        ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
+                        : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Ocultar lote y vencimiento en comprobantes */}
+                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={hideBatchAndExpiryInDocuments}
+                    onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                      Ocultar lote y vencimiento en comprobantes
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      {hideBatchAndExpiryInDocuments
+                        ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
+                        : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
+                    </p>
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Ticket térmico */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Ticket térmico</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Personaliza el pie de tus tickets impresos en impresoras térmicas
+                </p>
+
                 {/* Mensaje personalizado al pie del ticket térmico */}
                 <div className="mb-6">
                   <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -5440,7 +5608,7 @@ export default function Settings() {
                 </div>
 
                 {/* QR personalizado al pie del ticket térmico */}
-                <div className="mb-6">
+                <div>
                   <label className="flex items-start space-x-3 cursor-pointer group">
                     <input
                       type="checkbox"
@@ -5624,178 +5792,6 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
-
-                {/* Códigos de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
-                    checked={showProductCodeInQuotation}
-                    onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar códigos de producto en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductCodeInQuotation
-                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* Códigos de producto en comprobantes (boletas/facturas/notas) */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
-                    checked={showProductCodeInInvoices}
-                    onChange={(e) => setShowProductCodeInInvoices(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar códigos de producto en comprobantes
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductCodeInInvoices
-                        ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* Descripción de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
-                    checked={showProductDescriptionInQuotation}
-                    onChange={(e) => setShowProductDescriptionInQuotation(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Mostrar descripción del producto en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showProductDescriptionInQuotation
-                        ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
-                        : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* Imágenes de producto en cotizaciones */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mb-3">
-                  <input
-                    type="checkbox"
-                    checked={showImagesInQuotations}
-                    onChange={(e) => setShowImagesInQuotations(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Habilitar imágenes en cotizaciones
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {showImagesInQuotations
-                        ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
-                        : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* Espaciado amplio en PDF */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={pdfSpacious}
-                    onChange={(e) => setPdfSpacious(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Espaciado amplio en PDF
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {pdfSpacious
-                        ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
-                        : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* PDF en formato A5 */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={pdfA5}
-                    onChange={(e) => setPdfA5(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      PDF en formato A5
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {pdfA5
-                        ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
-                        : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
-                    </p>
-                  </div>
-                </label>
-
-                {/* Ocultar lote y vencimiento en comprobantes */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
-                  <input
-                    type="checkbox"
-                    checked={hideBatchAndExpiryInDocuments}
-                    onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Ocultar lote y vencimiento en comprobantes
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {hideBatchAndExpiryInDocuments
-                        ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
-                        : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
-                    </p>
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-blue-700 font-medium">
-                        Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
-                      </span>
-                    </div>
-                  </div>
-                </label>
-
-                {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
-                  <input
-                    type="checkbox"
-                    checked={hideCashExpectedFromCashier}
-                    onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {hideCashExpectedFromCashier
-                        ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
-                        : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
-                    </p>
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-blue-700 font-medium">
-                        Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
-                      </span>
-                    </div>
-                  </div>
-                </label>
               </div>
 
               {/* Divider */}
@@ -6072,6 +6068,32 @@ export default function Settings() {
                             </p>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors mt-3">
+                    <input
+                      type="checkbox"
+                      checked={hideCashExpectedFromCashier}
+                      onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {hideCashExpectedFromCashier
+                          ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
+                          : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs text-blue-700 font-medium">
+                          Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
+                        </span>
                       </div>
                     </div>
                   </label>
