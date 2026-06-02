@@ -3877,44 +3877,24 @@ export default function Settings() {
                       Configura cómo funciona el flujo de órdenes y cocina en tu restaurante
                     </p>
                     <div className="space-y-4">
-                      <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={restaurantConfig.itemStatusTracking}
-                          onChange={(e) => setRestaurantConfig({...restaurantConfig, itemStatusTracking: e.target.checked})}
-                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                            Seguimiento de estado por item individual
-                          </span>
-                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                            {restaurantConfig.itemStatusTracking
-                              ? '✓ Habilitado: Cada plato/item de la orden se marca individualmente (Pendiente → Preparando → Listo → Entregado). Los platos pueden estar listos en diferentes momentos. Ideal para restaurantes con múltiples estaciones de cocina o menús extensos.'
-                              : '✗ Deshabilitado: La orden completa se marca como un todo (Pendiente → En preparación → Lista → Entregada). Más simple y rápido para operaciones pequeñas, cafeterías o negocios con preparación rápida.'}
-                          </p>
-                        </div>
-                      </label>
+                      <SettingToggle
+                        checked={restaurantConfig.itemStatusTracking}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, itemStatusTracking: e.target.checked})}
+                        title="Seguimiento de estado por item individual"
+                        description={restaurantConfig.itemStatusTracking
+                          ? '✓ Habilitado: Cada plato/item de la orden se marca individualmente (Pendiente → Preparando → Listo → Entregado). Los platos pueden estar listos en diferentes momentos. Ideal para restaurantes con múltiples estaciones de cocina o menús extensos.'
+                          : '✗ Deshabilitado: La orden completa se marca como un todo (Pendiente → En preparación → Lista → Entregada). Más simple y rápido para operaciones pequeñas, cafeterías o negocios con preparación rápida.'}
+                      />
 
                       {/* Pago obligatorio antes de cocina */}
-                      <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={restaurantConfig.requirePaymentBeforeKitchen || false}
-                          onChange={(e) => setRestaurantConfig({...restaurantConfig, requirePaymentBeforeKitchen: e.target.checked})}
-                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                            Requerir pago antes de enviar a cocina
-                          </span>
-                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                            {restaurantConfig.requirePaymentBeforeKitchen
-                              ? '✓ Habilitado: Las órdenes no se pueden enviar a cocina hasta que estén pagadas. Ideal para restaurantes de comida rápida, food courts o delivery donde el pago es por adelantado.'
-                              : '✗ Deshabilitado: Las órdenes se pueden enviar a cocina sin necesidad de pago previo. El cliente puede pagar después de recibir su pedido.'}
-                          </p>
-                        </div>
-                      </label>
+                      <SettingToggle
+                        checked={restaurantConfig.requirePaymentBeforeKitchen || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, requirePaymentBeforeKitchen: e.target.checked})}
+                        title="Requerir pago antes de enviar a cocina"
+                        description={restaurantConfig.requirePaymentBeforeKitchen
+                          ? '✓ Habilitado: Las órdenes no se pueden enviar a cocina hasta que estén pagadas. Ideal para restaurantes de comida rápida, food courts o delivery donde el pago es por adelantado.'
+                          : '✗ Deshabilitado: Las órdenes se pueden enviar a cocina sin necesidad de pago previo. El cliente puede pagar después de recibir su pedido.'}
+                      />
 
                       {/* Recargo al Consumo (Decreto Ley N° 25988) */}
                       <div className={`p-4 border rounded-lg transition-colors ${
@@ -3922,24 +3902,14 @@ export default function Settings() {
                           ? 'border-green-500 bg-green-50'
                           : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
                       }`}>
-                        <label className="flex items-start space-x-3 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={restaurantConfig.recargoConsumoEnabled || false}
-                            onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
-                            className="mt-1 w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                          />
-                          <div className="flex-1">
-                            <span className="text-sm font-medium text-gray-900 group-hover:text-green-900">
-                              Recargo al Consumo
-                            </span>
-                            <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                              {restaurantConfig.recargoConsumoEnabled
-                                ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
-                                : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
-                            </p>
-                          </div>
-                        </label>
+                        <SettingToggle
+                          checked={restaurantConfig.recargoConsumoEnabled || false}
+                          onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
+                          title="Recargo al Consumo"
+                          description={restaurantConfig.recargoConsumoEnabled
+                            ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
+                            : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
+                        />
 
                         {/* Configuración del porcentaje (solo si está habilitado) */}
                         {restaurantConfig.recargoConsumoEnabled && (
@@ -3966,28 +3936,14 @@ export default function Settings() {
                       </div>
 
                       {/* Modo Multi-Estación de Cocina */}
-                      <label className={`flex items-start space-x-3 cursor-pointer group p-4 border rounded-lg transition-colors ${
-                        restaurantConfig.enableKitchenStations
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/30'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={restaurantConfig.enableKitchenStations || false}
-                          onChange={(e) => setRestaurantConfig({...restaurantConfig, enableKitchenStations: e.target.checked})}
-                          className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900">
-                            Modo Multi-Estación de Cocina
-                          </span>
-                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                            {restaurantConfig.enableKitchenStations
-                              ? '✓ Habilitado: Los pedidos se dividen automáticamente por estaciones (Cocina caliente, Cocina fría, Bebidas, etc.). Cada estación ve solo los items que le corresponden.'
-                              : '✗ Deshabilitado: Todos los items del pedido se muestran juntos en una sola vista de cocina.'}
-                          </p>
-                        </div>
-                      </label>
+                      <SettingToggle
+                        checked={restaurantConfig.enableKitchenStations || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, enableKitchenStations: e.target.checked})}
+                        title="Modo Multi-Estación de Cocina"
+                        description={restaurantConfig.enableKitchenStations
+                          ? '✓ Habilitado: Los pedidos se dividen automáticamente por estaciones (Cocina caliente, Cocina fría, Bebidas, etc.). Cada estación ve solo los items que le corresponden.'
+                          : '✗ Deshabilitado: Todos los items del pedido se muestran juntos en una sola vista de cocina.'}
+                      />
 
                       {/* Configuración de Estaciones (solo si está habilitado) */}
                       {restaurantConfig.enableKitchenStations && (
@@ -4345,24 +4301,14 @@ export default function Settings() {
                   Configura el comportamiento del control de stock
                 </p>
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowNegativeStock}
-                      onChange={(e) => setAllowNegativeStock(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir vender productos sin stock
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowNegativeStock
-                          ? '✓ Habilitado: Los productos se pueden vender incluso si el stock está en 0 o negativo. El stock puede quedar en números negativos. Útil para negocios bajo pedido o dropshipping.'
-                          : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={allowNegativeStock}
+                    onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                    title="Permitir vender productos sin stock"
+                    description={allowNegativeStock
+                      ? '✓ Habilitado: Los productos se pueden vender incluso si el stock está en 0 o negativo. El stock puede quedar en números negativos. Útil para negocios bajo pedido o dropshipping.'
+                      : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
+                  />
                 </div>
               </div>
 
@@ -4376,157 +4322,79 @@ export default function Settings() {
                   Configura el comportamiento del punto de venta
                 </p>
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowCustomProducts}
-                      onChange={(e) => setAllowCustomProducts(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir agregar productos personalizados en el POS
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowCustomProducts
-                          ? '✓ Habilitado: Aparecerá un botón "Producto Personalizado" en el punto de venta que permite agregar productos con nombre y precio personalizado sin necesidad de crearlos previamente. Ideal para servicios variables, trabajos por encargo o productos únicos.'
-                          : '✗ Deshabilitado: Solo se pueden vender productos previamente creados en el catálogo. Recomendado para negocios con inventario fijo y control estricto de productos.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={allowCustomProducts}
+                    onChange={(e) => setAllowCustomProducts(e.target.checked)}
+                    title="Permitir agregar productos personalizados en el POS"
+                    description={allowCustomProducts
+                      ? '✓ Habilitado: Aparecerá un botón "Producto Personalizado" en el punto de venta que permite agregar productos con nombre y precio personalizado sin necesidad de crearlos previamente. Ideal para servicios variables, trabajos por encargo o productos únicos.'
+                      : '✗ Deshabilitado: Solo se pueden vender productos previamente creados en el catálogo. Recomendado para negocios con inventario fijo y control estricto de productos.'}
+                  />
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowPriceEdit}
-                      onChange={(e) => setAllowPriceEdit(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir modificar precio de productos en el POS
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowPriceEdit
-                          ? '✓ Habilitado: Podrás editar el precio de venta de cualquier producto directamente desde el carrito del punto de venta. Útil para aplicar descuentos personalizados, promociones especiales o ajustar precios según el cliente.'
-                          : '✗ Deshabilitado: Los productos se venderán siempre al precio registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener precios fijos y evitar errores de digitación.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={allowPriceEdit}
+                    onChange={(e) => setAllowPriceEdit(e.target.checked)}
+                    title="Permitir modificar precio de productos en el POS"
+                    description={allowPriceEdit
+                      ? '✓ Habilitado: Podrás editar el precio de venta de cualquier producto directamente desde el carrito del punto de venta. Útil para aplicar descuentos personalizados, promociones especiales o ajustar precios según el cliente.'
+                      : '✗ Deshabilitado: Los productos se venderán siempre al precio registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener precios fijos y evitar errores de digitación.'}
+                  />
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={posClearSearchOnAdd}
-                      onChange={(e) => setPosClearSearchOnAdd(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Reiniciar búsqueda al agregar un producto al carrito
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {posClearSearchOnAdd
-                          ? '✓ Habilitado: Cuando agregues un producto al carrito, el campo de búsqueda se limpia automáticamente. Recomendado para flujos con pistola lectora o cuando agregas productos diferentes uno por uno.'
-                          : '✗ Deshabilitado: El término de búsqueda se mantiene después de agregar un producto. Útil cuando agregas varias unidades del mismo producto o varios productos similares (ej. "coca cola", "coca cola light").'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={posClearSearchOnAdd}
+                    onChange={(e) => setPosClearSearchOnAdd(e.target.checked)}
+                    title="Reiniciar búsqueda al agregar un producto al carrito"
+                    description={posClearSearchOnAdd
+                      ? '✓ Habilitado: Cuando agregues un producto al carrito, el campo de búsqueda se limpia automáticamente. Recomendado para flujos con pistola lectora o cuando agregas productos diferentes uno por uno.'
+                      : '✗ Deshabilitado: El término de búsqueda se mantiene después de agregar un producto. Útil cuando agregas varias unidades del mismo producto o varios productos similares (ej. "coca cola", "coca cola light").'}
+                  />
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={allowNameEdit}
-                      onChange={(e) => setAllowNameEdit(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir modificar nombre de productos en el POS
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {allowNameEdit
-                          ? '✓ Habilitado: Podrás editar el nombre de cualquier producto directamente desde el carrito del punto de venta. Útil para personalizar la descripción según el cliente o agregar detalles específicos al comprobante.'
-                          : '✗ Deshabilitado: Los productos se mostrarán siempre con el nombre registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener consistencia en los comprobantes.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={allowNameEdit}
+                    onChange={(e) => setAllowNameEdit(e.target.checked)}
+                    title="Permitir modificar nombre de productos en el POS"
+                    description={allowNameEdit
+                      ? '✓ Habilitado: Podrás editar el nombre de cualquier producto directamente desde el carrito del punto de venta. Útil para personalizar la descripción según el cliente o agregar detalles específicos al comprobante.'
+                      : '✗ Deshabilitado: Los productos se mostrarán siempre con el nombre registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener consistencia en los comprobantes.'}
+                  />
 
                   {/* SKU automático */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={autoSku}
-                      onChange={(e) => setAutoSku(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        SKU automático al crear productos
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {autoSku
-                          ? '✓ Habilitado: Al crear un nuevo producto se generará automáticamente un SKU secuencial (PROD-0001, PROD-0002, etc.). Puedes modificarlo antes de guardar si lo deseas.'
-                          : '✗ Deshabilitado: El campo SKU quedará vacío al crear un producto y deberás ingresarlo manualmente si lo necesitas.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={autoSku}
+                    onChange={(e) => setAutoSku(e.target.checked)}
+                    title="SKU automático al crear productos"
+                    description={autoSku
+                      ? '✓ Habilitado: Al crear un nuevo producto se generará automáticamente un SKU secuencial (PROD-0001, PROD-0002, etc.). Puedes modificarlo antes de guardar si lo deseas.'
+                      : '✗ Deshabilitado: El campo SKU quedará vacío al crear un producto y deberás ingresarlo manualmente si lo necesitas.'}
+                  />
 
                   {/* Ocultar productos sin stock en POS */}
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.hideOutOfStockInPOS ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
-                      <span className="text-xs text-gray-500">No mostrar productos con stock 0 en el Punto de Venta</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.hideOutOfStockInPOS}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
+                  <SettingToggle
+                    checked={posCustomFields.hideOutOfStockInPOS}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
+                    title="Ocultar productos sin stock"
+                    description="No mostrar productos con stock 0 en el Punto de Venta"
+                  />
 
                   {/* Auto-reset POS después de acción post-venta */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={autoResetPOS}
-                      onChange={(e) => setAutoResetPOS(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Reiniciar POS automáticamente después de imprimir/descargar
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {autoResetPOS
-                          ? '✓ Habilitado: Al imprimir ticket, descargar PDF, ver vista previa o enviar por WhatsApp, el POS se reiniciará automáticamente para una nueva venta.'
-                          : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Nueva Venta" manualmente para continuar.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={autoResetPOS}
+                    onChange={(e) => setAutoResetPOS(e.target.checked)}
+                    title="Reiniciar POS automáticamente después de imprimir/descargar"
+                    description={autoResetPOS
+                      ? '✓ Habilitado: Al imprimir ticket, descargar PDF, ver vista previa o enviar por WhatsApp, el POS se reiniciará automáticamente para una nueva venta.'
+                      : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Nueva Venta" manualmente para continuar.'}
+                  />
 
                   {/* Auto-imprimir ticket al completar venta */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={autoPrintTicket}
-                      onChange={(e) => setAutoPrintTicket(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Imprimir ticket automáticamente al completar venta
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {autoPrintTicket
-                          ? '✓ Habilitado: Al completar una venta, el ticket se imprimirá automáticamente sin necesidad de presionar el botón.'
-                          : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Imprimir Ticket" manualmente.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={autoPrintTicket}
+                    onChange={(e) => setAutoPrintTicket(e.target.checked)}
+                    title="Imprimir ticket automáticamente al completar venta"
+                    description={autoPrintTicket
+                      ? '✓ Habilitado: Al completar una venta, el ticket se imprimirá automáticamente sin necesidad de presionar el botón.'
+                      : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Imprimir Ticket" manualmente.'}
+                  />
 
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
@@ -4587,77 +4455,37 @@ export default function Settings() {
                   Activa campos adicionales para capturar información del cliente en el POS y comprobantes.
                 </p>
                 <div className="space-y-3">
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showStudentField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Alumno"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showStudentField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehiclePlateField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Placa de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehiclePlateField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehicleModelField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Modelo de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el modelo del vehículo en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehicleModelField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleModelField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehicleYearField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Año de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el año del vehículo en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehicleYearField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleYearField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
+                  <SettingToggle
+                    checked={posCustomFields.showStudentField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
+                    title={'Campo "Alumno"'}
+                    description="Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showVehiclePlateField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
+                    title={'Campo "Placa de Vehículo"'}
+                    description="Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showVehicleModelField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleModelField: e.target.checked })}
+                    title={'Campo "Modelo de Vehículo"'}
+                    description="Muestra un campo para ingresar el modelo del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showVehicleYearField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleYearField: e.target.checked })}
+                    title={'Campo "Año de Vehículo"'}
+                    description="Muestra un campo para ingresar el año del vehículo en el POS y comprobantes"
+                  />
 
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showSubscriptionFields ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Gestión de Suscripciones</span>
-                      <span className="text-xs text-gray-500">Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showSubscriptionFields}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
+                  <SettingToggle
+                    checked={posCustomFields.showSubscriptionFields}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
+                    title="Gestión de Suscripciones"
+                    description="Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones"
+                  />
                 </div>
               </div>
 
@@ -4672,24 +4500,14 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <label className="flex items-start space-x-3 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={multiplePricesEnabled}
-                        onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
-                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                          Habilitar múltiples precios por producto
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          {multiplePricesEnabled
-                            ? '✓ Habilitado: Podrás asignar hasta 3 precios diferentes a cada producto. Al vender, podrás elegir qué precio aplicar o asignar un nivel de precio a cada cliente.'
-                            : '✗ Deshabilitado: Solo se usará un precio por producto (comportamiento normal).'}
-                        </p>
-                      </div>
-                    </label>
+                    <SettingToggle
+                      checked={multiplePricesEnabled}
+                      onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
+                      title="Habilitar múltiples precios por producto"
+                      description={multiplePricesEnabled
+                        ? '✓ Habilitado: Podrás asignar hasta 3 precios diferentes a cada producto. Al vender, podrás elegir qué precio aplicar o asignar un nivel de precio a cada cliente.'
+                        : '✗ Deshabilitado: Solo se usará un precio por producto (comportamiento normal).'}
+                    />
 
                     {multiplePricesEnabled && (
                       <div className="mt-4 pt-4 border-t border-gray-200">
@@ -4898,24 +4716,14 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <label className="flex items-start space-x-3 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={presentationsEnabled}
-                        onChange={(e) => setPresentationsEnabled(e.target.checked)}
-                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                          Habilitar presentaciones de venta por producto
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          {presentationsEnabled
-                            ? '✓ Habilitado: Podrás definir múltiples presentaciones por producto (ej: Unidad, Media Docena, Caja x24). Al vender, elegirás la presentación y el stock se descontará automáticamente.'
-                            : '✗ Deshabilitado: Los productos se venderán con una sola unidad de medida (comportamiento normal).'}
-                        </p>
-                      </div>
-                    </label>
+                    <SettingToggle
+                      checked={presentationsEnabled}
+                      onChange={(e) => setPresentationsEnabled(e.target.checked)}
+                      title="Habilitar presentaciones de venta por producto"
+                      description={presentationsEnabled
+                        ? '✓ Habilitado: Podrás definir múltiples presentaciones por producto (ej: Unidad, Media Docena, Caja x24). Al vender, elegirás la presentación y el stock se descontará automáticamente.'
+                        : '✗ Deshabilitado: Los productos se venderán con una sola unidad de medida (comportamiento normal).'}
+                    />
 
                     {presentationsEnabled && (
                       <div className="mt-4 pt-4 border-t border-gray-200">
@@ -4949,26 +4757,14 @@ export default function Settings() {
                   Configura qué información se muestra en las tarjetas de productos del POS
                 </p>
                 <div className="space-y-4">
-                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <label className="flex items-start space-x-3 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={showDescriptionInPOS}
-                        onChange={(e) => setShowDescriptionInPOS(e.target.checked)}
-                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                          Mostrar descripción del producto en el POS
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          {showDescriptionInPOS
-                            ? '✓ Habilitado: Se mostrará la descripción completa del producto en la tarjeta del punto de venta.'
-                            : '✗ Deshabilitado: Solo se muestra el nombre, precio y stock en la tarjeta del POS.'}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
+                  <SettingToggle
+                    checked={showDescriptionInPOS}
+                    onChange={(e) => setShowDescriptionInPOS(e.target.checked)}
+                    title="Mostrar descripción del producto en el POS"
+                    description={showDescriptionInPOS
+                      ? '✓ Habilitado: Se mostrará la descripción completa del producto en la tarjeta del punto de venta.'
+                      : '✗ Deshabilitado: Solo se muestra el nombre, precio y stock en la tarjeta del POS.'}
+                  />
                 </div>
               </div>
 
@@ -4982,49 +4778,29 @@ export default function Settings() {
                   Configura opciones específicas para notas de venta
                 </p>
                 <div className="space-y-4">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={hideRucIgvInNotaVenta}
-                      onChange={(e) => {
-                        setHideRucIgvInNotaVenta(e.target.checked)
-                        if (e.target.checked) setHideOnlyIgvInNotaVenta(false)
-                      }}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar RUC e IGV en Notas de Venta
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {hideRucIgvInNotaVenta
-                          ? '✓ Habilitado: Las notas de venta no mostrarán el RUC de la empresa ni el desglose del IGV en la impresión. Solo se mostrará el total final.'
-                          : '✗ Deshabilitado: Las notas de venta mostrarán el RUC de la empresa y el desglose de subtotal e IGV (18%) como es usual.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={hideRucIgvInNotaVenta}
+                    onChange={(e) => {
+                      setHideRucIgvInNotaVenta(e.target.checked)
+                      if (e.target.checked) setHideOnlyIgvInNotaVenta(false)
+                    }}
+                    title="Ocultar RUC e IGV en Notas de Venta"
+                    description={hideRucIgvInNotaVenta
+                      ? '✓ Habilitado: Las notas de venta no mostrarán el RUC de la empresa ni el desglose del IGV en la impresión. Solo se mostrará el total final.'
+                      : '✗ Deshabilitado: Las notas de venta mostrarán el RUC de la empresa y el desglose de subtotal e IGV (18%) como es usual.'}
+                  />
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={hideOnlyIgvInNotaVenta}
-                      onChange={(e) => {
-                        setHideOnlyIgvInNotaVenta(e.target.checked)
-                        if (e.target.checked) setHideRucIgvInNotaVenta(false)
-                      }}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Ocultar solo IGV en Notas de Venta
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {hideOnlyIgvInNotaVenta
-                          ? '✓ Habilitado: Las notas de venta no mostrarán el desglose de subtotal e IGV, pero sí mostrarán el RUC de la empresa.'
-                          : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={hideOnlyIgvInNotaVenta}
+                    onChange={(e) => {
+                      setHideOnlyIgvInNotaVenta(e.target.checked)
+                      if (e.target.checked) setHideRucIgvInNotaVenta(false)
+                    }}
+                    title="Ocultar solo IGV en Notas de Venta"
+                    description={hideOnlyIgvInNotaVenta
+                      ? '✓ Habilitado: Las notas de venta no mostrarán el desglose de subtotal e IGV, pero sí mostrarán el RUC de la empresa.'
+                      : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
+                  />
 
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
@@ -5086,24 +4862,14 @@ export default function Settings() {
                       ? 'border-indigo-500 bg-indigo-50'
                       : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
                   }`}>
-                    <label className="flex items-start space-x-3 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={cardCommissionEnabled}
-                        onChange={(e) => setCardCommissionEnabled(e.target.checked)}
-                        className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-900">
-                          Cobrar comisión por pago con tarjeta
-                        </span>
-                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                          {cardCommissionEnabled
-                            ? `✓ Habilitado: cuando el pago sea 100% con tarjeta, se sube el precio ${cardCommissionRate || 0}% (queda incluido en boletas, facturas y notas de venta). El cliente paga el total con el recargo ya incluido, sin una línea aparte.`
-                            : '✗ Deshabilitado: no se agrega recargo por pagos con tarjeta.'}
-                        </p>
-                      </div>
-                    </label>
+                    <SettingToggle
+                      checked={cardCommissionEnabled}
+                      onChange={(e) => setCardCommissionEnabled(e.target.checked)}
+                      title="Cobrar comisión por pago con tarjeta"
+                      description={cardCommissionEnabled
+                        ? `✓ Habilitado: cuando el pago sea 100% con tarjeta, se sube el precio ${cardCommissionRate || 0}% (queda incluido en boletas, facturas y notas de venta). El cliente paga el total con el recargo ya incluido, sin una línea aparte.`
+                        : '✗ Deshabilitado: no se agrega recargo por pagos con tarjeta.'}
+                    />
 
                     {/* Porcentaje (solo si está habilitado) */}
                     {cardCommissionEnabled && (
