@@ -4192,7 +4192,7 @@ export default function Settings() {
                     </div>
 
                     {/* Gestión de Marcas (Multi-marca / Dark Kitchen) */}
-                    <div className={`p-4 border rounded-lg transition-colors ${
+                    <div className={`mt-4 p-4 border rounded-lg transition-colors ${
                       (restaurantConfig.brands || []).length > 0
                         ? 'border-gray-300 bg-gray-50'
                         : 'border-gray-200 hover:border-gray-300'
