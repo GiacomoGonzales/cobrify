@@ -68,6 +68,27 @@ import {
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
+// Toggle de configuración con estilo unificado (checkbox a la izquierda).
+function SettingToggle({ checked, onChange, title, description, disabled = false }) {
+  return (
+    <label className={`flex items-start gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+      checked ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+    } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="mt-0.5 w-5 h-5 shrink-0 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+      />
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium text-gray-900 block">{title}</span>
+        {description && <span className="text-xs text-gray-500 block mt-0.5 leading-relaxed">{description}</span>}
+      </div>
+    </label>
+  )
+}
+
 export default function Settings() {
   const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings } = useAppContext()
   // Preview de tema del catálogo
@@ -3139,81 +3160,43 @@ export default function Settings() {
                 </p>
                 <div className="space-y-3">
                   {/* Imágenes de productos */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={enableProductImages}
-                      onChange={(e) => setEnableProductImages(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Habilitar imágenes de productos
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {enableProductImages
-                          ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
-                          : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={enableProductImages}
+                    onChange={(e) => setEnableProductImages(e.target.checked)}
+                    title="Habilitar imágenes de productos"
+                    description={enableProductImages
+                      ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
+                      : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
+                  />
 
                   {/* Ubicación de productos */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={enableProductLocation}
-                      onChange={(e) => setEnableProductLocation(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Habilitar ubicación de productos
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {enableProductLocation
-                          ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
-                          : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={enableProductLocation}
+                    onChange={(e) => setEnableProductLocation(e.target.checked)}
+                    title="Habilitar ubicación de productos"
+                    description={enableProductLocation
+                      ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
+                      : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
+                  />
 
                   {/* Edición manual de stock desde el modal de productos */}
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={enableManualStockEdit}
-                      onChange={(e) => setEnableManualStockEdit(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Permitir editar stock manualmente desde productos
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {enableManualStockEdit
-                          ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
-                          : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={enableManualStockEdit}
+                    onChange={(e) => setEnableManualStockEdit(e.target.checked)}
+                    title="Permitir editar stock manualmente desde productos"
+                    description={enableManualStockEdit
+                      ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
+                      : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
+                  />
 
                   {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
                   {businessMode !== 'pharmacy' && (
-                    <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                      posCustomFields.showBatchExpiryInPurchase ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 block">Control de Lotes y Vencimientos</span>
-                        <span className="text-xs text-gray-500">Habilita control de lotes, fechas de vencimiento, alertas y selección de lotes en ventas, compras e inventario</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={posCustomFields.showBatchExpiryInPurchase}
-                        onChange={(e) => setPosCustomFields({ ...posCustomFields, showBatchExpiryInPurchase: e.target.checked })}
-                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                    </label>
+                    <SettingToggle
+                      checked={posCustomFields.showBatchExpiryInPurchase}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showBatchExpiryInPurchase: e.target.checked })}
+                      title="Control de Lotes y Vencimientos"
+                      description="Habilita control de lotes, fechas de vencimiento, alertas y selección de lotes en ventas, compras e inventario"
+                    />
                   )}
                 </div>
               </div>
@@ -3229,20 +3212,12 @@ export default function Settings() {
                 </p>
                 <div className="space-y-3">
                   {/* Mostrar precios de venta en compras */}
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showSalePriceInPurchase ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Precios de venta en compras</span>
-                      <span className="text-xs text-gray-500">Mostrar y actualizar precios de venta al registrar una compra. Si tienes múltiples precios o variantes, se mostrarán todos</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showSalePriceInPurchase}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSalePriceInPurchase: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
+                  <SettingToggle
+                    checked={posCustomFields.showSalePriceInPurchase}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showSalePriceInPurchase: e.target.checked })}
+                    title="Precios de venta en compras"
+                    description="Mostrar y actualizar precios de venta al registrar una compra. Si tienes múltiples precios o variantes, se mostrarán todos"
+                  />
                 </div>
               </div>
 
@@ -3257,26 +3232,14 @@ export default function Settings() {
                 </p>
                 <div className="space-y-3">
                   {/* Pantalla de cliente (segunda pantalla) */}
-                  <label className={`flex items-start space-x-3 cursor-pointer group p-3 border rounded-lg transition-colors ${
-                    enableCustomerDisplay ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={enableCustomerDisplay}
-                      onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Pantalla de cliente (segunda pantalla)
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {enableCustomerDisplay
-                          ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
-                          : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
-                      </p>
-                    </div>
-                  </label>
+                  <SettingToggle
+                    checked={enableCustomerDisplay}
+                    onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
+                    title="Pantalla de cliente (segunda pantalla)"
+                    description={enableCustomerDisplay
+                      ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
+                      : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
+                  />
                 </div>
               </div>
 
@@ -3290,24 +3253,14 @@ export default function Settings() {
                   Habilita una página dedicada para exportar tus ventas en el formato del Administrador de Eventos de Meta (Facebook Conversions).
                 </p>
 
-                <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={metaAdsEnabled}
-                    onChange={(e) => setMetaAdsEnabled(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                      Habilitar exportación para Meta Ads
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                      {metaAdsEnabled
-                        ? '✓ Habilitado: Se muestra una sección "Meta Ads" en el menú donde puedes ingresar manualmente la hora real de cada venta y exportar en el formato exacto de Meta (event_name, event_time, phone, value, currency, Order_id).'
-                        : '✗ Deshabilitado: No se mostrará la sección de exportación a Meta Ads.'}
-                    </p>
-                  </div>
-                </label>
+                <SettingToggle
+                  checked={metaAdsEnabled}
+                  onChange={(e) => setMetaAdsEnabled(e.target.checked)}
+                  title="Habilitar exportación para Meta Ads"
+                  description={metaAdsEnabled
+                    ? '✓ Habilitado: Se muestra una sección "Meta Ads" en el menú donde puedes ingresar manualmente la hora real de cada venta y exportar en el formato exacto de Meta (event_name, event_time, phone, value, currency, Order_id).'
+                    : '✗ Deshabilitado: No se mostrará la sección de exportación a Meta Ads.'}
+                />
 
                 {metaAdsEnabled && (
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
