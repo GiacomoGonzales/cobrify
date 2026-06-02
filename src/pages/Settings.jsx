@@ -4453,6 +4453,8 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Campos del cliente: no aplica a restaurante (alumno/vehiculo/suscripciones) */}
+              {businessMode !== 'restaurant' && (<>
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -4496,6 +4498,7 @@ export default function Settings() {
                   />
                 </div>
               </div>
+              </>)}
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
