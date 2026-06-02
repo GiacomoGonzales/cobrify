@@ -103,6 +103,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [transportMode, setTransportMode] = useState('02') // 02=Privado, 01=Público
   const [issueDate, setIssueDate] = useState('')
   const [transferDate, setTransferDate] = useState('')
+  const [carrierDeliveryDate, setCarrierDeliveryDate] = useState('') // Fecha de entrega de bienes al transportista (obligatoria en transporte público - SUNAT 3617)
   const [transferDescription, setTransferDescription] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
   const [weightUnit, setWeightUnit] = useState('KGM')
@@ -234,6 +235,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       setIssueDate(getLocalDateString(0))
       // Inicializar fecha de traslado para hoy (el usuario puede cambiarla)
       setTransferDate(getLocalDateString(0))
+      // Fecha de entrega al transportista por defecto = hoy (transporte público)
+      setCarrierDeliveryDate(getLocalDateString(0))
     }
   }, [isOpen, referenceInvoice, cloneData])
 
@@ -419,6 +422,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       // Pre-llenar fechas (usando hora de Perú)
       setIssueDate(getLocalDateString(0))  // Hoy
       setTransferDate(getLocalDateString(0))  // Hoy (el usuario puede cambiar)
+      setCarrierDeliveryDate(getLocalDateString(0))  // Entrega al transportista = hoy
 
       // Pre-llenar datos según si es compra o venta
       if (referenceInvoice.isPurchase) {
@@ -538,6 +542,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     // Fechas: usar fecha actual (no la de la guía original)
     setIssueDate(getLocalDateString(0))
     setTransferDate(getLocalDateString(0))
+    setCarrierDeliveryDate(getLocalDateString(0))
 
     // Datos básicos
     setTransferReason(cloneData.transferReason || '01')
@@ -1128,6 +1133,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       return
     }
 
+    // Transporte público: la "Fecha de entrega de bienes al transportista" es obligatoria
+    // desde el 01/06/2026 (SUNAT errores 3617/3618). Sin ella la guía es rechazada.
+    if (transportMode === '01') {
+      if (!carrierDeliveryDate) {
+        toast.error('Debe ingresar la fecha de entrega de bienes al transportista')
+        return
+      }
+      if (issueDate && carrierDeliveryDate < issueDate) {
+        toast.error('La fecha de entrega al transportista no puede ser anterior a la fecha de emisión')
+        return
+      }
+      if (carrierDeliveryDate > transferDate) {
+        toast.error('La fecha de entrega al transportista no puede ser posterior a la fecha de inicio de traslado')
+        return
+      }
+    }
+
     if (transportMode === '02') {
       // Si es vehículo M1 o L, los datos del conductor y placa son opcionales
       if (!isM1LVehicle) {
@@ -1203,6 +1225,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         transferReason,
         transportMode,
         transferDate,
+        // Fecha de entrega de bienes al transportista (solo transporte público - SUNAT 3617)
+        carrierDeliveryDate: transportMode === '01' ? carrierDeliveryDate : null,
         transferDescription,
         totalWeight: parseFloat(totalWeight),
         weightUnit,
@@ -1721,6 +1745,18 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 min={getYesterdayDateString()}
                 max={getTomorrowDateString()}
               />
+
+              {transportMode === '01' && (
+                <Input
+                  type="date"
+                  label="Fecha de entrega al transportista"
+                  required
+                  value={carrierDeliveryDate}
+                  onChange={(e) => setCarrierDeliveryDate(e.target.value)}
+                  min={issueDate || undefined}
+                  max={transferDate || undefined}
+                />
+              )}
 
               <Input
                 label="Descripción del traslado"

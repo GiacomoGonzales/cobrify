@@ -2508,13 +2508,13 @@ export function generateDispatchGuideXML(guideData, businessData) {
     }
   }
 
-  // === DATOS DE VEHÍCULO Y CONDUCTOR (privado, o público con indicador activo) ===
+  // === DATOS DE VEHÍCULO (TransportMeans) — privado, o público con indicador activo ===
+  // TransportMeans debe ir ANTES de LoadingTransportEvent y DriverPerson (orden UBL 2.1)
+  const isM1LVehicle = guideData.isM1LVehicle === true
   if (includeVehicleAndDriver) {
-    const isM1LVehicle = guideData.isM1LVehicle === true
     const hasVehiclePlate = guideData.transport?.vehicle?.plate?.trim()
-    const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
 
-    console.log(`🚗 [GRE XML] Datos vehículo/conductor - modo: ${guideData.transportMode}, M1/L: ${isM1LVehicle}, Placa: ${hasVehiclePlate || 'NO'}, Conductor: ${hasDriverData || 'NO'}`)
+    console.log(`🚗 [GRE XML] Datos vehículo - modo: ${guideData.transportMode}, M1/L: ${isM1LVehicle}, Placa: ${hasVehiclePlate || 'NO'}`)
 
     // Datos del vehículo (TransportMeans debe ir ANTES de DriverPerson según UBL 2.1)
     if (hasVehiclePlate) {
@@ -2526,6 +2526,36 @@ export function generateDispatchGuideXML(guideData, businessData) {
     } else if (!isM1LVehicle && guideData.transportMode === '02') {
       console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin placa y NO es vehículo M1/L`)
     }
+  }
+
+  // === FECHA DE ENTREGA DE BIENES AL TRANSPORTISTA (Transporte público / Modalidad 01) ===
+  // Obligatorio desde el 01/06/2026 (Validación SUNAT campo #34, errores 3617/3618).
+  // Antes era observación 4385; ahora es ERROR que RECHAZA la guía si el tag falta o está vacío.
+  // Tag: /DespatchAdvice/cac:Shipment/cac:ShipmentStage/cac:LoadingTransportEvent/cbc:OccurrenceDate
+  // Debe ir DESPUÉS de TransportMeans y ANTES de DriverPerson (orden UBL 2.1).
+  if (guideData.transportMode === '01') {
+    // Usar la fecha capturada en el formulario; si no existe (guías antiguas/reenvíos),
+    // usar la fecha de inicio de traslado como respaldo seguro.
+    let carrierDeliveryDate
+    if (guideData.carrierDeliveryDate && /^\d{4}-\d{2}-\d{2}$/.test(guideData.carrierDeliveryDate)) {
+      carrierDeliveryDate = guideData.carrierDeliveryDate
+    } else if (guideData.carrierDeliveryDate) {
+      carrierDeliveryDate = formatDatePeru(new Date(guideData.carrierDeliveryDate))
+    } else {
+      carrierDeliveryDate = transferDate
+    }
+    // Garantizar reglas SUNAT: emisión ≤ entrega ≤ inicio de traslado (evita errores 3618 y 3616)
+    if (carrierDeliveryDate < issueDate) carrierDeliveryDate = issueDate
+    if (carrierDeliveryDate > transferDate) carrierDeliveryDate = transferDate
+
+    const loadingTransportEvent = shipmentStage.ele('cac:LoadingTransportEvent')
+    loadingTransportEvent.ele('cbc:OccurrenceDate').txt(carrierDeliveryDate)
+    console.log(`📦 [GRE XML] Fecha de entrega de bienes al transportista (OccurrenceDate): ${carrierDeliveryDate}`)
+  }
+
+  // === DATOS DE CONDUCTOR (DriverPerson) — después de LoadingTransportEvent (orden UBL 2.1) ===
+  if (includeVehicleAndDriver) {
+    const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
 
     // Datos del conductor principal (DriverPerson después de TransportMeans)
     if (hasDriverData && guideData.transport?.driver) {
