@@ -50,16 +50,26 @@ export default function Accounting() {
   const [filterType, setFilterType] = useState('all') // all, factura, boleta
   const [filterSunat, setFilterSunat] = useState('all') // all, accepted, pending, rejected
   const [filterCdr, setFilterCdr] = useState('all') // all, with, without
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  // Por defecto mostramos el ÚLTIMO MES COMPLETO (el mes anterior al actual): los
+  // contadores exportan mes a mes, no "todos los meses". Maneja el salto de año
+  // (en enero, el mes anterior es diciembre del año pasado).
+  const _now = new Date()
+  const _lastMonth = new Date(_now.getFullYear(), _now.getMonth() - 1, 1)
+  const defaultMonth = _lastMonth.getMonth() + 1
+  const defaultYear = _lastMonth.getFullYear()
+  const defaultDateFrom = format(new Date(defaultYear, defaultMonth - 1, 1), 'yyyy-MM-dd')
+  const defaultDateTo = format(new Date(defaultYear, defaultMonth, 0), 'yyyy-MM-dd')
+
+  const [dateFrom, setDateFrom] = useState(defaultDateFrom)
+  const [dateTo, setDateTo] = useState(defaultDateTo)
   const [branches, setBranches] = useState([])
   const [generatingPdf, setGeneratingPdf] = useState(null)
 
   // Selector de mes rápido
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
-  const [selectedMonth, setSelectedMonth] = useState('')
-  const [selectedYear, setSelectedYear] = useState(currentYear)
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonth)
+  const [selectedYear, setSelectedYear] = useState(defaultYear)
 
   // Estados para descargas masivas
   const [downloadingAll, setDownloadingAll] = useState(false)
