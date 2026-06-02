@@ -3131,168 +3131,71 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Imágenes de productos */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableProductImages}
-                  onChange={(e) => setEnableProductImages(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Habilitar imágenes de productos
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {enableProductImages
-                      ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
-                      : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Ubicación de productos */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableProductLocation}
-                  onChange={(e) => setEnableProductLocation(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Habilitar ubicación de productos
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {enableProductLocation
-                      ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
-                      : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Edición manual de stock desde el modal de productos */}
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableManualStockEdit}
-                  onChange={(e) => setEnableManualStockEdit(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Permitir editar stock manualmente desde productos
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {enableManualStockEdit
-                      ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
-                      : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Pantalla de cliente (segunda pantalla) */}
-              <label className={`flex items-start space-x-3 cursor-pointer group p-3 border rounded-lg transition-colors ${
-                enableCustomerDisplay ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={enableCustomerDisplay}
-                  onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                    Pantalla de cliente (segunda pantalla)
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                    {enableCustomerDisplay
-                      ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
-                      : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Campos Personalizados del POS */}
+              {/* Catálogo y productos */}
               <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Campos Personalizados del POS</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Catálogo y productos</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Activa campos adicionales para capturar información extra en tus comprobantes.
+                  Controla qué información se gestiona en el catálogo y cómo se edita el stock.
                 </p>
                 <div className="space-y-3">
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showStudentField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Alumno"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes</span>
-                    </div>
+                  {/* Imágenes de productos */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
-                      checked={posCustomFields.showStudentField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      checked={enableProductImages}
+                      onChange={(e) => setEnableProductImages(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehiclePlateField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
                     <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Placa de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes</span>
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Habilitar imágenes de productos
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {enableProductImages
+                          ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
+                          : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
+                      </p>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehiclePlateField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehicleModelField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Modelo de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el modelo del vehículo en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehicleModelField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleModelField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showVehicleYearField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Campo "Año de Vehículo"</span>
-                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el año del vehículo en el POS y comprobantes</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.showVehicleYearField}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleYearField: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
                   </label>
 
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.showSubscriptionFields ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Gestión de Suscripciones</span>
-                      <span className="text-xs text-gray-500">Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones</span>
-                    </div>
+                  {/* Ubicación de productos */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
-                      checked={posCustomFields.showSubscriptionFields}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      checked={enableProductLocation}
+                      onChange={(e) => setEnableProductLocation(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Habilitar ubicación de productos
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {enableProductLocation
+                          ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
+                          : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Edición manual de stock desde el modal de productos */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={enableManualStockEdit}
+                      onChange={(e) => setEnableManualStockEdit(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir editar stock manualmente desde productos
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {enableManualStockEdit
+                          ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
+                          : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
+                      </p>
+                    </div>
                   </label>
 
                   {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
@@ -3312,23 +3215,19 @@ export default function Settings() {
                       />
                     </label>
                   )}
+                </div>
+              </div>
 
-                  {/* Ocultar productos sin stock en POS */}
-                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
-                    posCustomFields.hideOutOfStockInPOS ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
-                      <span className="text-xs text-gray-500">No mostrar productos con stock 0 en el Punto de Venta</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={posCustomFields.hideOutOfStockInPOS}
-                      onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                  </label>
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
 
+              {/* Inventario y compras */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Inventario y compras</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Opciones para el registro de compras y la gestión de inventario.
+                </p>
+                <div className="space-y-3">
                   {/* Mostrar precios de venta en compras */}
                   <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
                     posCustomFields.showSalePriceInPurchase ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
@@ -3344,7 +3243,40 @@ export default function Settings() {
                       className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                   </label>
+                </div>
+              </div>
 
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Dispositivo */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Dispositivo</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Opciones específicas del hardware donde usas la aplicación.
+                </p>
+                <div className="space-y-3">
+                  {/* Pantalla de cliente (segunda pantalla) */}
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-3 border rounded-lg transition-colors ${
+                    enableCustomerDisplay ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={enableCustomerDisplay}
+                      onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Pantalla de cliente (segunda pantalla)
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {enableCustomerDisplay
+                          ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
+                          : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -4587,6 +4519,22 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  {/* Ocultar productos sin stock en POS */}
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.hideOutOfStockInPOS ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
+                      <span className="text-xs text-gray-500">No mostrar productos con stock 0 en el Punto de Venta</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.hideOutOfStockInPOS}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+
                   {/* Auto-reset POS después de acción post-venta */}
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
@@ -4673,6 +4621,90 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Campos del cliente */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Campos del cliente</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Activa campos adicionales para capturar información del cliente en el POS y comprobantes.
+                </p>
+                <div className="space-y-3">
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showStudentField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Alumno"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showStudentField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showVehiclePlateField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Placa de Vehículo"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showVehiclePlateField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showVehicleModelField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Modelo de Vehículo"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el modelo del vehículo en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showVehicleModelField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleModelField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showVehicleYearField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Año de Vehículo"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el año del vehículo en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showVehicleYearField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleYearField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showSubscriptionFields ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Gestión de Suscripciones</span>
+                      <span className="text-xs text-gray-500">Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showSubscriptionFields}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
                 </div>
               </div>
 
@@ -5240,18 +5272,6 @@ export default function Settings() {
                   )}
                 </div>
               </div>
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Categorías de Gastos */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Categorías de Gastos</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Personaliza las categorías que usarás al registrar gastos del negocio.
-                </p>
-                <ExpenseCategoriesManager />
-              </div>
-
             </div>
           </CardContent>
 
