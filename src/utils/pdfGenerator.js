@@ -1183,7 +1183,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ========== CALCULAR POSICIONES FIJAS ==========
 
   // Alturas de elementos del pie (fijo en la parte inferior)
-  const FOOTER_TEXT_HEIGHT = 25 * S
+  // Términos y condiciones libres al pie del comprobante (texto configurable, solo PDF)
+  const invoiceTermsText = (companySettings?.invoiceFooterTerms || '').trim()
+  let invoiceTermsLines = []
+  if (invoiceTermsText) {
+    doc.setFontSize(7)
+    invoiceTermsLines = doc.splitTextToSize(invoiceTermsText, CONTENT_WIDTH)
+  }
+  const INVOICE_TERMS_HEIGHT = invoiceTermsText ? (18 + invoiceTermsLines.length * 8) : 0
+  const FOOTER_TEXT_HEIGHT = 25 * S + INVOICE_TERMS_HEIGHT
   const QR_BOX_HEIGHT = 75 * S
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
@@ -2151,6 +2159,22 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Usar el máximo entre totales y sección de transporte para el footerY
   footerY = Math.max(footerY, transportSectionEndY)
+
+  // ===== TÉRMINOS Y CONDICIONES (texto libre al pie del comprobante, solo PDF) =====
+  if (invoiceTermsText) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('TÉRMINOS Y CONDICIONES', MARGIN_LEFT, footerY + 6)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
+    let _termsY = footerY + 14
+    invoiceTermsLines.forEach((line) => {
+      doc.text(line, MARGIN_LEFT, _termsY)
+      _termsY += 8
+    })
+    footerY = _termsY + 4
+  }
 
   // Verificar si hay cuotas para mostrar
   const hasCuotas = invoice.documentType === 'factura' &&

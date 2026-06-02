@@ -233,6 +233,7 @@ export default function Settings() {
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
   const [ticketFooterMessage, setTicketFooterMessage] = useState('') // Mensaje personalizado al pie del ticket térmico
+  const [invoiceFooterTerms, setInvoiceFooterTerms] = useState('') // Términos y condiciones libres al pie del comprobante PDF (solo PDF, no SUNAT)
   // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
   const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
   const [ticketQrContent, setTicketQrContent] = useState('')
@@ -1016,6 +1017,7 @@ export default function Settings() {
 
         // Cargar color de PDF
         setTicketFooterMessage(businessData.ticketFooterMessage || '')
+        setInvoiceFooterTerms(businessData.invoiceFooterTerms || '')
         setTicketQrEnabled(businessData.ticketQrEnabled === true)
         setTicketQrContent(businessData.ticketQrContent || '')
         setTicketQrCaption(businessData.ticketQrCaption || '')
@@ -1695,6 +1697,7 @@ export default function Settings() {
         logoUrl: uploadedLogoUrl || null,
         pdfAccentColor: pdfAccentColor,
         ticketFooterMessage: ticketFooterMessage || '',
+        invoiceFooterTerms: invoiceFooterTerms || '',
         ticketQrEnabled: ticketQrEnabled === true,
         ticketQrContent: ticketQrContent || '',
         ticketQrCaption: ticketQrCaption || '',
@@ -5209,6 +5212,29 @@ export default function Settings() {
                     </span>
                   </div>
                 </SettingToggle>
+
+                {/* Términos y condiciones libres al pie del comprobante (solo PDF) */}
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Términos y condiciones (al pie del comprobante)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto libre que aparece automáticamente al pie de las facturas, boletas y notas de venta en PDF (ej: garantías, políticas de devolución). Solo se muestra en el PDF, no se envía a SUNAT. Dejalo vacío para no mostrar nada.
+                  </p>
+                  <textarea
+                    value={invoiceFooterTerms}
+                    onChange={(e) => setInvoiceFooterTerms(e.target.value.slice(0, 1000))}
+                    rows={5}
+                    maxLength={1000}
+                    placeholder="Ej: - La garantía por reparación dura 7 días calendario desde la fecha de reparación.
+- No se aceptan devoluciones de dinero una vez realizado el servicio."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">Solo aparece en el PDF (no en SUNAT)</span>
+                    <span className="text-xs text-gray-400">{invoiceFooterTerms.length}/1000</span>
+                  </div>
+                </div>
               </div>
 
               {/* Divider */}
@@ -5748,6 +5774,7 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
                       ticketFooterMessage: ticketFooterMessage || '',
+                      invoiceFooterTerms: invoiceFooterTerms || '',
                       ticketQrEnabled: ticketQrEnabled === true,
                       ticketQrContent: ticketQrContent || '',
                       ticketQrCaption: ticketQrCaption || '',
