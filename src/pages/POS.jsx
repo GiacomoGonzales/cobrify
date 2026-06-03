@@ -393,6 +393,10 @@ export default function POS() {
     return `${year}-${month}-${day}`
   }
   const [emissionDate, setEmissionDate] = useState(getLocalDateString()) // Fecha de emisión (por defecto hoy)
+  // ¿El usuario eligió manualmente la fecha de emisión? Si NO, siempre se usa la
+  // fecha actual del sistema al vender. Evita que una pestaña del POS abierta de un
+  // día para otro "congele" la fecha y emita las ventas de hoy con la fecha de ayer.
+  const emissionDateEditedRef = useRef(false)
   // Obtener fecha-hora local en formato YYYY-MM-DDTHH:mm (para inputs datetime-local)
   const getLocalDateTimeString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -963,20 +967,23 @@ export default function POS() {
   // Auto-actualizar fecha de emisión cuando la pestaña vuelve a estar activa
   // (cubre: PC apagada/encendida, pestaña en segundo plano, suspensión del sistema)
   useEffect(() => {
-    if (businessSettings?.allowCustomEmissionDate) return
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setEmissionDate(getLocalDateString())
-      }
+    // Refresca la fecha de emisión a HOY cuando la pestaña vuelve a estar activa.
+    // Se aplica SIEMPRE (incluso con fecha personalizada activada) salvo que el
+    // usuario haya elegido manualmente una fecha — así nunca se queda "congelada".
+    const refreshEmissionDate = () => {
+      if (!emissionDateEditedRef.current) setEmissionDate(getLocalDateString())
     }
-    const handleFocus = () => setEmissionDate(getLocalDateString())
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshEmissionDate()
+    }
+    const handleFocus = () => refreshEmissionDate()
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('focus', handleFocus)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [businessSettings?.allowCustomEmissionDate])
+  }, [])
 
   // Cleanup: cerrar pantalla de cliente al desmontar POS
   useEffect(() => {
@@ -1917,6 +1924,8 @@ export default function POS() {
         } else {
           setEmissionDate(getLocalDateString(new Date(invoice.emissionDate)))
         }
+        // Fecha cargada de un comprobante existente (edición): respetarla en el checkout.
+        emissionDateEditedRef.current = true
       }
 
       // Cargar hora del evento (Meta Ads)
@@ -3931,6 +3940,10 @@ export default function POS() {
     setSelectedRoom(null)
     setLastInvoiceData(null)
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
+    // Reiniciar la fecha de emisión a HOY y limpiar el flag de edición manual, para
+    // que cada nueva venta tome la fecha actual del sistema (no una fecha "congelada").
+    setEmissionDate(getLocalDateString())
+    emissionDateEditedRef.current = false
     setDiscountAmount('')
     setDiscountPercentage('')
     // Reset observaciones generales
@@ -4522,9 +4535,13 @@ export default function POS() {
 
     const businessId = getBusinessId()
 
-    // Auto-actualizar fecha de emisión a la fecha actual del sistema
+    // Fecha de emisión: usar SIEMPRE la fecha actual del sistema, salvo que el usuario
+    // haya elegido manualmente una fecha personalizada (opción activada + campo editado
+    // a mano). Esto evita que una pestaña del POS abierta de un día para otro "congele"
+    // la fecha y emita las ventas de hoy con la fecha de ayer.
     const currentDate = getLocalDateString()
-    const emissionDateToUse = businessSettings?.allowCustomEmissionDate ? emissionDate : currentDate
+    const useCustomDate = businessSettings?.allowCustomEmissionDate && emissionDateEditedRef.current
+    const emissionDateToUse = useCustomDate ? emissionDate : currentDate
     if (emissionDate !== emissionDateToUse) {
       setEmissionDate(emissionDateToUse)
     }
@@ -7208,7 +7225,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       minDate.setDate(today.getDate() - maxDaysBack)
                       return getLocalDateString(minDate)
                     })()}
-                    onChange={e => setEmissionDate(e.target.value)}
+                    onChange={e => { setEmissionDate(e.target.value); emissionDateEditedRef.current = true }}
                     className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                   />
                 </div>
