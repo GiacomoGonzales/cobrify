@@ -33,7 +33,18 @@ const formatDateAccounting = (d) => {
   return format(date, 'dd/MM/yyyy', { locale: es })
 }
 
-const getInvoiceDate = (inv) => inv.issueDate || inv.createdAt || inv.date
+// Fecha del comprobante para el reporte: priorizar la FECHA DE EMISIÓN elegida en el
+// POS (emissionDate) por sobre createdAt (fecha de creación del registro). Cuando se
+// emite con fecha personalizada, ambas difieren y el reporte contable debe usar la de
+// emisión — igual que la pantalla de Contabilidad. Devuelve un Date; las fechas string
+// YYYY-MM-DD se fijan al mediodía local para evitar el corrimiento de día por UTC.
+const toReportDate = (v) => {
+  if (!v) return null
+  if (v.toDate) return v.toDate()
+  if (typeof v === 'string') return new Date(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + 'T12:00:00' : v)
+  return new Date(v)
+}
+const getInvoiceDate = (inv) => toReportDate(inv.emissionDate || inv.issueDate || inv.createdAt || inv.date)
 
 const getSunatStatus = (inv) => {
   const s = inv.sunatStatus
