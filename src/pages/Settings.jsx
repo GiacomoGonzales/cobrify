@@ -91,12 +91,33 @@ function SettingToggle({ checked, onChange, title, description, disabled = false
 }
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName } = useAppContext()
   // Preview de tema del catálogo
   const [previewThemeId, setPreviewThemeId] = useState(null)
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // Nombre de la cuenta (displayName de Firebase Auth) — es el que se ve en la cabecera
+  const [displayNameInput, setDisplayNameInput] = useState('')
+  const [savingDisplayName, setSavingDisplayName] = useState(false)
+  useEffect(() => {
+    if (user?.displayName) setDisplayNameInput(user.displayName)
+  }, [user?.displayName])
+  const handleSaveDisplayName = async () => {
+    const name = displayNameInput.trim()
+    if (!name) { toast.error('Ingresa un nombre'); return }
+    if (isDemoMode || !updateDisplayName) { toast.error('No disponible en este modo'); return }
+    setSavingDisplayName(true)
+    try {
+      const res = await updateDisplayName(name)
+      if (res?.success) toast.success('Nombre actualizado correctamente')
+      else toast.error(res?.error || 'No se pudo actualizar el nombre')
+    } catch (e) {
+      toast.error('No se pudo actualizar el nombre')
+    } finally {
+      setSavingDisplayName(false)
+    }
+  }
   // Tab inicial: si la URL trae ?tab=xxx (ej: desde el sidebar "Mi Catálogo"
   // que apunta a /configuracion?tab=catalogo) lo respetamos. Si no, default.
   const _location = useLocation()
@@ -2708,6 +2729,27 @@ export default function Settings() {
       {/* Tab Content - Información */}
       {activeTab === 'informacion' && (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Nombre de la cuenta (el que se ve en la cabecera) — discreto */}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 px-1">
+          <span className="whitespace-nowrap">Nombre en la cabecera:</span>
+          <input
+            type="text"
+            value={displayNameInput}
+            onChange={(e) => setDisplayNameInput(e.target.value)}
+            placeholder={user?.email?.split('@')[0] || 'Tu nombre'}
+            disabled={isDemoMode}
+            className="w-48 px-2 py-1 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white disabled:bg-gray-100"
+          />
+          <button
+            type="button"
+            onClick={handleSaveDisplayName}
+            disabled={savingDisplayName || isDemoMode || !displayNameInput.trim() || displayNameInput.trim() === (user?.displayName || '')}
+            className="text-primary-600 hover:text-primary-700 disabled:text-gray-300 disabled:cursor-not-allowed font-medium whitespace-nowrap"
+          >
+            {savingDisplayName ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+
         {/* Company Info */}
         <Card>
           <CardHeader>

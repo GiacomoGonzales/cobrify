@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
+import { updateProfile } from 'firebase/auth'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
@@ -718,6 +719,22 @@ export const AuthProvider = ({ children }) => {
     return userFeatures?.[featureName] === true
   }
 
+  // Actualizar el nombre para mostrar (displayName de Firebase Auth). Es el nombre
+  // que aparece en la cabecera. Actualiza Auth y el estado local para reflejarlo al instante.
+  const updateDisplayName = async (newName) => {
+    try {
+      const name = String(newName || '').trim()
+      if (!name) return { success: false, error: 'El nombre no puede estar vacío' }
+      if (!auth.currentUser) return { success: false, error: 'No hay una sesión activa' }
+      await updateProfile(auth.currentUser, { displayName: name })
+      setUser(prev => (prev ? { ...prev, displayName: name } : prev))
+      return { success: true }
+    } catch (error) {
+      console.error('Error al actualizar el nombre del usuario:', error)
+      return { success: false, error: error?.message || 'Error al actualizar el nombre' }
+    }
+  }
+
   const value = {
     user,
     isAuthenticated,
@@ -753,6 +770,7 @@ export const AuthProvider = ({ children }) => {
     hasFeature, // Función helper para verificar features
     login,
     logout,
+    updateDisplayName, // Actualizar el nombre para mostrar (Firebase Auth displayName)
     refreshSubscription,
     refreshBusinessSettings, // Refrescar configuración del negocio después de guardar settings
     refreshResellerData, // Función para refrescar datos del reseller
