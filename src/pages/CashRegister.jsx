@@ -336,19 +336,29 @@ export default function CashRegister() {
       // Owner "Mi Caja": incluir su UID + UIDs de sub-usuarios sin caja independiente
       // Sub-usuario compartido: no filtrar (ver todas las ventas de la sesión)
       let allowedCreatedByUids = null // null = no filtrar por createdBy
+      // Conjunto paralelo para ATRIBUIR pagos diferidos (cobros hechos en esta sesión
+      // sobre ventas creadas en sesiones anteriores). Se compara contra
+      // payment.recordedBy, que puede ser email o uid del que registró el cobro.
+      let allowedRecordedBy = null
       if (!isSharedCashUser && !isViewingAll) {
         if (isOwner && !selectedCashUser) {
           // Owner viendo "Mi Caja": incluir ventas propias + sub-usuarios compartidos
-          const sharedSubUserUids = subUsers
-            .filter(u => !u.independentCashRegister)
-            .map(u => u.uid || u.id)
+          const sharedSubUsers = subUsers.filter(u => !u.independentCashRegister)
+          const sharedSubUserUids = sharedSubUsers.map(u => u.uid || u.id)
           allowedCreatedByUids = new Set([user.uid, ...sharedSubUserUids])
+          allowedRecordedBy = new Set([
+            user.uid, user.email,
+            ...sharedSubUsers.flatMap(u => [u.uid || u.id, u.email])
+          ].filter(Boolean))
         } else if (selectedCashUser && selectedCashUser !== 'all') {
           // Owner viendo caja de un sub-usuario específico (con caja independiente)
           allowedCreatedByUids = new Set([selectedCashUser])
+          const su = subUsers.find(u => (u.uid || u.id) === selectedCashUser)
+          allowedRecordedBy = new Set([selectedCashUser, su?.email].filter(Boolean))
         } else if (!isOwner && !isSharedCashUser) {
           // Sub-usuario con caja independiente: solo sus propias ventas
           allowedCreatedByUids = new Set([user.uid])
+          allowedRecordedBy = new Set([user.uid, user.email].filter(Boolean))
         }
       }
 
@@ -384,12 +394,21 @@ export default function CashRegister() {
 
           const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
           if (invoicesResult.success) {
-            // Filtrar por usuario que creó la factura
+            // Filtrar por usuario que creó la factura — pero CONSERVAR los pagos
+            // diferidos: ventas viejas (creadas por otra caja/usuario) que recibieron
+            // un cobro en ESTA sesión registrado por un usuario de ESTA caja. Ese
+            // efectivo pertenece a esta caja y debe entrar al efectivo esperado.
             const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
-              if (allowedCreatedByUids) {
-                if (invoice.createdBy && !allowedCreatedByUids.has(invoice.createdBy)) return false
-              }
-              return true
+              if (!allowedCreatedByUids) return true
+              if (!invoice.createdBy || allowedCreatedByUids.has(invoice.createdBy)) return true
+              // Pago diferido cobrado por un usuario de esta caja durante la sesión
+              const ph = Array.isArray(invoice.paymentHistory) ? invoice.paymentHistory : []
+              return ph.some(p => {
+                const pd = p?.date?.toDate ? p.date.toDate() : (p?.date ? new Date(p.date) : null)
+                const inSession = pd && sessionOpenedAt && pd >= sessionOpenedAt
+                const byThisCaja = allowedRecordedBy && p?.recordedBy && allowedRecordedBy.has(p.recordedBy)
+                return inSession && byThisCaja
+              })
             })
             setTodayInvoices(sessionInvoicesList)
           }
