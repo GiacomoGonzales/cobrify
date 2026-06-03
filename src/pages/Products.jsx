@@ -337,6 +337,7 @@ export default function Products() {
   const [newBrandName, setNewBrandName] = useState('')
   const [editingBrand, setEditingBrand] = useState(null)
   const [isSavingBrand, setIsSavingBrand] = useState(false)
+  const [selectedBrandIds, setSelectedBrandIds] = useState([]) // Selección múltiple para eliminar marcas en grupo
   const [isMigratingBrands, setIsMigratingBrands] = useState(false)
   const [showMigrationPreview, setShowMigrationPreview] = useState(false)
   // Set de keys (normalizadas) seleccionadas para migrar.
@@ -2737,7 +2738,6 @@ export default function Products() {
       toast.error(`Esta marca tiene ${linkedCount} producto(s) vinculado(s). Reasignalos antes de eliminar.`)
       return
     }
-    if (!window.confirm('¿Eliminar esta marca?')) return
     try {
       const updated = brands.filter(b => b.id !== brandId)
       setBrands(updated)
@@ -2747,6 +2747,49 @@ export default function Products() {
     } catch (err) {
       console.error('Error al eliminar marca:', err)
       toast.error('Error al eliminar la marca')
+    }
+  }
+
+  // Selección múltiple de marcas (para eliminar en grupo)
+  const toggleBrandSelection = (brandId) => {
+    setSelectedBrandIds(prev => prev.includes(brandId) ? prev.filter(id => id !== brandId) : [...prev, brandId])
+  }
+  const toggleSelectAllBrands = () => {
+    setSelectedBrandIds(prev => (prev.length === brands.length ? [] : brands.map(b => b.id)))
+  }
+  const handleDeleteSelectedBrands = async () => {
+    if (!user?.uid || selectedBrandIds.length === 0) return
+    const selectedSet = new Set(selectedBrandIds)
+    const blocked = []
+    const deletable = []
+    for (const b of brands) {
+      if (!selectedSet.has(b.id)) continue
+      const linked = products.filter(p => p.brandId === b.id).length
+      if (linked > 0) blocked.push(b)
+      else deletable.push(b.id)
+    }
+    if (deletable.length === 0) {
+      toast.error('Las marcas seleccionadas tienen productos vinculados. Reasignalos antes de eliminar.')
+      return
+    }
+    setIsSavingBrand(true)
+    try {
+      const deletableSet = new Set(deletable)
+      const updated = brands.filter(b => !deletableSet.has(b.id))
+      setBrands(updated)
+      const result = await saveProductBrands(getBusinessId(), updated)
+      if (!result.success) throw new Error(result.error)
+      setSelectedBrandIds([])
+      if (blocked.length > 0) {
+        toast.success(`${deletable.length} marca(s) eliminada(s). ${blocked.length} no se eliminaron por tener productos vinculados.`)
+      } else {
+        toast.success(`${deletable.length} marca(s) eliminada(s)`)
+      }
+    } catch (err) {
+      console.error('Error al eliminar marcas seleccionadas:', err)
+      toast.error('Error al eliminar las marcas')
+    } finally {
+      setIsSavingBrand(false)
     }
   }
 
@@ -7828,6 +7871,7 @@ export default function Products() {
           setIsBrandsModalOpen(false)
           setEditingBrand(null)
           setNewBrandName('')
+          setSelectedBrandIds([])
           setShowMigrationPreview(false)
           setMigrationSelected(new Set())
         }}
@@ -7981,6 +8025,32 @@ export default function Products() {
             </div>
           </div>
 
+          {/* Acciones de selección múltiple */}
+          {brands.length > 0 && (
+            <div className="flex items-center justify-between px-1">
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectedBrandIds.length === brands.length && brands.length > 0}
+                  onChange={toggleSelectAllBrands}
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Seleccionar todas
+              </label>
+              {selectedBrandIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedBrands}
+                  disabled={isSavingBrand}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar seleccionadas ({selectedBrandIds.length})
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Lista de marcas */}
           {brands.length > 0 ? (
             <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
@@ -7988,9 +8058,17 @@ export default function Products() {
                 const productCount = products.filter(p => p.brandId === brand.id).length
                 return (
                   <div key={brand.id} className="flex items-center justify-between p-2.5 hover:bg-gray-50">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{brand.name}</p>
-                      <p className="text-xs text-gray-500">{productCount} producto{productCount !== 1 ? 's' : ''}</p>
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedBrandIds.includes(brand.id)}
+                        onChange={() => toggleBrandSelection(brand.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{brand.name}</p>
+                        <p className="text-xs text-gray-500">{productCount} producto{productCount !== 1 ? 's' : ''}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
