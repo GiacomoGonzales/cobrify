@@ -3062,6 +3062,8 @@ export const createReseller = onRequest(
       // Crear/actualizar documento con el UID como ID
       await db.collection('resellers').doc(uid).set({
         ...data,
+        // Resellers NUEVOS sin modelo explícito → v2 (los existentes no se tocan)
+        ...(isNew && !data.pricingModel ? { pricingModel: 'v2' } : {}),
         createdAt: isNew ? FieldValue.serverTimestamp() : existingDoc.data().createdAt,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true })
@@ -8557,12 +8559,12 @@ export const resellerRenewClient = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesión')
     }
 
-    const { clientId, plan } = request.data
+    const { clientId, plan, useSunatDirect } = request.data
     if (!clientId || !plan) {
       throw new HttpsError('invalid-argument', 'clientId y plan son requeridos')
     }
 
-    // Meses por plan
+    // === Catálogo LEGACY (resellers actuales: por método × duración) ===
     const PLAN_MONTHS = {
       qpse_1_month: 1,
       qpse_6_months: 6,
@@ -8571,8 +8573,6 @@ export const resellerRenewClient = onCall(
       sunat_direct_6_months: 6,
       sunat_direct_12_months: 12,
     }
-
-    // Precios base para resellers
     const BASE_PRICES = {
       qpse_1_month: 20,
       qpse_6_months: 100,
@@ -8582,10 +8582,14 @@ export const resellerRenewClient = onCall(
       sunat_direct_12_months: 150,
     }
 
-    const months = PLAN_MONTHS[plan]
-    if (!months) {
-      throw new HttpsError('invalid-argument', 'Plan no válido para renovación')
-    }
+    // === Catálogo V2 (resellers nuevos: por duración) ===
+    const PLAN_MONTHS_V2 = { basico_mensual: 1, mensual: 1, semestral: 6, anual: 12 }
+    const BASE_PRICES_V2 = { basico_mensual: 19.90, mensual: 29.90, semestral: 149.90, anual: 199.90 }
+    const MAXINV_V2 = { basico_mensual: 100, mensual: 500, semestral: 500, anual: 500 }
+    const ALLOWS_SUNAT_V2 = { basico_mensual: false, mensual: true, semestral: true, anual: true }
+
+    // El plan y los meses se validan DENTRO de la transacción, según el
+    // pricingModel del reseller (legacy vs v2).
 
     const callerUid = request.auth.uid
     const callerEmail = request.auth.token.email
@@ -8617,6 +8621,13 @@ export const resellerRenewClient = onCall(
           throw new HttpsError('permission-denied', 'Tu cuenta de reseller está inactiva')
         }
 
+        // Modelo de precios del reseller: v2 (nuevos) o legacy (actuales sin el campo)
+        const isV2 = resellerData.pricingModel === 'v2'
+        const months = isV2 ? PLAN_MONTHS_V2[plan] : PLAN_MONTHS[plan]
+        if (!months) {
+          throw new HttpsError('invalid-argument', 'Plan no válido para tu cuenta')
+        }
+
         const resellerId = resellerDoc.id
 
         // 2. Verificar que el cliente pertenece al reseller
@@ -8633,9 +8644,10 @@ export const resellerRenewClient = onCall(
         }
 
         // 3. Calcular precio según tier del reseller
+        const defaultDiscount = isV2 ? 10 : 20 // bronze por modelo (v2: 10/20/30, legacy: 20/30/40)
         const discount = resellerData.discountOverride !== null && resellerData.discountOverride !== undefined
           ? resellerData.discountOverride
-          : 20 // Default bronze tier
+          : defaultDiscount
 
         // Si hay tier dinámico, contamos clientes activos
         if (resellerData.discountOverride === null || resellerData.discountOverride === undefined) {
@@ -8653,8 +8665,8 @@ export const resellerRenewClient = onCall(
           // Nota: no podemos hacer queries en transacciones, usar el descuento del override o default
         }
 
-        const basePrice = BASE_PRICES[plan] || 0
-        const finalPrice = Math.round(basePrice * (1 - discount / 100))
+        const basePrice = (isV2 ? BASE_PRICES_V2 : BASE_PRICES)[plan] || 0
+        const finalPrice = Math.round(basePrice * (1 - discount / 100) * 100) / 100 // 2 decimales
 
         // 4. Verificar saldo suficiente
         const currentBalance = resellerData.balance || 0
@@ -8670,7 +8682,14 @@ export const resellerRenewClient = onCall(
         const newPeriodEnd = new Date(startFrom)
         newPeriodEnd.setMonth(newPeriodEnd.getMonth() + months)
 
-        const isSunatDirect = plan.startsWith('sunat_direct')
+        // Límite de comprobantes del cliente según modelo / plan / método
+        let maxInvoices
+        if (isV2) {
+          maxInvoices = MAXINV_V2[plan] || 500
+          if (ALLOWS_SUNAT_V2[plan] && useSunatDirect) maxInvoices = -1 // SUNAT directo = ilimitado
+        } else {
+          maxInvoices = plan.startsWith('sunat_direct') ? -1 : 500
+        }
 
         // 6. Actualizar suscripción del cliente
         transaction.update(clientRef, {
@@ -8680,7 +8699,7 @@ export const resellerRenewClient = onCall(
           accessBlocked: false,
           blockReason: null,
           blockedAt: null,
-          'limits.maxInvoicesPerMonth': isSunatDirect ? -1 : 500,
+          'limits.maxInvoicesPerMonth': maxInvoices,
           updatedAt: FieldValue.serverTimestamp(),
           lastRenewalAt: FieldValue.serverTimestamp(),
           lastRenewalBy: resellerId,

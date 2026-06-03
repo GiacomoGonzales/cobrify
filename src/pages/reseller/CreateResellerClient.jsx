@@ -5,7 +5,7 @@ import { doc, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { db, secondaryAuth } from '@/lib/firebase'
 import { PLANS } from '@/services/subscriptionService'
-import { getResellerTierInfo, calculatePrice, BASE_PRICES } from '@/services/resellerTierService'
+import { getResellerTierInfo, calculatePrice, BASE_PRICES, PLANS_V2, BASE_PRICES_V2 } from '@/services/resellerTierService'
 import {
   ArrowLeft,
   Building2,
@@ -37,6 +37,7 @@ export default function CreateResellerClient() {
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
+  const model = resellerData?.pricingModel === 'v2' ? 'v2' : 'legacy'
 
   const [formData, setFormData] = useState({
     email: '',
@@ -46,7 +47,8 @@ export default function CreateResellerClient() {
     ruc: '',
     phone: '',
     address: '',
-    plan: 'qpse_1_month'
+    plan: 'qpse_1_month',
+    useSunatDirect: false // v2: certificado propio = comprobantes ilimitados
   })
 
   // Cargar info del tier al montar
@@ -54,7 +56,7 @@ export default function CreateResellerClient() {
     async function loadTierInfo() {
       if (!resellerId) return
       try {
-        const info = await getResellerTierInfo(resellerId, resellerData?.discountOverride)
+        const info = await getResellerTierInfo(resellerId, resellerData?.discountOverride, model)
         setTierInfo(info)
       } catch (e) {
         console.error('Error loading tier info:', e)
@@ -65,9 +67,16 @@ export default function CreateResellerClient() {
     loadTierInfo()
   }, [resellerId, resellerData?.discountOverride])
 
+  // Si el reseller es v2, asegurar que el plan seleccionado sea del catálogo v2
+  useEffect(() => {
+    if (model === 'v2') {
+      setFormData(prev => (PLANS_V2[prev.plan] ? prev : { ...prev, plan: 'mensual' }))
+    }
+  }, [model])
+
   const selectedPlan = PLANS[formData.plan]
-  const effectiveDiscount = tierInfo?.effectiveDiscount || 20
-  const planPrice = calculatePrice(formData.plan, effectiveDiscount)
+  const effectiveDiscount = tierInfo?.effectiveDiscount ?? (model === 'v2' ? 10 : 20)
+  const planPrice = calculatePrice(formData.plan, effectiveDiscount, model)
   const currentBalance = resellerData?.balance || 0
   const hasEnoughBalance = currentBalance >= planPrice
 
@@ -150,10 +159,17 @@ export default function CreateResellerClient() {
 
       // 3. Create subscription document
       // Clientes de resellers: QPse = 200 docs/mes, SUNAT Directo = ilimitado
-      const isSunatDirect = formData.plan.startsWith('sunat_direct')
+      // Límite de comprobantes según modelo / plan / método
+      let maxInvoices
+      if (model === 'v2') {
+        maxInvoices = PLANS_V2[formData.plan]?.maxInvoices || 500
+        if (PLANS_V2[formData.plan]?.allowSunatDirect && formData.useSunatDirect) maxInvoices = -1
+      } else {
+        maxInvoices = formData.plan.startsWith('sunat_direct') ? -1 : 200
+      }
       const resellerLimits = {
         ...selectedPlan.limits,
-        maxInvoicesPerMonth: isSunatDirect ? -1 : 200
+        maxInvoicesPerMonth: maxInvoices
       }
 
       await setDoc(doc(db, 'subscriptions', newUserId), {
@@ -468,14 +484,20 @@ export default function CreateResellerClient() {
                 Plan ({effectiveDiscount}% desc.)
               </h3>
               <div className="grid grid-cols-3 gap-2">
-                {Object.entries(BASE_PRICES).map(([planKey]) => {
+                {Object.keys(model === 'v2' ? BASE_PRICES_V2 : BASE_PRICES).map((planKey) => {
                   const plan = PLANS[planKey]
                   if (!plan) return null
 
-                  const basePrice = BASE_PRICES[planKey]
-                  const finalPrice = calculatePrice(planKey, effectiveDiscount)
+                  const v2 = model === 'v2'
+                  const basePrice = (v2 ? BASE_PRICES_V2 : BASE_PRICES)[planKey]
+                  const finalPrice = calculatePrice(planKey, effectiveDiscount, model)
                   const isSelected = formData.plan === planKey
                   const isQPse = planKey.startsWith('qpse')
+                  const meta = v2 ? PLANS_V2[planKey] : null
+                  const tag = v2 ? (meta?.label?.split(' ')[0] || 'Plan') : (isQPse ? 'QPse' : 'SUNAT')
+                  const limitText = v2
+                    ? (meta?.maxInvoices === 100 ? '100/mes' : '500/mes*')
+                    : (planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes')
 
                   return (
                     <label
@@ -495,8 +517,8 @@ export default function CreateResellerClient() {
                         className="sr-only"
                       />
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-xs font-medium ${isQPse ? 'text-blue-600' : 'text-purple-600'}`}>
-                          {isQPse ? 'QPse' : 'SUNAT'}
+                        <span className={`text-xs font-medium ${v2 ? 'text-emerald-600' : (isQPse ? 'text-blue-600' : 'text-purple-600')}`}>
+                          {tag}
                         </span>
                         {isSelected && <CheckCircle className="w-4 h-4 text-emerald-600" />}
                       </div>
@@ -506,12 +528,27 @@ export default function CreateResellerClient() {
                       <span className="text-lg font-bold text-gray-900">S/ {finalPrice}</span>
                       <span className="text-xs text-gray-400 line-through">S/ {basePrice}</span>
                       <span className="text-xs text-gray-500 mt-1">
-                        {planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes'}
+                        {limitText}
                       </span>
                     </label>
                   )
                 })}
               </div>
+
+              {/* v2: toggle QPse / SUNAT directo (planes que lo permiten) */}
+              {model === 'v2' && PLANS_V2[formData.plan]?.allowSunatDirect && (
+                <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.useSunatDirect}
+                    onChange={e => setFormData(prev => ({ ...prev, useSunatDirect: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  />
+                  <span className="text-xs text-gray-600">
+                    Emitir con <b>SUNAT directo</b> (certificado propio) — comprobantes <b>ilimitados</b>. Sin marcar: QPse, 500/mes.
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* Summary */}

@@ -34,6 +34,50 @@ export const PLANS = {
   },
 
   // ============================================
+  // MODELO V2 — Planes para RESELLERS NUEVOS (pricingModel: 'v2')
+  // Catálogo por DURACIÓN. El precio es el precio final al cliente; el reseller
+  // paga ese precio menos su descuento (10/20/30%). El límite de comprobantes lo
+  // fija el cobro del reseller: Básico 100, resto 500 (QPse) o ilimitado (SUNAT
+  // directo). maxBranches aquí es metadata; el cobro del reseller no la modifica.
+  // ============================================
+  basico_mensual: {
+    name: "Plan Básico - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 19.90,
+    totalPrice: 19.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: 100, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
+  },
+  mensual: {
+    name: "Plan Mensual - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+  },
+  semestral: {
+    name: "Plan Semestral - 6 Meses",
+    category: "qpse",
+    months: 6,
+    pricePerMonth: 24.98, // 149.90 / 6
+    totalPrice: 149.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+  },
+  anual: {
+    name: "Plan Anual - 12 Meses",
+    category: "qpse",
+    months: 12,
+    pricePerMonth: 16.66, // 199.90 / 12
+    totalPrice: 199.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+  },
+
+  // ============================================
   // PLAN BÁSICO QPSE (100 comprobantes/mes)
   // ============================================
   qpse_basico_1_month: {

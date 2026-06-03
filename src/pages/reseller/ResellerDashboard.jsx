@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { getResellerTierInfo, getAllPrices } from '@/services/resellerTierService'
+import { getResellerTierInfo, getAllPrices, PLANS_V2 } from '@/services/resellerTierService'
 import {
   Users,
   UserCheck,
@@ -36,6 +36,10 @@ export default function ResellerDashboard() {
 
   // Obtener el ID del reseller (puede ser el docId si es diferente al uid)
   const resellerId = resellerData?.docId || user?.uid
+  const model = resellerData?.pricingModel === 'v2' ? 'v2' : 'legacy'
+  const previewPlans = model === 'v2'
+    ? Object.values(PLANS_V2).map(p => ({ label: p.label, base: p.price }))
+    : [{ label: '1 Mes', base: 20 }, { label: '6 Meses', base: 100 }, { label: '12 Meses', base: 150 }]
 
   useEffect(() => {
     if (user && resellerId) {
@@ -99,7 +103,7 @@ export default function ResellerDashboard() {
 
       // Cargar información del tier
       try {
-        const tier = await getResellerTierInfo(resellerId, resellerData?.discountOverride)
+        const tier = await getResellerTierInfo(resellerId, resellerData?.discountOverride, model)
         setTierInfo(tier)
       } catch (e) {
         console.error('Error loading tier info:', e)
@@ -272,19 +276,13 @@ export default function ResellerDashboard() {
             )}
 
             {/* Prices Preview */}
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-2">
-              <div className="text-center">
-                <p className="text-xs text-slate-400">1 Mes</p>
-                <p className="font-bold">S/ {Math.round(20 * (1 - tierInfo.effectiveDiscount / 100))}</p>
-              </div>
-              <div className="text-center border-l border-white/20 pl-3">
-                <p className="text-xs text-slate-400">6 Meses</p>
-                <p className="font-bold">S/ {Math.round(100 * (1 - tierInfo.effectiveDiscount / 100))}</p>
-              </div>
-              <div className="text-center border-l border-white/20 pl-3">
-                <p className="text-xs text-slate-400">12 Meses</p>
-                <p className="font-bold">S/ {Math.round(150 * (1 - tierInfo.effectiveDiscount / 100))}</p>
-              </div>
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-2 flex-wrap">
+              {previewPlans.map((p, i) => (
+                <div key={p.label} className={`text-center ${i > 0 ? 'border-l border-white/20 pl-3' : ''}`}>
+                  <p className="text-xs text-slate-400">{p.label}</p>
+                  <p className="font-bold">S/ {Math.round(p.base * (1 - tierInfo.effectiveDiscount / 100) * 100) / 100}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

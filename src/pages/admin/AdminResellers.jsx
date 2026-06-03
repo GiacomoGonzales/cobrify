@@ -73,7 +73,8 @@ export default function AdminResellers() {
     discountOverride: '',  // Vacío = usar tier automático
     balance: 0,
     isActive: true,
-    customDomain: ''  // Solo admin puede configurar esto
+    customDomain: '',  // Solo admin puede configurar esto
+    pricingModel: 'v2' // Modelo de precios: 'v2' (nuevo) o 'legacy'
   })
 
   const [depositAmount, setDepositAmount] = useState('')
@@ -150,7 +151,8 @@ export default function AdminResellers() {
       discountOverride: '',
       balance: 0,
       isActive: true,
-      customDomain: ''
+      customDomain: '',
+      pricingModel: 'v2'
     })
     setShowModal(true)
   }
@@ -216,7 +218,8 @@ export default function AdminResellers() {
         : '',
       balance: reseller.balance || 0,
       isActive: reseller.isActive !== false,
-      customDomain: reseller.customDomain || ''
+      customDomain: reseller.customDomain || '',
+      pricingModel: reseller.pricingModel || 'legacy'
     })
     setShowModal(true)
   }
@@ -256,7 +259,8 @@ export default function AdminResellers() {
         discountOverride: discountOverride,
         balance: parseFloat(formData.balance) || 0,
         isActive: formData.isActive,
-        customDomain: formData.customDomain || null
+        customDomain: formData.customDomain || null,
+        pricingModel: formData.pricingModel || 'legacy'
       }
 
       if (selectedReseller) {
@@ -509,6 +513,9 @@ export default function AdminResellers() {
                         {reseller.effectiveDiscount}%
                         {reseller.hasOverride && <Crown className="w-3 h-3 text-purple-500" />}
                       </span>
+                      {reseller.pricingModel === 'v2'
+                        ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">v2</span>
+                        : <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full font-medium">Legacy</span>}
                       <span className="text-gray-500">{reseller.activeClientsCount || 0} activos</span>
                     </div>
                     <span className="font-bold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
@@ -596,6 +603,11 @@ export default function AdminResellers() {
                               )}
                             </div>
                             <span className="text-sm text-green-600 font-medium">{reseller.effectiveDiscount}% desc.</span>
+                            <div className="mt-0.5">
+                              {reseller.pricingModel === 'v2'
+                                ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">v2</span>
+                                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium">Legacy</span>}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -831,7 +843,21 @@ export default function AdminResellers() {
                         placeholder="Automático por nivel"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Vacío = automático (Bronce 20%, Plata 30%, Oro 40%)
+                        Vacío = automático por nivel (v2: 10/20/30%, legacy: 20/30/40%)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Modelo de precios</label>
+                      <select
+                        value={formData.pricingModel}
+                        onChange={e => setFormData({ ...formData, pricingModel: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="v2">Nuevo (v2) — Básico/Mensual/Semestral/Anual · desc. 10/20/30%</option>
+                        <option value="legacy">Antiguo (legacy) — QPse/SUNAT 1/6/12 · desc. 20/30/40%</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Define el catálogo que ve el reseller. Cambiar uno existente afecta sus próximas renovaciones/altas (sus clientes ya creados no cambian hasta renovar).
                       </p>
                     </div>
                     <div>
