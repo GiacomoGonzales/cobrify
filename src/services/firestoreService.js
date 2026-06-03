@@ -644,7 +644,7 @@ export const updateProduct = async (userId, productId, updates) => {
  * Actualizar stock de un producto usando transacción de Firestore (atómico)
  * Evita race conditions cuando dos ventas simultáneas descuentan stock del mismo producto
  */
-export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null, serialToMarkSold = null) => {
+export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null, serialToMarkSold = null, allowNegative = false) => {
   try {
     const docRef = doc(db, 'businesses', userId, 'products', productId)
     await runTransaction(db, async (transaction) => {
@@ -689,8 +689,10 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
         const existingIdx = variantWS.findIndex(ws => ws.warehouseId === warehouseId)
 
         if (existingIdx >= 0) {
-          variantWS[existingIdx] = { ...variantWS[existingIdx], stock: Math.max(0, (variantWS[existingIdx].stock || 0) + quantity) }
-        } else if (quantity > 0) {
+          const newVariantWsStock = (variantWS[existingIdx].stock || 0) + quantity
+          variantWS[existingIdx] = { ...variantWS[existingIdx], stock: allowNegative ? newVariantWsStock : Math.max(0, newVariantWsStock) }
+        } else if (quantity > 0 || allowNegative) {
+          // Crear entrada (positiva; o negativa si se permite vender sin stock)
           variantWS.push({ warehouseId, stock: quantity, minStock: 0 })
         }
 
@@ -743,18 +745,21 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
       let newStock, newWarehouseStocks
 
       if (warehouseStocks.length === 0 && !warehouseId) {
-        newStock = Math.max(0, currentGeneralStock + quantity)
+        newStock = allowNegative ? (currentGeneralStock + quantity) : Math.max(0, currentGeneralStock + quantity)
         newWarehouseStocks = []
       } else {
         const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
         if (existingIndex >= 0) {
           const wsStock = (warehouseStocks[existingIndex].stock || 0) + quantity
-          warehouseStocks[existingIndex] = { ...warehouseStocks[existingIndex], stock: Math.max(0, wsStock) }
+          warehouseStocks[existingIndex] = { ...warehouseStocks[existingIndex], stock: allowNegative ? wsStock : Math.max(0, wsStock) }
         } else if (quantity > 0) {
           warehouseStocks.push({ warehouseId, stock: quantity, minStock: 0 })
         } else if (quantity < 0 && warehouseStocks.length === 0) {
-          newStock = Math.max(0, currentGeneralStock + quantity)
+          newStock = allowNegative ? (currentGeneralStock + quantity) : Math.max(0, currentGeneralStock + quantity)
           newWarehouseStocks = []
+        } else if (quantity < 0 && allowNegative && warehouseId) {
+          // Vender sin stock: el almacén indicado no tenía entrada previa, crear una negativa
+          warehouseStocks.push({ warehouseId, stock: quantity, minStock: 0 })
         } else if (quantity < 0) {
           let remaining = Math.abs(quantity)
           for (let i = 0; i < warehouseStocks.length && remaining > 0; i++) {

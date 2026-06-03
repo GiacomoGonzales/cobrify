@@ -5614,7 +5614,8 @@ export default function POS() {
                     -totalQty,
                     {},
                     firstItem.variantSku || null,
-                    serialsPayload
+                    serialsPayload,
+                    !!companySettings?.allowNegativeStock
                   )
                 )
               }
@@ -5748,7 +5749,8 @@ export default function POS() {
                     -quantityToDeduct,
                     extraUpdates,
                     item.variantSku || null,
-                    null
+                    null,
+                    !!companySettings?.allowNegativeStock
                   )
                 })())
               })
