@@ -59,6 +59,7 @@ export default function Orders() {
   const [compactPrint, setCompactPrint] = useState(false)
   const [ultraCompactKitchen, setUltraCompactKitchen] = useState(false)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [a4SheetPrint, setA4SheetPrint] = useState(false)
 
   // Filtro por marca
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
@@ -95,6 +96,7 @@ export default function Orders() {
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setUltraCompactKitchen(printerConfigResult.config.ultraCompactKitchen || false)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
+          setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1688,6 +1690,7 @@ export default function Orders() {
                     compactPrint={compactPrint}
                     ultraCompactKitchen={ultraCompactKitchen}
                     simplePrint={simplePrint}
+                    a4SheetPrint={a4SheetPrint}
                     stationName={ticket.name}
                   />
                 </div>
@@ -1700,6 +1703,7 @@ export default function Orders() {
                 compactPrint={compactPrint}
                 ultraCompactKitchen={ultraCompactKitchen}
                 simplePrint={simplePrint}
+                a4SheetPrint={a4SheetPrint}
               />
             )}
           </div>

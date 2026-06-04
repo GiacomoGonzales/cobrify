@@ -15,7 +15,7 @@ import { formatPricedModifierLines } from '@/utils/modifierHelpers'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -182,8 +182,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <style>{`
         @media print {
           @page {
-            size: ${paperWidth}mm auto;
-            margin: 0;
+            size: ${a4SheetPrint ? 'A4' : `${paperWidth}mm auto`};
+            margin: ${a4SheetPrint ? '8mm' : '0'};
           }
 
           * {
@@ -193,7 +193,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           body {
             margin: 0;
             padding: 0;
-            width: ${paperWidth}mm;
+            ${a4SheetPrint ? '' : `width: ${paperWidth}mm;`}
           }
 
           body * {
@@ -206,12 +206,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           }
 
           .ticket-container {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: ${a4SheetPrint ? 'static' : 'absolute'};
+            ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
             width: ${paperWidth}mm !important;
             max-width: ${paperWidth}mm !important;
-            margin: 0 auto !important;
+            margin: ${a4SheetPrint ? '0' : '0 auto'} !important;
             padding: ${is58mm ? '1.5mm' : '2mm'} ${printMargins}mm !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
@@ -220,7 +219,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             line-height: ${webPrintLegible ? '1.4' : '1.2'};
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            overflow: hidden;
+            overflow: ${a4SheetPrint ? 'visible' : 'hidden'};
           }
 
           .info-row {

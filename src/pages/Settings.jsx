@@ -8491,6 +8491,22 @@ export default function Settings() {
                 description="Reduce las comandas de cocina al mínimo: solo mesa, orden y productos en formato compacto, sin bordes ni fondos decorativos. Ideal para ahorrar papel al máximo."
               />
 
+              {/* Modo hoja A4 para impresoras de tinta/laser (no termicas) */}
+              <SettingToggle
+                checked={printerConfig.a4SheetPrint || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    a4SheetPrint: e.target.checked,
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Impresion en hoja A4 activada' : 'Impresion en hoja A4 desactivada')
+                }}
+                title="Imprimir en hoja A4 (impresora de tinta/láser, no térmica)"
+                description="Para impresoras de hoja completa (ej. EPSON L5190) que imprimen por WiFi vía su app. El ticket y la comanda salen chicos y legibles en una hoja A4, sin agrandarse. Déjalo APAGADO si usas una impresora térmica de 58/80mm."
+              />
+
               {/* Márgenes laterales para impresión */}
               <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
                 <div className="flex-1">

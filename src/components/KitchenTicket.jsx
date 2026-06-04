@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, simplePrint = false, stationName = null }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, simplePrint = false, stationName = null, a4SheetPrint = false }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -50,8 +50,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
-            margin: 0;
+            size: ${a4SheetPrint ? 'A4' : '80mm auto'};
+            margin: ${a4SheetPrint ? '8mm' : '0'};
           }
 
           * {
@@ -61,7 +61,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           body {
             margin: 0;
             padding: 0;
-            width: 80mm;
+            ${a4SheetPrint ? '' : 'width: 80mm;'}
           }
 
           body * {
@@ -74,12 +74,11 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           }
 
           .kitchen-ticket-container {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: ${a4SheetPrint ? 'static' : 'absolute'};
+            ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
             width: 70mm !important;
             max-width: 70mm !important;
-            margin: 0 auto !important;
+            margin: ${a4SheetPrint ? '0' : '0 auto'} !important;
             padding: 2mm 1.5mm !important;
             box-sizing: border-box;
             font-family: 'Courier New', Courier, monospace;
@@ -88,7 +87,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
             line-height: ${webPrintLegible ? '1.4' : '1.25'};
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            overflow: hidden;
+            overflow: ${a4SheetPrint ? 'visible' : 'hidden'};
           }
 
           /* Cuando hay múltiples tickets (multi-estación), no usar position absolute */
@@ -97,9 +96,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
             visibility: visible;
           }
           .kitchen-multi-ticket {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: ${a4SheetPrint ? 'static' : 'absolute'};
+            ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
           }
           .kitchen-multi-ticket .kitchen-ticket-container {
             position: static;

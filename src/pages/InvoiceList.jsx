@@ -240,6 +240,7 @@ export default function InvoiceList() {
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Cargar configuración de impresora para webPrintLegible y compactPrint
@@ -255,6 +256,7 @@ export default function InvoiceList() {
         setCompactPrint(printerConfigResult.config.compactPrint || false)
         setPrintMargins(printerConfigResult.config.printMargins ?? 8)
         setSimplePrint(printerConfigResult.config.simplePrint || false)
+        setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
         setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
       }
     }
@@ -4639,7 +4641,7 @@ Gracias por tu preferencia.`
       {/* Hidden Ticket Component for Printing - Individual (modal o fila) */}
       {(viewingInvoice || rowPrintInvoice) && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} a4SheetPrint={a4SheetPrint} />
         </div>
       )}
 
@@ -4658,7 +4660,7 @@ Gracias por tu preferencia.`
             }
           `}</style>
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
-            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} />
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} a4SheetPrint={a4SheetPrint} />
           ))}
         </div>
       )}
