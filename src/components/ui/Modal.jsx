@@ -3,7 +3,7 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullScreenMobile = false }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullScreenMobile = false, fullScreen = false }) {
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e) => {
@@ -33,6 +33,32 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
 
   // Usar Portal para renderizar el modal fuera del árbol DOM normal
   // Esto soluciona el problema de z-index en iOS Safari
+  // Pantalla completa real (desktop + movil): ocupa todo el viewport.
+  // Usa `fixed inset-0` como contenedor (no porcentajes de alto), que es lo
+  // mas robusto en navegadores moviles (evita el bug de 100vh / h-full).
+  if (fullScreen) {
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col animate-fade-in">
+        {title && (
+          <div
+            className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-white flex-shrink-0"
+            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+          >
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 line-clamp-1 min-w-0">{title}</h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-2"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+        <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      </div>,
+      document.body
+    )
+  }
+
   return createPortal(
     <div className="fixed inset-0 z-[9999] overflow-y-auto">
       {/* Overlay */}

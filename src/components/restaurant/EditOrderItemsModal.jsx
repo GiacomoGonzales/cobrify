@@ -10,7 +10,7 @@ import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
-export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
+export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess, onAfterAddItems = null }) {
   const { getBusinessId, business, user } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
@@ -411,6 +411,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
           setShowAddItemsModal(false)
           if (onSuccess) onSuccess()
         }}
+        onAfterAddItems={onAfterAddItems}
       />
     </>
   )

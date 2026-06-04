@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ShoppingCart, Plus, Minus, Search, Loader2, X } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Search, Loader2, X, ChevronDown, ChevronRight } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
+import { cn } from '@/lib/utils'
 
 export default function OrderItemsModal({
   isOpen,
@@ -18,7 +19,8 @@ export default function OrderItemsModal({
   onSuccess,
   isNewOrder = false,
   newOrderData = null,
-  onSaveNewOrder = null
+  onSaveNewOrder = null,
+  onAfterAddItems = null
 }) {
   const { getBusinessId, businessSettings } = useAppContext()
   const demoContext = useDemoRestaurant()
@@ -45,6 +47,23 @@ export default function OrderItemsModal({
   // Price selection state (multiple prices)
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [productForPriceSelection, setProductForPriceSelection] = useState(null)
+
+  // Colapso de la seccion de categorias (como en el POS). Persiste en localStorage.
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('mesa_order_categories_collapsed') === 'true'
+    } catch (e) { void e; return false }
+  })
+  const toggleCategoriesCollapsed = () => {
+    setCategoriesCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('mesa_order_categories_collapsed', String(next)) } catch (e) { void e }
+      return next
+    })
+  }
+
+  // En movil el carrito se abre como overlay (en desktop esta fijo a la derecha)
+  const [showMobileCart, setShowMobileCart] = useState(false)
 
   // Cargar productos
   useEffect(() => {
@@ -408,11 +427,14 @@ export default function OrderItemsModal({
         onClose()
       } else {
         // En modo normal, agregar items a orden existente
+        const addedItems = cart.map(i => ({ ...i }))
         const result = await addOrderItems(getBusinessId(), order.id, cart)
         if (result.success) {
           toast.success(`${cart.length} items agregados a la orden`)
           setCart([])
           if (onSuccess) onSuccess()
+          // Auto-imprimir la comanda de los items recien agregados (solo app + impresora configurada)
+          if (onAfterAddItems) onAfterAddItems(addedItems)
           onClose()
         } else {
           toast.error('Error al agregar items: ' + result.error)
@@ -430,11 +452,72 @@ export default function OrderItemsModal({
     setCart([])
     setSearchTerm('')
     setSelectedCategory('Todos')
+    setShowMobileCart(false)
     onClose()
   }
 
   // Solo validar si NO es una nueva orden
   if (!isNewOrder && (!table || !order)) return null
+
+  const cartTotal = cart.reduce((sum, item) => sum + (item.total || 0), 0)
+
+  // Bloque reutilizable: item del carrito en modo lista compacto.
+  // Fila 1: nombre + total + quitar. Fila 2: cantidad + nota (una sola linea).
+  const renderCartItem = (item) => (
+    <div key={`${item.productId}-${item.modifierKey || 'no-mod'}`} className="border rounded-lg px-2.5 py-2 bg-white">
+      {/* Fila 1: nombre + total + quitar */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm text-gray-900 truncate">{item.name}</div>
+          <div className="text-[11px] text-gray-500">S/ {item.price.toFixed(2)} c/u</div>
+        </div>
+        <div className="font-bold text-sm text-gray-900 whitespace-nowrap">S/ {item.total.toFixed(2)}</div>
+        <button
+          type="button"
+          onClick={() => removeFromCart(item.productId, item.modifierKey)}
+          className="text-red-400 hover:text-red-600 flex-shrink-0"
+          title="Quitar"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Modificadores (compacto, una linea) */}
+      {item.modifiers && item.modifiers.length > 0 && (
+        <div className="text-[11px] text-primary-700 truncate mt-0.5">
+          {item.modifiers.map((m) => (m.options || []).map((o) => o.optionName).join(', ')).join(' · ')}
+        </div>
+      )}
+
+      {/* Fila 2: cantidad + nota en una sola linea */}
+      <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => updateQuantity(item.productId, item.quantity - 1, item.modifierKey)}
+            className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100"
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+          <button
+            type="button"
+            onClick={() => updateQuantity(item.productId, item.quantity + 1, item.modifierKey)}
+            className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-100"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
+        <input
+          type="text"
+          value={item.notes || ''}
+          onChange={(e) => updateNotes(item.productId, e.target.value, item.modifierKey)}
+          placeholder="Nota..."
+          className="flex-1 min-w-0 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+        />
+      </div>
+    </div>
+  )
 
   return (
     <Modal
@@ -457,14 +540,29 @@ export default function OrderItemsModal({
           </div>
         </div>
       }
-      size="xl"
-      fullScreenMobile={true}
+      fullScreen={true}
     >
-      <div className="flex flex-col h-full lg:h-[600px]">
-        {/* Contenedor con scroll único */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="relative flex flex-col lg:flex-row h-full min-h-0">
+        {/* ===== IZQUIERDA: buscar + categorias + productos ===== */}
+        <div className="flex-1 flex flex-col min-h-0 lg:border-r border-gray-200">
+          {/* MOVIL: acceso al carrito arriba (en celulares pequenos el carrito lateral no cabe).
+              Muestra cuanto vas sumando; al tocarlo se abre el carrito a pantalla completa. */}
+          <button
+            type="button"
+            onClick={() => setShowMobileCart(true)}
+            className="lg:hidden flex-shrink-0 mx-3 mt-3 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-primary-600 text-white shadow-sm active:bg-primary-700"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <ShoppingCart className="w-4 h-4" />
+              {cart.length} {cart.length === 1 ? 'item' : 'items'} en el carrito
+            </span>
+            <span className="flex items-center gap-1 font-bold text-sm">
+              S/ {cartTotal.toFixed(2)}
+              <ChevronRight className="w-4 h-4" />
+            </span>
+          </button>
           {/* Buscador */}
-          <div className="mb-4">
+          <div className="p-4 pb-2 flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <Input
@@ -477,203 +575,159 @@ export default function OrderItemsModal({
             </div>
           </div>
 
-          {/* Filtros de categorías */}
-          <div className="mb-4">
-            <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                    selectedCategory === category
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+          {/* Categorias colapsables (como en el POS) */}
+          <div className="px-4 flex-shrink-0">
+            <button
+              onClick={toggleCategoriesCollapsed}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2"
+              title={categoriesCollapsed ? 'Mostrar categorias' : 'Ocultar categorias'}
+            >
+              {categoriesCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Categorias
+              {categoriesCollapsed && selectedCategory !== 'Todos' && (
+                <span className="ml-1 normal-case px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 font-medium">
+                  {selectedCategory}
+                </span>
+              )}
+            </button>
+            {!categoriesCollapsed && (
+              <div className="flex flex-wrap gap-2 pb-3">
+                {categories.map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                      selectedCategory === category
+                        ? 'bg-primary-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Lista de productos */}
-            <div className="flex-1 border rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Productos Disponibles</h3>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-                </div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  {searchTerm ? 'No se encontraron productos' : 'No hay productos disponibles'}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2">
-                  {filteredProducts.map((product) => (
-                    <div
+          {/* Lista de productos (scroll propio) */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                {searchTerm ? 'No se encontraron productos' : 'No hay productos disponibles'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                {filteredProducts.map((product) => {
+                  const qtyInCart = cart.reduce((s, i) => s + (i.productId === product.id ? i.quantity : 0), 0)
+                  return (
+                    <button
+                      type="button"
                       key={product.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => addToCart(product)}
+                      className="relative flex flex-col text-left p-2.5 border rounded-lg hover:border-primary-500 hover:shadow-md hover:bg-primary-50/40 transition-all"
                     >
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{product.name}</div>
-                        <div className="text-sm text-gray-500">
-                          {product.code && <span className="mr-2">Código: {product.code}</span>}
-                          <span className="font-semibold text-primary-600">
-                            S/ {(product.price || 0).toFixed(2)}
-                          </span>
+                      {qtyInCart > 0 && (
+                        <div className="absolute top-1 left-1 w-5 h-5 bg-primary-600 text-white rounded-full flex items-center justify-center text-[11px] font-bold shadow z-10">
+                          {qtyInCart}
+                        </div>
+                      )}
+                      <p className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 text-gray-900 min-h-[2.2em]">
+                        {product.name}
+                      </p>
+                      {product.code && (
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate">Cód: {product.code}</p>
+                      )}
+                      <div className="mt-auto pt-1.5">
+                        <p className="text-sm font-bold text-primary-600">
+                          S/ {(product.price || 0).toFixed(2)}
                           {isNewOrder && (product.price2 || product.price3 || product.price4) && (
-                            <span className="text-xs text-green-600 ml-1">
+                            <span className="text-[10px] font-normal text-gray-400 ml-1">
                               - S/ {(product.price2 || product.price3 || product.price4 || 0).toFixed(2)}
                             </span>
                           )}
-                        </div>
+                        </p>
                         {product.stock !== undefined && (
-                          <div className="text-xs text-gray-500">Stock: {product.stock}</div>
+                          <p className="text-[10px] text-gray-400">Stock: {product.stock}</p>
                         )}
                       </div>
-                      <Button
-                        onClick={() => addToCart(product)}
-                        size="sm"
-                        className="ml-3"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Carrito */}
-            <div className="w-full lg:w-80 border rounded-lg p-4 flex flex-col">
-              <h3 className="font-semibold text-gray-900 mb-3">
-                Carrito ({cart.length} items)
-              </h3>
-
-              {cart.length === 0 ? (
-                <div className="flex items-center justify-center text-gray-500 text-sm py-8">
-                  Agrega productos al carrito
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2 mb-4">
-                  {cart.map((item) => (
-                    <div key={`${item.productId}-${item.modifierKey || 'no-mod'}`} className="border rounded-lg p-3 bg-white">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm text-gray-900">{item.name}</div>
-                          <div className="text-xs text-gray-500">
-                            S/ {item.price.toFixed(2)} c/u
-                          </div>
-
-                          {/* Mostrar modificadores si existen */}
-                          {item.modifiers && item.modifiers.length > 0 && (
-                            <div className="mt-1 space-y-1">
-                              {item.modifiers.map((modifier) => (
-                                <div key={modifier.modifierId} className="bg-primary-50 border border-primary-200 rounded px-2 py-1">
-                                  <div className="text-xs font-semibold text-primary-900">
-                                    {modifier.modifierName}:
-                                  </div>
-                                  <div className="text-xs text-primary-700">
-                                    {modifier.options.map((opt, idx) => (
-                                      <span key={opt.optionId}>
-                                        {opt.optionName}
-                                        {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
-                                        {idx < modifier.options.length - 1 && ', '}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item.productId, item.modifierKey)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => updateQuantity(item.productId, item.quantity - 1, item.modifierKey)}
-                            className="w-8 h-8 p-0"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => updateQuantity(item.productId, item.quantity + 1, item.modifierKey)}
-                            className="w-8 h-8 p-0"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                        </div>
-                        <div className="font-bold text-gray-900">
-                          S/ {item.total.toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* Campo de notas/especificaciones */}
-                      <div className="mt-2">
-                        <textarea
-                          value={item.notes || ''}
-                          onChange={(e) => updateNotes(item.productId, e.target.value, item.modifierKey)}
-                          placeholder="Especificaciones: sin lechuga, extra crema, etc..."
-                          className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 resize-none"
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                  {/* Total simple (sin desglose de IGV) */}
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total:</span>
-                      <span className="text-primary-600">
-                        S/ {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 text-center mt-2">
-                      Los montos detallados aparecerán en la precuenta
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
+
         </div>
 
-        {/* Botones */}
-        <div className="flex gap-3 pt-4 border-t flex-shrink-0 sticky bottom-0 bg-white -mx-6 px-6 -mb-6 pb-6">
-          <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={isSaving || cart.length === 0}
-            className="flex-1 bg-primary-600 hover:bg-primary-700"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Guardando...
-              </>
+        {/* ===== DERECHA: carrito (desktop fijo / movil overlay) ===== */}
+        <div
+          className={cn(
+            'flex-col min-h-0 bg-white lg:w-96',
+            showMobileCart ? 'flex absolute inset-0 z-20 lg:static lg:z-auto' : 'hidden lg:flex'
+          )}
+        >
+          {/* Header del carrito */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+            <h3 className="font-semibold text-gray-900">
+              Carrito ({cart.length} items)
+            </h3>
+            <button
+              onClick={() => setShowMobileCart(false)}
+              className="lg:hidden text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Items del carrito (scroll propio) */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-4">
+            {cart.length === 0 ? (
+              <div className="flex items-center justify-center text-gray-500 text-sm py-8">
+                Agrega productos al carrito
+              </div>
             ) : (
-              `Agregar ${cart.length} items`
+              <div className="space-y-2">
+                {cart.map(renderCartItem)}
+              </div>
             )}
-          </Button>
+          </div>
+
+          {/* Total + acciones (fijo abajo) */}
+          <div
+            className="border-t border-gray-200 p-4 flex-shrink-0 space-y-3"
+            style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="flex justify-between text-lg font-bold">
+              <span>Total:</span>
+              <span className="text-primary-600">S/ {cartTotal.toFixed(2)}</span>
+            </div>
+            <div className="text-xs text-gray-500 text-center">
+              Los montos detallados aparecerán en la precuenta
+            </div>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || cart.length === 0}
+                className="flex-1 bg-primary-600 hover:bg-primary-700"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  `Agregar ${cart.length} items`
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 

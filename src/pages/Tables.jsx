@@ -1207,6 +1207,86 @@ export default function Tables() {
     }, 300)
   }
 
+  // Auto-impresion de comanda al AGREGAR items a una mesa.
+  // - Solo en la app (impresion termica nativa) y si hay impresora configurada.
+  // - Imprime SOLO los items recien agregados (no toda la orden).
+  // - Cubre estaciones con impresora WiFi (IP) y, si no hay, la impresora del
+  //   dispositivo (bluetooth/iMin), separando por estacion si estan habilitadas.
+  // - Es SILENCIOSA: si no hay impresora o falla, no interrumpe el flujo (a diferencia
+  //   del boton manual, NO cae al dialogo de impresion web).
+  const autoPrintKitchenOnAdd = async (addedItems) => {
+    try {
+      if (isDemoMode) return
+      if (!Capacitor.isNativePlatform()) return
+      if (!selectedOrder || !selectedTable) return
+      const items = (addedItems || []).filter(Boolean)
+      if (items.length === 0) return
+
+      const businessId = getBusinessId()
+      const printerConfigResult = await getPrinterConfig(businessId)
+      if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) return
+
+      const pw = printerConfigResult.config.paperWidth || 58
+      const orderToPrintData = { ...selectedOrder, items, _ultraCompact: ultraCompactKitchen }
+      let printed = false
+
+      // 1) Estaciones con impresora WiFi (IP) propia
+      const stationsWithWifi = enableKitchenStations && Array.isArray(kitchenStations)
+        ? kitchenStations.filter(s => s.printerIp)
+        : []
+      if (stationsWithWifi.length > 0) {
+        const results = await printToAllStations(orderToPrintData, kitchenStations, pw)
+        printed = Array.isArray(results) && results.some(r => r.success)
+      } else {
+        // 2) Impresora del dispositivo (bluetooth/iMin)
+        await connectPrinter(printerConfigResult.config.address)
+        if (enableKitchenStations && Array.isArray(kitchenStations) && kitchenStations.length > 0) {
+          // Separar por estacion en la misma ticketera
+          const itemMatchesStation = (itemCategory, stationCategories) => {
+            if (!itemCategory || !stationCategories || stationCategories.length === 0) return false
+            if (stationCategories.includes(itemCategory)) return true
+            const itemCatName = categoryMap[itemCategory]
+            if (itemCatName && stationCategories.includes(itemCatName)) return true
+            for (const sc of stationCategories) {
+              if (categoryMap[sc] === itemCategory) return true
+            }
+            return false
+          }
+          let anyPrinted = false
+          for (const station of kitchenStations) {
+            let stationItems
+            if (station.isPase) stationItems = items
+            else if (station.categories?.length > 0) stationItems = items.filter(it => itemMatchesStation(it.category || it.categoryId || '', station.categories))
+            else continue
+            if (stationItems.length > 0) {
+              if (anyPrinted) await new Promise(resolve => setTimeout(resolve, 1500))
+              const r = await printKitchenOrder({ ...selectedOrder, items: stationItems }, selectedTable, pw, station.name)
+              if (r?.success) anyPrinted = true
+            }
+          }
+          printed = anyPrinted
+        } else {
+          // 3) Sin estaciones: una sola comanda
+          const r = await printKitchenOrder(orderToPrintData, selectedTable, pw)
+          printed = !!r?.success
+        }
+      }
+
+      if (printed) {
+        // Marcar la orden como impresa (leyendo la orden fresca de Firestore, que ya
+        // incluye los items recien agregados) para que el boton manual no los reimprima.
+        try {
+          const fresh = await getOrder(businessId, selectedOrder.id)
+          if (fresh.success && fresh.data) await markItemsAsPrinted(fresh.data)
+        } catch (e) { void e }
+        toast.success('Comanda enviada a cocina')
+      }
+    } catch (error) {
+      console.error('Error en auto-impresion de comanda al agregar items:', error)
+      // Silencioso: el agregado de items ya fue exitoso
+    }
+  }
+
   const handleOccupyTable = async (tableId, occupyData) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -1826,6 +1906,7 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onSuccess={reloadSelectedTableAndOrder}
+        onAfterAddItems={autoPrintKitchenOnAdd}
       />
 
       {/* Modal para editar items de la orden */}
@@ -1839,6 +1920,7 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onSuccess={reloadSelectedTableAndOrder}
+        onAfterAddItems={autoPrintKitchenOnAdd}
       />
 
       {/* Modal para dividir la cuenta */}
