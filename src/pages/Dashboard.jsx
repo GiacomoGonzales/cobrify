@@ -463,7 +463,12 @@ export default function Dashboard() {
     for (let d = 1; d <= daysInMonth; d++) {
       dailyMonthData.push({ day: d, ventas: dailyMap[d] || 0, isFuture: d > todayDay })
     }
-    const avgDailyMonth = monthSales / Math.max(todayDay, 1)
+    // Promedio solo con días CERRADOS: excluye el día en curso (todayDay), que
+    // recién empieza y arrastraría el promedio hacia abajo.
+    const closedDays = Math.max(todayDay - 1, 0)
+    let closedDaysSales = 0
+    for (let d = 1; d <= closedDays; d++) closedDaysSales += (dailyMap[d] || 0)
+    const avgDailyMonth = closedDays > 0 ? closedDaysSales / closedDays : 0
 
     // Top 5 productos / clientes ordenados
     const topProducts = Object.values(productMap)
