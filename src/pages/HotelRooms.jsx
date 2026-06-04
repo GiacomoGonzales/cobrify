@@ -38,6 +38,8 @@ const INITIAL_FORM = {
   pricingMode: 'nightly',
   ratePerHour: '',
   capacity: '1',
+  baseGuests: '2',
+  extraGuestRate: '',
   amenities: '',
   notes: '',
 }
@@ -93,6 +95,7 @@ export default function HotelRooms() {
     checkOutTime: '',
     ratePerNight: 0,
     ratePerHour: 0,
+    guests: 1,
     notes: '',
   })
   // Modo de cobro elegido para esta reserva (toggle).
@@ -237,6 +240,7 @@ export default function HotelRooms() {
       checkOutTime: '',
       ratePerNight: Number(selectedRoom.rate ?? selectedRoom.ratePerNight ?? 0),
       ratePerHour: Number(selectedRoom.ratePerHour ?? 0),
+      guests: Number(selectedRoom.baseGuests ?? 1),
       notes: '',
     })
     setIsQuickCheckInOpen(true)
@@ -340,6 +344,14 @@ export default function HotelRooms() {
       totalAmount = nights * Number(ratePerNight || 0)
     }
 
+    // Personas adicionales: cobro por noche por cada huesped que supera los incluidos (solo modo por noche)
+    const qBaseGuests = Number(selectedRoom.baseGuests ?? 1)
+    const qExtraGuestRate = Number(selectedRoom.extraGuestRate ?? 0)
+    const qGuests = Number(quickForm.guests) || qBaseGuests
+    const qExtraGuests = isHourly ? 0 : Math.max(0, qGuests - qBaseGuests)
+    const qExtraGuestTotal = nights * qExtraGuests * qExtraGuestRate
+    totalAmount += qExtraGuestTotal
+
     setIsSavingQuickCheckIn(true)
     try {
       if (isDemoMode) {
@@ -376,6 +388,10 @@ export default function HotelRooms() {
         }),
         nights,
         ratePerNight: Number(ratePerNight || 0),
+        guests: qGuests,
+        baseGuests: qBaseGuests,
+        extraGuestRate: qExtraGuestRate,
+        extraGuestTotal: qExtraGuestTotal,
         totalAmount,
         total: totalAmount,
         notes: quickForm.notes || '',
@@ -582,6 +598,8 @@ export default function HotelRooms() {
       pricingMode: selectedRoom.pricingMode === 'hourly' ? 'hourly' : 'nightly',
       ratePerHour: selectedRoom.ratePerHour?.toString() || '',
       capacity: selectedRoom.capacity?.toString() || '1',
+      baseGuests: selectedRoom.baseGuests?.toString() || '2',
+      extraGuestRate: selectedRoom.extraGuestRate?.toString() || '',
       amenities: Array.isArray(selectedRoom.amenities) ? selectedRoom.amenities.join(', ') : (selectedRoom.amenities || ''),
       notes: selectedRoom.notes || '',
     })
@@ -629,6 +647,8 @@ export default function HotelRooms() {
         ratePerHour: parseFloat(formData.ratePerHour) || 0,
         pricingMode: formData.pricingMode === 'hourly' ? 'hourly' : 'nightly',
         capacity: parseInt(formData.capacity) || 1,
+        baseGuests: parseInt(formData.baseGuests) || 1,
+        extraGuestRate: parseFloat(formData.extraGuestRate) || 0,
         amenities: formData.amenities.trim(),
         notes: formData.notes.trim(),
       }
@@ -1152,6 +1172,30 @@ export default function HotelRooms() {
             />
           </div>
 
+          {/* Persona adicional */}
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Personas incluidas en la tarifa"
+              name="baseGuests"
+              type="number"
+              value={formData.baseGuests}
+              onChange={handleChange}
+              placeholder="2"
+            />
+            <Input
+              label="Costo por persona adicional (S/ /noche)"
+              name="extraGuestRate"
+              type="number"
+              step="0.01"
+              value={formData.extraGuestRate}
+              onChange={handleChange}
+              placeholder="0.00"
+            />
+          </div>
+          <p className="text-xs text-gray-500 -mt-2">
+            Si una reserva tiene más huéspedes que los incluidos, se cobra este monto por noche por cada persona extra. Déjalo en 0 si no cobras por persona adicional.
+          </p>
+
           {/* Tarifa por hora (opcional) */}
           <div className="space-y-2 pt-2 border-t">
             <Input
@@ -1431,6 +1475,15 @@ export default function HotelRooms() {
                 value={quickForm.ratePerNight}
                 onChange={e => setQuickForm(prev => ({ ...prev, ratePerNight: e.target.value }))}
               />
+              {(selectedRoom?.extraGuestRate || 0) > 0 && (
+                <Input
+                  label={`Huéspedes (incluye ${selectedRoom?.baseGuests ?? 1}; extra S/ ${Number(selectedRoom?.extraGuestRate || 0).toFixed(2)}/noche)`}
+                  type="number"
+                  min="1"
+                  value={quickForm.guests}
+                  onChange={e => setQuickForm(prev => ({ ...prev, guests: e.target.value }))}
+                />
+              )}
             </>
           )}
 

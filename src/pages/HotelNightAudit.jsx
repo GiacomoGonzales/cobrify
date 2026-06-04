@@ -40,7 +40,19 @@ const RATE_TYPE_CONFIG = {
   surcharge: { label: 'Recargo', badge: 'success', icon: Tag, description: 'Suma este monto a la tarifa base' },
 }
 
-const EMPTY_RATE = { name: '', startDate: '', endDate: '', rateType: 'fixed', rate: '', notes: '' }
+// Dias de la semana (value = Date.getDay(): 0=Domingo .. 6=Sabado). Orden Lun->Dom para mostrar.
+const DAYS = [
+  { value: 1, label: 'Lun' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Mié' },
+  { value: 4, label: 'Jue' },
+  { value: 5, label: 'Vie' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' },
+]
+const DAY_LABEL = { 0: 'Dom', 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb' }
+
+const EMPTY_RATE = { name: '', startDate: '', endDate: '', daysOfWeek: [], rateType: 'fixed', rate: '', notes: '' }
 
 export default function HotelNightAudit() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
@@ -119,12 +131,24 @@ export default function HotelNightAudit() {
     setShowRateModal(true)
   }
 
+  const toggleRateDay = (day) => {
+    setRateForm(prev => {
+      const set = new Set(prev.daysOfWeek || [])
+      if (set.has(day)) set.delete(day)
+      else set.add(day)
+      return { ...prev, daysOfWeek: Array.from(set).sort((a, b) => a - b) }
+    })
+  }
+
+  const setWeekendDays = () => setRateForm(prev => ({ ...prev, daysOfWeek: [0, 5, 6] }))
+
   const openEditRate = (rate) => {
     setEditingRate(rate)
     setRateForm({
       name: rate.name || '',
       startDate: rate.startDate || '',
       endDate: rate.endDate || '',
+      daysOfWeek: rate.daysOfWeek || [],
       rateType: rate.rateType || 'fixed',
       rate: rate.rate || '',
       notes: rate.notes || '',
@@ -133,8 +157,10 @@ export default function HotelNightAudit() {
   }
 
   const handleSaveRate = async () => {
-    if (!rateForm.name || !rateForm.startDate || !rateForm.endDate || !rateForm.rate) {
-      toast.error('Completa los campos obligatorios')
+    const hasDateRange = rateForm.startDate && rateForm.endDate
+    const hasDays = rateForm.daysOfWeek && rateForm.daysOfWeek.length > 0
+    if (!rateForm.name || !rateForm.rate || (!hasDateRange && !hasDays)) {
+      toast.error('Completa nombre, valor y al menos un rango de fechas o días de la semana')
       return
     }
     try {
@@ -226,28 +252,34 @@ export default function HotelNightAudit() {
               <Moon className="w-12 h-12 mx-auto text-indigo-500" />
               <h2 className="text-xl font-semibold text-gray-800">Auditoría Nocturna</h2>
               <p className="text-gray-500">Fecha: {formatDate(today)}</p>
-              <Button
-                onClick={() => setShowConfirmModal(true)}
-                disabled={isRunning}
-                className="mx-auto"
-                size="lg"
-              >
-                {isRunning ? (
-                  <><Loader2 className="w-5 h-5 animate-spin mr-2" /> Procesando...</>
-                ) : (
-                  <><Play className="w-5 h-5 mr-2" /> Ejecutar Auditoría Nocturna</>
-                )}
-              </Button>
+              <div>
+                <Button
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={isRunning}
+                  size="lg"
+                >
+                  {isRunning ? (
+                    <><Loader2 className="w-5 h-5 animate-spin mr-2" /> Procesando...</>
+                  ) : (
+                    <><Play className="w-5 h-5 mr-2" /> Ejecutar Auditoría Nocturna</>
+                  )}
+                </Button>
+              </div>
 
               {auditResult && (
-                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg inline-block">
+                <div className="mt-2 p-4 bg-green-50 border border-green-200 rounded-lg inline-block">
                   <p className="text-green-800 font-medium">
                     <ClipboardCheck className="w-5 h-5 inline mr-1" />
-                    {auditResult.processedCount} reservas procesadas
+                    {auditResult.processed ?? 0} reserva{(auditResult.processed ?? 0) !== 1 ? 's' : ''} procesada{(auditResult.processed ?? 0) !== 1 ? 's' : ''}
                   </p>
                   <p className="text-green-700 text-lg font-bold mt-1">
                     Total cargado: {formatCurrency(auditResult.totalCharged)}
                   </p>
+                  {(auditResult.processed ?? 0) === 0 && (
+                    <p className="text-green-700 text-xs mt-1">
+                      No había noches pendientes por cobrar. Las reservas por hora se cobran al check-in, y las noches de las reservas por noche también se cargan al folio al hacer check-in.
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -279,7 +311,7 @@ export default function HotelNightAudit() {
                         .map((audit, idx) => (
                           <tr key={audit.id || idx} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-3 px-4">{formatDate(audit.date)}</td>
-                            <td className="py-3 px-4">{audit.processedCount ?? '-'}</td>
+                            <td className="py-3 px-4">{audit.reservationsProcessed ?? audit.processedCount ?? '-'}</td>
                             <td className="py-3 px-4 font-medium">{formatCurrency(audit.totalCharged || 0)}</td>
                             <td className="py-3 px-4 text-gray-600">{audit.performedBy || '-'}</td>
                             <td className="py-3 px-4">
@@ -325,10 +357,18 @@ export default function HotelNightAudit() {
                         <h3 className="font-semibold text-gray-800">{rate.name}</h3>
                         <Badge variant={config.badge}>{config.label}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <CalendarRange className="w-4 h-4" />
-                        {formatDate(rate.startDate)} — {formatDate(rate.endDate)}
-                      </div>
+                      {rate.startDate && rate.endDate && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <CalendarRange className="w-4 h-4" />
+                          {formatDate(rate.startDate)} — {formatDate(rate.endDate)}
+                        </div>
+                      )}
+                      {Array.isArray(rate.daysOfWeek) && rate.daysOfWeek.length > 0 && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <CalendarRange className="w-4 h-4" />
+                          {rate.daysOfWeek.map(d => DAY_LABEL[d]).join(', ')}
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-lg font-bold text-gray-800">
                         <RateIcon className="w-5 h-5 text-gray-400" />
                         {rate.rateType === 'multiplier'
@@ -397,19 +437,53 @@ export default function HotelNightAudit() {
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Fecha inicio"
+              label="Fecha inicio (opcional)"
               type="date"
-              required
               value={rateForm.startDate}
               onChange={e => setRateForm(prev => ({ ...prev, startDate: e.target.value }))}
             />
             <Input
-              label="Fecha fin"
+              label="Fecha fin (opcional)"
               type="date"
-              required
               value={rateForm.endDate}
               onChange={e => setRateForm(prev => ({ ...prev, endDate: e.target.value }))}
             />
+          </div>
+
+          {/* Dias de la semana: para tarifas de fin de semana o dias especificos */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-gray-700">Días de la semana (opcional)</label>
+              <button
+                type="button"
+                onClick={setWeekendDays}
+                className="text-xs font-medium text-primary-600 hover:underline"
+              >
+                Fin de semana
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {DAYS.map(d => {
+                const active = (rateForm.daysOfWeek || []).includes(d.value)
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => toggleRateDay(d.value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                      active
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              Vacío = aplica todos los días del rango de fechas. Elige días (ej. Vie/Sáb/Dom) para una tarifa de fin de semana.
+            </p>
           </div>
           <Select
             label="Tipo de tarifa"

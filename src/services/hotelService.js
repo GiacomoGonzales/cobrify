@@ -217,6 +217,31 @@ export const deleteReservation = async (businessId, reservationId) => {
   }
 }
 
+// Deshacer un check-in hecho por error: vuelve la reserva a "confirmada", libera la
+// habitación y quita los cargos de noche/hora agregados al ingresar (los consumos se conservan).
+export const undoCheckIn = async (businessId, reservationId, roomId) => {
+  try {
+    await updateDoc(doc(db, 'businesses', businessId, 'hotelReservations', reservationId), {
+      status: 'confirmed',
+      updatedAt: serverTimestamp(),
+    })
+    if (roomId) {
+      await updateRoomStatus(businessId, roomId, 'available')
+    }
+    const chargesResult = await getChargesByReservation(businessId, reservationId)
+    const toDelete = (chargesResult.data || []).filter(
+      c => (c.chargeType === 'room_night' || c.chargeType === 'room_hourly') && !c.invoiceId
+    )
+    for (const c of toDelete) {
+      await deleteDoc(doc(db, 'businesses', businessId, 'hotelFolioCharges', c.id))
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('Error al deshacer check-in:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // Genera array de fechas ISO (YYYY-MM-DD) para cada noche entre checkIn y checkOut (exclusivo)
 const getNightDateRange = (checkInStr, checkOutStr) => {
   const dates = []
@@ -284,6 +309,13 @@ export const checkIn = async (businessId, reservationId, roomId) => {
               .map(c => c.date)
           )
 
+          // Personas adicionales: cargo por noche por cada huesped que supera los incluidos
+          // (snapshot guardado en la reserva). Se suma a la tarifa de cada noche del folio.
+          const ciBaseGuests = Number(reservation.baseGuests ?? 1)
+          const ciExtraGuestRate = Number(reservation.extraGuestRate ?? 0)
+          const ciExtraGuests = Math.max(0, (Number(reservation.guests) || 0) - ciBaseGuests)
+          const ciExtraPerNight = ciExtraGuests * ciExtraGuestRate
+
           const dates = getNightDateRange(checkInDate, checkOutDate)
           for (const date of dates) {
             if (existingDates.has(date)) continue
@@ -294,8 +326,8 @@ export const checkIn = async (businessId, reservationId, roomId) => {
               roomNumber,
               guestName,
               chargeType: 'room_night',
-              description: `Noche ${date}`,
-              amount: rate,
+              description: ciExtraGuests > 0 ? `Noche ${date} (+${ciExtraGuests} pers.)` : `Noche ${date}`,
+              amount: rate + ciExtraPerNight,
               date,
               createdBy: 'checkin',
               createdAt: serverTimestamp(),
@@ -544,8 +576,21 @@ export const runNightAudit = async (businessId, auditDate, performedBy) => {
       // Las reservas por hora se cobran una sola vez en check-in, no por noche.
       if (res.pricingMode === 'hourly') continue
 
-      // Calcular tarifa (aplicar temporada si existe)
+      // Evitar duplicar: las noches se agregan al folio al hacer check-in, así que si la
+      // noche de hoy ya está cargada, no se vuelve a cobrar.
+      const existingForRes = await getChargesByReservation(businessId, res.id)
+      const alreadyCharged = (existingForRes.data || []).some(c => c.chargeType === 'room_night' && c.date === today)
+      if (alreadyCharged) continue
+
+      // Calcular tarifa de la habitación (aplica temporada / fin de semana si existe)
       const rate = await getEffectiveRate(businessId, res.roomId, today, res.ratePerNight || 0)
+
+      // Personas adicionales: cobro por noche por cada huésped que supera los incluidos.
+      const baseGuests = Number(res.baseGuests ?? 1)
+      const extraGuestRate = Number(res.extraGuestRate ?? 0)
+      const extraGuests = Math.max(0, (Number(res.guests) || 0) - baseGuests)
+      const extraGuestAmount = extraGuests * extraGuestRate
+      const nightAmount = rate + extraGuestAmount
 
       const charge = {
         reservationId: res.id,
@@ -553,8 +598,8 @@ export const runNightAudit = async (businessId, auditDate, performedBy) => {
         roomNumber: res.roomNumber,
         guestName: res.guestName,
         chargeType: 'room_night',
-        description: `Noche ${today}`,
-        amount: rate,
+        description: extraGuests > 0 ? `Noche ${today} (+${extraGuests} pers.)` : `Noche ${today}`,
+        amount: nightAmount,
         date: today,
         createdBy: performedBy || 'night_audit',
         createdAt: serverTimestamp(),
@@ -654,15 +699,28 @@ export const getEffectiveRate = async (businessId, roomId, date, baseRate) => {
 
     const checkDate = new Date(date + 'T12:00:00')
     for (const season of ratesResult.data) {
-      const start = new Date(season.startDate + 'T00:00:00')
-      const end = new Date(season.endDate + 'T23:59:59')
-      if (checkDate >= start && checkDate <= end) {
-        // Verificar si aplica a esta habitación (o a todas)
-        if (season.roomIds && season.roomIds.length > 0 && !season.roomIds.includes(roomId)) continue
-        if (season.rateType === 'fixed') return season.rate
-        if (season.rateType === 'multiplier') return baseRate * season.rate
-        if (season.rateType === 'surcharge') return baseRate + season.rate
+      const hasDateRange = !!(season.startDate && season.endDate)
+      const hasDays = Array.isArray(season.daysOfWeek) && season.daysOfWeek.length > 0
+
+      // Una tarifa debe tener al menos rango de fechas o días de la semana.
+      if (!hasDateRange && !hasDays) continue
+
+      // Rango de fechas (opcional): si la tarifa lo tiene, la noche debe caer dentro.
+      if (hasDateRange) {
+        const start = new Date(season.startDate + 'T00:00:00')
+        const end = new Date(season.endDate + 'T23:59:59')
+        if (checkDate < start || checkDate > end) continue
       }
+
+      // Días de la semana (opcional): si la tarifa los tiene (0=Dom..6=Sáb),
+      // solo aplica cuando el día de la noche coincide. Así se manejan los fines de semana.
+      if (hasDays && !season.daysOfWeek.includes(checkDate.getDay())) continue
+
+      // Verificar si aplica a esta habitación (o a todas)
+      if (season.roomIds && season.roomIds.length > 0 && !season.roomIds.includes(roomId)) continue
+      if (season.rateType === 'fixed') return season.rate
+      if (season.rateType === 'multiplier') return baseRate * season.rate
+      if (season.rateType === 'surcharge') return baseRate + season.rate
     }
     return baseRate
   } catch (error) {

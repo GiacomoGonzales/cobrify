@@ -36,6 +36,8 @@ import {
   getReservations,
   getActiveReservations,
   updateReservation,
+  deleteReservation,
+  undoCheckIn,
   getRooms,
   checkIn,
   checkOut,
@@ -63,6 +65,7 @@ const reservationSchema = z.object({
   checkOutTime: z.string().optional(),
   ratePerNight: z.coerce.number().min(0, 'Tarifa inválida'),
   ratePerHour: z.coerce.number().min(0, 'Tarifa inválida').optional(),
+  guests: z.coerce.number().int().min(1).optional(),
   notes: z.string().optional(),
 })
 
@@ -99,15 +102,27 @@ function calculateHoursDiff(checkInDate, checkInTime, checkOutDate, checkOutTime
   return Math.ceil(diffMs / (1000 * 60 * 60))
 }
 
+// Parsea Timestamp / Date / string "YYYY-MM-DD" como fecha LOCAL (no UTC), para
+// evitar que una fecha se muestre un día antes en zonas con UTC negativo (Perú = UTC-5).
+function parseDateLocal(date) {
+  if (!date) return null
+  if (date.toDate) return date.toDate()
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date)) {
+    const [y, m, d] = date.slice(0, 10).split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  return new Date(date)
+}
+
 function formatDate(date) {
-  if (!date) return '-'
-  const d = date.toDate ? date.toDate() : new Date(date)
+  const d = parseDateLocal(date)
+  if (!d) return '-'
   return d.toLocaleDateString('es-PE', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 function isToday(date) {
-  if (!date) return false
-  const d = date.toDate ? date.toDate() : new Date(date)
+  const d = parseDateLocal(date)
+  if (!d) return false
   const today = new Date()
   return d.getFullYear() === today.getFullYear() &&
     d.getMonth() === today.getMonth() &&
@@ -179,6 +194,7 @@ export default function HotelReservations() {
       checkOutTime: '',
       ratePerNight: 0,
       ratePerHour: 0,
+      guests: 1,
       notes: '',
     },
   })
@@ -190,6 +206,7 @@ export default function HotelReservations() {
   const watchRate = watch('ratePerNight')
   const watchRateHour = watch('ratePerHour')
   const watchRoomId = watch('roomId')
+  const watchGuests = watch('guests')
   const watchDocType = watch('documentType')
   const watchDocNumber = watch('documentNumber')
 
@@ -218,9 +235,14 @@ export default function HotelReservations() {
 
   const nights = calculateNights(watchCheckIn, watchCheckOut)
   const hours = calculateHoursDiff(watchCheckIn, watchCheckInTime, watchCheckOut, watchCheckOutTime)
+  // Personas adicionales: se cobra por noche por cada huésped que supera los incluidos en la habitación.
+  const baseGuests = Number(selectedRoom?.baseGuests ?? 1)
+  const extraGuestRate = Number(selectedRoom?.extraGuestRate ?? 0)
+  const extraGuests = Math.max(0, (Number(watchGuests) || 0) - baseGuests)
+  const extraGuestNightly = nights * extraGuests * extraGuestRate
   const estimatedTotal = isHourlyMode
     ? hours * (watchRateHour || 0)
-    : nights * (watchRate || 0)
+    : nights * (watchRate || 0) + extraGuestNightly
 
   // Auto-cargar tarifa al seleccionar habitación. Cargamos ambos campos (rate per night/hour)
   // pero solo se usa el del modo activo. Editable para descuentos/promos.
@@ -387,13 +409,9 @@ export default function HotelReservations() {
   }, [reservations, activeTab, searchTerm])
 
   // Available rooms for form
-  const availableRooms = useMemo(() => {
-    const occupiedRoomIds = reservations
-      .filter(r => r.status === 'checked_in' || r.status === 'confirmed')
-      .filter(r => !editingReservation || r.id !== editingReservation.id)
-      .map(r => r.roomId)
-    return rooms.filter(r => !occupiedRoomIds.includes(r.id))
-  }, [rooms, reservations, editingReservation])
+  // Mostrar TODAS las habitaciones: una misma habitación puede reservarse para
+  // distintas fechas, así que no se filtran las que estén ocupadas/reservadas hoy.
+  const availableRooms = useMemo(() => rooms, [rooms])
 
   // Open create modal
   const openCreateModal = () => {
@@ -411,6 +429,7 @@ export default function HotelReservations() {
       checkOutTime: '',
       ratePerNight: 0,
       ratePerHour: 0,
+      guests: 1,
       notes: '',
     })
     setIsModalOpen(true)
@@ -437,6 +456,7 @@ export default function HotelReservations() {
       checkOutTime: reservation.checkOutTime || '',
       ratePerNight: reservation.ratePerNight || 0,
       ratePerHour: reservation.ratePerHour || 0,
+      guests: reservation.guests || 1,
       notes: reservation.notes || '',
     })
     // Sincronizar el toggle de modo con lo guardado en la reserva.
@@ -471,9 +491,15 @@ export default function HotelReservations() {
         setIsSaving(false)
         return
       }
-      const totalAmount = isHourly
+      // Personas adicionales (solo modo por noche)
+      const resBaseGuests = Number(room?.baseGuests ?? 1)
+      const resExtraGuestRate = Number(room?.extraGuestRate ?? 0)
+      const resGuests = Number(data.guests) || resBaseGuests
+      const resExtraGuests = isHourly ? 0 : Math.max(0, resGuests - resBaseGuests)
+      const extraGuestTotal = nightsCount * resExtraGuests * resExtraGuestRate
+      const totalAmount = (isHourly
         ? hoursCount * Number(data.ratePerHour || 0)
-        : nightsCount * Number(data.ratePerNight || 0)
+        : nightsCount * Number(data.ratePerNight || 0)) + extraGuestTotal
 
       // Mapear al formato que espera el service (guestDocument, checkIn, ...) manteniendo también los nombres del form
       const payload = {
@@ -507,6 +533,10 @@ export default function HotelReservations() {
         // Totals
         nights: nightsCount,
         ratePerNight: Number(data.ratePerNight || 0),
+        guests: resGuests,
+        baseGuests: resBaseGuests,
+        extraGuestRate: resExtraGuestRate,
+        extraGuestTotal,
         totalAmount,
         total: totalAmount,
         notes: data.notes || '',
@@ -777,6 +807,62 @@ export default function HotelReservations() {
   // Eliminar item del carrito
   const removeItemFromCart = (key) => {
     setPendingItems(prev => prev.filter(p => p.key !== key))
+  }
+
+  // Deshacer un check-in hecho por error (vuelve la reserva a "confirmada")
+  const handleUndoCheckIn = async () => {
+    if (!editingReservation) return
+    if (!window.confirm('¿Deshacer el check-in? La reserva volverá a "Confirmada" y se quitarán los cargos de noche agregados al ingresar (los consumos se conservan).')) return
+    if (isDemoMode) {
+      setReservations(prev => prev.map(r => r.id === editingReservation.id ? { ...r, status: 'confirmed' } : r))
+      toast.success('Check-in deshecho (DEMO)')
+      setIsModalOpen(false)
+      return
+    }
+    setIsSaving(true)
+    try {
+      const result = await undoCheckIn(getBusinessId(), editingReservation.id, editingReservation.roomId)
+      if (result.success) {
+        toast.success('Check-in deshecho')
+        setIsModalOpen(false)
+        loadData()
+      } else {
+        toast.error(result.error || 'Error al deshacer el check-in')
+      }
+    } catch (e) {
+      console.error('Error al deshacer check-in:', e)
+      toast.error('Error al deshacer el check-in')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Eliminar una reserva (ej. una de prueba)
+  const handleDeleteReservation = async () => {
+    if (!editingReservation) return
+    if (!window.confirm(`¿Eliminar la reserva de ${editingReservation.guestName}? Esta acción no se puede deshacer.`)) return
+    if (isDemoMode) {
+      setReservations(prev => prev.filter(r => r.id !== editingReservation.id))
+      toast.success('Reserva eliminada (DEMO)')
+      setIsModalOpen(false)
+      return
+    }
+    setIsSaving(true)
+    try {
+      const result = await deleteReservation(getBusinessId(), editingReservation.id)
+      if (result.success) {
+        toast.success('Reserva eliminada')
+        setIsModalOpen(false)
+        loadData()
+      } else {
+        toast.error(result.error || 'Error al eliminar la reserva')
+      }
+    } catch (e) {
+      console.error('Error al eliminar reserva:', e)
+      toast.error('Error al eliminar la reserva')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Agregar cargo manual al carrito (no al folio directo)
@@ -1428,6 +1514,21 @@ export default function HotelReservations() {
                     )}
                   </div>
                 </div>
+                {extraGuestRate > 0 && (
+                  <div>
+                    <Input
+                      label={`Huéspedes (incluye ${baseGuests}; persona extra S/ ${extraGuestRate.toFixed(2)}/noche)`}
+                      type="number"
+                      min="1"
+                      {...register('guests')}
+                    />
+                    {extraGuests > 0 && nights > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        + {extraGuests} persona{extraGuests > 1 ? 's' : ''} adicional{extraGuests > 1 ? 'es' : ''} × {nights} noche{nights > 1 ? 's' : ''} = {formatCurrency(extraGuestNightly)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             )}
             <div>
@@ -1442,22 +1543,36 @@ export default function HotelReservations() {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsModalOpen(false)}
-              disabled={isSaving}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Guardando...</>
-              ) : (
-                editingReservation ? 'Actualizar Reserva' : 'Crear Reserva'
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              {editingReservation && editingReservation.status === 'checked_in' && (
+                <Button type="button" variant="outline" onClick={handleUndoCheckIn} disabled={isSaving}>
+                  Deshacer check-in
+                </Button>
               )}
-            </Button>
+              {editingReservation && (
+                <Button type="button" variant="danger" onClick={handleDeleteReservation} disabled={isSaving}>
+                  <Trash2 className="w-4 h-4 mr-1" /> Eliminar
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsModalOpen(false)}
+                disabled={isSaving}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Guardando...</>
+                ) : (
+                  editingReservation ? 'Actualizar Reserva' : 'Crear Reserva'
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>
@@ -1679,9 +1794,9 @@ export default function HotelReservations() {
                       variant="outline"
                       size="sm"
                       onClick={addManualToCart}
-                      className="flex-shrink-0"
+                      className="flex-shrink-0 whitespace-nowrap"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-4 h-4 mr-1" /> Agregar
                     </Button>
                   </div>
                 </details>
