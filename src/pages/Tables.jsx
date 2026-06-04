@@ -783,8 +783,8 @@ export default function Tables() {
       posPath = '/demo/pos'
     }
 
-    // Cortesías no se incluyen en el comprobante (opción A1)
-    const billableSelected = (selectedItems || []).filter(it => !it.isCourtesy)
+    // Pasamos los items seleccionados incluyendo cortesías: el POS las jala como
+    // bonificación (precio 0, inafecto). No se cobran, pero quedan en el comprobante.
 
     navigate(posPath, {
       state: {
@@ -794,7 +794,7 @@ export default function Tables() {
         tableNumber: selectedTable.number,
         orderId: selectedOrder.id,
         orderNumber: selectedOrder.orderNumber,
-        items: billableSelected,
+        items: selectedItems || [],
         remainingItems: remainingItems,
         waiterId: selectedTable.waiterId || selectedOrder.waiterId || null,
         waiterName: selectedTable.waiter || selectedOrder.waiterName || null,

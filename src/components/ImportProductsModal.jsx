@@ -160,7 +160,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         return
       }
 
-      const hasRowPrice = !!(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE)
+      // Precio presente aunque sea 0 (producto de bonificacion/cortesia). No usar
+      // truthiness porque 0 es falsy: validar que el campo exista y no este vacio.
+      const hasRowPrice = [row.precio, row.Precio, row.PRECIO, row.price, row.Price, row.PRICE]
+        .some(v => v !== undefined && v !== null && String(v).trim() !== '')
       // Detectar si la fila lleva alguna variante con precio válido
       let hasVariantPrice = false
       const unnumberedPrice = parseFloat(row.variante_precio || row.Variante_Precio || row.VARIANTE_PRECIO || 0)

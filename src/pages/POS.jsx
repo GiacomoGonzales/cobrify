@@ -1257,18 +1257,41 @@ export default function POS() {
         }
       }
 
-      // Cargar items de la mesa al carrito (excluyendo cortesías: no van al comprobante)
+      // Cargar items de la mesa al carrito. Las cortesías (bonificación marcada en
+      // la mesa) se jalan como bonificación: precio 0, inafecto y etiqueta en el
+      // nombre, igual que un producto de catálogo con precio 0. Así el cajero las
+      // ve en el POS y se emiten como bonificación (no se cobran).
       if (tableInfo.items && tableInfo.items.length > 0) {
         const billableSourceItems = tableInfo.items.filter(item => !item.isCourtesy)
-        const cartItems = billableSourceItems.map(item => ({
-          ...item,
-          id: item.productId || item.id,
-          // Mantener todos los datos del item de la mesa
-        }))
+        const cartItems = tableInfo.items.map((item, idx) => {
+          if (!item.isCourtesy) {
+            return { ...item, id: item.productId || item.id }
+          }
+          const alreadyLabeled = (item.name || '').includes('(BONIFICACIÓN)')
+          const bonif = {
+            ...item,
+            id: item.productId || item.id,
+            cartId: `mesa-bonif-${idx}`, // id único: evita fusionarse con un item facturable del mismo producto
+            price: 0,
+            basePrice: 0,
+            total: 0,
+            isBonificacion: true,
+            taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
+            name: alreadyLabeled ? item.name : `${item.name} (BONIFICACIÓN)`,
+          }
+          // No arrastrar las marcas de cortesía de la mesa al comprobante
+          delete bonif.originalPrice
+          delete bonif.originalTotal
+          delete bonif.isCourtesy
+          delete bonif.courtesyReason
+          delete bonif.courtesyMarkedAt
+          delete bonif.courtesyMarkedBy
+          return bonif
+        })
         setCart(cartItems)
         const courtesyCount = tableInfo.items.length - billableSourceItems.length
         const toastMsg = courtesyCount > 0
-          ? `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items (${courtesyCount} cortesía${courtesyCount > 1 ? 's' : ''} omitida${courtesyCount > 1 ? 's' : ''} del comprobante)`
+          ? `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items (${courtesyCount} bonificación${courtesyCount > 1 ? 'es' : ''})`
           : `Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`
         toast.success(toastMsg)
 

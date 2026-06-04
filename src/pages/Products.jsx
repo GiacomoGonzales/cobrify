@@ -2165,7 +2165,7 @@ export default function Products() {
             // Actualizar campos editables si vienen en el Excel
             if (product.name) updates.name = product.name
             if (product.description) updates.description = product.description
-            if (product.price != null && !isNaN(product.price) && product.price > 0) updates.price = product.price
+            if (product.price != null && !isNaN(product.price) && product.price >= 0) updates.price = product.price
             if (product.cost != null) updates.cost = product.cost
             if (product.price2 !== undefined) updates.price2 = product.price2
             if (product.price3 !== undefined) updates.price3 = product.price3

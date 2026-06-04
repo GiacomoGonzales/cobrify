@@ -48,9 +48,9 @@ export default function CloseTableModal({
       posPath = '/demo/pos'
     }
 
-    // Filtrar items de cortesía: NO se incluyen en la boleta/factura (opción A1)
-    // Se conservan en la orden para auditoría, pero el comprobante refleja solo lo cobrado.
-    const billableItems = (order.items || []).filter(it => !it.isCourtesy)
+    // Pasamos TODOS los items al POS, incluidas las cortesías: el POS las jala
+    // como bonificación (precio 0, inafecto + etiqueta). Los totales de la orden
+    // ya tienen las cortesías en 0, así que el monto a cobrar no cambia.
 
     // Redirigir al POS con los datos de la orden
     navigate(posPath, {
@@ -60,7 +60,7 @@ export default function CloseTableModal({
         tableNumber: table.number,
         orderId: order.id,
         orderNumber: order.orderNumber,
-        items: billableItems,
+        items: order.items || [],
         subtotal: order.subtotal,
         tax: order.tax,
         total: order.total,
