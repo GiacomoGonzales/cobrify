@@ -147,6 +147,12 @@ export const createReservation = async (businessId, reservationData) => {
       roomName: reservationData.roomName || '',
       nights: reservationData.nights || 0,
       ratePerNight: reservationData.ratePerNight || 0,
+      // Personas adicionales: snapshot para que el folio (check-in) y la auditoria
+      // puedan cobrar la persona extra por noche.
+      guests: Number(reservationData.guests) || Number(reservationData.baseGuests) || 1,
+      baseGuests: Number(reservationData.baseGuests) || 1,
+      extraGuestRate: Number(reservationData.extraGuestRate) || 0,
+      extraGuestTotal: Number(reservationData.extraGuestTotal) || 0,
       totalAmount,
       total: totalAmount,
       status: 'confirmed', // confirmed, checked_in, checked_out, cancelled, no_show
@@ -491,6 +497,11 @@ export const getChargesByReservation = async (businessId, reservationId) => {
     const charges = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() }))
       .sort((a, b) => {
+        // Orden cronologico por la fecha del cargo (YYYY-MM-DD ordena bien como texto).
+        // Para cargos de la misma fecha, respetar el orden de creacion.
+        const aDate = a.date || ''
+        const bDate = b.date || ''
+        if (aDate !== bDate) return aDate < bDate ? -1 : 1
         const aTime = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() ?? 0
         const bTime = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() ?? 0
         return aTime - bTime
