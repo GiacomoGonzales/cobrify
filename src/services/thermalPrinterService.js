@@ -3,6 +3,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
 import { getPricedModifiers } from '@/utils/modifierHelpers';
+import { unitDisplayName } from '@/data/sunatUnits';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -500,6 +501,8 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
       cutFeedLines: printerConfig.cutFeedLines ?? 5, // Líneas de avance antes del corte
       ultraCompactKitchen: printerConfig.ultraCompactKitchen || false, // Comandas ultracompactas
+      a4SheetPrint: printerConfig.a4SheetPrint || false, // Imprimir en hoja A4 (impresoras de tinta/laser, no termicas)
+      showItemUnit: printerConfig.showItemUnit || false, // Mostrar unidad/presentacion antes de cada producto en el ticket
       updatedAt: new Date().toISOString()
     };
 
@@ -632,7 +635,7 @@ const addSeparator = (printer, separator, paperWidth, currentAlign = 'left') => 
  * @param {Object} business - Datos del negocio
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => {
+export const printInvoiceTicket = async (invoice, business, paperWidth = 58, showItemUnit = false) => {
   const isNative = Capacitor.isNativePlatform();
 
   // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
@@ -695,6 +698,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     for (const item of invoice.items || []) {
       // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
       const itemName = convertSpanishText(item.name || item.description || '');
+      // Columna opcional de unidad/presentacion: "{cantidad} {UNIDAD/CAJA}  " antes del nombre.
+      // Si el item tiene presentacion (ej. CAJA) se muestra esa; si no, la unidad del producto
+      // convertida a nombre legible (NIU -> UNIDAD).
+      const measureUnit = convertSpanishText(item.presentationName ? item.presentationName.toString().toUpperCase() : unitDisplayName(item.unit));
+      const qtyForUnit = Number.isInteger(item.quantity) ? item.quantity.toString() : (item.quantity || 0).toFixed(3).replace(/\.?0+$/, '');
+      const namePrefix = showItemUnit ? `${qtyForUnit} ${measureUnit}  ` : '';
       // Observaciones adicionales (IMEI, placa, serie, etc.)
       const itemObservations = item.observations
         ? convertSpanishText(item.observations)
@@ -724,8 +733,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
       if (paperWidth === 80) {
         // FORMATO 80MM - EXACTAMENTE IGUAL AL WEB
-        // Línea 1: Nombre del producto completo
-        itemsText += `${itemName}\n`;
+        // Línea 1: Nombre del producto completo (con unidad/presentacion opcional)
+        itemsText += `${namePrefix}${itemName}\n`;
 
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
@@ -782,8 +791,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         });
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
-        // Línea 1: Nombre del producto completo
-        itemsText += `${itemName}\n`;
+        // Línea 1: Nombre del producto completo (con unidad/presentacion opcional)
+        itemsText += `${namePrefix}${itemName}\n`;
 
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero

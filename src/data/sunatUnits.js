@@ -159,4 +159,27 @@ export function normalizeSunatUnit(input) {
   return 'NIU'
 }
 
+// Mapa codigo SUNAT -> nombre legible (ej. 'NIU' -> 'UNIDAD', 'KGM' -> 'KILOGRAMO')
+const CODE_TO_NAME = SUNAT_UNITS.reduce((acc, u) => {
+  const name = (u.label.split(' - ')[1] || u.value).trim()
+  acc[u.value.toUpperCase()] = name.toUpperCase()
+  return acc
+}, {})
+
+/**
+ * Nombre legible de una unidad para mostrar en tickets/documentos.
+ * Si recibe un codigo SUNAT (NIU, KGM, BX...) devuelve su nombre (UNIDAD, KILOGRAMO, CAJA).
+ * Si recibe texto ya legible o custom (UNIDAD, CAJA, SACO...) lo devuelve tal cual en mayusculas.
+ *   unitDisplayName('NIU')    -> 'UNIDAD'
+ *   unitDisplayName('UNIDAD') -> 'UNIDAD'
+ *   unitDisplayName('CAJA')   -> 'CAJA'
+ */
+export function unitDisplayName(input) {
+  if (!input) return 'UNIDAD'
+  const raw = String(input).trim()
+  if (!raw) return 'UNIDAD'
+  const upper = raw.toUpperCase()
+  return CODE_TO_NAME[upper] || upper
+}
+
 export default SUNAT_UNITS

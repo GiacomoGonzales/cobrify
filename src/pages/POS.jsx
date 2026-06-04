@@ -618,6 +618,7 @@ export default function POS() {
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
+  const [showItemUnit, setShowItemUnit] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Price editing
@@ -1217,6 +1218,7 @@ export default function POS() {
           setPrintMargins(printerConfigResult.config.printMargins ?? 8)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
           setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
+          setShowItemUnit(printerConfigResult.config.showItemUnit || false)
           setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
         }
       } catch (error) {
@@ -6085,7 +6087,7 @@ export default function POS() {
               toast.info('Usando impresión estándar...')
             } else {
               // Imprimir en impresora térmica (80mm por defecto)
-              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80)
+              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false)
 
               if (result.success) {
                 toast.success('Comprobante impreso en ticketera')
@@ -10187,6 +10189,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             printMargins={printMargins}
             simplePrint={simplePrint}
             a4SheetPrint={a4SheetPrint}
+            showItemUnit={showItemUnit}
           />
         </div>
       )}

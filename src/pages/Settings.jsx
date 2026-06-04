@@ -8507,6 +8507,22 @@ export default function Settings() {
                 description="Para impresoras de hoja completa (ej. EPSON L5190) que imprimen por WiFi vía su app. El ticket y la comanda salen chicos y legibles en una hoja A4, sin agrandarse. Déjalo APAGADO si usas una impresora térmica de 58/80mm."
               />
 
+              {/* Mostrar unidad de medida / presentacion en el ticket */}
+              <SettingToggle
+                checked={printerConfig.showItemUnit || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    showItemUnit: e.target.checked,
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Unidad de medida activada en el ticket' : 'Unidad de medida desactivada')
+                }}
+                title="Mostrar unidad de medida en el ticket"
+                description="Antepone la cantidad y la unidad (o la presentación) a cada producto del ticket de venta. Ej: '1 UNIDAD Producto' o '3 CAJA Producto'."
+              />
+
               {/* Márgenes laterales para impresión */}
               <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
                 <div className="flex-1">

@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
+import { unitDisplayName } from '@/data/sunatUnits'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -15,7 +16,7 @@ import { formatPricedModifierLines } from '@/utils/modifierHelpers'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -827,6 +828,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
             const itemName = item.name || item.description || '';
+            // Unidad de medida / presentacion para la columna opcional del ticket:
+            // si el item tiene presentacion (ej. CAJA) se muestra esa; si no, la unidad del producto
+            // convertida a nombre legible (NIU -> UNIDAD).
+            const measureUnit = item.presentationName
+              ? item.presentationName.toString().toUpperCase()
+              : unitDisplayName(item.unit);
             // Observaciones adicionales (IMEI, placa, serie, etc.)
             const itemObservations = item.observations || null;
             // Descuento por ítem
@@ -835,7 +842,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
             return (
               <div key={index} className="item-row">
-                <div className="item-desc">{itemName}</div>
+                <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ` : ''}{itemName}</div>
                 <div className="item-details">
                   <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>
