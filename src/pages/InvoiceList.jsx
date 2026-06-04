@@ -3509,6 +3509,10 @@ Gracias por tu preferencia.`
 
             {/* ========== INFO VENTA ========== */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 uppercase">Fecha de Emisión</p>
+                <p className="font-medium text-gray-900 mt-1">{formatDate(getInvoiceDate(viewingInvoice))}</p>
+              </div>
               {viewingInvoice.sellerName && (
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-500 uppercase">Vendedor</p>
@@ -3624,7 +3628,11 @@ Gracias por tu preferencia.`
                         {item.batchNumber && (
                           <p className="text-xs text-blue-600 mt-1">
                             Lote: {item.batchNumber}
-                            {item.batchExpiryDate && ` • Venc: ${item.batchExpiryDate?.toDate ? item.batchExpiryDate.toDate().toLocaleDateString('es-PE') : new Date(item.batchExpiryDate).toLocaleDateString('es-PE')}`}
+                            {(() => {
+                              if (!item.batchExpiryDate) return null
+                              const d = item.batchExpiryDate?.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)
+                              return isNaN(d.getTime()) ? null : ` • Venc: ${d.toLocaleDateString('es-PE')}`
+                            })()}
                           </p>
                         )}
                         {item.observations && <p className="text-xs text-gray-500 mt-1 italic">{item.observations}</p>}
