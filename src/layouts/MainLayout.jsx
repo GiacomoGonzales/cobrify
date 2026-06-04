@@ -357,9 +357,14 @@ export default function MainLayout() {
   // Iniciar listener de Yape automáticamente (solo en APK Android)
   useYapeListener()
 
-  // Cargar WhatsApp del vendedor si tiene uno asignado
+  // ¿El usuario superó su límite mensual de comprobantes? (incluye el bono; admins excluidos)
+  const _invMonthlyLimit = subscription?.limits?.maxInvoicesPerMonth
+  const overInvoiceLimit = !isAdmin && typeof _invMonthlyLimit === 'number' && _invMonthlyLimit !== -1 &&
+    (subscription?.usage?.invoicesThisMonth || 0) >= (_invMonthlyLimit + (subscription?.bonusInvoices || 0))
+
+  // Cargar WhatsApp del vendedor si tiene uno asignado (para banners de gracia / límite)
   useEffect(() => {
-    if (subscription?.vendedorId && isInGracePeriod) {
+    if (subscription?.vendedorId && (isInGracePeriod || overInvoiceLimit)) {
       getVendedor(subscription.vendedorId).then(result => {
         if (result.success && result.data?.phone) {
           setVendedorWhatsApp(result.data.phone)
@@ -368,7 +373,7 @@ export default function MainLayout() {
     } else {
       setVendedorWhatsApp(null)
     }
-  }, [subscription?.vendedorId, isInGracePeriod])
+  }, [subscription?.vendedorId, isInGracePeriod, overInvoiceLimit])
 
   // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
   useEffect(() => {
@@ -570,6 +575,25 @@ export default function MainLayout() {
           >
             <MessageCircle className="w-3.5 h-3.5" />
             Renovar
+          </a>
+        </div>
+      )}
+
+      {/* Banner de límite de comprobantes superado (NO bloquea el envío a SUNAT) */}
+      {overInvoiceLimit && (
+        <div className={`bg-red-500 text-white px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 text-sm ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">Has superado tu límite de envíos a SUNAT este mes. Comunícate con nosotros para ampliarlo.</span>
+          </div>
+          <a
+            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, superé mi límite de comprobantes en Cobrify y quiero ampliarlo. Mi email es ${user?.email || ''}.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            Contactar
           </a>
         </div>
       )}

@@ -584,27 +584,9 @@ export const sendInvoiceToSunat = onRequest(
 
             // Si hay límite (no es -1 = ilimitado) y ya lo alcanzó
             if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
-              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
-
-              await invoiceRef.update({
-                sunatStatus: 'rejected',
-                sunatResponse: {
-                  code: 'LIMIT_EXCEEDED',
-                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
-                  observations: ['Actualiza tu plan para emitir más comprobantes'],
-                  error: true,
-                  method: 'validation'
-                },
-                updatedAt: FieldValue.serverTimestamp(),
-              })
-
-              res.status(400).json({
-                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
-                currentUsage,
-                maxInvoices,
-                message: 'Actualiza tu plan para emitir más comprobantes'
-              })
-              return
+              // Límite superado: NO bloquear el envío. Se permite emitir y el cliente
+              // muestra un aviso (banner) para que el usuario nos contacte y lo amplíe.
+              console.log(`⚠️ Límite superado (${currentUsage}/${maxInvoices}) — se permite el envío`)
             }
 
             console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
@@ -1374,27 +1356,9 @@ export const sendCreditNoteToSunat = onRequest(
             const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
 
             if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
-              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
-
-              await creditNoteRef.update({
-                sunatStatus: 'rejected',
-                sunatResponse: {
-                  code: 'LIMIT_EXCEEDED',
-                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
-                  observations: ['Actualiza tu plan para emitir más comprobantes'],
-                  error: true,
-                  method: 'validation'
-                },
-                updatedAt: FieldValue.serverTimestamp(),
-              })
-
-              res.status(400).json({
-                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
-                currentUsage,
-                maxInvoices,
-                message: 'Actualiza tu plan para emitir más comprobantes'
-              })
-              return
+              // Límite superado: NO bloquear el envío. Se permite emitir y el cliente
+              // muestra un aviso (banner) para que el usuario nos contacte y lo amplíe.
+              console.log(`⚠️ Límite superado (${currentUsage}/${maxInvoices}) — se permite el envío`)
             }
 
             console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
@@ -2053,27 +2017,9 @@ export const sendDebitNoteToSunat = onRequest(
             const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
 
             if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
-              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
-
-              await debitNoteRef.update({
-                sunatStatus: 'rejected',
-                sunatResponse: {
-                  code: 'LIMIT_EXCEEDED',
-                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
-                  observations: ['Actualiza tu plan para emitir más comprobantes'],
-                  error: true,
-                  method: 'validation'
-                },
-                updatedAt: FieldValue.serverTimestamp(),
-              })
-
-              res.status(400).json({
-                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
-                currentUsage,
-                maxInvoices,
-                message: 'Actualiza tu plan para emitir más comprobantes'
-              })
-              return
+              // Límite superado: NO bloquear el envío. Se permite emitir y el cliente
+              // muestra un aviso (banner) para que el usuario nos contacte y lo amplíe.
+              console.log(`⚠️ Límite superado (${currentUsage}/${maxInvoices}) — se permite el envío`)
             }
 
             console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
