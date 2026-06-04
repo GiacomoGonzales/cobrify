@@ -1248,16 +1248,16 @@ export default function Products() {
               // Ya tenía control de stock - mantener stock actual
               // Solo actualizar initialStock si el usuario es business_owner y lo modificó
               if (user?.role === 'business_owner' && data.initialStock !== '') {
-                productData.initialStock = parseInt(data.initialStock)
+                productData.initialStock = parseFloat(data.initialStock)
               }
             }
           } else {
             // Al crear, calcular stock total sumando todos los almacenes
             const warehouseStocksArray = Object.entries(warehouseInitialStocks)
-              .filter(([_, qty]) => qty && parseInt(qty) > 0)
+              .filter(([_, qty]) => qty && parseFloat(qty) > 0)
               .map(([warehouseId, qty]) => ({
                 warehouseId,
-                stock: parseInt(qty),
+                stock: parseFloat(qty),
                 minStock: 0
               }))
 
@@ -1269,7 +1269,7 @@ export default function Products() {
               productData.warehouseStocks = warehouseStocksArray
             } else {
               // Fallback: si no hay almacenes o no se ingresó stock por almacén, usar el campo simple
-              const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
+              const initialStockValue = data.initialStock === '' ? null : parseFloat(data.initialStock)
               productData.stock = initialStockValue
               productData.initialStock = initialStockValue
               productData.warehouseStocks = []
@@ -6208,6 +6208,7 @@ export default function Products() {
                   <Input
                     label="Stock Inicial"
                     type="number"
+                    step={allowDecimalQuantity ? 'any' : '1'}
                     placeholder="0"
                     error={errors.initialStock?.message}
                     {...register('initialStock')}
@@ -6237,6 +6238,7 @@ export default function Products() {
                             <input
                               type="number"
                               min="0"
+                              step={allowDecimalQuantity ? 'any' : '1'}
                               placeholder="0"
                               value={warehouseInitialStocks[wh.id] || ''}
                               onChange={(e) => setWarehouseInitialStocks(prev => ({
@@ -6251,11 +6253,11 @@ export default function Products() {
                       ))}
                     </div>
                     {/* Total */}
-                    {Object.values(warehouseInitialStocks).some(v => v && parseInt(v) > 0) && (
+                    {Object.values(warehouseInitialStocks).some(v => v && parseFloat(v) > 0) && (
                       <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
                         <span className="text-sm font-medium text-gray-700">Stock Total:</span>
                         <span className="text-sm font-bold text-primary-600">
-                          {Object.values(warehouseInitialStocks).reduce((sum, v) => sum + (parseInt(v) || 0), 0)} unidades
+                          {Object.values(warehouseInitialStocks).reduce((sum, v) => sum + (parseFloat(v) || 0), 0)} unidades
                         </span>
                       </div>
                     )}
@@ -6267,6 +6269,7 @@ export default function Products() {
                   <Input
                     label="Stock Inicial"
                     type="number"
+                    step={allowDecimalQuantity ? 'any' : '1'}
                     placeholder="0"
                     error={errors.initialStock?.message}
                     {...register('initialStock')}

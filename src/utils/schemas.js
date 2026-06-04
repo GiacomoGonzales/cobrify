@@ -89,7 +89,7 @@ export const customerSchema = z.object({
 // Schema para stock por almacén
 export const warehouseStockSchema = z.object({
   warehouseId: z.string().min(1, 'ID de almacén es requerido'),
-  stock: z.number().int().nonnegative('El stock no puede ser negativo'),
+  stock: z.number().nonnegative('El stock no puede ser negativo'),
   minStock: z.number().int().nonnegative('El stock mínimo no puede ser negativo').optional(),
 })
 
@@ -246,12 +246,12 @@ export const productSchema = z.object({
   category: z.string().optional(),
   stock: z
     .union([
-      z.number().int().nonnegative('El stock no puede ser negativo'),
+      z.number().nonnegative('El stock no puede ser negativo'),
       z
         .string()
         .transform(val => {
           if (val === '' || val === null || val === undefined) return null
-          const num = parseInt(val)
+          const num = parseFloat(val)
           return isNaN(num) ? null : num
         })
         .nullable(),
@@ -260,12 +260,12 @@ export const productSchema = z.object({
     .optional(),
   initialStock: z
     .union([
-      z.number().int().nonnegative('El stock inicial no puede ser negativo'),
+      z.number().nonnegative('El stock inicial no puede ser negativo'),
       z
         .string()
         .transform(val => {
           if (val === '' || val === null || val === undefined) return null
-          const num = parseInt(val)
+          const num = parseFloat(val)
           return isNaN(num) ? null : num
         })
         .nullable(),
