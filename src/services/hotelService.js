@@ -36,6 +36,9 @@ export const createRoom = async (businessId, roomData) => {
       pricingMode: roomData.pricingMode === 'hourly' ? 'hourly' : 'nightly',
       status: 'available', // available, occupied, cleaning, maintenance
       capacity: roomData.capacity || 1,
+      // Persona adicional (se descartaba al crear por la lista fija de campos)
+      baseGuests: Number(roomData.baseGuests) || 1,
+      extraGuestRate: Number(roomData.extraGuestRate) || 0,
       amenities: roomData.amenities || '',
       notes: roomData.notes || '',
       createdAt: serverTimestamp(),
