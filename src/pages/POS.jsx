@@ -307,6 +307,14 @@ export default function POS() {
     if (allowedPaymentMethods && allowedPaymentMethods.length === 1) {
       return PAYMENT_METHOD_ID_TO_KEY[allowedPaymentMethods[0]] || ''
     }
+    // Método de pago por defecto configurado por el negocio (Configuración > Ventas),
+    // solo si está permitido para este usuario.
+    const configured = companySettings?.defaultPaymentMethod
+    if (configured && PAYMENT_METHODS[configured]) {
+      const allowedOk = !allowedPaymentMethods || allowedPaymentMethods.length === 0
+        || allowedPaymentMethods.map(id => PAYMENT_METHOD_ID_TO_KEY[id]).includes(configured)
+      if (allowedOk) return configured
+    }
     return ''
   }
 
@@ -517,6 +525,22 @@ export default function POS() {
 
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: getDefaultPaymentMethod(), amount: '' }])
+
+  // companySettings llega async; al montar aún no estaba listo. Cuando carga, aplicar el
+  // método de pago por defecto configurado SI el formulario sigue pristino (sin borrador/
+  // edición). Los reinicios (Nueva Venta) ya lo aplican vía getDefaultPaymentMethod.
+  useEffect(() => {
+    const configured = companySettings?.defaultPaymentMethod
+    if (!configured || !PAYMENT_METHODS[configured]) return
+    const allowedOk = !allowedPaymentMethods || allowedPaymentMethods.length === 0
+      || allowedPaymentMethods.map(id => PAYMENT_METHOD_ID_TO_KEY[id]).includes(configured)
+    if (!allowedOk) return
+    setPayments(prev => (
+      prev.length === 1 && prev[0].method === '' && !prev[0].amount
+        ? [{ ...prev[0], method: configured }]
+        : prev
+    ))
+  }, [companySettings])
 
   // Hotel: habitaciones ocupadas y selección de habitación para cargo
   const [occupiedRooms, setOccupiedRooms] = useState([])

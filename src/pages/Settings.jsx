@@ -344,6 +344,7 @@ export default function Settings() {
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('') // '' = ninguno; o CASH/CARD/TRANSFER/YAPE/PLIN
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
@@ -1144,6 +1145,7 @@ export default function Settings() {
         // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
+        setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
 
@@ -4518,6 +4520,41 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Método de pago por defecto en POS */}
+                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">
+                        Método de pago por defecto en POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Aparecerá seleccionado al abrir el Punto de Venta. El cajero puede cambiarlo en cualquier momento.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { key: '', label: 'Ninguno' },
+                          { key: 'CASH', label: 'Efectivo' },
+                          { key: 'CARD', label: 'Tarjeta' },
+                          { key: 'TRANSFER', label: 'Transferencia' },
+                          { key: 'YAPE', label: 'Yape' },
+                          { key: 'PLIN', label: 'Plin' },
+                        ].map(opt => (
+                          <button
+                            key={opt.key || 'none'}
+                            type="button"
+                            onClick={() => setDefaultPaymentMethod(opt.key)}
+                            className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                              defaultPaymentMethod === opt.key
+                                ? 'border-primary-500 bg-primary-50 text-primary-700'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <span className="text-sm font-medium">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -5071,6 +5108,7 @@ export default function Settings() {
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
                       defaultDocumentType: defaultDocumentType,
+                      defaultPaymentMethod: defaultPaymentMethod || '',
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
