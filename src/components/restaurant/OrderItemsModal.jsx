@@ -68,6 +68,10 @@ export default function OrderItemsModal({
   // Cargar productos
   useEffect(() => {
     if (isOpen) {
+      // Siempre abrir mostrando la lista de productos, no el carrito. Sin esto, si el
+      // usuario cierra el modal con el carrito abierto (via "Agregar items"), al reabrir
+      // veria el carrito primero porque el componente no se desmonta.
+      setShowMobileCart(false)
       loadProducts()
     }
   }, [isOpen])
