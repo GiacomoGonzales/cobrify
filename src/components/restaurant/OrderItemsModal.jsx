@@ -143,7 +143,8 @@ export default function OrderItemsModal({
 
   // Filtrar productos por búsqueda y categoría
   useEffect(() => {
-    let filtered = products
+    // Excluir productos desactivados (isActive === false) en cualquier origen (incl. demo).
+    let filtered = products.filter((p) => p.isActive !== false)
 
     // Filtrar por categoría
     if (selectedCategory !== 'Todos') {
@@ -225,7 +226,9 @@ export default function OrderItemsModal({
         // En modo normal, cargar desde Firebase
         const result = await getProducts(businessId)
         if (result.success) {
-          const allProducts = result.data || []
+          // Excluir productos desactivados (isActive === false), igual que el POS, para que
+          // los mozos no puedan agregar a la mesa productos que estan ocultos del catalogo.
+          const allProducts = (result.data || []).filter((p) => p.isActive !== false)
           setProducts(allProducts)
           setFilteredProducts(allProducts)
 
