@@ -59,7 +59,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         name: invoice.customer.name || invoice.customerName || 'VARIOS',
         businessName: invoice.customer.businessName || invoice.customerBusinessName || '-',
         address: invoice.customer.address || invoice.customerAddress || '',
-        phone: invoice.customer.phone || invoice.customerPhone || ''
+        phone: invoice.customer.phone || invoice.customerPhone || '',
+        code: invoice.customer.code || invoice.customerCode || ''
       }
     }
     // Si no, usar la estructura plana
@@ -68,7 +69,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       name: invoice.customerName || 'VARIOS',
       businessName: invoice.customerBusinessName || '-',
       address: invoice.customerAddress || '',
-      phone: invoice.customerPhone || ''
+      phone: invoice.customerPhone || '',
+      code: invoice.customerCode || ''
     }
   }
 
@@ -707,6 +709,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
         <div className="ticket-section">
           <div className="section-title">DATOS DEL CLIENTE</div>
+
+          {customerData.code && (
+            <div className="info-row">
+              <span className="info-label">Cod. Cliente:</span>
+              <span>{customerData.code}</span>
+            </div>
+          )}
 
           {(invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
             <>

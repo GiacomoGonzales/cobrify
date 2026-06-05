@@ -5146,6 +5146,7 @@ export default function POS() {
                 ? (customerData.businessName || customerData.name || 'Cliente')
                 : (customerData.name || customerData.businessName || 'Cliente'),
               businessName: customerData.businessName || '',
+              code: selectedCustomer?.code || '',
               email: customerData.email || '',
               phone: customerData.phone || '',
               address: customerData.address || '',

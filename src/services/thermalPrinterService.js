@@ -1010,6 +1010,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         .text('DATOS DEL CLIENTE\n')
         .clearFormatting();
 
+      // Codigo de cliente (solo si el cliente lo tiene configurado)
+      if (invoice.customer?.code) {
+        printer = printer.text(convertSpanishText(`Cod. Cliente: ${invoice.customer.code}\n`));
+      }
+
       if (invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
         // Para boletas y notas de venta - DNI, Nombre, Dirección y Teléfono (si existe)
         const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
@@ -2424,6 +2429,11 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .text('DATOS DEL CLIENTE')
       .newLine()
       .bold(false);
+
+    // Codigo de cliente (solo si el cliente lo tiene configurado)
+    if (invoice.customer?.code) {
+      builder.text(`Cod. Cliente: ${invoice.customer.code}`).newLine();
+    }
 
     if (isInvoice) {
       builder.text(`RUC: ${invoice.customer?.documentNumber || '-'}`).newLine()
