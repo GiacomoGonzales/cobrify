@@ -265,6 +265,79 @@ const getNightDateRange = (checkInStr, checkOutStr) => {
   return dates
 }
 
+// Genera los cargos de la estadia (noches o estadia por hora) en el folio sin hacer
+// check-in. Idempotente: no duplica si ya existen. Sirve para emitir la boleta de una
+// reserva pagada por adelantado. El check-in posterior salta las noches ya creadas.
+export const ensureRoomNightCharges = async (businessId, reservationId, roomId) => {
+  try {
+    const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
+    const reservationSnap = await getDoc(reservationRef)
+    if (!reservationSnap.exists()) return { success: false, error: 'Reserva no encontrada' }
+    const reservation = reservationSnap.data()
+    const rid = roomId || reservation.roomId
+    const checkInDate = reservation.checkIn || reservation.checkInDate
+    const checkOutDate = reservation.checkOut || reservation.checkOutDate
+    const guestName = reservation.guestName || ''
+    const roomNumber = reservation.roomNumber || ''
+    const pricingMode = reservation.pricingMode === 'hourly' ? 'hourly' : 'nightly'
+    const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
+
+    if (pricingMode === 'hourly') {
+      const hours = Number(reservation.hours || 0)
+      const ratePerHour = Number(reservation.ratePerHour || 0)
+      const totalAmount = Number(reservation.totalAmount || reservation.total || hours * ratePerHour)
+      if (hours > 0 && totalAmount > 0) {
+        const existingResult = await getChargesByReservation(businessId, reservationId)
+        const hasHourlyCharge = (existingResult.data || []).some(c => c.chargeType === 'room_hourly')
+        if (!hasHourlyCharge) {
+          const ciTime = reservation.checkInTime || ''
+          const coTime = reservation.checkOutTime || ''
+          const timeRange = ciTime && coTime ? ` (${ciTime} - ${coTime})` : ''
+          await addDoc(chargesRef, {
+            reservationId, roomId: rid, roomNumber, guestName,
+            chargeType: 'room_hourly',
+            description: `Estadía ${hours} hora${hours !== 1 ? 's' : ''}${timeRange}`,
+            amount: totalAmount,
+            date: checkInDate || new Date().toISOString().split('T')[0],
+            createdBy: 'reserva',
+            createdAt: serverTimestamp(),
+          })
+        }
+      }
+    } else {
+      const baseRate = Number(reservation.ratePerNight || 0)
+      if (checkInDate && checkOutDate && baseRate > 0) {
+        const existingResult = await getChargesByReservation(businessId, reservationId)
+        const existingDates = new Set(
+          (existingResult.data || []).filter(c => c.chargeType === 'room_night').map(c => c.date)
+        )
+        const ciBaseGuests = Number(reservation.baseGuests ?? 1)
+        const ciExtraGuestRate = Number(reservation.extraGuestRate ?? 0)
+        const ciExtraGuests = Math.max(0, (Number(reservation.guests) || 0) - ciBaseGuests)
+        const ciExtraPerNight = ciExtraGuests * ciExtraGuestRate
+        const dates = getNightDateRange(checkInDate, checkOutDate)
+        for (const date of dates) {
+          if (existingDates.has(date)) continue
+          const rate = await getEffectiveRate(businessId, rid, date, baseRate)
+          await addDoc(chargesRef, {
+            reservationId, roomId: rid, roomNumber, guestName,
+            chargeType: 'room_night',
+            description: ciExtraGuests > 0 ? `Noche ${date} (+${ciExtraGuests} pers.)` : `Noche ${date}`,
+            amount: rate + ciExtraPerNight,
+            date,
+            createdBy: 'reserva',
+            createdAt: serverTimestamp(),
+          })
+        }
+      }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('Error al generar cargos de la estadia:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export const checkIn = async (businessId, reservationId, roomId) => {
   try {
     // Obtener datos de la reserva para generar cargos (por noche o por hora)

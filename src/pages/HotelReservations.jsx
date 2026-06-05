@@ -41,6 +41,7 @@ import {
   getRooms,
   checkIn,
   checkOut,
+  ensureRoomNightCharges,
   addCharge,
   getChargesByReservation,
   getReservationTotal,
@@ -413,6 +414,20 @@ export default function HotelReservations() {
   // distintas fechas, así que no se filtran las que estén ocupadas/reservadas hoy.
   const availableRooms = useMemo(() => rooms, [rooms])
 
+  // Fechas ya reservadas (confirmadas o con check-in) de la habitación seleccionada,
+  // para avisar al operador y evitar doble reserva. Solo reservas por noche.
+  const selectedRoomBookings = useMemo(() => {
+    if (!selectedRoom) return []
+    return reservations
+      .filter(r => r.roomId === selectedRoom.id)
+      .filter(r => r.status === 'confirmed' || r.status === 'checked_in')
+      .filter(r => !editingReservation || r.id !== editingReservation.id)
+      .filter(r => r.pricingMode !== 'hourly')
+      .map(r => ({ in: r.checkInDate || r.checkIn, out: r.checkOutDate || r.checkOut }))
+      .filter(b => b.in && b.out)
+      .sort((a, b) => (a.in < b.in ? -1 : 1))
+  }, [selectedRoom, reservations, editingReservation])
+
   // Open create modal
   const openCreateModal = () => {
     setEditingReservation(null)
@@ -477,6 +492,26 @@ export default function HotelReservations() {
     if (isHourly) {
       if (!data.checkInTime) { toast.error('Seleccione la hora de check-in'); return }
       if (!data.checkOutTime) { toast.error('Seleccione la hora de check-out'); return }
+    }
+
+    // Evitar doble reserva: la misma habitación no puede tener fechas que se crucen con
+    // otra reserva activa (confirmada o con check-in). Solo aplica a reservas por noche.
+    if (!isHourly) {
+      const overlap = reservations.find(r => {
+        if (r.roomId !== data.roomId) return false
+        if (r.status !== 'confirmed' && r.status !== 'checked_in') return false
+        if (editingReservation && r.id === editingReservation.id) return false
+        if (r.pricingMode === 'hourly') return false
+        const exIn = r.checkInDate || r.checkIn
+        const exOut = r.checkOutDate || r.checkOut
+        if (!exIn || !exOut) return false
+        // Se cruzan si: nuevoCheckIn < existenteCheckOut Y nuevoCheckOut > existenteCheckIn
+        return data.checkInDate < exOut && data.checkOutDate > exIn
+      })
+      if (overlap) {
+        toast.error(`La habitación ya está reservada del ${formatDate(overlap.checkInDate || overlap.checkIn)} al ${formatDate(overlap.checkOutDate || overlap.checkOut)}. Elige otras fechas.`)
+        return
+      }
     }
 
     setIsSaving(true)
@@ -702,10 +737,22 @@ export default function HotelReservations() {
         return
       }
       const businessId = getBusinessId()
-      const [chargesResult, totalResult] = await Promise.all([
+      let [chargesResult, totalResult] = await Promise.all([
         getChargesByReservation(businessId, reservation.id),
         getReservationTotal(businessId, reservation.id),
       ])
+      // Reserva confirmada (sin check-in aun): generar los cargos de la estadia para poder
+      // emitir la boleta por adelantado. Es idempotente (no duplica si ya existen).
+      const hasRoomCharge = (chargesResult.data || []).some(c => c.chargeType === 'room_night' || c.chargeType === 'room_hourly')
+      if (reservation.status === 'confirmed' && !hasRoomCharge) {
+        await ensureRoomNightCharges(businessId, reservation.id, reservation.roomId)
+        const refreshed = await Promise.all([
+          getChargesByReservation(businessId, reservation.id),
+          getReservationTotal(businessId, reservation.id),
+        ])
+        chargesResult = refreshed[0]
+        totalResult = refreshed[1]
+      }
       if (chargesResult.success) setFolioCharges(chargesResult.data || [])
       if (totalResult.success) setFolioTotal(totalResult.data || 0)
     } catch (error) {
@@ -1491,6 +1538,12 @@ export default function HotelReservations() {
                     error={errors.checkOutDate?.message}
                   />
                 </div>
+                {selectedRoomBookings.length > 0 && (
+                  <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <span className="font-semibold">⚠ Fechas ya reservadas en esta habitación:</span>{' '}
+                    {selectedRoomBookings.map(b => `${formatDate(b.in)} – ${formatDate(b.out)}`).join('  ·  ')}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Input
