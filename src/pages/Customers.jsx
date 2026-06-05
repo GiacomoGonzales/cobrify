@@ -77,6 +77,7 @@ export default function Customers() {
       documentNumber: '',
       businessName: '',
       name: '',
+      code: '',
       email: '',
       phone: '',
       address: '',
@@ -141,6 +142,7 @@ export default function Customers() {
       documentNumber: '',
       businessName: '',
       name: '',
+      code: '',
       email: '',
       phone: '',
       address: '',
@@ -162,6 +164,7 @@ export default function Customers() {
       documentNumber: customer.documentNumber,
       businessName: customer.businessName || '',
       name: customer.name,
+      code: customer.code || '',
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
@@ -913,6 +916,9 @@ export default function Customers() {
                         {customer.businessName && customer.businessName !== customer.name && (
                           <p className="text-[10px] text-gray-500 truncate max-w-[180px]">{customer.businessName}</p>
                         )}
+                        {customer.code && (
+                          <p className="text-[10px] text-gray-400 truncate max-w-[180px]">Cód: {customer.code}</p>
+                        )}
                       </TableCell>
                     )}
                     {visibleColumns.document && (
@@ -1146,6 +1152,13 @@ export default function Customers() {
             placeholder={documentType === ID_TYPES.RUC ? 'Nombre Comercial' : businessMode === 'veterinary' ? 'Nombre del propietario de la mascota' : 'Nombre Completo'}
             error={errors.name?.message}
             {...register('name')}
+          />
+
+          <Input
+            label="Código (opcional)"
+            placeholder="Ej: CLI-001"
+            error={errors.code?.message}
+            {...register('code')}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

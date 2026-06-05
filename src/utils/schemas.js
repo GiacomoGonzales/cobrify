@@ -32,6 +32,7 @@ export const customerSchema = z.object({
   documentNumber: z.string().optional().or(z.literal('')),
   businessName: z.string().optional().or(z.literal('')),
   name: z.string().min(1, 'Nombre es requerido'),
+  code: z.string().optional().or(z.literal('')),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
