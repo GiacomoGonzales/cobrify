@@ -559,7 +559,10 @@ export default function Settings() {
     address: '',
     name: '',
     type: 'bluetooth', // bluetooth o wifi
-    paperWidth: 58, // 58mm o 80mm
+    // Default 80mm para coincidir con el POS (ticketPaperWidth || 80) y con savePrinterConfig
+    // (paperWidth || 80). Antes era 58: si el usuario nunca elegía ancho, al activar un toggle
+    // web se persistía 58 en localStorage y el POS pasaba a imprimir en 58mm sin querer.
+    paperWidth: 80, // 58mm o 80mm
     webPrintLegible: false, // Modo legible para impresión web (letras más grandes)
   })
   const [availablePrinters, setAvailablePrinters] = useState([])
