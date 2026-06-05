@@ -3002,9 +3002,18 @@ export default function POS() {
       }
 
       setCart(
-        cart.map(item =>
-          (item.cartId || item.id) === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
-        )
+        cart.map(item => {
+          if ((item.cartId || item.id) === cartItemId) {
+            const newQuantity = item.quantity + 1
+            // Auto-precio por cantidad: al sumar con clics también debe cambiar de nivel
+            // (Público → Mayorista, etc.), igual que al editar la cantidad en el carrito.
+            const autoPrice = computeAutoPriceForQty(item.id, newQuantity)
+            return autoPrice != null
+              ? { ...item, quantity: newQuantity, price: autoPrice }
+              : { ...item, quantity: newQuantity }
+          }
+          return item
+        })
       )
     } else {
       // Detectar bonificación automática: productos del catálogo con precio 0.
@@ -3226,6 +3235,27 @@ export default function POS() {
       return cost > 0
     }
     return true
+  }
+
+  // Lista de TODOS los niveles de precio de un producto (Público, Mayorista, VIP, Especial)
+  // con su etiqueta configurada, para previsualizarlos en la grilla del POS cuando el negocio
+  // usa múltiples precios. Usa resolvePrice (respeta precios manuales y derivados por %).
+  const getProductPriceLevels = (product) => {
+    if (!businessSettings?.multiplePricesEnabled) return []
+    const defs = [
+      { key: 'price1', def: 'Público' },
+      { key: 'price2', def: 'Mayorista' },
+      { key: 'price3', def: 'VIP' },
+      { key: 'price4', def: 'Especial' },
+    ]
+    const out = []
+    for (const { key, def } of defs) {
+      if (key !== 'price1' && !hasPriceLevel(product, key)) continue
+      const value = resolvePrice(product, key)
+      if (value == null || value <= 0) continue
+      out.push({ key, label: businessSettings?.priceLabels?.[key] || def, value })
+    }
+    return out
   }
 
   // Manejar selección de precio desde el modal
@@ -5818,7 +5848,11 @@ export default function POS() {
                 return true
               })
 
-              for (const item of itemsForMovement) {
+              // En PARALELO: cada movimiento es un documento nuevo e independiente (no hay
+              // conflicto de doc), así 50 productos se registran a la vez en lugar de uno por
+              // uno. Antes este for secuencial era el principal causante de la demora al
+              // procesar ventas con muchos ítems.
+              await Promise.all(itemsForMovement.map(async (item) => {
                 const quantityForMovement = item.quantity * (item.presentationFactor || 1)
                 const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
                 const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
@@ -5853,7 +5887,7 @@ export default function POS() {
                     }
                   }
                 }
-              }
+              }))
               } catch (stockErr) {
                 console.error('❌ CRÍTICO: Error en descuento de stock:', stockErr)
                 toast.error('Venta guardada pero falló el descuento de stock. Revisa el inventario manualmente.', 10000)
@@ -5864,25 +5898,37 @@ export default function POS() {
               // - Recetas con deductOnSale=false (producción): NO descontar, ya se descontó al producir
               // - Recetas legacy (deductOnSale=undefined): se aplica el mismo default del formulario
               //   (restaurant=descontar, otros=no descontar) vía shouldDeductIngredients.
-              for (const item of bgCart) {
-                if (item.isCustom) continue
-                try {
-                  const recipeResult = await getRecipeByProductId(businessId, item.id)
-                  if (recipeResult.success && recipeResult.data) {
-                    const recipe = recipeResult.data
-                    if (!shouldDeductIngredients(recipe, businessMode)) continue
-                    const ingredientsToDeduct = recipe.ingredients.map(ing => ({
-                      ...ing,
-                      quantity: ing.quantity * item.quantity
-                    }))
-                    await deductIngredients(
-                      businessId,
-                      ingredientsToDeduct,
-                      bgInvoiceId,
-                      item.name,
-                      bgSelectedWarehouse?.id || null
-                    )
+              // Fase 1: leer todas las recetas en PARALELO. En retail/farmacia casi todas
+              // vienen vacías, pero antes se leían una por una y eso solo ya demoraba con
+              // muchos ítems (50 lecturas en fila).
+              const recipeLookups = await Promise.all(
+                bgCart.filter(item => !item.isCustom).map(async (item) => {
+                  try {
+                    const recipeResult = await getRecipeByProductId(businessId, item.id)
+                    return { item, recipe: (recipeResult.success && recipeResult.data) ? recipeResult.data : null }
+                  } catch (error) {
+                    console.warn(`⚠️ No se pudo leer receta de ${item.name}:`, error)
+                    return { item, recipe: null }
                   }
+                })
+              )
+              // Fase 2: descontar ingredientes en SERIE a propósito: varios productos pueden
+              // compartir un mismo insumo y descontarlos en paralelo causaría condiciones de
+              // carrera (lecturas/escrituras pisándose) sobre ese insumo.
+              for (const { item, recipe } of recipeLookups) {
+                if (!recipe || !shouldDeductIngredients(recipe, businessMode)) continue
+                try {
+                  const ingredientsToDeduct = recipe.ingredients.map(ing => ({
+                    ...ing,
+                    quantity: ing.quantity * item.quantity
+                  }))
+                  await deductIngredients(
+                    businessId,
+                    ingredientsToDeduct,
+                    bgInvoiceId,
+                    item.name,
+                    bgSelectedWarehouse?.id || null
+                  )
                 } catch (error) {
                   console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
                 }
@@ -6807,6 +6853,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     .filter(item => item.id === product.id)
                     .reduce((sum, item) => sum + item.quantity, 0)
 
+                  // Niveles de precio (Público, Mayorista, VIP, ...) para previsualizar en la tarjeta
+                  const priceLevels = getProductPriceLevels(product)
+                  const hasMultiplePriceLevels = !product.hasVariants && priceLevels.length > 1
+
                   return (
                 <button
                   key={product.id}
@@ -6904,42 +6954,56 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     )}
                     {/* Price and Stock */}
                     <div className="mt-1.5 sm:mt-2 pt-1.5 sm:pt-2 border-t border-gray-100">
-                      {/* Móvil: precio y stock en línea */}
-                      <div className="flex items-center justify-between sm:hidden gap-2">
-                        <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {formatCatalogPrice(product)}
-                          {!product.hasVariants && businessSettings?.multiplePricesEnabled && (hasPriceLevel(product, 'price2') || hasPriceLevel(product, 'price3') || hasPriceLevel(product, 'price4')) && (
-                            <span className="text-[10px] font-normal text-gray-400 ml-1">
-                              - {formatCurrency(toSessionCurrency(resolvePrice(product, 'price4') || resolvePrice(product, 'price3') || resolvePrice(product, 'price2')), currency)}
-                            </span>
-                          )}
-                        </p>
-                        {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
-                        {product.hasVariants && !hideStockInPOS && (
-                          <span className="text-[10px] text-gray-500">
-                            Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span>
-                          </span>
-                        )}
-                      </div>
-                      {/* Tablet/Desktop: precio arriba, stock abajo */}
-                      <div className="hidden sm:block overflow-hidden">
-                        <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {formatCatalogPrice(product)}
-                        </p>
-                        <div className="flex items-center justify-between mt-1">
-                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
-                          {product.hasVariants && (
-                            <>
-                              {!hideStockInPOS && (
-                                <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) > (product?.minStock ?? 3) ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                  Stock: {getCurrentWarehouseStock(product)}
+                      {hasMultiplePriceLevels ? (
+                        <>
+                          {/* Todos los niveles de precio (Público, Mayorista, VIP, ...) como previsualización */}
+                          <div className="space-y-0.5 mb-1">
+                            {priceLevels.map(lvl => (
+                              <div key={lvl.key} className="flex items-center justify-between gap-1.5 leading-tight">
+                                <span className="text-[10px] sm:text-xs text-gray-500 truncate">{lvl.label}</span>
+                                <span className={`text-xs sm:text-sm font-bold whitespace-nowrap ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                                  {formatCurrency(toSessionCurrency(lvl.value), currency)}
                                 </span>
+                              </div>
+                            ))}
+                          </div>
+                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                        </>
+                      ) : (
+                        <>
+                          {/* Móvil: precio y stock en línea */}
+                          <div className="flex items-center justify-between sm:hidden gap-2">
+                            <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                              {formatCatalogPrice(product)}
+                            </p>
+                            {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                            {product.hasVariants && !hideStockInPOS && (
+                              <span className="text-[10px] text-gray-500">
+                                Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span>
+                              </span>
+                            )}
+                          </div>
+                          {/* Tablet/Desktop: precio arriba, stock abajo */}
+                          <div className="hidden sm:block overflow-hidden">
+                            <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                              {formatCatalogPrice(product)}
+                            </p>
+                            <div className="flex items-center justify-between mt-1">
+                              {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                              {product.hasVariants && (
+                                <>
+                                  {!hideStockInPOS && (
+                                    <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) > (product?.minStock ?? 3) ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      Stock: {getCurrentWarehouseStock(product)}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-purple-500 font-medium">Ver opciones</span>
+                                </>
                               )}
-                              <span className="text-[10px] text-purple-500 font-medium">Ver opciones</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -8589,7 +8653,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               )}
                             </div>
                           ) : (
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {/* Desglose precio unitario x cantidad, A LA IZQUIERDA del total
+                                  (misma línea, para corroborar el precio sin agrandar la fila) */}
+                              <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                {formatCurrency(item.price, currency)} × {displayQty}
+                              </span>
                               <div className="text-right min-w-[58px]">
                                 {displayDiscount > 0 ? (
                                   <>
