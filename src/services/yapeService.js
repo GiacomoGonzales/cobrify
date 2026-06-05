@@ -189,8 +189,9 @@ export const parseYapeNotification = (notification) => {
   // "Yape recibido S/50.00 de JUAN PEREZ"
 
   // Buscar monto
-  const amountMatch = text.match(/S\/\s*(\d+(?:[.,]\d{2})?)/i) ||
-                      title.match(/S\/\s*(\d+(?:[.,]\d{2})?)/i)
+  // Acepta punto o coma como separador decimal, y 1 o 2 decimales (ej. "10,50", "1.5").
+  const amountMatch = text.match(/S\/\s*(\d+(?:[.,]\d{1,2})?)/i) ||
+                      title.match(/S\/\s*(\d+(?:[.,]\d{1,2})?)/i)
 
   if (!amountMatch) return null
 

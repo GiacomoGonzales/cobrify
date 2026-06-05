@@ -201,8 +201,11 @@ public class NotificationService extends NotificationListenerService {
             fullText = title + " " + text;
         }
 
-        // Buscar monto: S/ XX.XX o S/XX.XX
-        Pattern amountPattern = Pattern.compile("S/\\s*(\\d+(?:\\.\\d{2})?)");
+        // Buscar monto: S/ XX.XX, S/XX,XX, S/ X.X (1 o 2 decimales, punto o coma).
+        // Yape cambió el separador decimal a coma en algunas versiones; antes el patrón
+        // solo aceptaba punto + exactamente 2 decimales, por eso "10,50" se leía como 10
+        // y "1,5"/"1.5" como 1.
+        Pattern amountPattern = Pattern.compile("S/\\s*(\\d+(?:[.,]\\d{1,2})?)");
         Matcher amountMatcher = amountPattern.matcher(fullText);
 
         if (!amountMatcher.find()) {
@@ -212,7 +215,8 @@ public class NotificationService extends NotificationListenerService {
 
         double amount;
         try {
-            amount = Double.parseDouble(amountMatcher.group(1));
+            // Normalizar coma decimal a punto para Double.parseDouble.
+            amount = Double.parseDouble(amountMatcher.group(1).replace(',', '.'));
         } catch (NumberFormatException e) {
             Log.d(TAG, "Error parseando monto: " + amountMatcher.group(1));
             return null;

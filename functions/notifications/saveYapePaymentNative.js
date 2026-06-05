@@ -32,6 +32,20 @@ export const saveYapePaymentNative = onRequest(
     try {
       const { businessId, userId, amount, senderName, originalText, originalTitle, timestamp } = req.body
 
+      // Re-parsear el monto desde el texto original (robusto: punto O coma, 1 o 2 decimales).
+      // Asi el monto queda correcto AUNQUE el app haya enviado un valor truncado: apps viejas
+      // cuyo regex solo aceptaba punto + exactamente 2 decimales leian "10,50"->10 y "1,5"->1.
+      // Si no se puede reparsear del texto, se usa el amount que envio el app.
+      const reparseYapeAmount = (txt) => {
+        if (!txt) return null
+        const m = String(txt).match(/S\/\s*(\d+(?:[.,]\d{1,2})?)/i)
+        if (!m) return null
+        const v = parseFloat(m[1].replace(',', '.'))
+        return Number.isFinite(v) && v > 0 ? v : null
+      }
+      const reparsedAmount = reparseYapeAmount(originalText) ?? reparseYapeAmount(originalTitle)
+      const finalAmount = reparsedAmount != null ? reparsedAmount : parseFloat(amount)
+
       // Validar datos requeridos
       if (!businessId) {
         console.log('❌ Missing businessId')
@@ -39,10 +53,13 @@ export const saveYapePaymentNative = onRequest(
         return
       }
 
-      if (!amount || isNaN(parseFloat(amount))) {
-        console.log('❌ Invalid amount:', amount)
+      if (!finalAmount || isNaN(finalAmount)) {
+        console.log('❌ Invalid amount. body:', amount, '| reparsed:', reparsedAmount, '| text:', originalText)
         res.status(400).json({ error: 'Valid amount is required' })
         return
+      }
+      if (reparsedAmount != null && reparsedAmount !== parseFloat(amount)) {
+        console.log(`🔧 Monto corregido por reparseo: app=${amount} -> ${reparsedAmount} (texto: "${originalText}")`)
       }
 
       const db = getFirestore()
@@ -57,7 +74,7 @@ export const saveYapePaymentNative = onRequest(
 
       // Crear el documento del pago
       const paymentData = {
-        amount: parseFloat(amount),
+        amount: finalAmount,
         senderName: senderName || 'Desconocido',
         originalText: originalText || '',
         originalTitle: originalTitle || '',
