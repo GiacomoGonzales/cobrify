@@ -833,12 +833,22 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
             const itemName = item.name || item.description || '';
-            // Unidad de medida / presentacion para la columna opcional del ticket:
-            // si el item tiene presentacion (ej. CAJA) se muestra esa; si no, la unidad del producto
-            // convertida a nombre legible (NIU -> UNIDAD).
-            const measureUnit = item.presentationName
-              ? item.presentationName.toString().toUpperCase()
-              : unitDisplayName(item.unit);
+            // Opcion "mostrar unidad en el ticket": la presentacion (CAJA X24, PACK, ...)
+            // REEMPLAZA a la unidad despues de la cantidad y NO se repite al final del nombre.
+            // Prioridad: presentationName del item; si no lo trae pero el nombre termina en
+            // un sufijo "(...)", se usa ese como presentacion y se limpia el nombre.
+            let unitName = item.presentationName ? item.presentationName.toString() : '';
+            let cleanName = itemName;
+            if (unitName) {
+              const presSuffix = ` (${unitName})`;
+              if (cleanName.toLowerCase().endsWith(presSuffix.toLowerCase())) {
+                cleanName = cleanName.slice(0, cleanName.length - presSuffix.length);
+              }
+            } else {
+              const presMatch = cleanName.match(/^(.*\S)\s+\(([^()]+)\)\s*$/);
+              if (presMatch) { cleanName = presMatch[1]; unitName = presMatch[2]; }
+            }
+            const measureUnit = unitName ? unitName.toUpperCase() : unitDisplayName(item.unit);
             // Observaciones adicionales (IMEI, placa, serie, etc.)
             const itemObservations = item.observations || null;
             // Descuento por ítem
@@ -847,7 +857,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
             return (
               <div key={index} className="item-row">
-                <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ` : ''}{itemName}</div>
+                <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ${cleanName}` : itemName}</div>
                 <div className="item-details">
                   <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>

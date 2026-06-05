@@ -696,12 +696,25 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // NO mostrar header de columnas para ningún formato (ni 58mm ni 80mm)
     for (const item of invoice.items || []) {
-      // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
-      const itemName = convertSpanishText(item.name || item.description || '');
-      // Columna opcional de unidad/presentacion: "{cantidad} {UNIDAD/CAJA}  " antes del nombre.
-      // Si el item tiene presentacion (ej. CAJA) se muestra esa; si no, la unidad del producto
-      // convertida a nombre legible (NIU -> UNIDAD).
-      const measureUnit = convertSpanishText(item.presentationName ? item.presentationName.toString().toUpperCase() : unitDisplayName(item.unit));
+      // Nombre y unidad/presentacion para la columna opcional "{cantidad} {UNIDAD/CAJA}".
+      // La presentacion (CAJA X24, PACK, ...) REEMPLAZA la unidad y NO se repite al final
+      // del nombre. Prioridad: presentationName; si no lo trae pero el nombre termina en un
+      // sufijo "(...)", se usa ese como presentacion y se limpia el nombre.
+      const rawName = item.name || item.description || '';
+      let unitName = item.presentationName ? item.presentationName.toString() : '';
+      let cleanName = rawName;
+      if (unitName) {
+        const presSuffix = ` (${unitName})`;
+        if (cleanName.toLowerCase().endsWith(presSuffix.toLowerCase())) {
+          cleanName = cleanName.slice(0, cleanName.length - presSuffix.length);
+        }
+      } else {
+        const presMatch = cleanName.match(/^(.*\S)\s+\(([^()]+)\)\s*$/);
+        if (presMatch) { cleanName = presMatch[1]; unitName = presMatch[2]; }
+      }
+      // Si la opcion esta activa se imprime el nombre limpio (el sufijo pasa a ser la unidad).
+      const itemName = convertSpanishText(showItemUnit ? cleanName : rawName);
+      const measureUnit = convertSpanishText(unitName ? unitName.toUpperCase() : unitDisplayName(item.unit));
       const qtyForUnit = Number.isInteger(item.quantity) ? item.quantity.toString() : (item.quantity || 0).toFixed(3).replace(/\.?0+$/, '');
       const namePrefix = showItemUnit ? `${qtyForUnit} ${measureUnit}  ` : '';
       // Observaciones adicionales (IMEI, placa, serie, etc.)
