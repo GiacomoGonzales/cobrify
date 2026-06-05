@@ -395,6 +395,7 @@ export default function Products() {
   // Presentations state (venta por presentaciones: unidad, pack, caja, etc.)
   const [presentations, setPresentations] = useState([])
   const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
+  const [editingPresentationIdx, setEditingPresentationIdx] = useState(null) // null = ninguna en edicion
 
   // Image upload state
   const [productImages, setProductImages] = useState([]) // Array de {id, file, previewUrl, uploadedUrl}
@@ -668,6 +669,7 @@ export default function Products() {
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
     setNewPresentation({ name: '', factor: '', price: '' })
+    setEditingPresentationIdx(null)
     setTaxAffectation('10') // Default: Gravado
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
     // Resetear datos de farmacia
@@ -745,6 +747,7 @@ export default function Products() {
     setPresentations(product.presentations || [])
     setShowPresentations((product.presentations || []).length > 0)
     setNewPresentation({ name: '', factor: '', price: '' })
+    setEditingPresentationIdx(null)
 
     // Load pharmacy data if exists (pharmacy mode)
     setPharmacyData({
@@ -1137,7 +1140,7 @@ export default function Products() {
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled ? { presentations } : {}),
+        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseInt(p.factor) || 1, price: parseFloat(p.price) || 0 })) } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
@@ -5997,25 +6000,82 @@ export default function Products() {
                 <div className="space-y-2">
                   {presentations.map((pres, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                      <div className="flex-1 grid grid-cols-3 gap-2">
-                        <div>
-                          <span className="text-xs text-gray-500">Nombre</span>
-                          <p className="text-sm font-medium">{pres.name}</p>
+                      {editingPresentationIdx === idx ? (
+                        <div className="flex-1 grid grid-cols-3 gap-2">
+                          <div>
+                            <span className="text-xs text-gray-500">Nombre</span>
+                            <input
+                              type="text"
+                              value={pres.name}
+                              onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, name: e.target.value } : p))}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Factor</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={pres.factor}
+                              onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: e.target.value } : p))}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Precio</span>
+                            <input
+                              type="number"
+                              step="any"
+                              value={pres.price}
+                              onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, price: e.target.value } : p))}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs text-gray-500">Factor</span>
-                          <p className="text-sm font-medium">×{pres.factor}</p>
+                      ) : (
+                        <div className="flex-1 grid grid-cols-3 gap-2">
+                          <div>
+                            <span className="text-xs text-gray-500">Nombre</span>
+                            <p className="text-sm font-medium">{pres.name}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Factor</span>
+                            <p className="text-sm font-medium">×{pres.factor}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Precio</span>
+                            <p className="text-sm font-medium">S/ {parseFloat(pres.price || 0).toFixed(2)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs text-gray-500">Precio</span>
-                          <p className="text-sm font-medium">S/ {parseFloat(pres.price).toFixed(2)}</p>
-                        </div>
-                      </div>
+                      )}
+                      {editingPresentationIdx === idx ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseInt(p.factor) || 1, price: parseFloat(p.price) || 0 } : p))
+                            setEditingPresentationIdx(null)
+                          }}
+                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                          title="Listo"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPresentationIdx(idx)}
+                          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
                           const updated = presentations.filter((_, i) => i !== idx)
                           setPresentations(updated)
+                          if (editingPresentationIdx === idx) setEditingPresentationIdx(null)
                         }}
                         className="p-1.5 text-red-600 hover:bg-red-50 rounded"
                       >
