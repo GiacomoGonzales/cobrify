@@ -3220,6 +3220,26 @@ Gracias por tu preferencia.`
                     <span>Imprimir ticket</span>
                   </button>
 
+                  {/* Vista previa de PDF */}
+                  <button
+                    onClick={async () => {
+                      setOpenMenuId(null)
+                      if (!companySettings?.ruc) {
+                        toast.error('Configura los datos de tu empresa primero')
+                        return
+                      }
+                      try {
+                        await previewInvoicePDF(invoice, companySettings, branding, branches)
+                      } catch (e) {
+                        toast.error('Error al generar vista previa')
+                      }
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>Vista previa de PDF</span>
+                  </button>
+
                   {/* Descargar PDF */}
                   <button
                     onClick={async () => {
