@@ -1140,7 +1140,7 @@ export default function Products() {
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseInt(p.factor) || 1, price: parseFloat(p.price) || 0 })) } : {}),
+        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0 })) } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
@@ -6015,7 +6015,8 @@ export default function Products() {
                             <span className="text-xs text-gray-500">Factor</span>
                             <input
                               type="number"
-                              min="1"
+                              min="0"
+                              step="any"
                               value={pres.factor}
                               onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: e.target.value } : p))}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -6052,7 +6053,7 @@ export default function Products() {
                         <button
                           type="button"
                           onClick={() => {
-                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseInt(p.factor) || 1, price: parseFloat(p.price) || 0 } : p))
+                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0 } : p))
                             setEditingPresentationIdx(null)
                           }}
                           className="p-1.5 text-green-600 hover:bg-green-50 rounded"
@@ -6103,7 +6104,8 @@ export default function Products() {
                   <input
                     type="number"
                     placeholder="24"
-                    min="1"
+                    min="0"
+                    step="any"
                     value={newPresentation.factor}
                     onChange={(e) => setNewPresentation(prev => ({ ...prev, factor: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -6127,8 +6129,8 @@ export default function Products() {
                       toast.error('Ingresa un nombre para la presentación')
                       return
                     }
-                    if (!newPresentation.factor || parseInt(newPresentation.factor) < 1) {
-                      toast.error('El factor debe ser al menos 1')
+                    if (!newPresentation.factor || !(parseFloat(newPresentation.factor) > 0)) {
+                      toast.error('El factor debe ser mayor a 0')
                       return
                     }
                     if (!newPresentation.price || parseFloat(newPresentation.price) <= 0) {
@@ -6137,7 +6139,7 @@ export default function Products() {
                     }
                     setPresentations([...presentations, {
                       name: newPresentation.name.trim(),
-                      factor: parseInt(newPresentation.factor),
+                      factor: parseFloat(newPresentation.factor),
                       price: parseFloat(newPresentation.price)
                     }])
                     setNewPresentation({ name: '', factor: '', price: '' })
