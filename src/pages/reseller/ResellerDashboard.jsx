@@ -150,7 +150,11 @@ export default function ResellerDashboard() {
     })
   }
 
-  if (loading) {
+  // Esperar también a que resellerData (saldo, pricingModel, descuentos) llegue desde
+  // useAuth: carga async y puede aparecer después de que loading ya es false. Sin esto
+  // se ve un flash de saldo 0 + mensaje de "recarga" + descuentos/plan legacy antes de
+  // que se actualicen ~2s después. La ruta reseller está protegida, así que siempre llega.
+  if (loading || !resellerData) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
