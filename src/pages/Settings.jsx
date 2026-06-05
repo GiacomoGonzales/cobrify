@@ -250,6 +250,8 @@ export default function Settings() {
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  // Escala del logo en el ticket térmico (porcentaje, 100 = tamaño actual)
+  const [logoPrintScale, setLogoPrintScale] = useState(100)
 
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
@@ -1055,6 +1057,11 @@ export default function Settings() {
           setCompanySlogan(businessData.companySlogan)
         }
 
+        // Cargar escala del logo en el ticket térmico
+        if (businessData.logoPrintScale) {
+          setLogoPrintScale(businessData.logoPrintScale)
+        }
+
         // Cargar flag de códigos de producto en cotizaciones
         if (businessData.showProductCodeInQuotation !== undefined) {
           setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
@@ -1716,6 +1723,7 @@ export default function Settings() {
         department: data.department,
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
+        logoPrintScale: Number(logoPrintScale) || 100,
         pdfAccentColor: pdfAccentColor,
         ticketFooterMessage: ticketFooterMessage || '',
         invoiceFooterTerms: invoiceFooterTerms || '',
@@ -2812,6 +2820,27 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {/* Tamaño del logo en el ticket térmico */}
+              {logoUrl && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tamaño del logo en el ticket
+                  </label>
+                  <select
+                    value={logoPrintScale}
+                    onChange={(e) => setLogoPrintScale(Number(e.target.value))}
+                    className="w-full sm:w-56 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white"
+                  >
+                    {[50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150].map(v => (
+                      <option key={v} value={v}>{v}%{v === 100 ? ' (normal)' : ''}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Regula qué tan grande sale el logo en los tickets térmicos (PC y app). 100% = tamaño actual. Reducir funciona siempre; agrandar depende de la resolución del logo.
+                  </p>
+                </div>
+              )}
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>

@@ -249,14 +249,18 @@ function applyFloydSteinbergDithering(imageData) {
  * @param {number} paperWidth - Ancho de papel (58 o 80)
  * @returns {Promise<Object>} { url, base64, width, ready }
  */
-export async function prepareLogoForPrinting(logoUrl, paperWidth = 58) {
+export async function prepareLogoForPrinting(logoUrl, paperWidth = 58, scale = 100) {
   if (!logoUrl) {
     console.log('📷 No hay logo configurado');
     return { url: null, base64: null, width: 0, ready: false };
   }
 
-  // Verificar caché
-  const cacheKey = `${logoUrl}_${paperWidth}`;
+  // Escala configurable del logo (porcentaje, 100 = tamaño base). Acotada para no
+  // exceder el ancho de papel ni quedar invisible.
+  const pct = Math.max(30, Math.min(150, Number(scale) || 100)) / 100;
+
+  // Verificar caché (incluye la escala para no reusar un tamaño distinto)
+  const cacheKey = `${logoUrl}_${paperWidth}_${Math.round(pct * 100)}`;
   if (logoCache.has(cacheKey)) {
     const cached = logoCache.get(cacheKey);
     // Invalidar entradas antiguas sin base64 (fallback de errores CORS previos)
@@ -277,15 +281,19 @@ export async function prepareLogoForPrinting(logoUrl, paperWidth = 58) {
     const specs = LOGO_SPECS[paperWidth] || LOGO_SPECS[58];
     console.log('📐 Especificaciones:', specs);
 
+    // Ancho objetivo escalado, sin pasar el máximo imprimible del papel.
+    const paperMaxDots = paperWidth === 58 ? 384 : 576;
+    const targetWidth = Math.max(32, Math.min(paperMaxDots, Math.round(specs.maxWidth * pct)));
+
     // Intentar convertir a base64
-    console.log('🔄 Convirtiendo logo a base64...');
-    const base64 = await urlToBase64(logoUrl, specs.maxWidth, true);
+    console.log('🔄 Convirtiendo logo a base64... ancho objetivo:', targetWidth, 'px');
+    const base64 = await urlToBase64(logoUrl, targetWidth, true);
     console.log('✅ Logo convertido exitosamente. Tamaño:', base64.length, 'chars');
 
     const result = {
       url: logoUrl,
       base64: base64,
-      width: specs.recommendedWidth,
+      width: targetWidth,
       ready: true
     };
 

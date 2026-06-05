@@ -23,6 +23,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
 
+  // Escala del logo configurable por el usuario (companySettings.logoPrintScale, en %).
+  // 100 = tamaño actual. Acotada para no romper el ticket.
+  const logoScale = Math.max(0.3, Math.min(2, (Number(companySettings?.logoPrintScale) || 100) / 100))
+  const ls = (n) => Math.round(n * logoScale)
+
   // Función para detectar si la imagen es cuadrada
   const handleLogoLoad = (e) => {
     const img = e.target
@@ -290,8 +295,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         }
 
         .company-logo {
-          max-width: ${is58mm ? '150px' : '200px'};
-          max-height: ${is58mm ? '80px' : '100px'};
+          max-width: ${ls(is58mm ? 150 : 200)}px;
+          max-height: ${ls(is58mm ? 80 : 100)}px;
           width: auto;
           height: auto;
           object-fit: contain;
@@ -301,8 +306,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
         /* Logos cuadrados más pequeños */
         .company-logo.square-logo {
-          max-width: ${is58mm ? '70px' : '100px'};
-          max-height: ${is58mm ? '70px' : '100px'};
+          max-width: ${ls(is58mm ? 70 : 100)}px;
+          max-height: ${ls(is58mm ? 70 : 100)}px;
         }
 
         .company-name {
@@ -561,12 +566,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           margin: 0 !important;
         }
         .company-logo {
-          max-width: ${is58mm ? '100px' : '140px'} !important;
-          max-height: ${is58mm ? '50px' : '70px'} !important;
+          max-width: ${ls(is58mm ? 100 : 140)}px !important;
+          max-height: ${ls(is58mm ? 50 : 70)}px !important;
         }
         .company-logo.square-logo {
-          max-width: ${is58mm ? '50px' : '70px'} !important;
-          max-height: ${is58mm ? '50px' : '70px'} !important;
+          max-width: ${ls(is58mm ? 50 : 70)}px !important;
+          max-height: ${ls(is58mm ? 50 : 70)}px !important;
         }
         .document-type {
           font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;

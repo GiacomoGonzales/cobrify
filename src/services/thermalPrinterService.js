@@ -871,7 +871,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     if (business.logoUrl) {
       console.log('📷 Preparando logo del negocio...');
       try {
-        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
+        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
 
         // Determinar ancho en milímetros según papel (30% más pequeño)
         const logoWidthMm = paperWidth === 58 ? 32 : 46;
@@ -3431,7 +3431,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     // abortaba la impresión del ticket de cierre silenciosamente.
     if (business?.logoUrl) {
       try {
-        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
+        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
         if (logoConfig?.ready && logoConfig.base64) {
           const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
           printer = printer.image(dataUrl);
