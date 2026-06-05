@@ -100,6 +100,13 @@ const getShortUnitLabel = (unit) => {
   return SHORT_UNIT_LABELS[String(unit).toUpperCase()] || String(unit).toLowerCase()
 }
 
+// Normaliza texto para búsqueda: minúsculas + sin tildes/acentos (NFD + quita diacríticos).
+// Así "Pólo" se encuentra escribiendo "polo" y el buscador no es sensible a acentos.
+const normalizeForSearch = (s) => String(s || '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/\p{Diacritic}/gu, '')
+
 // Formatea cantidad para visualización: enteros sin decimales, decimales
 // con hasta 2 dígitos limpios (1 → "1", 1.5 → "1.5", 1.25 → "1.25").
 const formatQty = (n) => {
@@ -2592,9 +2599,22 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         return false
       }
 
-      const matchesSearch = !searchQuery ||
-        product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      // Búsqueda flexible e insensible a tildes/acentos: cada palabra (parcial) del término
+      // debe aparecer en algún campo del producto. Ej: "POL ROJ" encuentra "Polo Adidas Rojo"
+      // y "camion" encuentra "Camión".
+      const matchesSearch = (() => {
+        if (!searchQuery) return true
+        const terms = normalizeForSearch(searchQuery).split(/\s+/).filter(Boolean)
+        if (terms.length === 0) return true
+        const variantText = (product.variants || [])
+          .map(v => Object.values(v?.attributes || {}).join(' '))
+          .join(' ')
+        const haystack = normalizeForSearch(
+          [product.name, product.description, product.marca, product.code, product.sku, variantText]
+            .filter(Boolean).join(' ')
+        )
+        return terms.every(term => haystack.includes(term))
+      })()
 
       // Excluir productos de categorías ocultas
       if (product.category && hiddenCategoryIds.has(product.category)) {
