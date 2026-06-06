@@ -68,6 +68,7 @@ import BulkStockCorrectionModal from '@/components/BulkStockCorrectionModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
+import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -229,7 +230,10 @@ export default function Inventory() {
   const [productionData, setProductionData] = useState({
     warehouseId: '',
     quantity: '',
-    notes: ''
+    notes: '',
+    batchNumber: '',
+    expirationDate: '',
+    serials: ''
   })
   const [isProcessingProduction, setIsProcessingProduction] = useState(false)
   const [productionRecipeInfo, setProductionRecipeInfo] = useState(null)
@@ -816,6 +820,33 @@ export default function Inventory() {
       // Crear movimiento de merma
       const variantSku = isVariantDamage ? damageData.selectedVariantSku : null
       const variantNote = variantSku ? ` (Variante: ${variantSku})` : ''
+
+      // Lotes: si el producto (sin variantes) maneja lotes, descontar de batches[] con
+      // FEFO para que el detalle por lote no se descuadre del stock total. Antes la merma
+      // bajaba el stock total pero dejaba batches[] intacto.
+      let damageBatchUpdates = {}
+      let damageBatchNumber = null
+      let damageBatchNote = ''
+      if (!damageProduct.isIngredient && !isVariantDamage && damageProduct.batches?.length > 0) {
+        const result = computeBatchDeduction(
+          damageProduct,
+          { batchNumber: damageData.selectedBatch || null, productId: damageProduct.id },
+          damageData.warehouseId,
+          quantity
+        )
+        if (result && result.batchBreakdown?.length > 0) {
+          const meta = computeProductBatchMetadata(result.updatedBatches)
+          damageBatchUpdates = {
+            batches: result.updatedBatches,
+            batchNumber: meta.batchNumber,
+            expirationDate: meta.expirationDate,
+          }
+          damageBatchNumber = result.batchBreakdown[0].lotNumber || null
+          damageBatchNote = ' | Lotes: ' + result.batchBreakdown
+            .map(b => `${b.lotNumber || 's/l'}(${b.quantity})`).join(', ')
+        }
+      }
+
       const movementData = {
         warehouseId: damageData.warehouseId,
         type: 'damage',
@@ -823,8 +854,9 @@ export default function Inventory() {
         reason: reasonLabel,
         referenceType: 'damage_adjustment',
         userId: user.uid,
-        notes: damageData.notes || `${businessMode === 'logistics' ? 'Salida' : 'Merma'}: ${quantity} unidades - ${reasonLabel}${variantNote}`,
+        notes: (damageData.notes || `${businessMode === 'logistics' ? 'Salida' : 'Merma'}: ${quantity} unidades - ${reasonLabel}${variantNote}`) + damageBatchNote,
         ...(variantSku && { variantSku }),
+        ...(damageBatchNumber && { batchNumber: damageBatchNumber }),
       }
 
       // Usar ingredientId o productId según corresponda
@@ -871,6 +903,13 @@ export default function Inventory() {
           extraDamageUpdates.serials = updatedSerials
         }
 
+        // Aplicar el descuento de lotes (batches[]) calculado con FEFO arriba
+        if (damageBatchUpdates.batches) {
+          extraDamageUpdates.batches = damageBatchUpdates.batches
+          extraDamageUpdates.batchNumber = damageBatchUpdates.batchNumber
+          extraDamageUpdates.expirationDate = damageBatchUpdates.expirationDate
+        }
+
         // Actualizar stock del producto en el almacén (transacción atómica)
         const updateResult = await updateProductStockTransaction(
           businessId,
@@ -913,7 +952,10 @@ export default function Inventory() {
     setProductionData({
       warehouseId: defaultWarehouseId,
       quantity: '',
-      notes: ''
+      notes: '',
+      batchNumber: '',
+      expirationDate: '',
+      serials: ''
     })
     setShowProductionModal(true)
 
@@ -956,7 +998,10 @@ export default function Inventory() {
     setProductionData({
       warehouseId: '',
       quantity: '',
-      notes: ''
+      notes: '',
+      batchNumber: '',
+      expirationDate: '',
+      serials: ''
     })
   }
 
@@ -1004,6 +1049,46 @@ export default function Inventory() {
       return
     }
 
+    // Lote/vencimiento y series (solo productos sin variantes que los manejan)
+    const tracksBatch = productionProduct.trackExpiration && !productionProduct.hasVariants
+    const tracksSerials = productionProduct.trackSerials && !productionProduct.hasVariants
+
+    if (tracksBatch) {
+      if (!productionData.batchNumber.trim()) {
+        toast.error('Ingresa el número de lote del producto producido')
+        return
+      }
+      if (!productionData.expirationDate) {
+        toast.error('Ingresa la fecha de vencimiento del lote')
+        return
+      }
+    }
+
+    let serialsList = []
+    if (tracksSerials) {
+      serialsList = productionData.serials.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+      if (serialsList.length === 0) {
+        toast.error('Ingresa los números de serie producidos')
+        return
+      }
+      if (serialsList.length !== quantity) {
+        toast.error(`Debes ingresar ${quantity} números de serie (ingresaste ${serialsList.length})`)
+        return
+      }
+      const seen = new Set()
+      const dupes = serialsList.filter(s => { const k = s.toLowerCase(); if (seen.has(k)) return true; seen.add(k); return false })
+      if (dupes.length > 0) {
+        toast.error(`Hay números de serie repetidos: ${[...new Set(dupes)].join(', ')}`)
+        return
+      }
+      const existing = new Set((productionProduct.serials || []).map(s => String(s.serialNumber).trim().toLowerCase()))
+      const collide = serialsList.filter(s => existing.has(s.toLowerCase()))
+      if (collide.length > 0) {
+        toast.error(`Estos números de serie ya existen: ${collide.join(', ')}`)
+        return
+      }
+    }
+
     setIsProcessingProduction(true)
     try {
       const businessId = getBusinessId()
@@ -1014,7 +1099,9 @@ export default function Inventory() {
         warehouseId: productionData.warehouseId,
         notes: productionData.notes,
         userId: user.uid,
-        product: productionProduct
+        product: productionProduct,
+        ...(tracksBatch && { batchNumber: productionData.batchNumber.trim(), expirationDate: productionData.expirationDate }),
+        ...(tracksSerials && { serials: serialsList }),
       }
 
       let result
@@ -4371,6 +4458,46 @@ export default function Inventory() {
                 onChange={(e) => handleProductionQuantityChange(e.target.value)}
                 placeholder="Ej: 10"
               />
+
+              {/* Lote y vencimiento (productos con lote, sin variantes) */}
+              {productionProduct?.trackExpiration && !productionProduct?.hasVariants && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Lote"
+                    required
+                    value={productionData.batchNumber}
+                    onChange={(e) => setProductionData({ ...productionData, batchNumber: e.target.value })}
+                    placeholder="Ej: L-2026-001"
+                  />
+                  <Input
+                    label="Vencimiento"
+                    type="date"
+                    required
+                    value={productionData.expirationDate}
+                    onChange={(e) => setProductionData({ ...productionData, expirationDate: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {/* Números de serie (productos con series, sin variantes) */}
+              {productionProduct?.trackSerials && !productionProduct?.hasVariants && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Números de serie <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                    rows={Math.min(6, Math.max(2, parseInt(productionData.quantity) || 2))}
+                    value={productionData.serials}
+                    onChange={(e) => setProductionData({ ...productionData, serials: e.target.value })}
+                    placeholder={'Uno por línea, ej:\nSN-0001\nSN-0002'}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ingresa {productionData.quantity || 'N'} series (uno por línea o separadas por coma).
+                    {' '}Ingresadas: {productionData.serials.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).length}
+                  </p>
+                </div>
+              )}
 
               {/* Vista previa de receta (modo recipe) */}
               {productionMode === 'recipe' && (

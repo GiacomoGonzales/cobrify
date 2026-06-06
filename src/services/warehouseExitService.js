@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
 import { updateProductStockTransaction } from '@/services/firestoreService'
+import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 
 /**
  * Servicio de Salidas de Almacén hacia Obras/Proyectos
@@ -119,13 +120,44 @@ export const createWarehouseExit = async (businessId, exitData) => {
 
     // Descontar stock y crear movimiento por cada item
     for (const item of exitData.items) {
+      const qty = Math.abs(item.quantity)
+
+      // 0. Lotes: si el producto SIN variantes maneja lotes, descontar de batches[]
+      //    con FEFO para que el detalle por lote no se descuadre del stock total.
+      //    (El modelo no soporta lotes por variante, por eso se omite si hasVariants.)
+      let batchExtraUpdates = {}
+      let movementBatchNumber = null
+      let batchNote = ''
+      try {
+        const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
+        if (prodSnap.exists()) {
+          const prod = prodSnap.data()
+          if (!prod.hasVariants && prod.batches?.length > 0) {
+            const result = computeBatchDeduction(prod, item, exitData.warehouseId, qty)
+            if (result && result.batchBreakdown?.length > 0) {
+              const meta = computeProductBatchMetadata(result.updatedBatches)
+              batchExtraUpdates = {
+                batches: result.updatedBatches,
+                batchNumber: meta.batchNumber,
+                expirationDate: meta.expirationDate,
+              }
+              movementBatchNumber = result.batchBreakdown[0].lotNumber || null
+              batchNote = ' | Lotes: ' + result.batchBreakdown
+                .map(b => `${b.lotNumber || 's/l'}(${b.quantity})`).join(', ')
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('No se pudieron procesar lotes en salida para', item.productId, e)
+      }
+
       // 1. Descontar stock (atómicamente) — clave para que la salida realmente afecte el inventario
       await updateProductStockTransaction(
         businessId,
         item.productId,
         exitData.warehouseId,
-        -Math.abs(item.quantity),
-        {},
+        -qty,
+        batchExtraUpdates,
         item.variantSku || null
       )
 
@@ -133,15 +165,16 @@ export const createWarehouseExit = async (businessId, exitData) => {
       await createStockMovement(businessId, {
         productId: item.productId,
         variantSku: item.variantSku || null,
+        ...(movementBatchNumber && { batchNumber: movementBatchNumber }),
         warehouseId: exitData.warehouseId,
         type: 'warehouse_exit',
-        quantity: -Math.abs(item.quantity),
+        quantity: -qty,
         reason: movementReason,
         referenceType: 'warehouse_exit',
         referenceId: docRef.id,
         referenceNumber: number,
         userId: exitData.userId,
-        notes: exitData.notes || '',
+        notes: (exitData.notes || '') + batchNote,
       })
     }
 

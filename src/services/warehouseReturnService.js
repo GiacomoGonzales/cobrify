@@ -10,6 +10,7 @@ import {
   runTransaction,
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
+import { updateProductStockTransaction } from '@/services/firestoreService'
 
 /**
  * Servicio de Retornos a Almacén desde Obras/Proyectos
@@ -73,16 +74,32 @@ export const createWarehouseReturn = async (businessId, returnData) => {
       updatedAt: serverTimestamp(),
     })
 
-    // Crear movimientos de stock (solo items en buen estado y dañados vuelven al stock, perdidos no)
+    // Devolver stock y crear movimiento (solo items en buen estado y dañados vuelven
+    // al stock; los perdidos no)
     for (const item of returnData.items) {
       if (item.condition === 'lost') continue // Perdidos no regresan al stock
 
+      const qty = Math.abs(item.quantity)
+
+      // 1. Devolver el stock REAL (base + variante). Esto antes faltaba: el retorno
+      //    solo registraba el movimiento y el stock nunca subía, por lo que los
+      //    materiales devueltos quedaban fuera del inventario (descuadre).
+      await updateProductStockTransaction(
+        businessId,
+        item.productId,
+        returnData.warehouseId,
+        qty, // positivo: regresa al stock
+        {},
+        item.variantSku || null
+      )
+
+      // 2. Movimiento para trazabilidad
       await createStockMovement(businessId, {
         productId: item.productId,
         variantSku: item.variantSku || null,
         warehouseId: returnData.warehouseId,
         type: 'warehouse_return',
-        quantity: Math.abs(item.quantity),
+        quantity: qty,
         reason: `Retorno de obra: ${returnData.projectName} (${item.condition === 'good' ? 'buen estado' : 'dañado'})`,
         referenceType: 'warehouse_return',
         referenceId: docRef.id,

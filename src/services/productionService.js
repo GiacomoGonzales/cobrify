@@ -17,14 +17,69 @@ import { db } from '@/lib/firebase'
 import { getRecipeByProductId, checkRecipeStock, calculateRecipeCost } from './recipeService'
 import { deductIngredients } from './ingredientService'
 import { updateWarehouseStock, updateVariantWarehouseStock, createStockMovement } from './warehouseService'
+import { computeProductBatchMetadata } from '@/utils/batchStock'
 // updateProduct ya no se usa - producción usa transacciones para evitar datos stale
+
+const normalizeBn = (s) => String(s || '').trim().toLowerCase()
+
+/**
+ * Construye los campos extra (batches[], serials[], campos rápidos) cuando se produce
+ * un producto CON lote/vencimiento o CON números de serie. Solo aplica a productos sin
+ * variantes (el modelo no soporta lotes/series por variante). Devuelve {} si no aplica.
+ * Antes producción solo subía el stock total y dejaba batches[]/serials[] intactos,
+ * descuadrando el detalle por lote/serie respecto al total.
+ */
+function buildProductionExtras(freshProduct, { batchNumber, expirationDate, serials, warehouseId, quantity, costPrice }) {
+  const extras = {}
+  if (freshProduct.hasVariants) return extras // lotes/series por variante no soportados
+
+  // LOTE: agregar (o sumar) el lote producido a batches[]
+  if (freshProduct.trackExpiration && batchNumber) {
+    const batches = [...(freshProduct.batches || [])]
+    const idx = batches.findIndex(b =>
+      normalizeBn(b.lotNumber || b.batchNumber) === normalizeBn(batchNumber) &&
+      (b.warehouseId || null) === (warehouseId || null)
+    )
+    if (idx >= 0) {
+      batches[idx] = { ...batches[idx], quantity: (batches[idx].quantity || 0) + quantity }
+    } else {
+      batches.push({
+        batchNumber,
+        lotNumber: batchNumber,
+        expirationDate: expirationDate || null,
+        quantity,
+        warehouseId: warehouseId || null,
+        costPrice: costPrice || 0,
+      })
+    }
+    extras.batches = batches
+    const meta = computeProductBatchMetadata(batches)
+    extras.batchNumber = meta.batchNumber
+    extras.expirationDate = meta.expirationDate
+  }
+
+  // SERIES: agregar los números de serie producidos a serials[]
+  if (freshProduct.trackSerials && Array.isArray(serials) && serials.length > 0) {
+    const all = [...(freshProduct.serials || [])]
+    const existing = new Set(all.map(s => normalizeBn(s.serialNumber)))
+    serials.forEach(sn => {
+      const clean = String(sn).trim()
+      if (!clean || existing.has(normalizeBn(clean))) return
+      all.push({ serialNumber: clean, status: 'available', warehouseId: warehouseId || null, addedVia: 'production' })
+      existing.add(normalizeBn(clean))
+    })
+    extras.serials = all
+  }
+
+  return extras
+}
 
 /**
  * Ejecutar producción con receta (modo automático)
  * Descuenta insumos y aumenta stock del producto
  */
 export const executeRecipeProduction = async (businessId, params) => {
-  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku } = params
+  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku, batchNumber, expirationDate, serials } = params
 
   try {
     // 1. Obtener receta
@@ -77,6 +132,7 @@ export const executeRecipeProduction = async (businessId, params) => {
       const freshProduct = { id: productDoc.id, ...productDoc.data() }
       let updateData
 
+      let extras = {}
       if (variantIndex != null && freshProduct.variants?.length > 0) {
         const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
         updateData = {
@@ -90,10 +146,16 @@ export const executeRecipeProduction = async (businessId, params) => {
           stock: updatedProduct.stock,
           warehouseStocks: updatedProduct.warehouseStocks
         }
+        // Lotes/series del producto producido (solo productos sin variantes)
+        extras = buildProductionExtras(freshProduct, {
+          batchNumber, expirationDate, serials, warehouseId, quantity,
+          costPrice: quantity > 0 ? (totalCost / quantity) : 0,
+        })
       }
 
       transaction.update(productRef, {
         ...updateData,
+        ...extras,
         updatedAt: serverTimestamp()
       })
     })
@@ -108,7 +170,9 @@ export const executeRecipeProduction = async (businessId, params) => {
       referenceType: 'production',
       userId,
       ...(variantSku && { variantSku }),
-      notes: notes || `Producción automática de ${quantity} unidades`
+      ...(batchNumber && { batchNumber }),
+      notes: (notes || `Producción automática de ${quantity} unidades`) +
+        (serials?.length ? ` | Series: ${serials.join(', ')}` : '')
     })
 
     // 8. Guardar registro de producción
@@ -120,6 +184,8 @@ export const executeRecipeProduction = async (businessId, params) => {
       recipeId: recipe.id,
       warehouseId,
       ...(variantIndex != null && { variantIndex, variantSku }),
+      ...(batchNumber && { batchNumber, expirationDate: expirationDate || null }),
+      ...(serials?.length && { serials }),
       ingredientsDeducted: ingredientsToDeduct.map(ing => ({
         ingredientId: ing.ingredientId,
         ingredientName: ing.ingredientName,
@@ -146,7 +212,7 @@ export const executeRecipeProduction = async (businessId, params) => {
  * Ejecutar producción manual (solo aumenta stock)
  */
 export const executeManualProduction = async (businessId, params) => {
-  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku } = params
+  const { productId, productName, quantity, warehouseId, notes, userId, product, variantIndex, variantSku, batchNumber, expirationDate, serials } = params
 
   try {
     // 1. Aumentar stock del producto usando transacción (leer datos frescos de Firestore)
@@ -157,6 +223,7 @@ export const executeManualProduction = async (businessId, params) => {
 
       const freshProduct = { id: productDoc.id, ...productDoc.data() }
       let updateData
+      let extras = {}
 
       if (variantIndex != null && freshProduct.variants?.length > 0) {
         const updatedProduct = updateVariantWarehouseStock(freshProduct, variantIndex, warehouseId, quantity)
@@ -171,10 +238,16 @@ export const executeManualProduction = async (businessId, params) => {
           stock: updatedProduct.stock,
           warehouseStocks: updatedProduct.warehouseStocks
         }
+        // Lotes/series del producto producido (solo productos sin variantes)
+        extras = buildProductionExtras(freshProduct, {
+          batchNumber, expirationDate, serials, warehouseId, quantity,
+          costPrice: freshProduct.costPrice || product?.costPrice || 0,
+        })
       }
 
       transaction.update(productRef, {
         ...updateData,
+        ...extras,
         updatedAt: serverTimestamp()
       })
     })
@@ -189,7 +262,9 @@ export const executeManualProduction = async (businessId, params) => {
       referenceType: 'production_manual',
       userId,
       ...(variantSku && { variantSku }),
-      notes: notes || `Producción manual de ${quantity} unidades`
+      ...(batchNumber && { batchNumber }),
+      notes: (notes || `Producción manual de ${quantity} unidades`) +
+        (serials?.length ? ` | Series: ${serials.join(', ')}` : '')
     })
 
     // 3. Guardar registro de producción
@@ -201,6 +276,8 @@ export const executeManualProduction = async (businessId, params) => {
       recipeId: null,
       warehouseId,
       ...(variantIndex != null && { variantIndex, variantSku }),
+      ...(batchNumber && { batchNumber, expirationDate: expirationDate || null }),
+      ...(serials?.length && { serials }),
       ingredientsDeducted: [],
       totalCost: 0,
       notes: notes || '',
@@ -288,7 +365,7 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
       return { success: false, error: 'Producción no encontrada' }
     }
     const production = productionDoc.data()
-    const { productId, quantity, warehouseId, mode, ingredientsDeducted, variantIndex, variantSku } = production
+    const { productId, quantity, warehouseId, mode, ingredientsDeducted, variantIndex, variantSku, batchNumber, serials } = production
 
     const batch = writeBatch(db)
 
@@ -328,9 +405,33 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
             ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
             : Math.max(0, (productData.stock || 0) - quantity)
 
+          // Revertir también el lote/serie producido para no descuadrar el detalle
+          const reverseExtras = {}
+          if (batchNumber && Array.isArray(productData.batches)) {
+            const batches = [...productData.batches]
+            const idx = batches.findIndex(b =>
+              normalizeBn(b.lotNumber || b.batchNumber) === normalizeBn(batchNumber) &&
+              (b.warehouseId || null) === (warehouseId || null)
+            )
+            if (idx >= 0) {
+              batches[idx] = { ...batches[idx], quantity: Math.max(0, (batches[idx].quantity || 0) - quantity) }
+              reverseExtras.batches = batches
+              const meta = computeProductBatchMetadata(batches)
+              reverseExtras.batchNumber = meta.batchNumber
+              reverseExtras.expirationDate = meta.expirationDate
+            }
+          }
+          if (Array.isArray(serials) && serials.length > 0 && Array.isArray(productData.serials)) {
+            const toRemove = new Set(serials.map(s => normalizeBn(s)))
+            reverseExtras.serials = productData.serials.filter(s =>
+              !(toRemove.has(normalizeBn(s.serialNumber)) && s.status === 'available')
+            )
+          }
+
           batch.update(productRef, {
             stock: newStock,
             warehouseStocks,
+            ...reverseExtras,
             updatedAt: Timestamp.now()
           })
         }
