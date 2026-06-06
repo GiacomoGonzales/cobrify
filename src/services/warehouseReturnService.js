@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  getDoc,
   getDocs,
   query,
   orderBy,
@@ -77,19 +78,52 @@ export const createWarehouseReturn = async (businessId, returnData) => {
     // Devolver stock y crear movimiento (solo items en buen estado y dañados vuelven
     // al stock; los perdidos no)
     for (const item of returnData.items) {
-      if (item.condition === 'lost') continue // Perdidos no regresan al stock
-
+      const isLost = item.condition === 'lost'
       const qty = Math.abs(item.quantity)
 
-      // 1. Devolver el stock REAL (base + variante). Esto antes faltaba: el retorno
-      //    solo registraba el movimiento y el stock nunca subía, por lo que los
-      //    materiales devueltos quedaban fuera del inventario (descuadre).
+      // Series: marcar las seleccionadas (que estaban 'in_project') según la condición:
+      // buen estado/dañado → 'available' (regresan al stock); perdido → 'lost'.
+      let serialExtra = {}
+      let serialNote = ''
+      if (item.selectedSerials?.length > 0) {
+        try {
+          const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
+          if (prodSnap.exists() && Array.isArray(prodSnap.data().serials)) {
+            const sel = new Set(item.selectedSerials)
+            serialExtra.serials = prodSnap.data().serials.map(s => {
+              if (sel.has(s.serialNumber) && s.status === 'in_project') {
+                return isLost
+                  ? { ...s, status: 'lost', lostReason: 'Retorno: perdido', lostDate: new Date() }
+                  : { ...s, status: 'available', warehouseId: returnData.warehouseId, projectId: null, exitId: null }
+              }
+              return s
+            })
+            serialNote = ` | Series: ${item.selectedSerials.join(', ')}`
+          }
+        } catch (e) {
+          console.warn('No se pudieron procesar series en retorno para', item.productId, e)
+        }
+      }
+
+      // Perdidos: NO regresan al stock, pero sí actualizamos el estado de la serie a 'lost'
+      if (isLost) {
+        if (serialExtra.serials) {
+          await updateProductStockTransaction(
+            businessId, item.productId, returnData.warehouseId, 0, serialExtra, item.variantSku || null
+          )
+        }
+        continue
+      }
+
+      // 1. Devolver el stock REAL (base + variante) + series a 'available'. Esto antes
+      //    faltaba: el retorno solo registraba el movimiento y el stock nunca subía,
+      //    por lo que los materiales devueltos quedaban fuera del inventario (descuadre).
       await updateProductStockTransaction(
         businessId,
         item.productId,
         returnData.warehouseId,
         qty, // positivo: regresa al stock
-        {},
+        serialExtra,
         item.variantSku || null
       )
 
@@ -97,6 +131,7 @@ export const createWarehouseReturn = async (businessId, returnData) => {
       await createStockMovement(businessId, {
         productId: item.productId,
         variantSku: item.variantSku || null,
+        ...(item.selectedSerials?.length > 0 && { serialNumbers: item.selectedSerials }),
         warehouseId: returnData.warehouseId,
         type: 'warehouse_return',
         quantity: qty,
@@ -104,7 +139,7 @@ export const createWarehouseReturn = async (businessId, returnData) => {
         referenceType: 'warehouse_return',
         referenceId: docRef.id,
         userId: returnData.userId,
-        notes: item.conditionNotes || '',
+        notes: (item.conditionNotes || '') + serialNote,
       })
     }
 

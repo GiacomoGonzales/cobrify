@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText, PackageMinus } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
@@ -141,6 +141,11 @@ export default function WarehouseExits() {
     }
     const existing = items.find(i => i.productId === product.id && !i.variantSku)
     if (existing) {
+      if (existing.hasSerials) {
+        toast.info(`"${product.name}" ya está agregado: selecciona las series abajo`)
+        setProductSearch('')
+        return
+      }
       // Ya existe, incrementar cantidad (con tope por stock)
       if (existing.quantity >= stock) {
         toast.error(`Ya agregaste el máximo disponible de "${product.name}" (${stock})`)
@@ -150,6 +155,9 @@ export default function WarehouseExits() {
         ? { ...i, quantity: i.quantity + 1 }
         : i))
     } else {
+      const availableSerials = product.trackSerials
+        ? (product.serials || []).filter(s => s.status === 'available' && (!s.warehouseId || s.warehouseId === selectedWarehouse))
+        : []
       setItems([...items, {
         productId: product.id,
         productName: product.name,
@@ -157,9 +165,23 @@ export default function WarehouseExits() {
         quantity: 1,
         unit: product.unit || 'und',
         availableStock: stock,
+        serials: availableSerials,
+        hasSerials: product.trackSerials && availableSerials.length > 0,
+        selectedSerials: [],
       }])
     }
     setProductSearch('')
+  }
+
+  const toggleExitSerial = (productId, serialNumber) => {
+    setItems(items.map(i => {
+      if (i.productId !== productId || i.variantSku) return i
+      const current = i.selectedSerials || []
+      const newSelected = current.includes(serialNumber)
+        ? current.filter(sn => sn !== serialNumber)
+        : [...current, serialNumber]
+      return { ...i, selectedSerials: newSelected, quantity: newSelected.length || 1 }
+    }))
   }
 
   const getProductStock = (product) => {
@@ -271,6 +293,12 @@ export default function WarehouseExits() {
       toast.error(`Ingresa una cantidad válida para "${invalidQty.productName}"`)
       return
     }
+    // Validar series seleccionadas para productos serializados
+    const missingSerials = items.find(i => i.hasSerials && (!i.selectedSerials || i.selectedSerials.length === 0))
+    if (missingSerials) {
+      toast.error(`Selecciona las series a enviar de "${missingSerials.productName}"`)
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -281,8 +309,9 @@ export default function WarehouseExits() {
         exitType,
         warehouseId: selectedWarehouse,
         warehouseName: warehouse?.name || '',
-        items: items.map(({ productId, productName, productCode, quantity, unit, variantSku }) => ({
+        items: items.map(({ productId, productName, productCode, quantity, unit, variantSku, selectedSerials }) => ({
           productId, productName, productCode, quantity, unit, variantSku: variantSku || null,
+          selectedSerials: selectedSerials || [],
         })),
         notes,
         userId: user.uid,
@@ -691,7 +720,8 @@ export default function WarehouseExits() {
                 </thead>
                 <tbody>
                   {items.map((item, idx) => (
-                    <tr key={`${item.productId}-${item.variantSku || 'nv'}-${idx}`} className="border-t border-gray-100">
+                    <Fragment key={`${item.productId}-${item.variantSku || 'nv'}-${idx}`}>
+                    <tr className="border-t border-gray-100">
                       <td className="py-2 px-3">
                         <div className="font-medium text-gray-900">
                           {item.productName}
@@ -709,16 +739,19 @@ export default function WarehouseExits() {
                           type="number"
                           min="1"
                           max={item.availableStock}
-                          value={item.quantity}
+                          value={item.hasSerials ? (item.selectedSerials?.length || 0) : item.quantity}
+                          disabled={item.hasSerials}
                           onChange={e => updateItemQuantity(item.productId, item.variantSku, e.target.value)}
                           onBlur={() => finalizeItemQuantity(item.productId, item.variantSku)}
                           className={`w-20 px-2 py-1 border rounded text-sm text-center focus:ring-2 ${
-                            item.exceedsStock
+                            item.hasSerials
+                              ? 'border-gray-200 bg-gray-100 text-gray-500'
+                              : item.exceedsStock
                               ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-indigo-500'
                           }`}
                         />
-                        {item.exceedsStock && (
+                        {item.exceedsStock && !item.hasSerials && (
                           <div className="text-[10px] text-red-600 mt-0.5">Max: {item.availableStock}</div>
                         )}
                       </td>
@@ -728,6 +761,38 @@ export default function WarehouseExits() {
                         </button>
                       </td>
                     </tr>
+                    {item.hasSerials && (
+                      <tr className="bg-amber-50/50 border-t border-amber-100">
+                        <td colSpan={4} className="px-3 py-2">
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-medium text-amber-700 mt-0.5 whitespace-nowrap">Series a enviar:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.serials.map((s) => {
+                                const isSelected = (item.selectedSerials || []).includes(s.serialNumber)
+                                return (
+                                  <button
+                                    key={s.serialNumber}
+                                    type="button"
+                                    onClick={() => toggleExitSerial(item.productId, s.serialNumber)}
+                                    className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                                      isSelected
+                                        ? 'bg-amber-600 text-white border-amber-600'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
+                                    }`}
+                                  >
+                                    {s.serialNumber}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            {(item.selectedSerials || []).length > 0 && (
+                              <span className="text-xs text-amber-600 whitespace-nowrap">({item.selectedSerials.length} sel.)</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

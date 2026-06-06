@@ -122,33 +122,43 @@ export const createWarehouseExit = async (businessId, exitData) => {
     for (const item of exitData.items) {
       const qty = Math.abs(item.quantity)
 
-      // 0. Lotes: si el producto SIN variantes maneja lotes, descontar de batches[]
-      //    con FEFO para que el detalle por lote no se descuadre del stock total.
-      //    (El modelo no soporta lotes por variante, por eso se omite si hasVariants.)
-      let batchExtraUpdates = {}
+      // Lotes (FEFO) y series: leer el producto una vez para mantener batches[]/serials[]
+      // sincronizados con el stock total. (El modelo no soporta lotes/series por variante,
+      // por eso se omite si hasVariants.)
+      let extraUpdates = {}
       let movementBatchNumber = null
-      let batchNote = ''
+      let detailNote = ''
       try {
         const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
         if (prodSnap.exists()) {
           const prod = prodSnap.data()
+          // Lotes
           if (!prod.hasVariants && prod.batches?.length > 0) {
             const result = computeBatchDeduction(prod, item, exitData.warehouseId, qty)
             if (result && result.batchBreakdown?.length > 0) {
               const meta = computeProductBatchMetadata(result.updatedBatches)
-              batchExtraUpdates = {
-                batches: result.updatedBatches,
-                batchNumber: meta.batchNumber,
-                expirationDate: meta.expirationDate,
-              }
+              extraUpdates.batches = result.updatedBatches
+              extraUpdates.batchNumber = meta.batchNumber
+              extraUpdates.expirationDate = meta.expirationDate
               movementBatchNumber = result.batchBreakdown[0].lotNumber || null
-              batchNote = ' | Lotes: ' + result.batchBreakdown
+              detailNote += ' | Lotes: ' + result.batchBreakdown
                 .map(b => `${b.lotNumber || 's/l'}(${b.quantity})`).join(', ')
             }
           }
+          // Series: marcar las seleccionadas como 'in_project' (salen del stock disponible
+          // pero pueden regresar vía Retorno a almacén).
+          if (prod.trackSerials && item.selectedSerials?.length > 0 && Array.isArray(prod.serials)) {
+            const sel = new Set(item.selectedSerials)
+            extraUpdates.serials = prod.serials.map(s =>
+              sel.has(s.serialNumber) && s.status === 'available'
+                ? { ...s, status: 'in_project', projectId: exitData.projectId || null, exitId: docRef.id }
+                : s
+            )
+            detailNote += ` | Series: ${item.selectedSerials.join(', ')}`
+          }
         }
       } catch (e) {
-        console.warn('No se pudieron procesar lotes en salida para', item.productId, e)
+        console.warn('No se pudieron procesar lotes/series en salida para', item.productId, e)
       }
 
       // 1. Descontar stock (atómicamente) — clave para que la salida realmente afecte el inventario
@@ -157,7 +167,7 @@ export const createWarehouseExit = async (businessId, exitData) => {
         item.productId,
         exitData.warehouseId,
         -qty,
-        batchExtraUpdates,
+        extraUpdates,
         item.variantSku || null
       )
 
@@ -166,6 +176,7 @@ export const createWarehouseExit = async (businessId, exitData) => {
         productId: item.productId,
         variantSku: item.variantSku || null,
         ...(movementBatchNumber && { batchNumber: movementBatchNumber }),
+        ...(item.selectedSerials?.length > 0 && { serialNumbers: item.selectedSerials }),
         warehouseId: exitData.warehouseId,
         type: 'warehouse_exit',
         quantity: -qty,
@@ -174,7 +185,7 @@ export const createWarehouseExit = async (businessId, exitData) => {
         referenceId: docRef.id,
         referenceNumber: number,
         userId: exitData.userId,
-        notes: (exitData.notes || '') + batchNote,
+        notes: (exitData.notes || '') + detailNote,
       })
     }
 
