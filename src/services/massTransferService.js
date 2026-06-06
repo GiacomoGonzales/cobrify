@@ -233,6 +233,8 @@ export const createMassTransfer = async (businessId, transferData) => {
       )
 
       const variantNote = item.variantSku ? ` (${item.variantSku}${item.variantLabel ? ': ' + item.variantLabel : ''})` : ''
+      const serialNote = (item.serialNumbers && item.serialNumbers.length > 0)
+        ? ` (Series: ${item.serialNumbers.join(', ')})` : ''
 
       // Movimiento de salida
       await createStockMovement(businessId, {
@@ -247,7 +249,8 @@ export const createMassTransfer = async (businessId, transferData) => {
         userId: transferData.userId,
         ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
         ...(item.variantSku && { variantSku: item.variantSku }),
-        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
+        ...(item.serialNumbers?.length > 0 && { serialNumbers: item.serialNumbers }),
+        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}${serialNote}`,
       })
 
       // Movimiento de entrada
@@ -263,7 +266,8 @@ export const createMassTransfer = async (businessId, transferData) => {
         userId: transferData.userId,
         ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
         ...(item.variantSku && { variantSku: item.variantSku }),
-        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}`,
+        ...(item.serialNumbers?.length > 0 && { serialNumbers: item.serialNumbers }),
+        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}${serialNote}`,
       })
     }
 

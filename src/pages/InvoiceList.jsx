@@ -1320,6 +1320,7 @@ Gracias por tu preferencia.`
       const { getProducts } = await import('@/services/firestoreService')
       const { doc: docRef, updateDoc } = await import('firebase/firestore')
       const { db: fireDb } = await import('@/lib/firebase')
+      const { computeBatchDeduction, computeProductBatchMetadata } = await import('@/utils/batchStock')
 
       // Obtener movimientos existentes para esta venta
       const movementsResult = await getStockMovements(bId)
@@ -1376,7 +1377,26 @@ Gracias por tu preferencia.`
         // Descontar stock del producto (transacción atómica)
         const { updateProductStockTransaction: updateStockTx } = await import('@/services/firestoreService')
         const itemVariantSku = item.variantSku || null
-        await updateStockTx(bId, productId, warehouseId, -quantityForMovement, {}, itemVariantSku)
+
+        // Lotes: descontar de batches[] (lote vendido si se registró, o FEFO) para que el
+        // detalle por lote no se descuadre del total al sincronizar productos con lote.
+        let syncBatchExtra = {}
+        let syncBatchNumber = null
+        if (!productData.hasVariants && productData.batches?.length > 0) {
+          const result = computeBatchDeduction(productData, item, warehouseId, quantityForMovement)
+          if (result && result.batchBreakdown?.length > 0) {
+            const meta = computeProductBatchMetadata(result.updatedBatches)
+            syncBatchExtra = { batches: result.updatedBatches, batchNumber: meta.batchNumber, expirationDate: meta.expirationDate }
+            syncBatchNumber = result.batchBreakdown[0].lotNumber || null
+          }
+        }
+
+        // Series: marcar la serie vendida si el ítem la registró
+        const syncSerialPayload = (item.serialNumber && productData.trackSerials)
+          ? { serialNumber: item.serialNumber, saleId: invoice.id, saleDate: invoiceDate }
+          : null
+
+        await updateStockTx(bId, productId, warehouseId, -quantityForMovement, syncBatchExtra, itemVariantSku, syncSerialPayload)
 
         // Crear movimiento
         await createStockMovement(bId, {
@@ -1391,6 +1411,8 @@ Gracias por tu preferencia.`
           referenceNumber: invoice.number || '',
           userId: user?.uid,
           ...(itemVariantSku && { variantSku: itemVariantSku }),
+          ...(syncBatchNumber && { batchNumber: syncBatchNumber }),
+          ...(item.serialNumber && { serialNumber: item.serialNumber }),
           notes: item.presentationName
             ? `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} - ${item.quantity} ${item.presentationName} (sincronizado)`
             : `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} (sincronizado)`,

@@ -1503,6 +1503,7 @@ export default function Products() {
                   await createStockMovement(businessId, {
                     productId: result.id,
                     variantIndex: i,
+                    variantSku: variant.sku,
                     warehouseId: warehouseId,
                     type: 'entry',
                     quantity: variant.stock,
