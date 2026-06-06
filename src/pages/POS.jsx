@@ -5673,7 +5673,17 @@ export default function POS() {
                 }
               })
 
-              const stockUpdates = []
+              // Agrupar las operaciones de stock por PRODUCTO. Distintas líneas del mismo
+              // producto (ej. varias variantes) se corren en SERIE entre sí para NO chocar
+              // sobre el mismo documento de Firestore: la contención dispara reintentos con
+              // backoff exponencial (1s, 2s, 4s...) y eso era lo que hacía que una venta con
+              // muchas variantes del mismo producto demorara 20-30s. Productos distintos
+              // siguen corriendo en paralelo.
+              const stockOpsByProduct = new Map()
+              const pushStockOp = (productId, opFn) => {
+                if (!stockOpsByProduct.has(productId)) stockOpsByProduct.set(productId, [])
+                stockOpsByProduct.get(productId).push(opFn)
+              }
 
               // Una transacción por grupo de series del mismo producto/variante/almacén
               for (const items of serialGroups.values()) {
@@ -5688,7 +5698,7 @@ export default function POS() {
                   saleId: bgInvoiceId || null,
                   saleDate
                 }))
-                stockUpdates.push(
+                pushStockOp(firstItem.id, () =>
                   updateProductStockTransaction(
                     businessId,
                     firstItem.id,
@@ -5704,7 +5714,7 @@ export default function POS() {
 
               // Items sin número de serie: mantienen el procesamiento individual con lógica de lotes
               nonSerialItems.forEach(item => {
-                stockUpdates.push((async () => {
+                pushStockOp(item.id, async () => {
                   const productData = bgProducts.find(p => p.id === item.id)
                   if (!productData) return
                   if (productData.trackStock === false) return
@@ -5834,10 +5844,18 @@ export default function POS() {
                     null,
                     !!companySettings?.allowNegativeStock
                   )
-                })())
+                })
               })
 
-              await Promise.all(stockUpdates)
+              // Correr: en SERIE dentro de cada producto (evita contención sobre el mismo
+              // documento), en PARALELO entre productos distintos.
+              await Promise.all(
+                [...stockOpsByProduct.values()].map(async (ops) => {
+                  for (const op of ops) {
+                    await op()
+                  }
+                })
+              )
 
               // 4.0.1. Actualizar factura con desglose de lotes (si hubo lotes usados)
               if (Object.keys(batchBreakdownByItemId).length > 0 && bgInvoiceId) {
