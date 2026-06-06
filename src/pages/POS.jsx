@@ -8461,7 +8461,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     // Ítems sin serie quedan como grupos de 1 miembro (render igual que siempre).
                     const groups = []
                     const seen = new Map()
-                    cart.forEach(it => {
+                    cart.forEach((it, idx) => {
                       if (it.serialNumber) {
                         const gKey = `g|${it.id || it.productId}|${it.batchNumber || ''}`
                         const existing = seen.get(gKey)
@@ -8473,7 +8473,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         seen.set(gKey, g)
                         groups.push(g)
                       } else {
-                        groups.push({ key: `s|${it.cartId || it.id}`, isSerial: false, members: [it] })
+                        // Incluir el índice como desempate: varios ítems del mismo producto sin
+                        // cartId único caían a `it.id` y producían keys DUPLICADAS, lo que en dev
+                        // inundaba la consola con cientos de warnings por render (lentísimo).
+                        const uniqueKey = it.cartId || `${it.id}|${idx}`
+                        groups.push({ key: `s|${uniqueKey}`, isSerial: false, members: [it] })
                       }
                     })
                     return groups.map(group => {
