@@ -5965,26 +5965,44 @@ export default function POS() {
                   _recipeByProduct.set(pid, null)
                 }
               }))
-              // Descuento en SERIE por LÍNEA (cantidades correctas por presentación). Serial a
-              // propósito: varios productos pueden compartir un insumo y descontarlos en paralelo
-              // causaría condiciones de carrera sobre ese insumo.
+              // AGREGAR el consumo de insumos de TODOS los platos y descontar en 1 sola pasada.
+              // Antes era 1 llamada a deductIngredients por plato, EN SERIE (race de insumos
+              // compartidos) → con ~25 platos eso eran decenas de lecturas+commits encadenados,
+              // el verdadero cuello de la venta. Sumamos por (ingredientId|unidad) y descontamos
+              // una vez: cada insumo se lee/escribe una sola vez, sin race.
+              const _ingAgg = new Map()
               for (const item of bgCart.filter(item => !item.isCustom)) {
                 const recipe = _recipeByProduct.get(item.id)
                 if (!recipe || !shouldDeductIngredients(recipe, businessMode)) continue
-                try {
-                  const ingredientsToDeduct = recipe.ingredients.map(ing => ({
-                    ...ing,
-                    quantity: ing.quantity * item.quantity
-                  }))
-                  await deductIngredients(
-                    businessId,
-                    ingredientsToDeduct,
-                    bgInvoiceId,
-                    item.name,
-                    bgSelectedWarehouse?.id || null
-                  )
-                } catch (error) {
-                  console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
+                for (const ing of (recipe.ingredients || [])) {
+                  const k = `${ing.ingredientId}|${ing.unit || ''}`
+                  const addQty = (ing.quantity || 0) * (item.quantity || 0)
+                  const ex = _ingAgg.get(k)
+                  if (ex) ex.quantity += addQty
+                  else _ingAgg.set(k, { ...ing, quantity: addQty })
+                }
+              }
+              if (_ingAgg.size > 0) {
+                // Repartir en pasadas donde cada ingredientId aparezca a lo sumo UNA vez, para que
+                // una sola llamada nunca toque el mismo doc dos veces (caso raro: mismo insumo en
+                // dos unidades distintas). Caso normal = 1 pasada.
+                const _passes = []
+                const _passIds = []
+                for (const ing of _ingAgg.values()) {
+                  let placed = false
+                  for (let p = 0; p < _passes.length; p++) {
+                    if (!_passIds[p].has(ing.ingredientId)) {
+                      _passes[p].push(ing); _passIds[p].add(ing.ingredientId); placed = true; break
+                    }
+                  }
+                  if (!placed) { _passes.push([ing]); _passIds.push(new Set([ing.ingredientId])) }
+                }
+                for (const pass of _passes) {
+                  try {
+                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null)
+                  } catch (error) {
+                    console.warn('⚠️ No se pudo descontar insumos (agregado):', error)
+                  }
                 }
               }
               _recipeMs = Date.now() - _recipeT0

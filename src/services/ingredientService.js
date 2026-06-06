@@ -444,11 +444,19 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
   try {
     const batch = writeBatch(db)
 
-    for (const ingredient of ingredients) {
+    // Pre-leer todos los docs en PARALELO (antes era un getDoc EN SERIE por insumo, lento
+    // con muchos insumos). El cálculo y el armado del batch se hacen después, sin awaits.
+    const _refs = ingredients.map(ing =>
+      doc(db, 'businesses', businessId, ing.ingredientType === 'product' ? 'products' : 'ingredients', ing.ingredientId)
+    )
+    const _snaps = await Promise.all(_refs.map(r => getDoc(r)))
+
+    for (let _i = 0; _i < ingredients.length; _i++) {
+      const ingredient = ingredients[_i]
       // Si es un producto terminado, descontar del stock del producto
       if (ingredient.ingredientType === 'product') {
-        const productRef = doc(db, 'businesses', businessId, 'products', ingredient.ingredientId)
-        const productDoc = await getDoc(productRef)
+        const productRef = _refs[_i]
+        const productDoc = _snaps[_i]
 
         if (!productDoc.exists()) {
           console.warn(`Producto ${ingredient.ingredientName} no encontrado`)
@@ -523,8 +531,8 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
       }
 
       // Ingrediente crudo: flujo existente
-      const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredient.ingredientId)
-      const ingredientDoc = await getDoc(ingredientRef)
+      const ingredientRef = _refs[_i]
+      const ingredientDoc = _snaps[_i]
 
       if (!ingredientDoc.exists()) {
         console.warn(`Ingrediente ${ingredient.ingredientName} no encontrado`)
