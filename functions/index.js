@@ -27,6 +27,7 @@ import {
   listResources,
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
+import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -10785,6 +10786,60 @@ export const resetSubUserPassword = onCall(
     } catch (error) {
       console.error('Error al resetear contraseña:', error)
       throw new HttpsError('internal', `Error al actualizar contraseña: ${error.message}`)
+    }
+  }
+)
+
+/**
+ * Descontar el stock de una venta + registrar movimientos, todo EN EL SERVIDOR en una sola
+ * transacción atómica. Reemplaza las N transacciones del cliente (lentas con muchos ítems).
+ * Los insumos (recetas) se siguen descontando en el cliente.
+ */
+export const processSaleStock = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const data = request.data || {}
+    const { businessId, warehouseId, invoiceId, invoiceNumber, documentType, allowNegativeStock, items } = data
+
+    if (!businessId) throw new HttpsError('invalid-argument', 'businessId requerido')
+    if (!Array.isArray(items) || items.length === 0) return { success: true, batchBreakdownByCartKey: {} }
+
+    // Verificar que el usuario autenticado pertenece a ese negocio (owner o sub-usuario).
+    // El Admin SDK se salta las reglas de Firestore, así que esta verificación es clave.
+    try {
+      const userSnap = await db.collection('users').doc(request.auth.uid).get()
+      const ownerId = userSnap.exists ? (userSnap.data().ownerId || null) : null
+      const effectiveBusinessId = ownerId || request.auth.uid
+      if (effectiveBusinessId !== businessId) {
+        throw new HttpsError('permission-denied', 'No tienes acceso a este negocio')
+      }
+    } catch (err) {
+      if (err instanceof HttpsError) throw err
+      throw new HttpsError('internal', 'No se pudo verificar el acceso al negocio')
+    }
+
+    try {
+      const result = await runProcessSaleStock(db, FieldValue, {
+        businessId,
+        warehouseId: warehouseId || '',
+        invoiceId: invoiceId || '',
+        invoiceNumber: invoiceNumber || '',
+        documentType: documentType || 'nota_venta',
+        userId: request.auth.uid,
+        allowNegativeStock: !!allowNegativeStock,
+        items,
+      })
+      return { success: true, ...result }
+    } catch (err) {
+      console.error('❌ Error en processSaleStock:', err)
+      throw new HttpsError('internal', err.message || 'Error al descontar stock')
     }
   }
 )

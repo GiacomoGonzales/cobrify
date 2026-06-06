@@ -4586,6 +4586,7 @@ export default function POS() {
   const handleCheckout = async () => {
     if (!user?.uid) return
     if (isProcessing || checkoutGuardRef.current) return
+    const _checkoutT0 = Date.now() // diagnóstico: tiempo total desde el clic
     console.log('🛒 handleCheckout: iniciando proceso de venta', {
       itemsEnCarrito: cart.length,
       tipoDoc: documentType,
@@ -4634,34 +4635,47 @@ export default function POS() {
     {
       const allMissingIngredients = []
 
-      for (const item of cart) {
-        // Solo verificar productos que no sean personalizados
-        if (item.isCustom) continue
+      // Leer TODAS las recetas en UNA sola consulta (antes era 1 query por ítem → ~N queries
+      // en fila, el verdadero cuello ANTES de guardar la factura). Mapa productId -> receta.
+      const _valRecipeByProduct = new Map()
+      try {
+        const { collection: _vc, getDocs: _vg } = await import('firebase/firestore')
+        const { db: _vdb } = await import('@/lib/firebase')
+        const _vsnap = await _vg(_vc(_vdb, 'businesses', businessId, 'recipes'))
+        _vsnap.forEach(d => { const r = { id: d.id, ...d.data() }; if (r.productId) _valRecipeByProduct.set(r.productId, r) })
+      } catch (e) {
+        console.warn('No se pudieron leer recetas para validación:', e)
+      }
 
+      // Solo los ítems con receta que descuenta al vender requieren validar insumos.
+      const _itemsToCheck = cart.filter(item => {
+        if (item.isCustom) return false
+        const r = _valRecipeByProduct.get(item.id)
+        return r && shouldDeductIngredients(r, businessMode)
+      })
+
+      // Validar en PARALELO (antes era en serie).
+      const _checks = await Promise.all(_itemsToCheck.map(async (item) => {
         try {
-          // Si la receta es modo "producción" (deductOnSale=false), los ingredientes
-          // ya se descontaron al producir y el stock se controla en el producto terminado.
-          // No validar stock de ingredientes aquí para no bloquear la venta del producto ya producido.
-          // Para recetas legacy sin deductOnSale, aplicamos el mismo default que el formulario
-          // de Composición (restaurant=descontar, otros=no descontar).
-          const recipeResult = await getRecipeByProductId(businessId, item.id)
-          if (recipeResult.success && !shouldDeductIngredients(recipeResult.data, businessMode)) continue
-
           const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
-          if (stockCheck.success && !stockCheck.hasStock) {
-            stockCheck.missingIngredients.forEach(ing => {
-              allMissingIngredients.push({
-                product: item.name,
-                ingredient: ing.name,
-                available: ing.available,
-                needed: ing.needed,
-                unit: ing.unit
-              })
-            })
-          }
+          return { item, stockCheck }
         } catch (error) {
-          // No bloquear la venta si la verificación misma falla (red, permisos, etc.)
           console.warn(`No se pudo verificar receta de ${item.name}:`, error)
+          return { item, stockCheck: null }
+        }
+      }))
+
+      for (const { item, stockCheck } of _checks) {
+        if (stockCheck && stockCheck.success && !stockCheck.hasStock) {
+          stockCheck.missingIngredients.forEach(ing => {
+            allMissingIngredients.push({
+              product: item.name,
+              ingredient: ing.name,
+              available: ing.available,
+              needed: ing.needed,
+              unit: ing.unit
+            })
+          })
         }
       }
 
@@ -5660,8 +5674,67 @@ export default function POS() {
               // insumos), lo que sumaba los tiempos. console.time mide cuánto toma cada fase.
               const _stockPhase = (async () => {
               const _stockT0 = Date.now()
+              // === PRIMARY: descuento de stock + movimientos EN EL SERVIDOR (1 transacción
+              // atómica, rápido). Si falla (o la función no está desplegada), cae al fallback
+              // en el cliente de más abajo, así nunca se pierde una venta. ===
               try {
-              // Map para almacenar desglose de lotes por item (para actualizar factura)
+                const { httpsCallable } = await import('firebase/functions')
+                const { functions: _fns } = await import('@/lib/firebase')
+                const _itemsPayload = bgCart.filter(it => !it.isCustom).map(it => {
+                  const pd = bgProducts.find(p => p.id === it.id)
+                  if (!pd || pd.trackStock === false) return null
+                  return {
+                    productId: it.id,
+                    name: it.name || '',
+                    quantity: it.quantity * (it.presentationFactor || 1),
+                    variantSku: it.variantSku || null,
+                    isNoLot: !!it.isNoLot,
+                    batchNumber: it.batchNumber || null,
+                    serialNumber: it.serialNumber || null,
+                    cartKey: it.cartId || it.id,
+                    presentationName: it.presentationName || null,
+                    originalQty: it.quantity,
+                  }
+                }).filter(Boolean)
+                if (_itemsPayload.length > 0) {
+                  const _res = await httpsCallable(_fns, 'processSaleStock')({
+                    businessId,
+                    warehouseId: bgSelectedWarehouse?.id || '',
+                    invoiceId: bgInvoiceId || '',
+                    invoiceNumber: bgNumberResult?.number || '',
+                    documentType: bgDocumentType,
+                    allowNegativeStock: !!companySettings?.allowNegativeStock,
+                    items: _itemsPayload,
+                  })
+                  // Actualizar la factura con el desglose de lotes devuelto por el servidor
+                  const _bb = _res?.data?.batchBreakdownByCartKey || {}
+                  if (Object.keys(_bb).length > 0 && bgInvoiceId) {
+                    try {
+                      const { doc: _dr, getDoc: _gd, updateDoc: _ud } = await import('firebase/firestore')
+                      const { db: _fdb } = await import('@/lib/firebase')
+                      const _invRef = _dr(_fdb, 'businesses', businessId, 'invoices', bgInvoiceId)
+                      const _invSnap = await _gd(_invRef)
+                      if (_invSnap.exists()) {
+                        const _invData = _invSnap.data()
+                        const _updItems = (_invData.items || []).map(invItem => {
+                          const cartItem = bgCart.find(c => c.id === invItem.productId)
+                          const cartKey = cartItem?.cartId || cartItem?.id
+                          const breakdown = _bb[cartKey]
+                          return breakdown ? { ...invItem, batchBreakdown: breakdown } : invItem
+                        })
+                        await _ud(_invRef, { items: _updItems })
+                      }
+                    } catch (err) { console.error('Error al guardar desglose de lotes (servidor):', err) }
+                  }
+                }
+                _stockMs = Date.now() - _stockT0
+                return // listo en el servidor → no ejecutar el fallback de cliente
+              } catch (serverErr) {
+                console.error('⚠️ processSaleStock (servidor) falló, usando fallback en cliente:', serverErr)
+              }
+
+              try {
+              // FALLBACK (cliente): Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
 
               // Agrupar items con número de serie por (productId|variantSku|warehouseId).
@@ -5899,46 +5972,45 @@ export default function POS() {
                 return true
               })
 
-              // En PARALELO: cada movimiento es un documento nuevo e independiente (no hay
-              // conflicto de doc), así 50 productos se registran a la vez en lugar de uno por
-              // uno. Antes este for secuencial era el principal causante de la demora al
-              // procesar ventas con muchos ítems.
-              await Promise.all(itemsForMovement.map(async (item) => {
-                const quantityForMovement = item.quantity * (item.presentationFactor || 1)
-                const docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
-                const noteParts = [`Venta ${item.name} - ${docTypeName} ${bgNumberResult?.number || ''}`]
-                if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
-                if (item.isNoLot) noteParts.push('Sin lote')
-                if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
-                const movementData = {
-                  productId: item.id,
-                  productName: item.name || '',
-                  warehouseId: bgSelectedWarehouse?.id || '',
-                  type: 'sale',
-                  quantity: -quantityForMovement,
-                  reason: 'Venta',
-                  referenceType: 'invoice',
-                  referenceId: bgInvoiceId || '',
-                  referenceNumber: bgNumberResult?.number || '',
-                  userId: bgUserUid,
-                  ...(item.batchNumber && { batchNumber: item.batchNumber }),
-                  ...(item.serialNumber && { serialNumber: item.serialNumber }),
-                  ...(item.variantSku && { variantSku: item.variantSku }),
-                  notes: noteParts.join(' - ')
-                }
-                // Reintentar hasta 3 veces si falla para evitar movimientos perdidos
-                for (let attempt = 1; attempt <= 3; attempt++) {
-                  try {
-                    await createStockMovement(businessId, movementData)
-                    break // Éxito, salir del retry
-                  } catch (err) {
-                    console.error(`📦 [StockMovement] Intento ${attempt}/3 falló para: ${item.name}`, err)
-                    if (attempt === 3) {
-                      console.error('📦 [StockMovement] CRÍTICO: No se pudo registrar movimiento después de 3 intentos para:', item.name)
-                    }
+              // Registrar TODOS los movimientos en writeBatch (1 escritura por lote de hasta 450,
+              // en vez de N escrituras sueltas). Muchísimos menos round-trips a Firestore.
+              try {
+                const { writeBatch: _wb, collection: _mc, doc: _md, serverTimestamp: _mts } = await import('firebase/firestore')
+                const { db: _mdb } = await import('@/lib/firebase')
+                const _movCol = _mc(_mdb, 'businesses', businessId, 'stockMovements')
+                const _docTypeName = bgDocumentType === 'boleta' ? 'Boleta' : bgDocumentType === 'factura' ? 'Factura' : 'Nota de Venta'
+                for (let _mi = 0; _mi < itemsForMovement.length; _mi += 450) {
+                  const _chunk = itemsForMovement.slice(_mi, _mi + 450)
+                  const _batch = _wb(_mdb)
+                  for (const item of _chunk) {
+                    const quantityForMovement = item.quantity * (item.presentationFactor || 1)
+                    const noteParts = [`Venta ${item.name} - ${_docTypeName} ${bgNumberResult?.number || ''}`]
+                    if (item.batchNumber) noteParts.push(`Lote: ${item.batchNumber}`)
+                    if (item.isNoLot) noteParts.push('Sin lote')
+                    if (item.presentationName) noteParts.push(`${item.quantity} ${item.presentationName}`)
+                    _batch.set(_md(_movCol), {
+                      productId: item.id,
+                      productName: item.name || '',
+                      warehouseId: bgSelectedWarehouse?.id || '',
+                      type: 'sale',
+                      quantity: -quantityForMovement,
+                      reason: 'Venta',
+                      referenceType: 'invoice',
+                      referenceId: bgInvoiceId || '',
+                      referenceNumber: bgNumberResult?.number || '',
+                      userId: bgUserUid,
+                      ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                      ...(item.serialNumber && { serialNumber: item.serialNumber }),
+                      ...(item.variantSku && { variantSku: item.variantSku }),
+                      notes: noteParts.join(' - '),
+                      createdAt: _mts(),
+                    })
                   }
+                  await _batch.commit()
                 }
-              }))
+              } catch (movErr) {
+                console.error('📦 [StockMovement] Error al registrar movimientos en lote:', movErr)
+              }
               } catch (stockErr) {
                 console.error('❌ CRÍTICO: Error en descuento de stock:', stockErr)
                 toast.error('Venta guardada pero falló el descuento de stock. Revisa el inventario manualmente.', 10000)
@@ -5955,16 +6027,20 @@ export default function POS() {
               //     undefined: default por modo (restaurant=sí) vía shouldDeductIngredients.
               // Lectura de recetas: UNA por producto (dedupe). Varias líneas del mismo producto
               // (presentaciones/variantes) comparten productId, así no se relee N veces.
-              const _uniqueProductIds = [...new Set(bgCart.filter(item => !item.isCustom).map(item => item.id))]
+              // Leer TODAS las recetas en UNA sola consulta (antes era 1 query por producto,
+              // ~50 queries con muchos ítems). Mapa productId -> receta.
               const _recipeByProduct = new Map()
-              await Promise.all(_uniqueProductIds.map(async (pid) => {
-                try {
-                  const recipeResult = await getRecipeByProductId(businessId, pid)
-                  _recipeByProduct.set(pid, (recipeResult.success && recipeResult.data) ? recipeResult.data : null)
-                } catch (error) {
-                  _recipeByProduct.set(pid, null)
-                }
-              }))
+              try {
+                const { collection: _rc, getDocs: _rg } = await import('firebase/firestore')
+                const { db: _rdb } = await import('@/lib/firebase')
+                const _recipesSnap = await _rg(_rc(_rdb, 'businesses', businessId, 'recipes'))
+                _recipesSnap.forEach(d => {
+                  const r = { id: d.id, ...d.data() }
+                  if (r.productId) _recipeByProduct.set(r.productId, r)
+                })
+              } catch (error) {
+                console.warn('No se pudieron leer las recetas:', error)
+              }
               // AGREGAR el consumo de insumos de TODOS los platos y descontar en 1 sola pasada.
               // Antes era 1 llamada a deductIngredients por plato, EN SERIE (race de insumos
               // compartidos) → con ~25 platos eso eran decenas de lecturas+commits encadenados,
@@ -6169,18 +6245,11 @@ export default function POS() {
             }
 
             console.log('✅ Todas las operaciones de background completadas')
-            // Diagnóstico temporal: mostrar el DESGLOSE en pantalla.
-            try {
-              const _fmt = (ms) => ms == null ? '—' : (ms / 1000).toFixed(1) + 's'
-              const _total = ((Date.now() - _bgStart) / 1000).toFixed(1)
-              const _msg = `Total ${_total}s · stock ${_fmt(_stockMs)} · recetas/insumos ${_fmt(_recipeMs)}`
-              toast.info(`⏱ ${_msg}`, 20000)
-              // En localhost (dev) además un alert que NO se cierra solo, para poder leerlo.
-              // En producción NO sale (no molesta a los clientes).
-              if (import.meta.env?.DEV) {
-                window.alert(`⏱ TIEMPOS DE REGISTRO\n\nTotal: ${_total}s\nStock + movimientos: ${_fmt(_stockMs)}\nRecetas / insumos: ${_fmt(_recipeMs)}`)
-              }
-            } catch (e) { void e }
+            // Métrica de tiempos SOLO en consola de desarrollo — no se muestra a los usuarios.
+            if (import.meta.env?.DEV) {
+              const _f = (ms) => ms == null ? '—' : (ms / 1000).toFixed(1) + 's'
+              console.log(`⏱ Venta: desde clic ${((Date.now() - _checkoutT0) / 1000).toFixed(1)}s · registro ${((Date.now() - _bgStart) / 1000).toFixed(1)}s (stock ${_f(_stockMs)} · recetas ${_f(_recipeMs)})`)
+            }
           } catch (bgError) {
             console.error('❌ Error en operaciones de background:', bgError)
             toast.error('Error al guardar datos. Verifica en el listado de ventas.', 5000)
