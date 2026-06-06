@@ -978,6 +978,9 @@ export default function StockMovements() {
                         {movement.batchNumber && (
                           <p className="text-xs text-amber-600 truncate">Lote: {movement.batchNumber}</p>
                         )}
+                        {movement.serialNumber && (
+                          <p className="text-xs text-blue-600 truncate">Serie: {movement.serialNumber}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className={`font-bold text-sm ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>

@@ -2370,7 +2370,9 @@ export default function Products() {
                         referenceType: 'initial_stock',
                         referenceId: existingProduct.id,
                         userId: user?.uid,
-                        notes: `Ajuste de stock por importación masiva (${previousStock} → ${stockValue})`
+                        ...(product.batchNumber && { batchNumber: product.batchNumber }),
+                        ...(product.expirationDate && { expirationDate: product.expirationDate }),
+                        notes: `Ajuste de stock por importación masiva (${previousStock} → ${stockValue})${product.batchNumber ? ` - Lote: ${product.batchNumber}` : ''}`
                       })
                     }
                   }
@@ -2471,7 +2473,9 @@ export default function Products() {
                     referenceType: 'initial_stock',
                     referenceId: result.id,
                     userId: user?.uid,
-                    notes: 'Ingreso de stock inicial por importación masiva'
+                    ...(product.batchNumber && { batchNumber: product.batchNumber }),
+                    ...(product.expirationDate && { expirationDate: product.expirationDate }),
+                    notes: `Ingreso de stock inicial por importación masiva${product.batchNumber ? ` - Lote: ${product.batchNumber}` : ''}`
                   })
                 }
               }
