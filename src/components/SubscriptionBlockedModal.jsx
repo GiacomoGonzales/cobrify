@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2, Loader2 } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2, Loader2, LogOut } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { getVendedor } from '@/services/vendedorService'
@@ -44,7 +44,7 @@ function CopyButton({ text }) {
   )
 }
 
-export default function SubscriptionBlockedModal({ isOpen, subscription, businessName }) {
+export default function SubscriptionBlockedModal({ isOpen, subscription, businessName, onLogout }) {
   const email = subscription?.email || ''
   const [vendedor, setVendedor] = useState(null)
   const [loadingVendedor, setLoadingVendedor] = useState(!!subscription?.vendedorId)
@@ -158,6 +158,17 @@ export default function SubscriptionBlockedModal({ isOpen, subscription, busines
           <MessageCircle className="w-5 h-5 mr-2" />
           Enviar captura por WhatsApp
         </Button>
+
+        {/* Cerrar sesión: permite salir de la cuenta bloqueada (ej. para cambiar de usuario) */}
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full mt-3 flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 py-2 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Cerrar sesión
+          </button>
+        )}
       </div>
     </Modal>
   )

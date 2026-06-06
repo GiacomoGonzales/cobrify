@@ -793,6 +793,7 @@ export const AuthProvider = ({ children }) => {
           isOpen={shouldShowBlockedModal}
           subscription={subscription}
           businessName={subscription?.businessName || user?.email}
+          onLogout={logout}
         />
       )}
     </AuthContext.Provider>
