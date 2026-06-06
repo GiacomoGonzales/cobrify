@@ -6123,9 +6123,15 @@ export default function POS() {
           }
         }
 
-        // Esperar a que terminen las operaciones complementarias (incluye descuento
-        // de stock). Si el usuario navega o cierra antes, se pierden, por eso awaiteamos.
-        // backgroundSave() tiene su propio try/catch interno, no lanza.
+        // Liberar la UI AL INSTANTE: la factura ya está guardada y tanto la impresión
+        // (5533) como el envío a SUNAT (fire-and-forget) ya corren aparte. El descuento
+        // de stock y el registro de movimientos siguen en SEGUNDO PLANO sin bloquear el
+        // botón "Procesar venta". Antes el `await` dejaba el botón cargando hasta terminar
+        // todo el stock, lo que demoraba mucho en ventas con muchos ítems/variantes.
+        setIsProcessing(false)
+        checkoutGuardRef.current = false
+        // Igual lo esperamos para mantener viva la operación mientras la página siga
+        // abierta. backgroundSave() tiene su propio try/catch interno, no lanza.
         await backgroundSave()
       }
     } catch (error) {
