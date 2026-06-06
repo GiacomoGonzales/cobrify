@@ -456,20 +456,43 @@ export default function Purchases() {
               variantSku
             )
 
-            // Registrar movimiento de stock
-            await createStockMovement(businessId, {
+            // Registrar movimiento(s) de stock de la reversión, con trazabilidad de lote/serie
+            // para que el historial los muestre igual que en las ventas (antes la anulación
+            // salía sin lote ni serie):
+            //  - Productos con SERIE: un movimiento por cada serie (cant. -1, "Serie: X").
+            //  - Demás productos: un solo movimiento con el lote ("Lote: X").
+            const revertedSerials = Array.isArray(item.serialNumbers)
+              ? item.serialNumbers.filter(sn => sn && String(sn).trim())
+              : []
+            const baseVoidMovement = {
               productId: item.productId,
               warehouseId: warehouseId,
               type: 'purchase_void',
-              quantity: -quantityToDeduct,
               reason: 'Anulación de compra',
               referenceType: 'purchase_void',
               referenceId: deletingPurchase.id,
               referenceNumber: deletingPurchase.invoiceNumber || 'S/N',
               userId: user.uid,
               ...(variantSku && { variantSku }),
-              notes: `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'}${variantSku ? ` (${variantSku})` : ''}`
-            })
+              ...(item.batchNumber && { batchNumber: item.batchNumber }),
+            }
+            const voidNoteBase = `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'}`
+            if (revertedSerials.length > 0) {
+              for (const sn of revertedSerials) {
+                await createStockMovement(businessId, {
+                  ...baseVoidMovement,
+                  quantity: -1,
+                  serialNumber: sn,
+                  notes: `${voidNoteBase} - Serie: ${sn}${item.batchNumber ? ` - Lote: ${item.batchNumber}` : ''}`
+                })
+              }
+            } else {
+              await createStockMovement(businessId, {
+                ...baseVoidMovement,
+                quantity: -quantityToDeduct,
+                notes: `${voidNoteBase}${item.batchNumber ? ` - Lote: ${item.batchNumber}` : ''}${variantSku ? ` (${variantSku})` : ''}`
+              })
+            }
 
             console.log(`✅ Stock revertido para ${item.productName}: -${quantityToDeduct}`)
           } catch (stockError) {
