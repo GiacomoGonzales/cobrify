@@ -5652,6 +5652,11 @@ export default function POS() {
             //    stock ya descontado (el toggle "descontar stock" se activó al crearla).
             const _guideAlreadyDeducted = !!(_sourceDispatchGuide && _sourceDispatchGuide.stockAlreadyDeducted)
             if (!(_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) && !_guideAlreadyDeducted) {
+              // Fase de stock + movimientos: corre EN PARALELO con la fase de recetas/insumos
+              // (son independientes). Antes corrían en cadena (stock → movimientos → recetas →
+              // insumos), lo que sumaba los tiempos. console.time mide cuánto toma cada fase.
+              const _stockPhase = (async () => {
+              try { console.time('POS:stock+movimientos') } catch (e) { void e }
               try {
               // Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
@@ -5935,30 +5940,33 @@ export default function POS() {
                 console.error('❌ CRÍTICO: Error en descuento de stock:', stockErr)
                 toast.error('Venta guardada pero falló el descuento de stock. Revisa el inventario manualmente.', 10000)
               }
+              try { console.timeEnd('POS:stock+movimientos') } catch (e) { void e }
+              })()
 
-              // 4.5. Descontar ingredientes del inventario
-              // - Recetas con deductOnSale=true (default en restaurantes): descontar al vender
-              // - Recetas con deductOnSale=false (producción): NO descontar, ya se descontó al producir
-              // - Recetas legacy (deductOnSale=undefined): se aplica el mismo default del formulario
-              //   (restaurant=descontar, otros=no descontar) vía shouldDeductIngredients.
-              // Fase 1: leer todas las recetas en PARALELO. En retail/farmacia casi todas
-              // vienen vacías, pero antes se leían una por una y eso solo ya demoraba con
-              // muchos ítems (50 lecturas en fila).
-              const recipeLookups = await Promise.all(
-                bgCart.filter(item => !item.isCustom).map(async (item) => {
-                  try {
-                    const recipeResult = await getRecipeByProductId(businessId, item.id)
-                    return { item, recipe: (recipeResult.success && recipeResult.data) ? recipeResult.data : null }
-                  } catch (error) {
-                    console.warn(`⚠️ No se pudo leer receta de ${item.name}:`, error)
-                    return { item, recipe: null }
-                  }
-                })
-              )
-              // Fase 2: descontar ingredientes en SERIE a propósito: varios productos pueden
-              // compartir un mismo insumo y descontarlos en paralelo causaría condiciones de
-              // carrera (lecturas/escrituras pisándose) sobre ese insumo.
-              for (const { item, recipe } of recipeLookups) {
+              // Fase de recetas/insumos: corre EN PARALELO con stock+movimientos. Es
+              // independiente (toca docs de ingredientes, no de los productos vendidos).
+              const _recipePhase = (async () => {
+              try { console.time('POS:recetas+insumos') } catch (e) { void e }
+              // 4.5. Descontar ingredientes del inventario (solo recetas con deductOnSale).
+              //   - true: descontar al vender · false: producción (ya descontado) ·
+              //     undefined: default por modo (restaurant=sí) vía shouldDeductIngredients.
+              // Lectura de recetas: UNA por producto (dedupe). Varias líneas del mismo producto
+              // (presentaciones/variantes) comparten productId, así no se relee N veces.
+              const _uniqueProductIds = [...new Set(bgCart.filter(item => !item.isCustom).map(item => item.id))]
+              const _recipeByProduct = new Map()
+              await Promise.all(_uniqueProductIds.map(async (pid) => {
+                try {
+                  const recipeResult = await getRecipeByProductId(businessId, pid)
+                  _recipeByProduct.set(pid, (recipeResult.success && recipeResult.data) ? recipeResult.data : null)
+                } catch (error) {
+                  _recipeByProduct.set(pid, null)
+                }
+              }))
+              // Descuento en SERIE por LÍNEA (cantidades correctas por presentación). Serial a
+              // propósito: varios productos pueden compartir un insumo y descontarlos en paralelo
+              // causaría condiciones de carrera sobre ese insumo.
+              for (const item of bgCart.filter(item => !item.isCustom)) {
+                const recipe = _recipeByProduct.get(item.id)
                 if (!recipe || !shouldDeductIngredients(recipe, businessMode)) continue
                 try {
                   const ingredientsToDeduct = recipe.ingredients.map(ing => ({
@@ -5976,6 +5984,11 @@ export default function POS() {
                   console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
                 }
               }
+              try { console.timeEnd('POS:recetas+insumos') } catch (e) { void e }
+              })()
+
+              // Esperar ambas fases (corren en paralelo)
+              await Promise.all([_stockPhase, _recipePhase])
             }
 
             // 5. Actualizar métricas del mozo
