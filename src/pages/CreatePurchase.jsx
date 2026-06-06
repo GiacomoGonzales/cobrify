@@ -1625,6 +1625,7 @@ export default function CreatePurchase() {
           const qty = parseFloat(item.quantity) || 0
           if (qty <= 0) return
 
+          const cleanSerials = (item.serialNumbers || []).filter(sn => sn?.trim?.())
           return createStockMovement(businessId, {
             productId: item.productId,
             warehouseId: selectedWarehouse?.id || '',
@@ -1635,7 +1636,9 @@ export default function CreatePurchase() {
             referenceId: resultId || '',
             userId: user?.uid,
             ...(item.variantSku && { variantSku: item.variantSku }),
-            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}${item.variantSku ? ` (${item.variantLabel || item.variantSku})` : ''}`
+            ...(item.batchNumber && { batchNumber: item.batchNumber }),
+            ...(cleanSerials.length > 0 && { serialNumbers: cleanSerials }),
+            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}${item.variantSku ? ` (${item.variantLabel || item.variantSku})` : ''}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${cleanSerials.length > 0 ? ` (Series: ${cleanSerials.join(', ')})` : ''}`
           })
         })
 

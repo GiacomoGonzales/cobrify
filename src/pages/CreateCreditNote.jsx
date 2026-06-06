@@ -817,13 +817,27 @@ export default function CreateCreditNote() {
                 // Restaurar cantidad del lote si el item tenía lote
                 const batchExtraUpdates = {}
                 if (item.batchNumber && productData.batches?.length > 0) {
+                  let matched = false
                   const updatedBatches = productData.batches.map(b => {
                     const bId = b.lotNumber || b.batchNumber || b.id
                     if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
+                      matched = true
                       return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
                     }
                     return b
                   })
+                  // Si el lote ya no existía (se vació y se eliminó del array), recrearlo
+                  // para no descuadrar batches[] respecto al stock total devuelto.
+                  if (!matched) {
+                    updatedBatches.push({
+                      id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      batchNumber: item.batchNumber,
+                      lotNumber: item.batchNumber,
+                      quantity: quantityToRestore,
+                      expirationDate: item.expirationDate || null,
+                      warehouseId: warehouseId || null,
+                    })
+                  }
                   batchExtraUpdates.batches = updatedBatches
 
                   const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
