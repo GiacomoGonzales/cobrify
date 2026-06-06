@@ -5575,6 +5575,8 @@ export default function POS() {
         // ========================================
         const backgroundSave = async () => {
           const _bgStart = Date.now()
+          let _stockMs = null
+          let _recipeMs = null
           try {
             console.log('✅ Factura ya guardada, ejecutando operaciones complementarias...')
 
@@ -5657,7 +5659,7 @@ export default function POS() {
               // (son independientes). Antes corrían en cadena (stock → movimientos → recetas →
               // insumos), lo que sumaba los tiempos. console.time mide cuánto toma cada fase.
               const _stockPhase = (async () => {
-              try { console.time('POS:stock+movimientos') } catch (e) { void e }
+              const _stockT0 = Date.now()
               try {
               // Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
@@ -5941,13 +5943,13 @@ export default function POS() {
                 console.error('❌ CRÍTICO: Error en descuento de stock:', stockErr)
                 toast.error('Venta guardada pero falló el descuento de stock. Revisa el inventario manualmente.', 10000)
               }
-              try { console.timeEnd('POS:stock+movimientos') } catch (e) { void e }
+              _stockMs = Date.now() - _stockT0
               })()
 
               // Fase de recetas/insumos: corre EN PARALELO con stock+movimientos. Es
               // independiente (toca docs de ingredientes, no de los productos vendidos).
               const _recipePhase = (async () => {
-              try { console.time('POS:recetas+insumos') } catch (e) { void e }
+              const _recipeT0 = Date.now()
               // 4.5. Descontar ingredientes del inventario (solo recetas con deductOnSale).
               //   - true: descontar al vender · false: producción (ya descontado) ·
               //     undefined: default por modo (restaurant=sí) vía shouldDeductIngredients.
@@ -5985,7 +5987,7 @@ export default function POS() {
                   console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
                 }
               }
-              try { console.timeEnd('POS:recetas+insumos') } catch (e) { void e }
+              _recipeMs = Date.now() - _recipeT0
               })()
 
               // Esperar ambas fases (corren en paralelo)
@@ -6149,9 +6151,11 @@ export default function POS() {
             }
 
             console.log('✅ Todas las operaciones de background completadas')
-            // Diagnóstico temporal: mostrar en pantalla cuánto tomó registrar todo (stock,
-            // movimientos, insumos). Si NO ves este aviso al vender, estás en código viejo (caché).
-            try { toast.info(`Registro completo en ${((Date.now() - _bgStart) / 1000).toFixed(1)} s`, 8000) } catch (e) { void e }
+            // Diagnóstico temporal: mostrar el DESGLOSE en pantalla (sin tocar consola).
+            try {
+              const _fmt = (ms) => ms == null ? '—' : (ms / 1000).toFixed(1) + 's'
+              toast.info(`⏱ Total ${((Date.now() - _bgStart) / 1000).toFixed(1)}s · stock ${_fmt(_stockMs)} · recetas/insumos ${_fmt(_recipeMs)}`, 20000)
+            } catch (e) { void e }
           } catch (bgError) {
             console.error('❌ Error en operaciones de background:', bgError)
             toast.error('Error al guardar datos. Verifica en el listado de ventas.', 5000)
