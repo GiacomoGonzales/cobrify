@@ -6169,10 +6169,17 @@ export default function POS() {
             }
 
             console.log('✅ Todas las operaciones de background completadas')
-            // Diagnóstico temporal: mostrar el DESGLOSE en pantalla (sin tocar consola).
+            // Diagnóstico temporal: mostrar el DESGLOSE en pantalla.
             try {
               const _fmt = (ms) => ms == null ? '—' : (ms / 1000).toFixed(1) + 's'
-              toast.info(`⏱ Total ${((Date.now() - _bgStart) / 1000).toFixed(1)}s · stock ${_fmt(_stockMs)} · recetas/insumos ${_fmt(_recipeMs)}`, 20000)
+              const _total = ((Date.now() - _bgStart) / 1000).toFixed(1)
+              const _msg = `Total ${_total}s · stock ${_fmt(_stockMs)} · recetas/insumos ${_fmt(_recipeMs)}`
+              toast.info(`⏱ ${_msg}`, 20000)
+              // En localhost (dev) además un alert que NO se cierra solo, para poder leerlo.
+              // En producción NO sale (no molesta a los clientes).
+              if (import.meta.env?.DEV) {
+                window.alert(`⏱ TIEMPOS DE REGISTRO\n\nTotal: ${_total}s\nStock + movimientos: ${_fmt(_stockMs)}\nRecetas / insumos: ${_fmt(_recipeMs)}`)
+              }
             } catch (e) { void e }
           } catch (bgError) {
             console.error('❌ Error en operaciones de background:', bgError)
