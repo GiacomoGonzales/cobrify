@@ -436,6 +436,8 @@ export default function Products() {
       weight: '',
       unit: 'NIU',
       category: '',
+      marca: '',
+      brandId: '',
       stock: '',
       noStock: false,
       hasVariants: false,

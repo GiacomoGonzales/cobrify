@@ -291,6 +291,7 @@ export const productSchema = z.object({
     .optional(),
   noStock: z.boolean().optional(),
   marca: z.string().optional(),
+  brandId: z.string().optional().nullable(), // Marca administrada (ID). Sin esto, zodResolver descartaba brandId del form al guardar.
   // NUEVO: Stock por almacén para productos simples
   warehouseStocks: z.array(warehouseStockSchema).optional(),
   // Campos para sistema de variantes
