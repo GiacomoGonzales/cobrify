@@ -5574,6 +5574,7 @@ export default function POS() {
         // (la factura ya fue creada, estas son operaciones complementarias)
         // ========================================
         const backgroundSave = async () => {
+          const _bgStart = Date.now()
           try {
             console.log('✅ Factura ya guardada, ejecutando operaciones complementarias...')
 
@@ -6148,6 +6149,9 @@ export default function POS() {
             }
 
             console.log('✅ Todas las operaciones de background completadas')
+            // Diagnóstico temporal: mostrar en pantalla cuánto tomó registrar todo (stock,
+            // movimientos, insumos). Si NO ves este aviso al vender, estás en código viejo (caché).
+            try { toast.info(`Registro completo en ${((Date.now() - _bgStart) / 1000).toFixed(1)} s`, 8000) } catch (e) { void e }
           } catch (bgError) {
             console.error('❌ Error en operaciones de background:', bgError)
             toast.error('Error al guardar datos. Verifica en el listado de ventas.', 5000)
