@@ -12,15 +12,17 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases as getIngredientPurchases, getIngredients } from '@/services/ingredientService'
 import { getPurchases as getProductPurchases } from '@/services/firestoreService'
+import { getWarehouses } from '@/services/warehouseService'
 
 export default function PurchaseHistory() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, allowedBranches, allowedWarehouses, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
   const [ingredientPurchases, setIngredientPurchases] = useState([])
   const [productPurchases, setProductPurchases] = useState([])
   const [ingredients, setIngredients] = useState([])
+  const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Filters
@@ -36,7 +38,7 @@ export default function PurchaseHistory() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -50,10 +52,11 @@ export default function PurchaseHistory() {
         setIngredients(demoIngredients)
       } else {
         const businessId = getBusinessId()
-        const [ingPurchasesResult, ingredientsResult, prodPurchasesResult] = await Promise.all([
+        const [ingPurchasesResult, ingredientsResult, prodPurchasesResult, warehousesResult] = await Promise.all([
           getIngredientPurchases(businessId),
           getIngredients(businessId),
-          getProductPurchases(businessId)
+          getProductPurchases(businessId),
+          getWarehouses(businessId)
         ])
 
         if (ingPurchasesResult.success) {
@@ -65,6 +68,10 @@ export default function PurchaseHistory() {
         if (prodPurchasesResult.success) {
           setProductPurchases(prodPurchasesResult.data || [])
         }
+        if (warehousesResult.success) {
+          // Almacenes activos (para derivar la sucursal de cada compra de productos)
+          setWarehouses((warehousesResult.data || []).filter(w => w.isActive !== false))
+        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -74,13 +81,50 @@ export default function PurchaseHistory() {
     }
   }
 
+  // Seguridad: ¿hay restricción activa por ubicación para este usuario? (usuarios secundarios)
+  const locationRestricted = !isBusinessOwner && !isAdmin &&
+    ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
+
+  // Almacenes permitidos efectivos (para mapear compras: almacén → sucursal).
+  // Las compras de productos NO tienen branchId; la sucursal se deriva del
+  // almacén. Construimos el set de almacenes visibles: su sucursal está
+  // permitida (Principal vía hasMainBranchAccess) Y, si hay restricción por
+  // almacén, el almacén está explícitamente permitido.
+  const allowedWarehouseIds = useMemo(() => {
+    if (!locationRestricted) return null
+    const branchRestricted = allowedBranches?.length > 0
+    const whRestricted = allowedWarehouses?.length > 0
+    return new Set(
+      warehouses
+        .filter(w => {
+          const branchOk = !branchRestricted ? true : (!w.branchId ? hasMainBranchAccess : allowedBranches.includes(w.branchId))
+          const whOk = !whRestricted ? true : allowedWarehouses.includes(w.id)
+          return branchOk && whOk
+        })
+        .map(w => w.id)
+    )
+  }, [warehouses, allowedBranches, allowedWarehouses, hasMainBranchAccess, locationRestricted])
+
   // Unificar ambas fuentes en un solo array normalizado
   const allPurchases = useMemo(() => {
+    // Filtro de seguridad por ubicación ANTES del desglose por ítem (que descarta
+    // warehouseId). La sucursal de una compra de productos se deriva de su almacén.
+    // Compra sin almacén = Sucursal Principal → visible solo si hasMainBranchAccess.
+    // Las compras de ingredientes (ingredientPurchases) normalmente no llevan
+    // ubicación, por eso se dejan tal cual (legacy-safe).
+    const visibleProductPurchases = !locationRestricted
+      ? productPurchases
+      : productPurchases.filter(purchase => {
+          const whId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
+          if (!whId) return hasMainBranchAccess
+          return allowedWarehouseIds ? allowedWarehouseIds.has(whId) : true
+        })
+
     // Construir sets de claves de compras principales que ya tienen ingredientes
     // para evitar duplicar ingredientes que ya están en la colección purchases
     const mainPurchaseKeysByInvoice = new Set()
     const mainPurchaseKeysByDay = new Set()
-    productPurchases.forEach(purchase => {
+    visibleProductPurchases.forEach(purchase => {
       const hasIngredients = purchase.items?.some(item => item.itemType === 'ingredient')
       if (hasIngredients) {
         const supplierName = purchase.supplier?.businessName || ''
@@ -129,7 +173,7 @@ export default function PurchaseHistory() {
 
     // Compras de productos (colección purchases) - desglosar items individuales
     const prodItems = []
-    productPurchases.forEach(purchase => {
+    visibleProductPurchases.forEach(purchase => {
       if (!purchase.items || purchase.items.length === 0) return
       const purchaseDate = purchase.invoiceDate || purchase.createdAt
       const supplierName = purchase.supplier?.businessName || ''
@@ -155,7 +199,7 @@ export default function PurchaseHistory() {
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0)
       return dateB - dateA
     })
-  }, [ingredientPurchases, productPurchases])
+  }, [ingredientPurchases, productPurchases, allowedWarehouseIds, locationRestricted, hasMainBranchAccess])
 
   // Get unique suppliers
   const suppliers = Array.from(

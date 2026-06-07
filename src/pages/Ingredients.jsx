@@ -53,7 +53,7 @@ const UNITS = [
 ]
 
 export default function Ingredients() {
-  const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess } = useAppContext()
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
@@ -263,7 +263,12 @@ export default function Ingredients() {
       ])
 
       if (branchesResult.success) {
-        setBranches(branchesResult.data || [])
+        // Filtrar sucursales según el acceso del usuario (usuarios secundarios
+        // restringidos solo deben ver/seleccionar sus sucursales permitidas).
+        const accessibleBranches = filterBranchesByAccess
+          ? filterBranchesByAccess(branchesResult.data || [])
+          : (branchesResult.data || [])
+        setBranches(accessibleBranches)
       }
       if (warehousesResult.success) {
         const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
@@ -587,15 +592,33 @@ export default function Ingredients() {
     }
   }
 
+  // Conjunto de IDs de almacenes permitidos para el usuario (null = sin restricción → todos).
+  // Para owner/admin/usuarios sin restricción se queda en null y el comportamiento es idéntico al actual.
+  const allowedWarehouseIdSet = useMemo(() => {
+    if (!allowedWarehouses || allowedWarehouses.length === 0) return null
+    return new Set(allowedWarehouses)
+  }, [allowedWarehouses])
+
   // Helper para obtener stock de un ingrediente según el filtro de sucursal
   const getStockForBranch = useMemo(() => {
     return (ingredient) => {
       if (filterBranch === 'all') {
-        return ingredient.currentStock || 0
+        // Sin restricción de almacenes: total global (idéntico al comportamiento anterior).
+        if (!allowedWarehouseIdSet) {
+          return ingredient.currentStock || 0
+        }
+        // Usuario restringido: sumar SOLO los almacenes permitidos para no filtrar
+        // stock de sucursales ajenas. Sin warehouseStocks no se puede atribuir el
+        // stock a un almacén permitido, así que se reporta 0.
+        const warehouseStocks = ingredient.warehouseStocks || []
+        if (warehouseStocks.length === 0) return 0
+        return warehouseStocks
+          .filter(ws => allowedWarehouseIdSet.has(ws.warehouseId))
+          .reduce((sum, ws) => sum + (ws.stock || 0), 0)
       }
       return getIngredientStockForBranch(ingredient, warehouses, filterBranch)
     }
-  }, [warehouses, filterBranch])
+  }, [warehouses, filterBranch, allowedWarehouseIdSet])
 
   // Filter ingredients
   const filteredIngredients = ingredients.filter(ingredient => {

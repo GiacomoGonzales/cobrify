@@ -147,7 +147,7 @@ const getRealStockValue = (item) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
@@ -365,6 +365,13 @@ export default function Inventory() {
 
   const filteredWarehouses = React.useMemo(() => getFilteredWarehouses(), [getFilteredWarehouses])
 
+  // Conjunto de IDs de almacenes permitidos para el usuario (null = sin restricción → todos).
+  // Para owner/admin/usuarios sin restricción se queda en null y el comportamiento es idéntico al actual.
+  const allowedWarehouseIdSet = React.useMemo(() => {
+    if (!allowedWarehouses || allowedWarehouses.length === 0) return null
+    return new Set(allowedWarehouses)
+  }, [allowedWarehouses])
+
   // Calcular stock considerando los filtros de sucursal y almacén
   const getStockForBranch = React.useCallback((item) => {
     // Productos con variantes: sumar stock de todas las variantes
@@ -396,9 +403,11 @@ export default function Inventory() {
     // Obtener IDs de almacenes filtrados por sucursal
     const filteredWarehouseIds = filteredWarehouses.map(w => w.id)
 
-    // Si estamos viendo todas las sucursales, sumar todo
+    // Si estamos viendo todas las sucursales, sumar todo (respetando los almacenes permitidos del usuario)
     if (filterBranch === 'all') {
-      return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      return warehouseStocks
+        .filter(ws => !allowedWarehouseIdSet || allowedWarehouseIdSet.has(ws.warehouseId))
+        .reduce((sum, ws) => sum + (ws.stock || 0), 0)
     }
 
     // Filtrar y sumar solo los almacenes de la sucursal seleccionada
@@ -407,7 +416,7 @@ export default function Inventory() {
       .reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
     return branchStock
-  }, [filterBranch, filterWarehouses, filteredWarehouses])
+  }, [filterBranch, filterWarehouses, filteredWarehouses, allowedWarehouseIdSet])
 
   const loadProducts = async () => {
     if (!user?.uid) return

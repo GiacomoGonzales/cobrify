@@ -6316,6 +6316,27 @@ export default function POS() {
       }
 
       // Fallback: impresión estándar (web o si falla la térmica)
+      // Releer la configuración FRESCA de localStorage antes de imprimir. El estado en memoria
+      // puede quedar desincronizado (p.ej. la opción se activó/cambió después de abrir el POS o
+      // en otra pestaña), lo que hacía que el ticket saliera con valores viejos aunque en
+      // Configuración se vieran activos. Releyendo aquí, cada impresión usa el valor real.
+      try {
+        const { getPrinterConfig } = await import('@/services/thermalPrinterService')
+        const fresh = await getPrinterConfig(getBusinessId())
+        if (fresh.success && fresh.config) {
+          setShowItemUnit(fresh.config.showItemUnit || false)
+          setWebPrintLegible(fresh.config.webPrintLegible || false)
+          setCompactPrint(fresh.config.compactPrint || false)
+          setPrintMargins(fresh.config.printMargins ?? 8)
+          setSimplePrint(fresh.config.simplePrint || false)
+          setA4SheetPrint(fresh.config.a4SheetPrint || false)
+          setTicketPaperWidth(fresh.config.paperWidth || 80)
+          // Dar un tick para que el ticket se re-renderice con los valores frescos antes de imprimir
+          await new Promise(resolve => setTimeout(resolve, 60))
+        }
+      } catch (e) {
+        console.error('Error releyendo config de impresora antes de imprimir:', e)
+      }
       window.print()
       if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
     } finally {

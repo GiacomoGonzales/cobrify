@@ -31,9 +31,13 @@ import { getProducts } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getMassTransfers } from '@/services/massTransferService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
+import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function StockMovements() {
-  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
+  // Los movimientos llevan warehouseId y, en transferencias, fromWarehouse/toWarehouse.
+  const canAccess = useLocationAccess()
   const toast = useToast()
   const { branding } = useBranding()
   const [movements, setMovements] = useState([])
@@ -62,7 +66,7 @@ export default function StockMovements() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -170,14 +174,17 @@ export default function StockMovements() {
           }
         })
 
-        setMovements(enrichedMovements)
+        // Sanea por permisos de ubicación: el usuario secundario solo ve movimientos
+        // de sus almacenes habilitados (en transferencias basta con que uno coincida).
+        setMovements(enrichedMovements.filter(m => canAccess(m, { warehouseFields: ['warehouseId', 'fromWarehouse', 'toWarehouse'] })))
         setLastDoc(movementsResult.lastDoc || null)
         setHasMoreFromServer(movementsResult.hasMore || false)
         setVisibleCount(50)
       }
 
       if (warehousesResult.success) {
-        setWarehouses(warehousesResult.data || [])
+        // Solo almacenes a los que el usuario tiene acceso (para el dropdown de filtro)
+        setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(warehousesResult.data || []) : (warehousesResult.data || []))
       }
 
       if (productsResult.success) {
@@ -241,7 +248,7 @@ export default function StockMovements() {
             isCrossBranchTransfer,
           }
         })
-        setMovements(prev => [...prev, ...enriched])
+        setMovements(prev => [...prev, ...enriched.filter(m => canAccess(m, { warehouseFields: ['warehouseId', 'fromWarehouse', 'toWarehouse'] }))])
         setLastDoc(result.lastDoc || null)
         setHasMoreFromServer(result.hasMore || false)
       } else {
@@ -269,6 +276,9 @@ export default function StockMovements() {
 
   // Filtrar movimientos
   const filteredMovements = movements.filter(movement => {
+    // Defensa de permisos por ubicación (además del saneo en la carga)
+    if (!canAccess(movement, { warehouseFields: ['warehouseId', 'fromWarehouse', 'toWarehouse'] })) return false
+
     const matchesSearch =
       movement.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       movement.productCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||

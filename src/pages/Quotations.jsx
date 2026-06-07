@@ -51,9 +51,12 @@ import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function Quotations() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  // Filtro de seguridad por sucursal/almacén habilitado del usuario (helper compartido)
+  const canAccessQuotation = useLocationAccess()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const toast = useToast()
@@ -146,7 +149,7 @@ export default function Quotations() {
   useEffect(() => {
     loadQuotations()
     loadBranches()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   // Cargar sucursales para filtro
   const loadBranches = async () => {
@@ -216,7 +219,8 @@ export default function Quotations() {
       ])
 
       if (quotationsResult.success) {
-        setQuotations(quotationsResult.data || [])
+        // Seguridad: solo cotizaciones de sucursales/almacenes permitidos (sanea tabla, stats y export)
+        setQuotations((quotationsResult.data || []).filter(canAccessQuotation))
       } else {
         console.error('Error al cargar cotizaciones:', quotationsResult.error)
       }
@@ -446,7 +450,7 @@ export default function Quotations() {
   }
 
   // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
-  const filteredQuotations = quotations.filter(quotation => {
+  const filteredQuotations = quotations.filter(canAccessQuotation).filter(quotation => {
     const matchesSearch = matchesSearchQuery(
       searchTerm,
       quotation.number,

@@ -40,6 +40,8 @@ import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
+import { useLocationAccess } from '@/utils/locationAccess'
 import {
   exportGeneralReport,
   exportSalesReport,
@@ -155,8 +157,11 @@ const getInvoiceDate = (invoice) => {
 }
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin } = useAppContext()
   const hidePrivateData = useHidePrivateData()
+  // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
+  // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
+  const canAccess = useLocationAccess()
 
   // Si estamos en modo inmobiliaria, renderizar el componente especializado
   if (businessMode === 'real_estate') {
@@ -181,6 +186,7 @@ export default function Reports() {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [branches, setBranches] = useState([])
+  const [warehouses, setWarehouses] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [productSearch, setProductSearch] = useState('')
   const [productPage, setProductPage] = useState(0)
@@ -214,7 +220,9 @@ export default function Reports() {
   useEffect(() => {
     loadData()
     loadBranches()
-  }, [user])
+    // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario,
+    // recargar y re-sanear los datos visibles.
+  }, [user, allowedBranches, allowedWarehouses])
 
   // Recargar datos cuando el rango cambia a uno más amplio
   const [loadedRange, setLoadedRange] = useState(null)
@@ -226,14 +234,21 @@ export default function Reports() {
     if (currentOrder > loadedOrder) loadData()
   }, [dateRange])
 
-  // Cargar sucursales para filtro
+  // Cargar sucursales y almacenes para filtro
+  // (los almacenes se usan para mapear compras → sucursal en el filtro de seguridad)
   const loadBranches = async () => {
     if (!user?.uid || isDemoMode) return
     try {
-      const result = await getActiveBranches(getBusinessId())
-      if (result.success) {
-        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+      const [branchesRes, warehousesRes] = await Promise.all([
+        getActiveBranches(getBusinessId()),
+        getWarehouses(getBusinessId()),
+      ])
+      if (branchesRes.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(branchesRes.data || []) : (branchesRes.data || [])
         setBranches(branchList)
+      }
+      if (warehousesRes.success) {
+        setWarehouses((warehousesRes.data || []).filter(w => w.isActive !== false))
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)
@@ -303,7 +318,11 @@ export default function Reports() {
 
       const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult, brandsResult, purchasesResult, movementsResults] = results
 
-      if (invoicesResult.success) setInvoices(invoicesResult.data || [])
+      // Seguridad usuarios secundarios: sanear los conjuntos que van por sucursal (branchId)
+      // con el helper compartido. Facturas también traen warehouseId.
+      // Las compras NO tienen branchId (su sucursal se deriva del almacén): se filtran
+      // en filteredPurchases con allowedWarehouseIds. Los clientes son globales (no se filtran).
+      if (invoicesResult.success) setInvoices((invoicesResult.data || []).filter(canAccess))
       if (customersResult.success) setCustomers(customersResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (recipesResult.success) setRecipes(recipesResult.data || [])
@@ -311,10 +330,10 @@ export default function Reports() {
       if (brandsResult?.success) setProductBrands(brandsResult.data || [])
       if (purchasesResult?.success) setPurchases(purchasesResult.data || [])
 
-      // Movimientos financieros y de caja
+      // Movimientos financieros y de caja (van por branchId)
       const [financialResult, cashResult] = movementsResults || [{ success: false }, { success: false }]
-      if (financialResult?.success) setFinancialMovements(financialResult.data || [])
-      if (cashResult?.success) setCashMovements(cashResult.data || [])
+      if (financialResult?.success) setFinancialMovements((financialResult.data || []).filter(canAccess))
+      if (cashResult?.success) setCashMovements((cashResult.data || []).filter(canAccess))
 
       // Gastos (si se cargaron)
       if (hasFeature && hasFeature('expenseManagement') && results[7]) {
@@ -342,6 +361,38 @@ export default function Reports() {
       setLoadedRange(dateRange)
     }
   }
+
+  // ===== Seguridad por ubicación para COMPRAS =====
+  // Las compras no guardan branchId; su sucursal se deriva del almacén (warehouseId).
+  // Si solo usáramos canAccess() (que filtra por branchId) un usuario restringido por
+  // SUCURSAL no quedaría filtrado. Replicamos el enfoque de CashFlow.jsx:
+  // construimos el Set de almacenes permitidos (por sucursal y/o almacén) y filtramos
+  // las compras contra él. Compra sin almacén = Sucursal Principal.
+  const locationRestricted = !isBusinessOwner && !isAdmin &&
+    ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
+
+  const allowedWarehouseIds = useMemo(() => {
+    if (!locationRestricted) return null
+    const branchRestricted = allowedBranches?.length > 0
+    const whRestricted = allowedWarehouses?.length > 0
+    return new Set(
+      warehouses
+        .filter(w => {
+          const branchOk = !branchRestricted ? true : (!w.branchId ? hasMainBranchAccess : allowedBranches.includes(w.branchId))
+          const whOk = !whRestricted ? true : allowedWarehouses.includes(w.id)
+          return branchOk && whOk
+        })
+        .map(w => w.id)
+    )
+  }, [warehouses, allowedBranches, allowedWarehouses, hasMainBranchAccess, locationRestricted])
+
+  // ¿El usuario puede ver esta compra según sus permisos? (independiente del filtro de UI)
+  const hasPurchaseAccess = useCallback((purchase) => {
+    if (!locationRestricted) return true
+    const whId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
+    if (!whId) return hasMainBranchAccess // compra sin almacén = Sucursal Principal
+    return allowedWarehouseIds ? allowedWarehouseIds.has(whId) : true
+  }, [locationRestricted, allowedWarehouseIds, hasMainBranchAccess])
 
   // Función para calcular el costo de un item
   const calculateItemCost = useCallback((item) => {
@@ -371,6 +422,9 @@ export default function Reports() {
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     // - Filtrar por sucursal si está seleccionada
     const validInvoices = invoices.filter(invoice => {
+      // Seguridad (defensa adicional): respetar siempre los permisos de ubicación del
+      // usuario, sin importar el dropdown de sucursal (que arranca en 'all').
+      if (!canAccess(invoice)) return false
       // Comprobantes archivados manualmente desde Ventas: no aparecen en reportes ni totales
       if (invoice.archived === true) {
         return false
@@ -459,7 +513,7 @@ export default function Reports() {
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
-  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, filterBranch])
+  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, filterBranch, canAccess])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -1431,17 +1485,21 @@ export default function Reports() {
     const now = new Date()
     let filterDate = new Date()
 
+    // Seguridad usuarios secundarios: las compras se derivan por almacén → sucursal.
+    // Saneamos primero por permisos (warehouseId ∈ allowedWarehouseIds) y luego por fecha.
+    const accessiblePurchases = purchases.filter(hasPurchaseAccess)
+
     // Para fechas personalizadas
     if (dateRange === 'custom') {
       if (!customStartDate || !customEndDate) {
-        return purchases
+        return accessiblePurchases
       }
       const startDate = parseLocalDate(customStartDate)
       startDate.setHours(0, 0, 0, 0)
       const endDate = parseLocalDate(customEndDate)
       endDate.setHours(23, 59, 59, 999)
 
-      return purchases.filter(purchase => {
+      return accessiblePurchases.filter(purchase => {
         if (!purchase.createdAt) return false
         const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
         return purchaseDate >= startDate && purchaseDate <= endDate
@@ -1468,17 +1526,17 @@ export default function Reports() {
         filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
         break
       case 'all':
-        return purchases
+        return accessiblePurchases
       default:
-        return purchases
+        return accessiblePurchases
     }
 
-    return purchases.filter(purchase => {
+    return accessiblePurchases.filter(purchase => {
       if (!purchase.createdAt) return false
       const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
       return purchaseDate >= filterDate
     })
-  }, [purchases, dateRange, customStartDate, customEndDate])
+  }, [purchases, dateRange, customStartDate, customEndDate, hasPurchaseAccess])
 
   // Estadísticas de compras (costo de ventas) — en PEN base.
   const purchaseStats = useMemo(() => {
@@ -1764,6 +1822,8 @@ export default function Reports() {
 
     // Función para filtrar por sucursal
     const filterByBranch = (movement) => {
+      // Seguridad (defensa adicional): respetar siempre los permisos de ubicación del usuario.
+      if (!canAccess(movement)) return false
       if (filterBranch === 'all') return true
       if (filterBranch === 'main') {
         return !movement.branchId
@@ -1808,7 +1868,7 @@ export default function Reports() {
         ...filteredCash.filter(m => m.type === 'expense')
       ]
     }
-  }, [financialMovements, cashMovements, dateRange, customStartDate, customEndDate, filterBranch])
+  }, [financialMovements, cashMovements, dateRange, customStartDate, customEndDate, filterBranch, canAccess])
 
   // Estadísticas de rentabilidad
   const profitabilityStats = useMemo(() => {

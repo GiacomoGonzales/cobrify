@@ -70,9 +70,10 @@ import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
+import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { branding } = useBranding()
   const navigate = useNavigate()
@@ -307,6 +308,24 @@ export default function InvoiceList() {
     }
 
     // Fallback: impresión estándar (web o si falla la térmica).
+    // Releer la configuración FRESCA de localStorage antes de imprimir, para no usar
+    // valores cacheados en memoria que pueden estar desincronizados (mismo fix que el POS).
+    try {
+      const fresh = await getPrinterConfig(getBusinessId())
+      if (fresh.success && fresh.config) {
+        setShowItemUnit(fresh.config.showItemUnit || false)
+        setWebPrintLegible(fresh.config.webPrintLegible || false)
+        setCompactPrint(fresh.config.compactPrint || false)
+        setPrintMargins(fresh.config.printMargins ?? 8)
+        setSimplePrint(fresh.config.simplePrint || false)
+        setA4SheetPrint(fresh.config.a4SheetPrint || false)
+        setTicketPaperWidth(fresh.config.paperWidth || 80)
+        // Dar un tick para que el ticket se re-renderice con los valores frescos
+        await new Promise(resolve => setTimeout(resolve, 60))
+      }
+    } catch (e) {
+      console.error('Error releyendo config de impresora antes de imprimir:', e)
+    }
     // Si viene desde la fila usamos rowPrintInvoice (estado dedicado) para
     // no abrir el modal de detalle ni interferir con la impresión masiva.
     // Si viene del modal, viewingInvoice ya está seteado y se imprime
@@ -553,7 +572,7 @@ Gracias por tu preferencia.`
   useEffect(() => {
     loadInvoices()
     loadBranches()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   // Recargar facturas cuando cambia el filtro de fecha (porque la query de Firestore cambia)
   useEffect(() => {
@@ -574,6 +593,10 @@ Gracias por tu preferencia.`
       console.error('Error al cargar sucursales:', error)
     }
   }
+
+  // Filtro de seguridad: ¿el usuario puede ver esta factura según su sucursal/almacén habilitado?
+  // (helper compartido en src/utils/locationAccess.js — usa allowedBranches/allowedWarehouses del usuario)
+  const canAccessInvoice = useLocationAccess()
 
   const loadInvoices = async () => {
     if (!user?.uid) return
@@ -602,7 +625,9 @@ Gracias por tu preferencia.`
       ])
 
       if (invoicesResult.success) {
-        setInvoices(invoicesResult.data || [])
+        // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
+        // Sanea el estado base, por lo que tabla, totales, exportación y selección lo respetan.
+        setInvoices((invoicesResult.data || []).filter(canAccessInvoice))
       } else {
         console.error('Error al cargar facturas:', invoicesResult.error)
       }
@@ -2005,6 +2030,7 @@ Gracias por tu preferencia.`
 
   // Filtrar facturas
   const filteredInvoices = invoices
+    .filter(canAccessInvoice) // Seguridad: respetar sucursal/almacén permitido (defensa adicional al saneo de carga)
     .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {

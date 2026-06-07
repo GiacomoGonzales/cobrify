@@ -4,6 +4,7 @@ import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircl
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useLocationAccess } from '@/utils/locationAccess'
 import { useToast } from '@/contexts/ToastContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
@@ -89,6 +90,8 @@ const DEMO_GUIDES = [
 export default function DispatchGuides() {
   const navigate = useNavigate()
   const { getBusinessId, isDemoMode, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
+  // Seguridad: el usuario secundario solo ve guías de sus sucursales habilitadas
+  const canAccess = useLocationAccess()
   const { branding } = useBranding()
 
   // Verificar si el usuario tiene acceso a la sucursal principal
@@ -229,7 +232,7 @@ export default function DispatchGuides() {
       const result = await getDispatchGuides(businessId)
 
       if (result.success) {
-        setGuides(result.data)
+        setGuides((result.data || []).filter(canAccess))
       } else {
         throw new Error(result.error || 'Error al cargar las guías')
       }
@@ -527,7 +530,7 @@ export default function DispatchGuides() {
   }
 
   // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
-  const filteredGuides = guides.filter(guide => {
+  const filteredGuides = guides.filter(canAccess).filter(guide => {
     const matchesSearch = matchesSearchQuery(
       searchTerm,
       guide.number,

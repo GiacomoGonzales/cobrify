@@ -34,10 +34,16 @@ import { getRecentInvoices, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getTablesStats } from '@/services/tableService'
+import { useLocationAccess } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses } = useAppContext()
+  // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
+  // Mismo helper compartido que usa Ventas/InvoiceList — usa allowedBranches/allowedWarehouses.
+  const canAccess = useLocationAccess()
+  // ¿El usuario está restringido a ciertas sucursales/almacenes? (owner/admin nunca lo están)
+  const restringido = !isBusinessOwner && !isAdmin && ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
   // Multi-divisa: solo si el negocio activó la flag en Configuración.
   const dashMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const { branding } = useBranding()
@@ -81,7 +87,10 @@ export default function Dashboard() {
     loadDashboardData()
     loadBranches()
     loadMonthlyAggregates()
-  }, [user, isDemoMode])
+    // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario
+    // secundario, recargamos para re-saturar facturas y recomputar el gráfico de 12 meses.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode, allowedBranches, allowedWarehouses])
 
   // Cargar sucursales para filtro
   const loadBranches = async () => {
@@ -146,6 +155,46 @@ export default function Dashboard() {
     if (!user?.uid) return
     const businessId = getBusinessId()
     if (!businessId) return
+
+    // OPCIÓN A — Usuario secundario restringido a ciertas sucursales/almacenes:
+    // el aggregate server-side sum('total') NO se puede filtrar por ubicación, así que
+    // traemos las facturas de los últimos 12 meses y sumamos en el cliente SOLO las que
+    // pasan canAccess. Más caro en reads, pero correcto. Owner/admin y usuarios sin
+    // restricción siguen usando el aggregate (rápido) en el bloque de abajo.
+    if (restringido) {
+      // El inicio de la ventana más antigua (11 meses atrás) es nuestra fecha "desde".
+      const since = windows[0].monthStart
+      setMonthlyYearLoading(true)
+      setMonthlyYearError(false)
+      try {
+        const result = await getRecentInvoices(businessId, since)
+        if (!result.success) throw new Error(result.error || 'getRecentInvoices falló')
+        // Mismo cálculo de fecha que la rama demo (emissionDate → mediodía, sino createdAt)
+        // para bucketear coherente con monthStart/monthEnd.
+        const invoicesIn12m = (result.data || []).filter(canAccess)
+        const data = windows.map(w => {
+          const ventas = invoicesIn12m.reduce((acc, inv) => {
+            const invDate = inv.emissionDate
+              ? new Date(inv.emissionDate + 'T12:00:00')
+              : inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+            if (!invDate) return acc
+            if (invDate >= w.monthStart && invDate < w.monthEnd) {
+              return acc + (Number(inv.total) || 0)
+            }
+            return acc
+          }, 0)
+          return { month: w.label, year: w.year, monthNum: w.monthNum, ventas }
+        })
+        setMonthlyYearData(data)
+      } catch (error) {
+        console.warn('⚠️ No se pudo calcular el gráfico de 12 meses (usuario restringido):', error)
+        setMonthlyYearData([])
+        setMonthlyYearError(true)
+      } finally {
+        setMonthlyYearLoading(false)
+      }
+      return
+    }
 
     setMonthlyYearLoading(true)
     setMonthlyYearError(false)
@@ -270,7 +319,9 @@ export default function Dashboard() {
       ])
 
       if (invoicesResult.success) {
-        setInvoices(invoicesResult.data || [])
+        // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
+        // Sanea el estado base → KPIs, gráficos, top productos/clientes/pagos lo respetan.
+        setInvoices((invoicesResult.data || []).filter(canAccess))
       }
       if (productsResult.success) {
         setProducts(productsResult.data || [])
@@ -315,12 +366,17 @@ export default function Dashboard() {
   }, [])
 
   // === Filtrado por sucursal (memoized) ===
+  // `invoices` ya viene saneado por permisos de ubicación (loadDashboardData), pero
+  // re-filtramos por canAccess como red de seguridad (idempotente para usuarios sin
+  // restricción).
   const branchFilteredInvoices = useMemo(() => {
+    const base = invoices.filter(canAccess)
     return filterBranch === 'all'
-      ? invoices
+      ? base
       : filterBranch === 'main'
-        ? invoices.filter(inv => !inv.branchId)
-        : invoices.filter(inv => inv.branchId === filterBranch)
+        ? base.filter(inv => !inv.branchId)
+        : base.filter(inv => inv.branchId === filterBranch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, filterBranch])
 
   // === Filtrado de facturas válidas (memoized) ===

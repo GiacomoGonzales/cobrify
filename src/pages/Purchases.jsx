@@ -75,7 +75,7 @@ const getInvoiceDocTypeLabel = (type) => {
 }
 
 export default function Purchases() {
-  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -135,7 +135,7 @@ export default function Purchases() {
     loadBranches()
     loadWarehouses()
     loadCompanySettings()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   const loadCompanySettings = async () => {
     if (!user?.uid) return
@@ -157,7 +157,9 @@ export default function Purchases() {
     if (!user?.uid || isDemoMode) return
     const result = await getActiveBranches(getBusinessId())
     if (result.success) {
-      setBranches(result.data || [])
+      // Solo las sucursales que el usuario puede ver (usuarios secundarios restringidos)
+      const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+      setBranches(branchList)
     }
   }
 
@@ -947,8 +949,43 @@ export default function Purchases() {
     return warehouses.filter(w => w.branchId === filterBranch).map(w => w.id)
   }, [warehouses, filterBranch])
 
+  // Seguridad: ¿hay restricción activa por ubicación para este usuario? (usuarios secundarios)
+  const locationRestricted = !isBusinessOwner && !isAdmin &&
+    ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
+
+  // Almacenes permitidos efectivos (para mapear compras: almacén → sucursal).
+  // Las compras NO tienen branchId; la sucursal se deriva del almacén, por eso
+  // el filtro genérico por branchId no basta. Construimos el set de almacenes
+  // visibles: su sucursal está permitida (Principal vía hasMainBranchAccess) Y,
+  // si hay restricción por almacén, el almacén está explícitamente permitido.
+  const allowedWarehouseIds = useMemo(() => {
+    if (!locationRestricted) return null
+    const branchRestricted = allowedBranches?.length > 0
+    const whRestricted = allowedWarehouses?.length > 0
+    return new Set(
+      warehouses
+        .filter(w => {
+          const branchOk = !branchRestricted ? true : (!w.branchId ? hasMainBranchAccess : allowedBranches.includes(w.branchId))
+          const whOk = !whRestricted ? true : allowedWarehouses.includes(w.id)
+          return branchOk && whOk
+        })
+        .map(w => w.id)
+    )
+  }, [warehouses, allowedBranches, allowedWarehouses, hasMainBranchAccess, locationRestricted])
+
+  // ¿El usuario puede ver esta compra según sus permisos? (independiente del filtro de UI).
+  // Compra sin almacén = Sucursal Principal → visible solo si hasMainBranchAccess.
+  const hasLocationAccess = (purchase) => {
+    if (!locationRestricted) return true
+    const whId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
+    if (!whId) return hasMainBranchAccess // compra sin almacén = Sucursal Principal
+    return allowedWarehouseIds ? allowedWarehouseIds.has(whId) : true
+  }
+
   // Filtrar por sucursal
   const filterByBranch = (purchase) => {
+    // Seguridad: siempre respetar los permisos del usuario, sin importar el filtro de UI
+    if (!hasLocationAccess(purchase)) return false
     if (filterBranch === 'all') return true
     if (!getWarehouseIdsForBranch || getWarehouseIdsForBranch.length === 0) return false
 
@@ -1014,7 +1051,7 @@ export default function Purchases() {
   // Compras filtradas por fecha y sucursal (para las estadísticas, sin búsqueda de texto)
   const dateFilteredPurchases = useMemo(() => {
     return purchases.filter(filterByDate).filter(filterByBranch)
-  }, [purchases, dateFilter, customStartDate, customEndDate, filterBranch, getWarehouseIdsForBranch])
+  }, [purchases, dateFilter, customStartDate, customEndDate, filterBranch, getWarehouseIdsForBranch, allowedWarehouseIds, locationRestricted])
 
   // Estadísticas — montos convertidos a PEN base usando el TC congelado en
   // cada compra. Si una compra es USD con TC 3.78 y total $100, suma S/ 378.

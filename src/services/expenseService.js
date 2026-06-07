@@ -183,6 +183,9 @@ export async function createExpense(userId, expenseData) {
       reference: expenseData.reference?.trim() || '',
       supplier: expenseData.supplier?.trim() || '',
       notes: expenseData.notes?.trim() || '',
+      // Sucursal del gasto (null = gasto general / Sucursal Principal).
+      // Necesario para el filtro de seguridad por sucursal de usuarios secundarios.
+      branchId: expenseData.branchId || null,
       createdAt: Timestamp.now(),
       createdBy: expenseData.createdBy || 'unknown'
     }
@@ -237,6 +240,9 @@ export async function updateExpense(userId, expenseId, expenseData) {
       reference: expenseData.reference?.trim() || '',
       supplier: expenseData.supplier?.trim() || '',
       notes: expenseData.notes?.trim() || '',
+      // Sucursal del gasto (null = gasto general / Sucursal Principal).
+      // Necesario para el filtro de seguridad por sucursal de usuarios secundarios.
+      branchId: expenseData.branchId || null,
       updatedAt: Timestamp.now()
     }
 

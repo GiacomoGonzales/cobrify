@@ -14,6 +14,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import { useLocationAccess } from '@/utils/locationAccess'
 
 const CONDITION_CONFIG = {
   good: { label: 'Buen estado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -22,7 +23,9 @@ const CONDITION_CONFIG = {
 }
 
 export default function WarehouseReturns() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  // Seguridad: el usuario secundario solo ve retornos de sus almacenes habilitados
+  const canAccess = useLocationAccess()
   const toast = useToast()
   const { branding } = useBranding()
 
@@ -48,7 +51,7 @@ export default function WarehouseReturns() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -62,10 +65,10 @@ export default function WarehouseReturns() {
         getWarehouses(businessId),
         getCompanySettings(businessId),
       ])
-      if (returnsResult.success) setReturns(returnsResult.data || [])
+      if (returnsResult.success) setReturns((returnsResult.data || []).filter(canAccess))
       if (projectsResult.success) setProjects(projectsResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
-      if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
+      if (warehousesResult.success) setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(warehousesResult.data || []) : (warehousesResult.data || []))
       if (settingsResult?.success) setBusinessInfo(settingsResult.data || {})
     } catch (error) {
       console.error('Error:', error)
@@ -235,6 +238,8 @@ export default function WarehouseReturns() {
   }
 
   const filtered = returns.filter(r => {
+    // Seguridad: respetar almacén permitido (además del saneo en la carga)
+    if (!canAccess(r)) return false
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return r.projectName?.toLowerCase().includes(term) ||

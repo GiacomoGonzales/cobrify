@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useLocationAccess } from '@/utils/locationAccess'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -145,7 +146,9 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, isDemoMode, hasMainBranchAccess, businessSettings } = useAppContext()
+  const { user, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess } = useAppContext()
+  // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
+  const canAccess = useLocationAccess()
   const hidePrivateData = useHidePrivateData()
   const expenseMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const toast = useToast()
@@ -215,7 +218,7 @@ export default function Expenses() {
       loadBranches()
       loadCategories()
     }
-  }, [user?.uid, dateRange])
+  }, [user?.uid, dateRange, allowedBranches, allowedWarehouses])
 
   async function loadCategories() {
     if (isDemoMode) {
@@ -241,7 +244,7 @@ export default function Expenses() {
     try {
       const result = await getActiveBranches(user.uid)
       if (result.success) {
-        setBranches(result.data || [])
+        setBranches(filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || []))
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)
@@ -265,7 +268,7 @@ export default function Expenses() {
         startDate: dateRange.startDate,
         endDate: dateRange.endDate
       })
-      setExpenses(data)
+      setExpenses((data || []).filter(canAccess))
     } catch (error) {
       toast.error('Error al cargar los gastos')
     } finally {
@@ -287,7 +290,7 @@ export default function Expenses() {
         startDate: getLocalDateString(start),
         endDate: getLocalDateString(end),
       })
-      setLast6MonthsExpenses(data)
+      setLast6MonthsExpenses((data || []).filter(canAccess))
     } catch (err) {
       console.error('Error cargando gastos 6 meses:', err)
     }

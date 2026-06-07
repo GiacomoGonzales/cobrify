@@ -7,6 +7,7 @@ import { getExpenses, getExpenseCategories, DEFAULT_EXPENSE_CATEGORIES } from '@
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
+import { useLocationAccess } from '@/utils/locationAccess'
 import {
   TrendingUp,
   TrendingDown,
@@ -191,7 +192,8 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CashFlow() {
-  const { user, isDemoMode, hasMainBranchAccess } = useAppContext()
+  const { user, isDemoMode, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
+  const canAccess = useLocationAccess()
   const toast = useToast()
   const hidePrivateData = useHidePrivateData()
 
@@ -277,7 +279,7 @@ export default function CashFlow() {
       loadData()
       loadCategories()
     }
-  }, [user?.uid, dateRange])
+  }, [user?.uid, dateRange, allowedBranches, allowedWarehouses])
 
   async function loadCategories() {
     if (isDemoMode) {
@@ -349,7 +351,8 @@ export default function CashFlow() {
       }
 
       if (branchesRes.success) {
-        setBranches(branchesRes.data || [])
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(branchesRes.data || []) : (branchesRes.data || [])
+        setBranches(branchList)
       }
 
       if (warehousesRes.success) {
@@ -374,8 +377,42 @@ export default function CashFlow() {
     return warehouses.filter(w => w.branchId === branchFilter).map(w => w.id)
   }, [warehouses, branchFilter])
 
+  // Seguridad: ¿hay restricción activa por ubicación para este usuario? (usuarios secundarios)
+  const locationRestricted = !isBusinessOwner && !isAdmin &&
+    ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
+
+  // Almacenes permitidos efectivos (para mapear compras: almacén → sucursal)
+  const allowedWarehouseIds = useMemo(() => {
+    if (!locationRestricted) return null
+    const branchRestricted = allowedBranches?.length > 0
+    const whRestricted = allowedWarehouses?.length > 0
+    return new Set(
+      warehouses
+        .filter(w => {
+          const branchOk = !branchRestricted ? true : (!w.branchId ? hasMainBranchAccess : allowedBranches.includes(w.branchId))
+          const whOk = !whRestricted ? true : allowedWarehouses.includes(w.id)
+          return branchOk && whOk
+        })
+        .map(w => w.id)
+    )
+  }, [warehouses, allowedBranches, allowedWarehouses, hasMainBranchAccess, locationRestricted])
+
+  // ¿El usuario puede ver este item según sus permisos? (independiente del filtro de UI)
+  const hasLocationAccess = (item, type) => {
+    if (!locationRestricted) return true
+    if (type === 'purchase') {
+      const whId = item.warehouseId || item.items?.[0]?.warehouseId
+      if (!whId) return hasMainBranchAccess // compra sin almacén = Sucursal Principal
+      return allowedWarehouseIds ? allowedWarehouseIds.has(whId) : true
+    }
+    // invoice / expense / cashMovement / financialMovement / loan → por branchId (+ warehouseId en facturas)
+    return canAccess(item)
+  }
+
   // Helper: Filtrar por sucursal según el tipo de documento
   const filterByBranch = (item, type) => {
+    // Seguridad: siempre respetar los permisos del usuario, sin importar el filtro de UI
+    if (!hasLocationAccess(item, type)) return false
     if (branchFilter === 'all') return true
 
     switch (type) {

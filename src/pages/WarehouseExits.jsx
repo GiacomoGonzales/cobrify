@@ -14,9 +14,12 @@ import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function WarehouseExits() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  // Seguridad: el usuario secundario solo ve salidas de sus almacenes habilitados
+  const canAccess = useLocationAccess()
   const toast = useToast()
   const { branding } = useBranding()
 
@@ -52,7 +55,7 @@ export default function WarehouseExits() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, allowedBranches, allowedWarehouses])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -66,10 +69,10 @@ export default function WarehouseExits() {
         getWarehouses(businessId),
         getCompanySettings(businessId),
       ])
-      if (exitsResult.success) setExits(exitsResult.data || [])
+      if (exitsResult.success) setExits((exitsResult.data || []).filter(canAccess))
       if (projectsResult.success) setProjects(projectsResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
-      if (warehousesResult.success) setWarehouses(warehousesResult.data || [])
+      if (warehousesResult.success) setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(warehousesResult.data || []) : (warehousesResult.data || []))
       if (settingsResult?.success) setBusinessInfo(settingsResult.data || {})
     } catch (error) {
       console.error('Error:', error)
@@ -364,6 +367,8 @@ export default function WarehouseExits() {
 
   // Filtrar salidas
   const filtered = exits.filter(e => {
+    // Seguridad: respetar almacén permitido (además del saneo en la carga)
+    if (!canAccess(e)) return false
     // Filtro por tipo (default legacy: sin exitType = 'project')
     const itemType = e.exitType || 'project'
     if (typeFilter !== 'all' && itemType !== typeFilter) return false

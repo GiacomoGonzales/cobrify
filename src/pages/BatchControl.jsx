@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Pill, Layers, Warehouse, Store } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -14,7 +14,11 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 
 function BatchControl() {
-  const { user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess } = useAppContext()
+  const {
+    user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess,
+    allowedWarehouses, isBusinessOwner, isAdmin,
+    filterWarehousesByAccess, filterBranchesByAccess,
+  } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -274,13 +278,35 @@ function BatchControl() {
     }
   }
 
+  // Almacenes a los que el usuario tiene acceso (para los dropdowns).
+  // En modo demo el contexto no expone filterWarehousesByAccess → sin restricción (todos).
+  const accessibleWarehouses = useMemo(
+    () => (filterWarehousesByAccess ? filterWarehousesByAccess(warehouses) : warehouses),
+    [filterWarehousesByAccess, warehouses]
+  )
+
+  // Sucursales a las que el usuario tiene acceso (para el dropdown de sucursal).
+  const accessibleBranches = useMemo(
+    () => (filterBranchesByAccess ? filterBranchesByAccess(branches) : branches),
+    [filterBranchesByAccess, branches]
+  )
+
+  // Conjunto de IDs de almacenes permitidos para el usuario.
+  // null = sin restricción (owner/admin, allowedWarehouses vacío, o modo demo) → comportamiento idéntico al actual.
+  // Cuando hay restricción, derivamos el set de los almacenes accesibles ya cargados
+  // (cubre el caso de IDs en allowedWarehouses que no existen como almacén).
+  const allowedWarehouseIdSet = useMemo(() => {
+    if (isBusinessOwner || isAdmin || !allowedWarehouses || allowedWarehouses.length === 0) return null
+    return new Set(accessibleWarehouses.map(w => w.id))
+  }, [isBusinessOwner, isAdmin, allowedWarehouses, accessibleWarehouses])
+
   // Formatear fecha
-  // Almacenes filtrados por sucursal
+  // Almacenes filtrados por sucursal (sobre la base de almacenes permitidos)
   const filteredWarehouses = filterBranch === 'all'
-    ? warehouses
+    ? accessibleWarehouses
     : filterBranch === 'main'
-      ? warehouses.filter(w => !w.branchId)
-      : warehouses.filter(w => w.branchId === filterBranch)
+      ? accessibleWarehouses.filter(w => !w.branchId)
+      : accessibleWarehouses.filter(w => w.branchId === filterBranch)
 
   // Obtener stock de un producto según filtros de almacén/sucursal
   const getFilteredStock = (product) => {
@@ -293,7 +319,11 @@ function BatchControl() {
     }
 
     if (filterBranch === 'all') {
-      return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      // Sin restricción: suma global (igual que antes).
+      // Con restricción: solo los almacenes a los que el usuario tiene acceso.
+      return warehouseStocks
+        .filter(ws => !allowedWarehouseIdSet || allowedWarehouseIdSet.has(ws.warehouseId))
+        .reduce((sum, ws) => sum + (ws.stock || 0), 0)
     }
 
     const warehouseIds = filteredWarehouses.map(w => w.id)
@@ -316,8 +346,21 @@ function BatchControl() {
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Filtrar productos
-  const filteredProducts = products
+  // Base de productos visibles para el usuario (independiente de búsqueda/filtros).
+  // Sin restricción (owner/admin o allowedWarehouses vacío) = todos los productos (idéntico al actual).
+  // Con restricción: se ocultan los productos cuyo stock esté SOLO en almacenes ajenos
+  // (un producto se muestra si tiene algún warehouseStocks[].warehouseId permitido).
+  const visibleProducts = useMemo(() => {
+    if (!allowedWarehouseIdSet) return products
+    return products.filter(p => {
+      const ws = p.warehouseStocks || []
+      if (ws.length === 0) return true // sin desglose por almacén: no se puede atribuir → se muestra
+      return ws.some(s => allowedWarehouseIdSet.has(s.warehouseId))
+    })
+  }, [products, allowedWarehouseIdSet])
+
+  // Filtrar productos (sobre la base permitida)
+  const filteredProducts = visibleProducts
     .filter(p => {
       const matchesSearch =
         p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -352,12 +395,12 @@ function BatchControl() {
       return true
     })
 
-  // Stats
+  // Stats (sobre la base permitida)
   const stats = {
-    totalProducts: products.length,
-    productsWithBatches: products.filter(p => p.batches && p.batches.length > 0).length,
-    totalBatches: products.reduce((sum, p) => sum + (p.batches?.length || 0), 0),
-    expiringBatches: products.reduce((sum, p) => {
+    totalProducts: visibleProducts.length,
+    productsWithBatches: visibleProducts.filter(p => p.batches && p.batches.length > 0).length,
+    totalBatches: visibleProducts.reduce((sum, p) => sum + (p.batches?.length || 0), 0),
+    expiringBatches: visibleProducts.reduce((sum, p) => {
       return sum + (p.batches?.filter(b => {
         const status = getExpirationStatus(b.expirationDate)
         return status && ['expired', 'critical', 'warning'].includes(status.status)
@@ -637,9 +680,9 @@ function BatchControl() {
           </div>
 
           {/* Filtros de sucursal y almacén */}
-          {(warehouses.length > 0 || branches.length > 0) && (
+          {(accessibleWarehouses.length > 0 || accessibleBranches.length > 0) && (
             <div className="flex flex-col sm:flex-row gap-3 mt-3 pt-3 border-t border-gray-100">
-              {branches.length > 0 && (
+              {accessibleBranches.length > 0 && (
                 <div className="flex items-center gap-2 flex-1">
                   <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <select
@@ -649,13 +692,13 @@ function BatchControl() {
                   >
                     <option value="all">Todas las sucursales</option>
                     {hasMainBranchAccess && <option value="main">Sede principal</option>}
-                    {branches.map(b => (
+                    {accessibleBranches.map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ))}
                   </select>
                 </div>
               )}
-              {warehouses.length > 0 && (
+              {accessibleWarehouses.length > 0 && (
                 <div className="flex items-center gap-2 flex-1">
                   <Warehouse className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <select
