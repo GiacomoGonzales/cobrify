@@ -384,6 +384,105 @@ const loadImageAsBase64 = async (url) => {
   }
 }
 
+// ===== Imágenes de productos para comprobantes (mismo enfoque que cotizaciones) =====
+// Caché en memoria para imágenes de productos durante una misma generación de PDF
+// (evita descargar la misma imagen varias veces si se repite el producto).
+const _productImageMemoryCache = new Map()
+
+/**
+ * Carga una imagen de producto desde Firebase Storage o URL pública y la convierte a base64.
+ * NO usa el caché del logo para no invalidarlo. Usa caché en memoria para repetidos en la misma sesión.
+ * Retorna null si falla (no lanza para no bloquear el PDF).
+ */
+const loadProductImageAsBase64 = async (url, timeout = 8000) => {
+  if (!url) return null
+  if (_productImageMemoryCache.has(url)) {
+    return _productImageMemoryCache.get(url)
+  }
+  try {
+    const isNative = Capacitor.isNativePlatform()
+
+    const fetchPromise = (async () => {
+      if (isNative) {
+        try {
+          const storagePath = getStoragePathFromUrl(url)
+          let downloadUrl = url
+          if (storagePath) {
+            const storageRef = ref(storage, storagePath)
+            downloadUrl = await getDownloadURL(storageRef)
+          }
+          const response = await CapacitorHttp.get({ url: downloadUrl, responseType: 'blob' })
+          if (response.status === 200 && response.data) {
+            const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
+            return `data:${mimeType};base64,${response.data}`
+          }
+        } catch (e) {
+          // fallthrough a la ruta SDK
+        }
+      }
+
+      const storagePath = getStoragePathFromUrl(url)
+      if (storagePath) {
+        const storageRef = ref(storage, storagePath)
+        const blob = await getBlob(storageRef)
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+      }
+
+      const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    })()
+
+    const result = await Promise.race([
+      fetchPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout)),
+    ])
+    _productImageMemoryCache.set(url, result)
+    return result
+  } catch (e) {
+    console.warn('No se pudo cargar imagen de producto:', url, e?.message || e)
+    _productImageMemoryCache.set(url, null) // cachear el fallo para no reintentar
+    return null
+  }
+}
+
+/**
+ * Detecta el formato de imagen a partir del data URL para pasarlo a jsPDF.addImage.
+ */
+const detectImageFormat = (dataUrl) => {
+  if (!dataUrl) return 'JPEG'
+  if (dataUrl.startsWith('data:image/png')) return 'PNG'
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
+  return 'JPEG'
+}
+
+/**
+ * Obtiene las dimensiones reales (naturalWidth/naturalHeight) de una imagen base64.
+ * Devuelve null si no se puede determinar (no bloquea — el caller usa el cuadrado completo).
+ */
+const getImageDimensions = (dataUrl) => new Promise((resolve) => {
+  if (!dataUrl) return resolve(null)
+  try {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 })
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  } catch {
+    resolve(null)
+  }
+})
+
 /**
  * Genera el código QR para SUNAT
  */
@@ -1253,17 +1352,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Si el negocio ocultó lote/vencimiento en comprobantes, suprimir esa info en el PDF
   const hideBatchAndExpiry = companySettings?.hideBatchAndExpiryInDocuments === true
 
+  // Flag para mostrar imágenes de productos en comprobantes (default false).
+  // IMPORTANTE: con FALSE el layout debe quedar EXACTAMENTE igual que antes (documento fiscal).
+  const showImages = companySettings?.showImagesInInvoices === true
+  // Tamaño de la miniatura en el PDF (mismo enfoque que cotizaciones, escalado a A5)
+  const imageBoxSize = (spacious ? 120 : 104) * S
+  const imagePadding = 8 * S // espacio entre la imagen y el texto
+
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
   // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
   // Normal: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | (DCTO.) | IMPORTE
   // Farmacia con dcto: 5+5+8+26+10+8+9+10+12 = 93 (ok, margen mínimo)
   // Farmacia sin dcto: 5+5+10+40+10+8+8+14 = 100
   // Normal sin dcto:   7+6+49+17+19 = 98 (existente, no cambia)
+  // Cuando showImages está activo se agrega una columna IMAGEN dedicada (antes de DESCRIPCIÓN)
+  // y se reduce el ancho de DESCRIPCIÓN. Con showImages=false el ancho de img es 0 y todo
+  // queda idéntico al layout original.
   const colWidths = hasAnyItemDiscount ? {
     cant: CONTENT_WIDTH * 0.05,
     um: CONTENT_WIDTH * 0.05,
     code: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.26 : CONTENT_WIDTH * 0.40,
+    img: showImages ? CONTENT_WIDTH * (isPharmacy ? 0.16 : 0.22) : 0,
+    desc: isPharmacy
+      ? CONTENT_WIDTH * (showImages ? 0.10 : 0.26)
+      : CONTENT_WIDTH * (showImages ? 0.18 : 0.40),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.09 : CONTENT_WIDTH * 0.15,
@@ -1273,7 +1385,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: CONTENT_WIDTH * 0.05,
     um: isPharmacy ? CONTENT_WIDTH * 0.05 : CONTENT_WIDTH * 0.06,
     code: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    desc: isPharmacy ? CONTENT_WIDTH * 0.40 : CONTENT_WIDTH * 0.49,
+    img: showImages ? CONTENT_WIDTH * (isPharmacy ? 0.18 : 0.22) : 0,
+    desc: isPharmacy
+      ? CONTENT_WIDTH * (showImages ? 0.22 : 0.40)
+      : CONTENT_WIDTH * (showImages ? 0.27 : 0.49),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.08 : CONTENT_WIDTH * 0.17,
@@ -1286,7 +1401,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: colX,
     um: colX += colWidths.cant,
     code: colX += colWidths.um,
-    desc: colX += colWidths.code,
+    img: colX += colWidths.code,
+    desc: colX += colWidths.img,
     lab: colX += colWidths.desc,
     marca: colX += colWidths.lab,
     pu: colX += colWidths.marca,
@@ -1296,7 +1412,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: colX,
     um: colX += colWidths.cant,
     code: colX += colWidths.um,
-    desc: colX += colWidths.code,
+    img: colX += colWidths.code,
+    desc: colX += colWidths.img,
     lab: colX += colWidths.desc,
     marca: colX += colWidths.lab,
     pu: colX += colWidths.marca,
@@ -1306,6 +1423,36 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Flag de configuración: mostrar código/SKU del producto en los comprobantes (default true)
   const showProductCode = companySettings?.showProductCodeInInvoices !== false
+
+  // Pre-cargar imágenes de productos en paralelo (solo si la opción está habilitada).
+  // Para cada imagen guardamos { data, width, height } para poder respetar la proporción al dibujar.
+  const imagesByUrl = {}
+  if (showImages) {
+    const uniqueUrls = Array.from(new Set(
+      items
+        .map(it => it.imageUrl || it.image || '')
+        .filter(u => typeof u === 'string' && u.length > 0)
+    ))
+    if (uniqueUrls.length > 0) {
+      const results = await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const data = await loadProductImageAsBase64(url)
+          if (!data) return { url, data: null }
+          const dims = await getImageDimensions(data)
+          return { url, data, width: dims?.width || 0, height: dims?.height || 0 }
+        })
+      )
+      results.forEach(({ url, data, width, height }) => {
+        if (data) imagesByUrl[url] = { data, width, height }
+      })
+    }
+  }
+  // Helper para saber si un item efectivamente tiene imagen disponible
+  const itemHasImage = (item) => {
+    if (!showImages) return false
+    const url = item.imageUrl || item.image || ''
+    return !!url && !!imagesByUrl[url]
+  }
 
   // Función para calcular altura dinámica de cada item
   const calculateItemHeight = (item) => {
@@ -1389,8 +1536,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     const totalLines = descLines.length + serialLines.length + pharmaLines.length
     const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6) * S
-    const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
-    return { height: calculatedHeight, descLines, pharmaLines, serialLines }
+    let calculatedHeight = Math.max(minProductRowHeight, baseHeight)
+    // Si el item tiene imagen, asegurar suficiente alto para mostrarla con padding
+    const hasImage = itemHasImage(item)
+    if (hasImage) {
+      calculatedHeight = Math.max(calculatedHeight, imageBoxSize + imagePadding)
+    }
+    return { height: calculatedHeight, descLines, pharmaLines, serialLines, hasImage }
   }
 
   // Calcular alturas de todos los items
@@ -1412,6 +1564,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
     if (isPharmacy) {
       doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
+    }
+    if (showImages) {
+      doc.text('IMAGEN', cols.img + colWidths.img / 2, headerTextY, { align: 'center' })
     }
     doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
     if (isPharmacy) {
@@ -1450,7 +1605,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   })
 
   for (let i = 0; i < items.length; i++) {
-    const { height: rowHeight, descLines, pharmaLines, serialLines } = itemHeights[i]
+    const { height: rowHeight, descLines, pharmaLines, serialLines, hasImage } = itemHeights[i]
 
     // Verificar si la fila cabe en la página actual, si no → nueva página
     if (dataRowY + rowHeight > currentPageBottomLimit) {
@@ -1502,6 +1657,42 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       if (codeText) {
         const codeLines = doc.splitTextToSize(codeText, colWidths.code - 4)
         doc.text(codeLines[0], cols.code + colWidths.code / 2, centerY, { align: 'center' })
+      }
+    }
+
+    // Imagen del producto en su columna propia, respetando proporción (sin estirar ni cortar)
+    if (hasImage) {
+      const url = item.imageUrl || item.image || ''
+      const imgInfo = imagesByUrl[url]
+      if (imgInfo?.data) {
+        // Calcular tamaño "fit" dentro del cuadrado disponible (imageBoxSize × imageBoxSize)
+        let drawW = imageBoxSize
+        let drawH = imageBoxSize
+        const w = imgInfo.width
+        const h = imgInfo.height
+        if (w > 0 && h > 0) {
+          const ratio = w / h
+          if (ratio >= 1) {
+            // Imagen horizontal o cuadrada: ajustar al ancho del cuadro
+            drawW = imageBoxSize
+            drawH = imageBoxSize / ratio
+          } else {
+            // Imagen vertical: ajustar al alto del cuadro
+            drawH = imageBoxSize
+            drawW = imageBoxSize * ratio
+          }
+        }
+        // Centrar dentro de la celda: tanto horizontal como verticalmente
+        const cellLeft = cols.img + (colWidths.img - imageBoxSize) / 2
+        const cellTop = dataRowY + Math.max(2, (rowHeight - imageBoxSize) / 2)
+        const imgX = cellLeft + (imageBoxSize - drawW) / 2
+        const imgY = cellTop + (imageBoxSize - drawH) / 2
+        try {
+          const fmt = detectImageFormat(imgInfo.data)
+          doc.addImage(imgInfo.data, fmt, imgX, imgY, drawW, drawH, undefined, 'FAST')
+        } catch (e) {
+          console.warn('No se pudo dibujar imagen del producto en PDF:', e?.message || e)
+        }
       }
     }
 

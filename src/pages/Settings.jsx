@@ -283,6 +283,9 @@ export default function Settings() {
   // Estado para mostrar imágenes de producto en cotizaciones PDF
   const [showImagesInQuotations, setShowImagesInQuotations] = useState(false)
 
+  // Estado para mostrar imágenes de producto en comprobantes de venta PDF
+  const [showImagesInInvoices, setShowImagesInInvoices] = useState(false)
+
   // Estado para espaciado amplio en PDF
   const [pdfSpacious, setPdfSpacious] = useState(false)
   const [pdfA5, setPdfA5] = useState(false)
@@ -1086,6 +1089,11 @@ export default function Settings() {
           setShowImagesInQuotations(businessData.showImagesInQuotations)
         }
 
+        // Cargar flag de imágenes en comprobantes de venta (default false)
+        if (businessData.showImagesInInvoices !== undefined) {
+          setShowImagesInInvoices(businessData.showImagesInInvoices)
+        }
+
         // Cargar flag de espaciado amplio en PDF
         if (businessData.pdfSpacious !== undefined) {
           setPdfSpacious(businessData.pdfSpacious)
@@ -1740,6 +1748,7 @@ export default function Settings() {
         showProductCodeInInvoices: showProductCodeInInvoices,
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
         showImagesInQuotations: showImagesInQuotations,
+        showImagesInInvoices: showImagesInInvoices,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
@@ -5308,6 +5317,18 @@ export default function Settings() {
                   />
                 </div>
 
+                {/* Imágenes de producto en comprobantes de venta */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showImagesInInvoices}
+                    onChange={(e) => setShowImagesInInvoices(e.target.checked)}
+                    title="Habilitar imágenes en comprobantes de venta"
+                    description={showImagesInInvoices
+                      ? 'Habilitado: Cada producto del comprobante (factura, boleta o nota de venta) mostrará una miniatura de su imagen en el PDF, igual que en las cotizaciones (las filas serán un poco más altas).'
+                      : 'Deshabilitado: El PDF de comprobantes no muestra imágenes.'}
+                  />
+                </div>
+
                 {/* Ocultar lote y vencimiento en comprobantes */}
                 <SettingToggle
                   checked={hideBatchAndExpiryInDocuments}
@@ -5896,6 +5917,7 @@ export default function Settings() {
                       showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
                       showImagesInQuotations: showImagesInQuotations,
+                      showImagesInInvoices: showImagesInInvoices,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,

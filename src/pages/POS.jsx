@@ -4905,6 +4905,7 @@ export default function POS() {
           quantity: item.quantity,
           unit: item.unit || 'NIU',
           unitPrice: item.price,
+          ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
           ...(currency === 'USD' && Number(item.basePrice) > 0 && {
             basePrice: Number(item.basePrice),
           }),
@@ -5110,6 +5111,7 @@ export default function POS() {
         quantity: item.quantity,
         unit: item.unit || 'NIU',
         unitPrice: item.price,
+        ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
         // Multi-divisa: persistir basePrice (PEN exacto) cuando la venta es
         // USD, para que NC/ND/reportes futuros puedan reconstruir el
         // equivalente PEN sin pérdida de redondeo.
