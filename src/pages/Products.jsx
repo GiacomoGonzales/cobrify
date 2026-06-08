@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer, Layers, Boxes } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer, Layers, Boxes, Scale } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -3381,6 +3381,48 @@ export default function Products() {
     }
   }
 
+  // Activar/desactivar masivamente "permitir decimales" (venta por peso) en los productos seleccionados
+  const handleBulkSetAllowDecimals = async (allow) => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const result = await updateProduct(businessId, productId, { allowDecimalQuantity: allow })
+          if (result.success) successCount++
+          else errorCount++
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      const action = allow ? 'permiten' : 'ya no permiten'
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) ${action} decimales`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de decimales:', error)
+      toast.error('Error al cambiar la opción de decimales')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   // Variant management functions
   const handleAddAttribute = () => {
     if (!newAttributeName.trim()) {
@@ -4192,6 +4234,15 @@ export default function Products() {
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   Mostrar en catálogo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('allowDecimals')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Scale className="w-4 h-4 mr-2" />
+                  Permitir decimales
                 </Button>
                 <Button
                   variant="outline"
@@ -8200,6 +8251,8 @@ export default function Products() {
             ? 'Cambiar categoría'
             : bulkAction === 'showInCatalog'
             ? 'Mostrar en catálogo'
+            : bulkAction === 'allowDecimals'
+            ? 'Permitir decimales'
             : 'Activar/Desactivar productos'
         }
         size="md"
@@ -8379,6 +8432,57 @@ export default function Products() {
                     <>
                       <Eye className="w-4 h-4 mr-2" />
                       Mostrar en catálogo
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'allowDecimals' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  ¿Qué quieres hacer con los {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}?
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  "Permitir decimales" deja vender cantidades fraccionarias (ej. 1.5 kg, 0.75). Útil para venta por peso o volumen.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkSetAllowDecimals(false)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4 mr-2" />
+                      Desactivar decimales
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleBulkSetAllowDecimals(true)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Scale className="w-4 h-4 mr-2" />
+                      Activar decimales
                     </>
                   )}
                 </Button>
