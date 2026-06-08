@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { Building2, Loader2, CheckCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { createWarehouse } from '@/services/warehouseService'
 import { db } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -121,6 +122,15 @@ export default function BusinessCreate() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
+
+      // Crear el almacén principal por defecto para la nueva cuenta. Así el stock de los
+      // productos nuevos se asigna automáticamente a este almacén (con su movimiento inicial)
+      // y queda con historial desde el comienzo, sin tener que "sincronizar" después.
+      try {
+        await createWarehouse(user.uid, { name: 'Almacén Principal', isDefault: true })
+      } catch (whError) {
+        console.error('Error al crear el almacén principal de la nueva cuenta:', whError)
+      }
 
       // Marcar como creado exitosamente y redirigir inmediatamente
       setSuccessfullyCreated(true)

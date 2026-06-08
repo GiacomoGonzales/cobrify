@@ -684,6 +684,24 @@ export const getOrphanStockProducts = (products, activeWarehouses = null) => {
       return false
     }
 
+    // Productos CON variantes: el stock vive en variant.warehouseStocks (no en product.warehouseStocks).
+    // Comparar la suma del stock de las variantes contra lo asignado a almacenes activos en SUS warehouseStocks.
+    if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+      let variantTotal = 0
+      let variantAssigned = 0
+      for (const v of product.variants) {
+        variantTotal += v.stock || 0
+        if (Array.isArray(v.warehouseStocks)) {
+          v.warehouseStocks.forEach(ws => {
+            if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
+              variantAssigned += ws.stock || 0
+            }
+          })
+        }
+      }
+      return variantTotal > variantAssigned
+    }
+
     // Calcular suma de warehouseStocks (solo de almacenes activos si tenemos la lista)
     let warehouseTotal = 0
     if (product.warehouseStocks && product.warehouseStocks.length > 0) {
@@ -714,6 +732,24 @@ export const getOrphanStock = (product, activeWarehouses = null) => {
   }
 
   const activeWarehouseIds = activeWarehouses ? activeWarehouses.map(w => w.id) : null
+
+  // Productos CON variantes: el stock vive en variant.warehouseStocks (no en product.warehouseStocks).
+  if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+    let variantTotal = 0
+    let variantAssigned = 0
+    for (const v of product.variants) {
+      variantTotal += v.stock || 0
+      if (Array.isArray(v.warehouseStocks)) {
+        v.warehouseStocks.forEach(ws => {
+          if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
+            variantAssigned += ws.stock || 0
+          }
+        })
+      }
+    }
+    const variantOrphan = variantTotal - variantAssigned
+    return variantOrphan > 0 ? variantOrphan : 0
+  }
 
   // Calcular stock solo en almacenes activos
   let activeWarehouseTotal = 0
