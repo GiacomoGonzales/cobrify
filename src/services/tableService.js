@@ -1259,15 +1259,27 @@ export const getTablesByStatus = async (businessId, status) => {
 
 /**
  * Obtener estadísticas de mesas
+ *
+ * @param {string} businessId
+ * @param {string|null} [branchFilter] - Filtra las mesas por sede antes de calcular:
+ *   - null / 'all' (default): todas las sedes (comportamiento histórico).
+ *   - 'main': solo mesas SIN branchId (Sucursal Principal).
+ *   - <branchId>: solo mesas con ese branchId.
  */
-export const getTablesStats = async (businessId) => {
+export const getTablesStats = async (businessId, branchFilter = null) => {
   try {
     const result = await getTables(businessId)
     if (!result.success) {
       return result
     }
 
-    const tables = result.data
+    let tables = result.data
+    // Filtrar por la sede solicitada (null/'all' = todas, igual que antes)
+    if (branchFilter && branchFilter !== 'all') {
+      tables = tables.filter(t =>
+        branchFilter === 'main' ? !t.branchId : t.branchId === branchFilter
+      )
+    }
     const stats = {
       total: tables.length,
       available: tables.filter(t => t.status === 'available').length,

@@ -127,14 +127,16 @@ export const getOrder = async (businessId, orderId) => {
 /**
  * Obtener el siguiente número de orden del día
  */
-const getDailyOrderNumber = async (businessId) => {
+const getDailyOrderNumber = async (businessId, branchId = null) => {
   try {
     // Obtener la fecha de hoy en formato YYYY-MM-DD
     const today = new Date()
     const dateKey = today.toISOString().split('T')[0] // "2025-01-15"
 
-    // Referencia al contador diario
-    const counterRef = doc(db, 'businesses', businessId, 'counters', `orders-${dateKey}`)
+    // Contador diario POR SEDE: cada sucursal lleva su propia numeración de comandas.
+    // Sin sede (Principal / negocio de una sola sede) mantiene la clave original (retrocompatible).
+    const counterKey = branchId ? `orders-${dateKey}-${branchId}` : `orders-${dateKey}`
+    const counterRef = doc(db, 'businesses', businessId, 'counters', counterKey)
     const counterSnap = await getDoc(counterRef)
 
     let orderNumber = 1
@@ -173,9 +175,6 @@ export const createOrder = async (businessId, orderData) => {
 
     const now = new Date()
 
-    // Obtener el número de orden del día
-    const orderNumber = await getDailyOrderNumber(businessId)
-
     // Sede de la orden: explícita o heredada de la mesa (para separar órdenes/comandas por sucursal)
     let branchId = orderData.branchId ?? null
     if (branchId === null && orderData.tableId) {
@@ -186,6 +185,9 @@ export const createOrder = async (businessId, orderData) => {
         console.error('No se pudo heredar la sede de la mesa para la orden:', e)
       }
     }
+
+    // Obtener el número de orden del día (numeración independiente por sede)
+    const orderNumber = await getDailyOrderNumber(businessId, branchId)
 
     const newOrder = {
       // Número de orden diario

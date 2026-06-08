@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Users, Plus, Edit, Trash2, UserCheck, DollarSign, Clock, TrendingUp, Loader2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { getWaiters, getWaitersStats, deleteWaiter, toggleWaiterStatus } from '@/services/waiterService'
+import { getWaiters, deleteWaiter, toggleWaiterStatus } from '@/services/waiterService'
 import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -19,13 +19,31 @@ export default function Waiters() {
 
   const [waiters, setWaiters] = useState([])
   const [branches, setBranches] = useState([])
-  const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingWaiter, setEditingWaiter] = useState(null)
 
   // Mozos visibles según las sucursales habilitadas del usuario
   const visibleWaiters = waiters.filter(canAccess)
+
+  // Estadísticas calculadas SOLO sobre los mozos visibles (por sede), no sobre el
+  // total global del negocio. Misma fórmula que getWaitersStats del servicio.
+  const stats = useMemo(() => {
+    const activeWaiters = visibleWaiters.filter(w => w.status === 'active')
+    const totalSalesToday = activeWaiters.reduce((sum, w) => sum + (w.todaySales || 0), 0)
+    const totalOrdersToday = activeWaiters.reduce((sum, w) => sum + (w.todayOrders || 0), 0)
+    return {
+      total: visibleWaiters.length,
+      active: activeWaiters.length,
+      inactive: visibleWaiters.filter(w => w.status === 'inactive').length,
+      totalActiveTables: activeWaiters.reduce((sum, w) => sum + (w.activeTables || 0), 0),
+      totalSalesToday,
+      totalOrdersToday,
+      averageTicket: totalOrdersToday > 0 ? totalSalesToday / totalOrdersToday : 0,
+    }
+    // canAccess es un closure recreado cada render; visibleWaiters se deriva de waiters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiters, allowedBranches])
   // Mapa id de sede -> nombre, para mostrar a qué sede pertenece cada mozo
   const branchNameById = branches.reduce((acc, b) => {
     acc[b.id] = b.name
@@ -41,24 +59,18 @@ export default function Waiters() {
   const loadWaiters = async () => {
     setIsLoading(true)
     try {
-      // Si estamos en modo demo, usar datos de demo
+      // Si estamos en modo demo, usar datos de demo (las stats se calculan con useMemo)
       if (isDemoMode && demoData?.waiters) {
         setWaiters(demoData.waiters)
-        // Calcular stats básicas de demo
-        setStats({
-          total: demoData.waiters.length,
-          active: demoData.waiters.filter(w => w.status === 'active').length,
-          inactive: demoData.waiters.filter(w => w.status === 'inactive').length,
-        })
         setIsLoading(false)
         return
       }
 
-      // Modo normal - usar Firestore
+      // Modo normal - usar Firestore. Las stats se calculan en cliente sobre los
+      // mozos visibles (useMemo), por eso ya no se llama a getWaitersStats.
       const businessId = getBusinessId()
-      const [waitersResult, statsResult, branchesResult] = await Promise.all([
+      const [waitersResult, branchesResult] = await Promise.all([
         getWaiters(businessId),
-        getWaitersStats(businessId),
         getActiveBranches(businessId),
       ])
 
@@ -66,10 +78,6 @@ export default function Waiters() {
         setWaiters(waitersResult.data || [])
       } else {
         toast.error('Error al cargar mozos: ' + waitersResult.error)
-      }
-
-      if (statsResult.success) {
-        setStats(statsResult.data)
       }
 
       if (branchesResult.success) {

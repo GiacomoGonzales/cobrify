@@ -33,7 +33,7 @@ import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } fro
 import { getRecentInvoices, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getActiveBranches } from '@/services/branchService'
-import { getTablesStats } from '@/services/tableService'
+import { getTables } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
@@ -268,15 +268,7 @@ export default function Dashboard() {
       // Load demo data
       setInvoices(demoData.invoices || [])
       setProducts(demoData.products || [])
-      // Calcular monto de mesas abiertas en modo demo restaurante
-      if (businessMode === 'restaurant' && Array.isArray(demoData.tables)) {
-        const openAmount = demoData.tables
-          .filter(t => t.status === 'occupied')
-          .reduce((sum, t) => sum + (t.amount || 0), 0)
-        setOpenTablesAmount(openAmount)
-      } else {
-        setOpenTablesAmount(0)
-      }
+      // El monto de mesas abiertas se calcula en el useEffect dedicado (respeta filterBranch).
       setIsLoading(false)
       return
     }
@@ -327,23 +319,68 @@ export default function Dashboard() {
         setProducts(productsResult.data || [])
       }
 
-      // Cargar monto de mesas abiertas (solo en modo restaurante)
-      if (businessMode === 'restaurant') {
-        const tablesStatsResult = await getTablesStats(businessId)
-        if (tablesStatsResult.success) {
-          setOpenTablesAmount(tablesStatsResult.data.totalAmount || 0)
-        } else {
-          setOpenTablesAmount(0)
-        }
-      } else {
-        setOpenTablesAmount(0)
-      }
+      // El monto de mesas abiertas (modo restaurante) se calcula en un useEffect
+      // aparte que depende de filterBranch, para que respete el selector de sede
+      // y los permisos de ubicación del usuario.
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Monto de mesas abiertas (solo modo restaurante).
+  // En un efecto aparte que depende de filterBranch para que el monto respete el
+  // selector de sede del Dashboard. Además aplica canAccess (permisos de ubicación):
+  // un usuario restringido nunca suma mesas de sedes fuera de allowedBranches, y si
+  // no tiene acceso a la Principal, las mesas sin branchId tampoco se cuentan.
+  useEffect(() => {
+    if (businessMode !== 'restaurant') {
+      setOpenTablesAmount(0)
+      return
+    }
+
+    // Misma semántica que branchFilteredInvoices para el selector de sede:
+    // 'all' = todas, 'main' = sin branchId (Principal), <id> = esa sede.
+    const matchesBranch = (t) =>
+      filterBranch === 'all'
+        ? true
+        : filterBranch === 'main'
+          ? !t.branchId
+          : t.branchId === filterBranch
+
+    const sumOpen = (list) =>
+      (list || [])
+        .filter(t => canAccess(t) && matchesBranch(t) && t.status === 'occupied')
+        .reduce((acc, t) => acc + (t.amount || 0), 0)
+
+    // Modo demo: usar las mesas de demoData
+    if (isDemoMode) {
+      setOpenTablesAmount(Array.isArray(demoData?.tables) ? sumOpen(demoData.tables) : 0)
+      return
+    }
+
+    if (!user?.uid) return
+
+    let cancelled = false
+    const loadOpenTablesAmount = async () => {
+      try {
+        const result = await getTables(getBusinessId())
+        if (cancelled) return
+        setOpenTablesAmount(result.success ? sumOpen(result.data) : 0)
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error al cargar monto de mesas abiertas:', error)
+          setOpenTablesAmount(0)
+        }
+      }
+    }
+    loadOpenTablesAmount()
+    return () => { cancelled = true }
+    // canAccess es un closure recreado cada render; se omite de deps a propósito
+    // (lee de allowedBranches, que sí está en deps). Mismo patrón que el resto del archivo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode, demoData, businessMode, filterBranch, allowedBranches])
 
   // Helper to get date from invoice - usa fecha de emisión si existe, sino createdAt
   const getInvoiceDate = useCallback((inv) => {
