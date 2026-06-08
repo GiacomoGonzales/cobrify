@@ -74,6 +74,7 @@ export const createTable = async (businessId, tableData) => {
       number: tableData.number,
       capacity: tableData.capacity || 4,
       zone: tableData.zone || 'Salón Principal',
+      branchId: tableData.branchId || null, // Sucursal/sede a la que pertenece la mesa (null = Sucursal Principal)
       status: 'available', // available, occupied, reserved, maintenance
       isActive: true,
       // Datos de ocupación (null cuando está disponible)

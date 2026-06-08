@@ -42,16 +42,24 @@ import {
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder, updateItemStatus } from '@/services/orderService'
 import { getCompanySettings, getProductCategories, savePrecuentaSnapshot } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
+import { useLocationAccess } from '@/utils/locationAccess'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
-  const { user, getBusinessId, isDemoMode, demoData, userPermissions } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, userPermissions, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
+  const canAccessTable = useLocationAccess()
   const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
 
   const [tables, setTables] = useState([])
+  // Sucursales (sedes): para filtrar y crear mesas por sede
+  const [branches, setBranches] = useState([])
+  const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
+  const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
@@ -111,6 +119,7 @@ export default function Tables() {
     number: '',
     capacity: '4',
     zone: 'Salón Principal',
+    branchId: null,
   })
 
   const zones = ['Salón Principal', 'Terraza', 'Salón VIP', 'Bar', 'Exterior']
@@ -230,6 +239,31 @@ export default function Tables() {
     },
   })
 
+  // Cargar sucursales (sedes) habilitadas para el usuario y fijar la sede por defecto
+  useEffect(() => {
+    if (!user?.uid) return
+    if (isDemoMode) { setBranchesLoaded(true); return }
+    const loadBranches = async () => {
+      try {
+        const result = await getActiveBranches(getBusinessId())
+        if (result.success) {
+          const list = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+          setBranches(list)
+          // Por defecto: Sucursal Principal si el usuario tiene acceso; si está
+          // restringido a sucursales, fijar la primera permitida (no podrá ver otras).
+          if (!hasMainBranchAccess && list.length > 0) {
+            setSelectedBranchId(list[0].id)
+          }
+        }
+      } catch (error) {
+        console.error('Error al cargar sucursales:', error)
+      } finally {
+        setBranchesLoaded(true)
+      }
+    }
+    loadBranches()
+  }, [user, isDemoMode, allowedBranches])
+
   // Listener en tiempo real para mesas
   useEffect(() => {
     if (!user?.uid) return
@@ -258,6 +292,11 @@ export default function Tables() {
       return
     }
 
+    // Solo los usuarios restringidos a sucursales esperan a que carguen las sedes (para no
+    // mostrar un instante mesas de otra sede). La mayoría (con acceso a la Principal, incluidos
+    // los negocios sin sucursales) carga sin esperar; canAccessTable es la red de seguridad.
+    if (!hasMainBranchAccess && !branchesLoaded) return
+
     // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
@@ -269,7 +308,12 @@ export default function Tables() {
       (snapshot) => {
         const tablesData = []
         snapshot.forEach((doc) => {
-          tablesData.push({ id: doc.id, ...doc.data() })
+          const t = { id: doc.id, ...doc.data() }
+          // Filtrar por la sede seleccionada (sin branchId = Sucursal Principal)
+          if ((t.branchId || null) !== (selectedBranchId || null)) return
+          // Seguridad: respetar las sedes habilitadas del usuario secundario
+          if (!canAccessTable(t)) return
+          tablesData.push(t)
         })
 
         setTables(tablesData)
@@ -299,7 +343,7 @@ export default function Tables() {
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
-  }, [user, isDemoMode, demoData])
+  }, [user, isDemoMode, demoData, selectedBranchId, branchesLoaded, allowedBranches])
 
   // La ocupación de mesas desde carta digital se maneja directamente en CatalogoPublico.jsx
   // al momento de crear la orden. No se necesita listener adicional aquí.
@@ -403,6 +447,7 @@ export default function Tables() {
       number: '',
       capacity: '4',
       zone: 'Salón Principal',
+      branchId: selectedBranchId, // crear en la sede actualmente seleccionada
     })
     setIsModalOpen(true)
   }
@@ -418,6 +463,7 @@ export default function Tables() {
       number: String(table.number),
       capacity: table.capacity.toString(),
       zone: table.zone,
+      branchId: table.branchId || null,
     })
     setIsModalOpen(true)
   }
@@ -436,6 +482,7 @@ export default function Tables() {
         number: formData.number.trim(),
         capacity: parseInt(formData.capacity),
         zone: formData.zone,
+        branchId: formData.branchId ?? null, // sede a la que pertenece la mesa (null = Principal)
       }
 
       let result
@@ -1499,10 +1546,24 @@ export default function Tables() {
           </h1>
           <p className="text-gray-600 mt-1">Administra las mesas de tu restaurante</p>
         </div>
-        <Button onClick={openCreateModal} className="flex items-center gap-2 w-full md:w-auto">
-          <Plus className="w-4 h-4" />
-          Nueva Mesa
-        </Button>
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+          {branches.length > 0 && (
+            <Select
+              value={selectedBranchId || ''}
+              onChange={(e) => setSelectedBranchId(e.target.value || null)}
+              className="w-full md:w-56"
+            >
+              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+          )}
+          <Button onClick={openCreateModal} className="flex items-center gap-2 w-full md:w-auto">
+            <Plus className="w-4 h-4" />
+            Nueva Mesa
+          </Button>
+        </div>
       </div>
 
       {/* Estadísticas */}
@@ -1841,6 +1902,24 @@ export default function Tables() {
               ))}
             </Select>
           </div>
+
+          {branches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sede *
+              </label>
+              <Select
+                value={formData.branchId || ''}
+                onChange={(e) => setFormData({ ...formData, branchId: e.target.value || null })}
+              >
+                {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">La mesa solo aparecerá en esta sede.</p>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button
