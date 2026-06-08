@@ -1649,6 +1649,11 @@ function CartDrawer({
             const tableData = matchedTableDoc.data()
             const tableRef = doc(db, 'businesses', business.id, 'tables', matchedTableDoc.id)
 
+            // Heredar la sede (branchId) de la mesa en la orden, para separar órdenes/comandas por sucursal
+            await updateDoc(doc(db, 'businesses', business.id, 'orders', orderDoc.id), {
+              branchId: tableData.branchId || null,
+            })
+
             if (tableData.status === 'available' || tableData.status === 'reserved') {
               // Mesa libre o reservada: ocuparla con esta orden
               await updateDoc(tableRef, {

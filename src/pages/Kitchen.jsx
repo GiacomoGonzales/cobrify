@@ -3,18 +3,27 @@ import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2, LayoutGrid 
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
+import Select from '@/components/ui/Select'
 import { getActiveOrders, updateOrderStatus, updateItemStatus } from '@/services/orderService'
 import { getProductCategories } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
+import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Kitchen() {
-  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
+  const canAccess = useLocationAccess()
   const toast = useToast()
 
   const [orders, setOrders] = useState([])
+  // Sucursales (sedes): para filtrar las órdenes/comandas por sede
+  const [branches, setBranches] = useState([])
+  const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
+  const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
   const [updatingItemId, setUpdatingItemId] = useState(null)
@@ -73,6 +82,31 @@ export default function Kitchen() {
     loadCategories()
   }, [user, isDemoMode, getBusinessId])
 
+  // Cargar sucursales (sedes) habilitadas para el usuario y fijar la sede por defecto
+  useEffect(() => {
+    if (!user?.uid) return
+    if (isDemoMode) { setBranchesLoaded(true); return }
+    const loadBranches = async () => {
+      try {
+        const result = await getActiveBranches(getBusinessId())
+        if (result.success) {
+          const list = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+          setBranches(list)
+          // Por defecto: Sucursal Principal si el usuario tiene acceso; si está
+          // restringido a sucursales, fijar la primera permitida (no podrá ver otras).
+          if (!hasMainBranchAccess && list.length > 0) {
+            setSelectedBranchId(list[0].id)
+          }
+        }
+      } catch (error) {
+        console.error('Error al cargar sucursales:', error)
+      } finally {
+        setBranchesLoaded(true)
+      }
+    }
+    loadBranches()
+  }, [user, isDemoMode, allowedBranches])
+
   // Listener en tiempo real para órdenes activas de cocina
   useEffect(() => {
     if (!user?.uid) return
@@ -101,6 +135,11 @@ export default function Kitchen() {
       return
     }
 
+    // Solo los usuarios restringidos a sucursales esperan a que carguen las sedes (para no
+    // mostrar un instante órdenes de otra sede). La mayoría (con acceso a la Principal, incluidos
+    // los negocios sin sucursales) carga sin esperar; canAccess es la red de seguridad.
+    if (!hasMainBranchAccess && !branchesLoaded) return
+
     // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
@@ -118,7 +157,12 @@ export default function Kitchen() {
       (snapshot) => {
         const ordersData = []
         snapshot.forEach((doc) => {
-          ordersData.push({ id: doc.id, ...doc.data() })
+          const o = { id: doc.id, ...doc.data() }
+          // Filtrar por la sede seleccionada (sin branchId = Sucursal Principal)
+          if ((o.branchId || null) !== (selectedBranchId || null)) return
+          // Seguridad: respetar las sedes habilitadas del usuario secundario
+          if (!canAccess(o)) return
+          ordersData.push(o)
         })
 
         // Ordenar: urgentes primero, luego por fecha de creación (más antiguas primero)
@@ -144,7 +188,7 @@ export default function Kitchen() {
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
-  }, [user, isDemoMode, demoData])
+  }, [user, isDemoMode, demoData, selectedBranchId, branchesLoaded, allowedBranches])
 
   const loadOrders = async () => {
     // Esta función ya no es necesaria con listeners en tiempo real
@@ -549,11 +593,20 @@ export default function Kitchen() {
           </h1>
           <p className="text-gray-600 mt-1">Sistema de display para la cocina (KDS)</p>
         </div>
-        <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg">
-          <Clock className="w-5 h-5 text-gray-600" />
-          <span className="font-mono text-xl font-bold text-gray-900">
-            {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
-          </span>
+        <div className="flex items-center gap-3">
+          {/* Selector de sede: solo si el negocio tiene sucursales */}
+          {branches.length > 0 && (
+            <Select value={selectedBranchId || ''} onChange={(e) => setSelectedBranchId(e.target.value || null)}>
+              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
+            </Select>
+          )}
+          <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg">
+            <Clock className="w-5 h-5 text-gray-600" />
+            <span className="font-mono text-xl font-bold text-gray-900">
+              {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
         </div>
       </div>
 

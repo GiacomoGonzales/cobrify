@@ -176,9 +176,23 @@ export const createOrder = async (businessId, orderData) => {
     // Obtener el número de orden del día
     const orderNumber = await getDailyOrderNumber(businessId)
 
+    // Sede de la orden: explícita o heredada de la mesa (para separar órdenes/comandas por sucursal)
+    let branchId = orderData.branchId ?? null
+    if (branchId === null && orderData.tableId) {
+      try {
+        const tableSnap = await getDoc(doc(db, 'businesses', businessId, 'tables', orderData.tableId))
+        if (tableSnap.exists()) branchId = tableSnap.data().branchId ?? null
+      } catch (e) {
+        console.error('No se pudo heredar la sede de la mesa para la orden:', e)
+      }
+    }
+
     const newOrder = {
       // Número de orden diario
       orderNumber: orderNumber,
+
+      // Sede a la que pertenece la orden (null = Sucursal Principal)
+      branchId: branchId,
 
       // Información de la mesa y mozo (solo si existen)
       ...(orderData.tableId && { tableId: orderData.tableId }),
