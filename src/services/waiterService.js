@@ -75,6 +75,7 @@ export const createWaiter = async (businessId, waiterData) => {
       email: waiterData.email || '',
       shift: waiterData.shift || 'Mañana', // Mañana, Tarde, Noche
       startTime: waiterData.startTime || '08:00',
+      branchId: waiterData.branchId || null, // sede a la que pertenece el mozo (null = Sucursal Principal)
       status: 'active', // active, inactive
       isActive: true,
       // Métricas

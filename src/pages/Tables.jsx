@@ -847,6 +847,8 @@ export default function Tables() {
         remainingItems: remainingItems,
         waiterId: selectedTable.waiterId || selectedOrder.waiterId || null,
         waiterName: selectedTable.waiter || selectedOrder.waiterName || null,
+        // Sede de la mesa: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
+        branchId: selectedTable.branchId ?? selectedOrder.branchId ?? null,
       }
     })
     setIsIndividualPaymentModalOpen(false)
@@ -1953,7 +1955,7 @@ export default function Tables() {
         }}
         table={selectedTable}
         order={selectedOrder}
-        waiters={waiters}
+        waiters={waiters.filter(w => (w.branchId || null) === (selectedBranchId || null) && canAccessTable(w))}
         defaultWaiterId={userPermissions?.defaultWaiterId || null}
         availableTables={tables.filter(t => t.status === 'available')}
         occupiedTables={tables.filter(t => t.status === 'occupied')}

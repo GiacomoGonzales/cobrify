@@ -5,24 +5,38 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getWaiters, getWaitersStats, deleteWaiter, toggleWaiterStatus } from '@/services/waiterService'
+import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useLocationAccess } from '@/utils/locationAccess'
 import WaiterFormModal from '@/components/restaurant/WaiterFormModal'
 
 export default function Waiters() {
-  const { getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches } = useAppContext()
   const toast = useToast()
+  // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
+  const canAccess = useLocationAccess()
 
   const [waiters, setWaiters] = useState([])
+  const [branches, setBranches] = useState([])
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingWaiter, setEditingWaiter] = useState(null)
 
+  // Mozos visibles según las sucursales habilitadas del usuario
+  const visibleWaiters = waiters.filter(canAccess)
+  // Mapa id de sede -> nombre, para mostrar a qué sede pertenece cada mozo
+  const branchNameById = branches.reduce((acc, b) => {
+    acc[b.id] = b.name
+    return acc
+  }, {})
+
   // Cargar datos de Firestore o demo
   useEffect(() => {
     loadWaiters()
-  }, [isDemoMode, demoData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemoMode, demoData, allowedBranches])
 
   const loadWaiters = async () => {
     setIsLoading(true)
@@ -42,9 +56,10 @@ export default function Waiters() {
 
       // Modo normal - usar Firestore
       const businessId = getBusinessId()
-      const [waitersResult, statsResult] = await Promise.all([
+      const [waitersResult, statsResult, branchesResult] = await Promise.all([
         getWaiters(businessId),
         getWaitersStats(businessId),
+        getActiveBranches(businessId),
       ])
 
       if (waitersResult.success) {
@@ -55,6 +70,13 @@ export default function Waiters() {
 
       if (statsResult.success) {
         setStats(statsResult.data)
+      }
+
+      if (branchesResult.success) {
+        const list = filterBranchesByAccess
+          ? filterBranchesByAccess(branchesResult.data || [])
+          : (branchesResult.data || [])
+        setBranches(list)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -228,6 +250,7 @@ export default function Waiters() {
                 <TableHead>Código</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Teléfono</TableHead>
+                {branches.length > 0 && <TableHead>Sede</TableHead>}
                 <TableHead>Turno</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-center">Mesas Activas</TableHead>
@@ -237,16 +260,16 @@ export default function Waiters() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {waiters.length === 0 ? (
+              {visibleWaiters.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12">
+                  <TableCell colSpan={branches.length > 0 ? 10 : 9} className="text-center py-12">
                     <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-600 font-medium">No hay mozos registrados</p>
                     <p className="text-sm text-gray-500 mt-1">Crea tu primer mozo para comenzar</p>
                   </TableCell>
                 </TableRow>
               ) : (
-                waiters.map((waiter) => (
+                visibleWaiters.map((waiter) => (
                   <TableRow key={waiter.id}>
                     <TableCell>
                       <span className="font-mono font-medium">{waiter.code}</span>
@@ -262,6 +285,11 @@ export default function Waiters() {
                       </div>
                     </TableCell>
                     <TableCell className="text-gray-600">{waiter.phone || '-'}</TableCell>
+                    {branches.length > 0 && (
+                      <TableCell className="text-gray-600">
+                        {waiter.branchId ? (branchNameById[waiter.branchId] || waiter.branchId) : 'Sucursal Principal'}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Badge variant="default" className="flex items-center gap-1 w-fit">
                         <Clock className="w-3 h-3" />

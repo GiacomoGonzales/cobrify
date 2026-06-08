@@ -5,14 +5,17 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { createWaiter, updateWaiter } from '@/services/waiterService'
+import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
+  // Sucursales (sedes) habilitadas para el usuario: para asignar la sede del mozo
+  const [branches, setBranches] = useState([])
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -20,9 +23,28 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
     email: '',
     shift: 'Mañana',
     startTime: '08:00',
+    branchId: null,
   })
 
   const [errors, setErrors] = useState({})
+
+  // Cargar sucursales habilitadas para el usuario
+  useEffect(() => {
+    if (!isOpen) return
+    const loadBranches = async () => {
+      try {
+        const result = await getActiveBranches(getBusinessId())
+        if (result.success) {
+          const list = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+          setBranches(list)
+        }
+      } catch (error) {
+        console.error('Error al cargar sucursales:', error)
+      }
+    }
+    loadBranches()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, allowedBranches])
 
   // Cargar datos del mozo si es edición
   useEffect(() => {
@@ -34,9 +56,12 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
         email: waiter.email || '',
         shift: waiter.shift || 'Mañana',
         startTime: waiter.startTime || '08:00',
+        branchId: waiter.branchId || null,
       })
     } else {
-      // Reset form for new waiter
+      // Reset form for new waiter.
+      // Por defecto: Sucursal Principal si tiene acceso; si está restringido a
+      // sucursales, fijar la primera permitida.
       setFormData({
         name: '',
         code: '',
@@ -44,10 +69,11 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
         email: '',
         shift: 'Mañana',
         startTime: '08:00',
+        branchId: !hasMainBranchAccess && branches.length > 0 ? branches[0].id : null,
       })
     }
     setErrors({})
-  }, [waiter, isOpen])
+  }, [waiter, isOpen, branches, hasMainBranchAccess])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -202,6 +228,29 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
             onChange={handleChange}
           />
         </div>
+
+        {/* Sede (solo si el negocio tiene sucursales) */}
+        {branches.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sede
+            </label>
+            <Select
+              value={formData.branchId || ''}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, branchId: e.target.value || null }))
+              }
+            >
+              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              El mozo solo aparecerá en esta sede.
+            </p>
+          </div>
+        )}
 
         {/* Botones */}
         <div className="flex gap-3 pt-4">

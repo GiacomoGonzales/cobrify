@@ -495,6 +495,8 @@ export default function Orders() {
         items: orderToClose.items,
         orderType: orderToClose.orderType,
         markAsPaidOnComplete: true,
+        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
+        branchId: orderToClose.branchId ?? null,
       }
     })
     setShowCloseOrderModal(false)
@@ -577,6 +579,8 @@ export default function Orders() {
         waiterId: orderToClose.waiterId || null,
         waiterName: orderToClose.waiterName || null,
         markAsPaidOnComplete: true,
+        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
+        branchId: orderToClose.branchId ?? null,
       },
     })
     setIsIndividualPaymentModalOpen(false)
@@ -973,6 +977,8 @@ export default function Orders() {
         tableNumber: order.tableNumber || null,
         waiterId: order.waiterId || null,
         waiterName: order.waiterName || null,
+        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
+        branchId: order.branchId ?? null,
       }
     })
   }

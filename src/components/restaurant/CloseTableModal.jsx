@@ -69,6 +69,8 @@ export default function CloseTableModal({
         // Información del mozo
         waiterId: table.waiterId || order.waiterId || null,
         waiterName: table.waiter || order.waiterName || null,
+        // Sede de la mesa: el POS la usa para fijar sucursal+almacén (comprobante/serie/caja/stock correctos)
+        branchId: table.branchId ?? order.branchId ?? null,
       }
     })
     handleClose()

@@ -441,6 +441,8 @@ export default function POS() {
   // Branches/Sucursales (para series de documentos)
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null)
+  // Sede pendiente de aplicar al cobrar una mesa/orden (se resuelve cuando cargan sucursales/almacenes)
+  const [pendingBranchSelection, setPendingBranchSelection] = useState(null)
 
   // Estado para edición de documento existente
   const [editingInvoiceId, setEditingInvoiceId] = useState(null)
@@ -1266,6 +1268,37 @@ export default function POS() {
   const userChangedDocTypeRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
+  // Fija la sucursal y su almacén en el POS según la sede de la mesa/orden que se va a cobrar,
+  // para que el comprobante, la serie SUNAT, la caja y el descuento de stock/insumos usen la sede correcta.
+  const applyBranchForOrder = (branchId) => {
+    if (!branchId) {
+      setSelectedBranch(null)
+      const mainWarehouses = warehouses.filter(w => w.isActive && !w.branchId)
+      if (mainWarehouses.length > 0) {
+        setSelectedWarehouse(mainWarehouses.find(w => w.isDefault) || mainWarehouses[0])
+      }
+    } else {
+      const branch = branches.find(b => b.id === branchId)
+      if (branch) {
+        setSelectedBranch(branch)
+        const branchWarehouses = warehouses.filter(w => w.isActive && w.branchId === branchId)
+        if (branchWarehouses.length > 0) {
+          setSelectedWarehouse(branchWarehouses.find(w => w.isDefault) || branchWarehouses[0])
+        }
+      }
+    }
+  }
+
+  // Aplica la sede pendiente cuando ya cargaron los almacenes (evita la carrera al montar el POS
+  // desde el cobro de una mesa: fromTable corre antes de que getWarehouses/getActiveBranches resuelvan).
+  useEffect(() => {
+    if (!pendingBranchSelection) return
+    if (warehouses.length === 0) return
+    applyBranchForOrder(pendingBranchSelection.branchId)
+    setPendingBranchSelection(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBranchSelection, warehouses, branches])
+
   useEffect(() => {
     if (location.state?.fromTable && !tableLoadedRef.current) {
       const tableInfo = location.state
@@ -1275,6 +1308,12 @@ export default function POS() {
 
       setTableData(tableInfo)
       setOrderType('dine-in') // Establecer automáticamente como "En Mesa"
+
+      // Forzar la sede (y su almacén) a la de la mesa: el comprobante, la serie, la caja y el
+      // descuento de stock/insumos deben quedar en la sucursal de la mesa, no en la del cajero.
+      if ('branchId' in tableInfo) {
+        setPendingBranchSelection({ branchId: tableInfo.branchId ?? null })
+      }
 
       // Si la mesa tiene una orden asociada, guardarla para marcarla como pagada al completar
       // En cobro parcial (partialClose) NO marcar la orden como pagada porque sigue activa
@@ -1423,6 +1462,11 @@ export default function POS() {
 
       // Establecer tipo de orden
       setOrderType(orderInfo.orderType || 'takeaway')
+
+      // Forzar la sede (y su almacén) a la de la orden, para cobrar/descontar stock en la sucursal correcta
+      if ('branchId' in orderInfo) {
+        setPendingBranchSelection({ branchId: orderInfo.branchId ?? null })
+      }
 
       // Cargar items de la orden al carrito
       if (orderInfo.items && orderInfo.items.length > 0) {
