@@ -10470,7 +10470,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 description: item.name,
                 quantity: item.quantity,
                 price: item.unitPrice,
+                unit: item.unit, // unidad de medida (para que el ticket no caiga a "UNIDAD" genérico)
                 observations: item.observations,
+                // Presentación elegida (CAJA, PACK, ...): el ticket la antepone con showItemUnit
+                ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
                 ...(item.serialNumber && { serialNumber: item.serialNumber }),
               })),
               series: lastInvoiceData.series,
