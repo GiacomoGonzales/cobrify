@@ -1359,6 +1359,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const imageBoxSize = (spacious ? 120 : 104) * S
   const imagePadding = 8 * S // espacio entre la imagen y el texto
 
+  // Mapeo de códigos SUNAT a labels legibles (desde UNITS + legacy). Se define aquí —antes de
+  // calcular los anchos de columna— para poder medir el texto real de la U.M. y ensanchar su
+  // columna cuando la unidad es larga (p. ej. "Metro cuadrado", "Ciento de unidades").
+  const unitLabels = Object.fromEntries(UNITS.map(u => [u.value, u.label]))
+  Object.assign(unitLabels, {
+    'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT',
+    'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
+  })
+  const getUnitText = (item) => {
+    const code = item.unit || 'UNIDAD'
+    return unitLabels[code] || code
+  }
+
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
   // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT. | (DCTO) | IMPORTE
   // Normal: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | (DCTO.) | IMPORTE
@@ -1394,6 +1407,29 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     pu: isPharmacy ? CONTENT_WIDTH * 0.08 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: isPharmacy ? CONTENT_WIDTH * 0.14 : CONTENT_WIDTH * 0.19
+  }
+
+  // Ensanchar dinámicamente la columna U.M. si el texto de la unidad no entra (p. ej. "Metro
+  // cuadrado", "Ciento de unidades"). Se mide el texto más largo y se le da el ancho necesario
+  // (con tope), restándoselo a DESCRIPCIÓN. Para unidades cortas (UND, KG…) queda en su ancho
+  // original, de modo que los comprobantes habituales no cambian su layout.
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  let maxUmTextWidth = doc.getTextWidth('U.M.')
+  for (const it of items) {
+    const w = doc.getTextWidth(getUnitText(it))
+    if (w > maxUmTextWidth) maxUmTextWidth = w
+  }
+  const neededUm = maxUmTextWidth + 8
+  if (neededUm > colWidths.um) {
+    const maxUm = CONTENT_WIDTH * (isPharmacy ? 0.12 : 0.16)
+    const minDesc = CONTENT_WIDTH * (isPharmacy ? 0.10 : 0.18)
+    let delta = Math.min(neededUm, maxUm) - colWidths.um
+    delta = Math.min(delta, Math.max(0, colWidths.desc - minDesc))
+    if (delta > 0) {
+      colWidths.um += delta
+      colWidths.desc -= delta
+    }
   }
 
   let colX = MARGIN_LEFT
@@ -1534,8 +1570,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       }
     }
 
+    // La U.M. va en su propia columna (paralela a la descripción): si es muy larga y se parte
+    // en varias líneas, la fila debe ser lo bastante alta para contenerla.
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    const umLines = doc.splitTextToSize(getUnitText(item), colWidths.um - 6)
     const totalLines = descLines.length + serialLines.length + pharmaLines.length
-    const baseHeight = totalLines * lineHeight + (spacious ? 10 : 6) * S
+    const baseHeight = Math.max(totalLines, umLines.length) * lineHeight + (spacious ? 10 : 6) * S
     let calculatedHeight = Math.max(minProductRowHeight, baseHeight)
     // Si el item tiene imagen, asegurar suficiente alto para mostrarla con padding
     const hasImage = itemHasImage(item)
@@ -1561,7 +1602,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setTextColor(255, 255, 255)
     const headerTextY = startY + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
-    doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
+    doc.text('U.M.', cols.um + 3, headerTextY)
     if (isPharmacy) {
       doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
     }
@@ -1595,14 +1636,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-
-  // Mapeo de códigos SUNAT a labels legibles (desde UNITS + legacy)
-  const unitLabels = Object.fromEntries(UNITS.map(u => [u.value, u.label]))
-  // Agregar labels legacy para compatibilidad
-  Object.assign(unitLabels, {
-    'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT',
-    'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
-  })
 
   for (let i = 0; i < items.length; i++) {
     const { height: rowHeight, descLines, pharmaLines, serialLines, hasImage } = itemHeights[i]
@@ -1645,10 +1678,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
     doc.text(quantityText, cols.cant + colWidths.cant / 2, centerY, { align: 'center' })
 
-    // Unidad de medida - centrada verticalmente
-    const unitCode = item.unit || 'UNIDAD'
-    const unitText = unitLabels[unitCode] || unitCode
-    doc.text(unitText, cols.um + colWidths.um / 2, centerY, { align: 'center' })
+    // Unidad de medida - alineada a la izquierda; si la unidad es larga y supera el tope de
+    // ancho de la columna, se parte en varias líneas (centradas verticalmente en la fila).
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    const umLines = doc.splitTextToSize(getUnitText(item), colWidths.um - 6)
+    const umStartY = centerY - ((umLines.length - 1) * lineHeight) / 2
+    umLines.forEach((line, idx) => {
+      doc.text(line, cols.um + 3, umStartY + (idx * lineHeight))
+    })
 
     // Código del producto (solo modo farmacia, y si el toggle de configuración lo permite)
     if (isPharmacy && colWidths.code > 0 && showProductCode) {
