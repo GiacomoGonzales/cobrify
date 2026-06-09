@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranding } from '@/contexts/BrandingContext';
+import { DEFAULT_BRANDING } from '@/services/brandingService';
 import { PLANS } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import {
@@ -22,6 +24,21 @@ import { es } from 'date-fns/locale';
 
 export default function MySubscription() {
   const { subscription, user } = useAuth();
+  const { branding } = useBranding();
+
+  // Contacto de soporte: si la cuenta pertenece a un RESELLER, mostrar SUS datos
+  // (WhatsApp/email de su branding); si es cliente directo de Cobrify, mostrar el
+  // soporte de Cobrify. No se mezclan (un cliente de reseller no debe ver a Cobrify).
+  const isResellerAccount = !!(branding?.companyName && branding.companyName !== DEFAULT_BRANDING.companyName)
+  const supportName = isResellerAccount ? branding.companyName : 'Cobrify'
+  const supportWhatsapp = (isResellerAccount ? (branding.whatsapp || '') : '+51 900 434 988').trim()
+  const supportEmail = (isResellerAccount ? (branding.supportEmail || '') : 'soporte@cobrifyperu.com').trim()
+  // wa.me necesita solo dígitos; si es un celular peruano de 9 dígitos, anteponer 51.
+  const supportWaDigits = (() => {
+    const d = supportWhatsapp.replace(/\D/g, '')
+    return d.length === 9 ? `51${d}` : d
+  })()
+
   const [vendedorInfo, setVendedorInfo] = useState(null)
   const [assignedClients, setAssignedClients] = useState([])
   const [loadingClients, setLoadingClients] = useState(false)
@@ -390,37 +407,43 @@ export default function MySubscription() {
         </div>
       )}
 
-      {/* Información de contacto */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="font-semibold text-blue-900 mb-3 text-lg">
-          ¿Necesitas ayuda con tu suscripción?
-        </h3>
-        <p className="text-blue-800 mb-4">
-          Si tienes preguntas sobre tu plan, pagos o necesitas actualizar tu suscripción, contáctanos:
-        </p>
-        <div className="space-y-2 text-blue-800">
-          <p>
-            <span className="font-medium">WhatsApp:</span>{' '}
-            <a
-              href="https://wa.me/51900434988"
-              className="text-blue-600 hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              +51 900 434 988
-            </a>
+      {/* Información de contacto (del reseller si aplica, si no de Cobrify) */}
+      {(supportWhatsapp || supportEmail) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="font-semibold text-blue-900 mb-3 text-lg">
+            ¿Necesitas ayuda con tu suscripción?
+          </h3>
+          <p className="text-blue-800 mb-4">
+            Si tienes preguntas sobre tu plan, pagos o necesitas actualizar tu suscripción, contáctate con {supportName}:
           </p>
-          <p>
-            <span className="font-medium">Email:</span>{' '}
-            <a
-              href="mailto:soporte@cobrifyperu.com"
-              className="text-blue-600 hover:underline"
-            >
-              soporte@cobrifyperu.com
-            </a>
-          </p>
+          <div className="space-y-2 text-blue-800">
+            {supportWhatsapp && (
+              <p>
+                <span className="font-medium">WhatsApp:</span>{' '}
+                <a
+                  href={`https://wa.me/${supportWaDigits}`}
+                  className="text-blue-600 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {supportWhatsapp}
+                </a>
+              </p>
+            )}
+            {supportEmail && (
+              <p>
+                <span className="font-medium">Email:</span>{' '}
+                <a
+                  href={`mailto:${supportEmail}`}
+                  className="text-blue-600 hover:underline"
+                >
+                  {supportEmail}
+                </a>
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

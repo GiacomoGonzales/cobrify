@@ -197,6 +197,9 @@ export default function CreateResellerClient() {
           primaryColor: resellerData?.branding?.primaryColor || '#2563eb',
           secondaryColor: resellerData?.branding?.secondaryColor || '#1d4ed8',
           accentColor: resellerData?.branding?.accentColor || '#3b82f6',
+          // Contacto de soporte del reseller (para la sección de ayuda de "Mi Suscripción")
+          whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
+          supportEmail: resellerData?.branding?.supportEmail || resellerData?.email || '',
         }
       })
 

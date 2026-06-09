@@ -82,16 +82,22 @@ export async function getBrandingForClient(userId) {
           // Si en la subscription no quedó websiteUrl/customDomain (puede ser un snapshot
           // viejo), traerlos del reseller actual. Necesario para que footers de PDFs
           // muestren el dominio del reseller en vez de cobrifyperu.com.
-          if ((!merged.websiteUrl || !merged.customDomain) && subscription.resellerId) {
+          // Snapshots viejos no guardaron websiteUrl/customDomain ni el contacto de soporte
+          // (whatsapp/supportEmail). Si falta alguno, lo traemos del reseller actual para que
+          // los footers de PDFs y la sección de soporte de "Mi Suscripción" muestren los datos
+          // del reseller en vez de los de Cobrify.
+          if ((!merged.websiteUrl || !merged.customDomain || !merged.whatsapp || !merged.supportEmail) && subscription.resellerId) {
             try {
               const fresh = await getResellerBranding(subscription.resellerId)
               merged = {
                 ...merged,
                 websiteUrl: merged.websiteUrl || fresh.websiteUrl || '',
                 customDomain: merged.customDomain || fresh.customDomain || '',
+                whatsapp: merged.whatsapp || fresh.whatsapp || '',
+                supportEmail: merged.supportEmail || fresh.supportEmail || '',
               }
             } catch (e) {
-              console.warn('No se pudo refrescar websiteUrl/customDomain del reseller:', e.message)
+              console.warn('No se pudo refrescar datos del reseller:', e.message)
             }
           }
           return merged
