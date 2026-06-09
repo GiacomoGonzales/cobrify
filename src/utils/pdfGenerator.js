@@ -1355,8 +1355,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Flag para mostrar imágenes de productos en comprobantes (default false).
   // IMPORTANTE: con FALSE el layout debe quedar EXACTAMENTE igual que antes (documento fiscal).
   const showImages = companySettings?.showImagesInInvoices === true
+  // Escala de imágenes elegida por el usuario (Configuración > Documentos, 50–150%; 100 = actual).
+  // Escala la miniatura Y la columna IMAGEN, tomando/devolviendo espacio a DESCRIPCIÓN. El máximo
+  // efectivo se limita según el layout (farmacia / filas con descuento tienen menos espacio) para
+  // que la descripción nunca quede aplastada. Con 100% el layout es EXACTAMENTE el actual.
+  const rawImgScale = Number(companySettings?.invoiceImageScale)
+  const requestedImgScale = Number.isFinite(rawImgScale) && rawImgScale > 0
+    ? Math.min(150, Math.max(50, rawImgScale)) / 100
+    : 1
+  const IMG_FRAC_BASE = hasAnyItemDiscount ? (isPharmacy ? 0.16 : 0.22) : (isPharmacy ? 0.18 : 0.22)
+  const DESC_FRAC_BASE = hasAnyItemDiscount ? (isPharmacy ? 0.10 : 0.18) : (isPharmacy ? 0.22 : 0.27)
+  const MIN_DESC_FRAC = isPharmacy ? 0.10 : 0.18
+  const imgScale = showImages
+    ? Math.min(requestedImgScale, (IMG_FRAC_BASE + DESC_FRAC_BASE - MIN_DESC_FRAC) / IMG_FRAC_BASE)
+    : 1
+  const IMG_FRAC = IMG_FRAC_BASE * imgScale
+  const DESC_FRAC = DESC_FRAC_BASE + (IMG_FRAC_BASE - IMG_FRAC)
   // Tamaño de la miniatura en el PDF (mismo enfoque que cotizaciones, escalado a A5)
-  const imageBoxSize = (spacious ? 120 : 104) * S
+  const imageBoxSize = (spacious ? 120 : 104) * S * imgScale
   const imagePadding = 8 * S // espacio entre la imagen y el texto
 
   // Mapeo de códigos SUNAT a labels legibles (desde UNITS + legacy). Se define aquí —antes de
@@ -1385,10 +1401,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: CONTENT_WIDTH * 0.05,
     um: CONTENT_WIDTH * 0.05,
     code: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
-    img: showImages ? CONTENT_WIDTH * (isPharmacy ? 0.16 : 0.22) : 0,
+    img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
     desc: isPharmacy
-      ? CONTENT_WIDTH * (showImages ? 0.10 : 0.26)
-      : CONTENT_WIDTH * (showImages ? 0.18 : 0.40),
+      ? CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.26)
+      : CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.40),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.09 : CONTENT_WIDTH * 0.15,
@@ -1398,10 +1414,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: CONTENT_WIDTH * 0.05,
     um: isPharmacy ? CONTENT_WIDTH * 0.05 : CONTENT_WIDTH * 0.06,
     code: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    img: showImages ? CONTENT_WIDTH * (isPharmacy ? 0.18 : 0.22) : 0,
+    img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
     desc: isPharmacy
-      ? CONTENT_WIDTH * (showImages ? 0.22 : 0.40)
-      : CONTENT_WIDTH * (showImages ? 0.27 : 0.49),
+      ? CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.40)
+      : CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.49),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
     marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.08 : CONTENT_WIDTH * 0.17,

@@ -90,6 +90,36 @@ function SettingToggle({ checked, onChange, title, description, disabled = false
   )
 }
 
+// Regulador de tamaño de las imágenes de producto en los PDF (50%–150%).
+// Va DENTRO de un SettingToggle (que es un <label>): el preventDefault evita que
+// hacer clic sobre los textos del regulador marque/desmarque el checkbox del toggle.
+function PdfImageSizeSlider({ value, onChange }) {
+  return (
+    <div className="mt-3" onClick={(e) => e.preventDefault()}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-gray-700">Tamaño de las imágenes en el PDF</span>
+        <span className="text-xs font-semibold text-primary-700">{value}%{value === 100 ? ' (normal)' : ''}</span>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="150"
+        step="10"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-primary-600 cursor-pointer"
+      />
+      <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+        <span>Más pequeñas</span>
+        <span>Más grandes</span>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+        Las filas del PDF se ajustan solas. Si el diseño tiene poco espacio (p. ej. farmacia o filas con descuento), se usa el máximo que entra sin aplastar la descripción.
+      </p>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName } = useAppContext()
   // Preview de tema del catálogo
@@ -285,6 +315,10 @@ export default function Settings() {
 
   // Estado para mostrar imágenes de producto en comprobantes de venta PDF
   const [showImagesInInvoices, setShowImagesInInvoices] = useState(false)
+
+  // Tamaño de las imágenes de producto en los PDF (50–150%; 100 = tamaño actual)
+  const [quotationImageScale, setQuotationImageScale] = useState(100)
+  const [invoiceImageScale, setInvoiceImageScale] = useState(100)
 
   // Estado para espaciado amplio en PDF
   const [pdfSpacious, setPdfSpacious] = useState(false)
@@ -1094,6 +1128,14 @@ export default function Settings() {
           setShowImagesInInvoices(businessData.showImagesInInvoices)
         }
 
+        // Tamaño de imágenes en los PDF (default 100%)
+        if (businessData.quotationImageScale) {
+          setQuotationImageScale(Number(businessData.quotationImageScale) || 100)
+        }
+        if (businessData.invoiceImageScale) {
+          setInvoiceImageScale(Number(businessData.invoiceImageScale) || 100)
+        }
+
         // Cargar flag de espaciado amplio en PDF
         if (businessData.pdfSpacious !== undefined) {
           setPdfSpacious(businessData.pdfSpacious)
@@ -1749,6 +1791,8 @@ export default function Settings() {
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
         showImagesInQuotations: showImagesInQuotations,
         showImagesInInvoices: showImagesInInvoices,
+        quotationImageScale: Number(quotationImageScale) || 100,
+        invoiceImageScale: Number(invoiceImageScale) || 100,
         pdfSpacious: pdfSpacious,
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
@@ -5314,7 +5358,11 @@ export default function Settings() {
                     description={showImagesInQuotations
                       ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
                       : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
-                  />
+                  >
+                    {showImagesInQuotations && (
+                      <PdfImageSizeSlider value={quotationImageScale} onChange={setQuotationImageScale} />
+                    )}
+                  </SettingToggle>
                 </div>
 
                 {/* Imágenes de producto en comprobantes de venta */}
@@ -5326,7 +5374,11 @@ export default function Settings() {
                     description={showImagesInInvoices
                       ? 'Habilitado: Cada producto del comprobante (factura, boleta o nota de venta) mostrará una miniatura de su imagen en el PDF, igual que en las cotizaciones (las filas serán un poco más altas).'
                       : 'Deshabilitado: El PDF de comprobantes no muestra imágenes.'}
-                  />
+                  >
+                    {showImagesInInvoices && (
+                      <PdfImageSizeSlider value={invoiceImageScale} onChange={setInvoiceImageScale} />
+                    )}
+                  </SettingToggle>
                 </div>
 
                 {/* Ocultar lote y vencimiento en comprobantes */}
@@ -5918,6 +5970,8 @@ export default function Settings() {
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
                       showImagesInQuotations: showImagesInQuotations,
                       showImagesInInvoices: showImagesInInvoices,
+                      quotationImageScale: Number(quotationImageScale) || 100,
+                      invoiceImageScale: Number(invoiceImageScale) || 100,
                       pdfSpacious: pdfSpacious,
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,

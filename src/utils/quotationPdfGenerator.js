@@ -861,8 +861,23 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const showProductDescription = companySettings?.showProductDescriptionInQuotation !== false
   // Flag para mostrar imágenes de productos en cotizaciones (default false)
   const showImages = companySettings?.showImagesInQuotations === true
-  // Tamaño de la imagen en el PDF (4× más grande que la versión inicial)
-  const imageBoxSize = spacious ? 120 : 104
+  // Escala de imágenes elegida por el usuario (Configuración > Documentos, 50–150%; 100 = actual).
+  // Escala la miniatura Y la columna IMAGEN, tomando/devolviendo espacio a DESCRIPCIÓN. El máximo
+  // efectivo se limita para que la descripción nunca quede aplastada (farmacia tiene menos espacio).
+  const rawImgScale = Number(companySettings?.quotationImageScale)
+  const requestedImgScale = Number.isFinite(rawImgScale) && rawImgScale > 0
+    ? Math.min(150, Math.max(50, rawImgScale)) / 100
+    : 1
+  const IMG_FRAC_BASE = 0.22
+  const DESC_FRAC_BASE = isPharmacy ? 0.18 : 0.35
+  const MIN_DESC_FRAC = isPharmacy ? 0.12 : 0.20
+  const imgScale = showImages
+    ? Math.min(requestedImgScale, (IMG_FRAC_BASE + DESC_FRAC_BASE - MIN_DESC_FRAC) / IMG_FRAC_BASE)
+    : 1
+  const IMG_FRAC = IMG_FRAC_BASE * imgScale
+  const DESC_FRAC = DESC_FRAC_BASE + (IMG_FRAC_BASE - IMG_FRAC)
+  // Tamaño de la imagen en el PDF (escala con el regulador; 100% = layout original)
+  const imageBoxSize = (spacious ? 120 : 104) * imgScale
   const imagePadding = 8 // espacio entre la imagen y el texto
 
   // Mapeo de unidades legacy a abreviaturas legibles. Se define aquí —antes de calcular los
@@ -882,8 +897,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     ? {
         cant: CONTENT_WIDTH * 0.05,
         um: CONTENT_WIDTH * 0.05,
-        img: showImages ? CONTENT_WIDTH * 0.22 : 0,
-        desc: CONTENT_WIDTH * (showImages ? 0.18 : 0.26),
+        img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
+        desc: CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.26),
         lab: CONTENT_WIDTH * (showImages ? 0.10 : 0.14),
         marca: CONTENT_WIDTH * (showImages ? 0.09 : 0.12),
         pu: CONTENT_WIDTH * (showImages ? 0.13 : 0.15),
@@ -892,8 +907,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     : {
         cant: CONTENT_WIDTH * 0.06,
         um: CONTENT_WIDTH * 0.06,
-        img: showImages ? CONTENT_WIDTH * 0.22 : 0,
-        desc: CONTENT_WIDTH * (showImages ? 0.35 : 0.44),
+        img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
+        desc: CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.44),
         lab: 0,
         marca: 0,
         pu: CONTENT_WIDTH * (showImages ? 0.16 : 0.20),
