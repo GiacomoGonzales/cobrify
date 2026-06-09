@@ -836,43 +836,42 @@ export default function POS() {
     return { usd, pen }
   }
 
-  // Multi-divisa: precio del producto en la moneda activa de la sesión.
-  // - Sesión PEN: siempre devuelve product.price (PEN).
-  // - Sesión USD: si product.priceUSD > 0, lo devuelve directamente (precio
-  //   fijo definido por el usuario, no depende del TC). Si no hay priceUSD,
-  //   convierte product.price con el TC del día.
-  // Esto permite tener productos con pricing en dólar que no se descuadran
-  // cuando el TC cambia (ej. productos importados con precio de lista USD).
-  const getProductSessionPrice = (product) => {
-    if (!product) return 0
-    const penPrice = Number(product.price) || 0
-    if (currency === 'USD') {
-      const fixedUSD = Number(product.priceUSD)
-      if (Number.isFinite(fixedUSD) && fixedUSD > 0) return fixedUSD
+  // Valor (número) de una entidad (producto o variante) en una moneda dada, respetando el
+  // ancla en dólares (priceUSD). En USD vale el priceUSD fijo; en soles = priceUSD × TC. Sin
+  // priceUSD: price (soles) o su conversión por TC. Base de la grilla con doble moneda.
+  const productEntityValueIn = (entity, cur) => {
+    if (!entity) return 0
+    const tc = Number(exchangeRate) > 1 ? Number(exchangeRate) : 0
+    const usd = Number(entity.priceUSD)
+    if (Number.isFinite(usd) && usd > 0) {
+      if (cur === 'USD') return usd
+      return tc > 0 ? Number((usd * tc).toFixed(2)) : (Number(entity.price) || usd)
     }
-    return toSessionCurrency(penPrice)
+    const pen = Number(entity.price) || 0
+    if (cur === 'PEN') return pen
+    return tc > 0 ? Number((pen / tc).toFixed(2)) : pen
   }
 
-  // Formatea el precio de un producto/variante mostrándolo en la moneda
-  // activa de la sesión. Para productos con variantes muestra rango "X – Y".
-  const formatCatalogPrice = (product) => {
-    if (!product) return formatCurrency(0, currency)
+  // Formatea el precio de catálogo de un producto en una moneda específica (PEN o USD).
+  // Para productos con variantes muestra rango "X – Y". Respeta el ancla USD en ambas monedas.
+  const formatCatalogPriceIn = (product, cur) => {
+    if (!product) return formatCurrency(0, cur)
     if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
-      // Las variantes no soportan priceUSD por ahora (v1). Se convierte
-      // siempre con el TC. Roadmap: agregar priceUSD por variante.
       const prices = product.variants
-        .map((v) => Number(v?.price))
+        .map((v) => productEntityValueIn(v, cur))
         .filter((p) => Number.isFinite(p) && p > 0)
-        .map((p) => toSessionCurrency(p))
-      if (prices.length === 0) return formatCurrency(0, currency)
+      if (prices.length === 0) return formatCurrency(0, cur)
       const min = Math.min(...prices)
       const max = Math.max(...prices)
       return min === max
-        ? formatCurrency(min, currency)
-        : `${formatCurrency(min, currency)} – ${formatCurrency(max, currency)}`
+        ? formatCurrency(min, cur)
+        : `${formatCurrency(min, cur)} – ${formatCurrency(max, cur)}`
     }
-    return formatCurrency(getProductSessionPrice(product), currency)
+    return formatCurrency(productEntityValueIn(product, cur), cur)
   }
+
+  // Precio del producto en la moneda activa de la sesión (la moneda de cobro elegida).
+  const formatCatalogPrice = (product) => formatCatalogPriceIn(product, currency)
 
   // Cambio de moneda. Si vamos a USD y no hay TC válido, lo obtenemos
   // antes de hacer cualquier otra cosa. Si hay carrito, convertimos los
@@ -7121,6 +7120,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <p className={`text-sm sm:text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {formatCatalogPrice(product)}
                         </p>
+                        {posMultiCurrencyOn && exchangeRate > 1 && (
+                          <p className="text-[10px] font-medium text-gray-400 leading-tight">≈ {formatCatalogPriceIn(product, currency === 'USD' ? 'PEN' : 'USD')}</p>
+                        )}
                         {!hideStockInPOS && (
                           <div className="text-[11px] sm:text-xs mt-0.5">
                             {!product.hasVariants
@@ -7294,6 +7296,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                               {formatCatalogPrice(product)}
                             </p>
+                            {posMultiCurrencyOn && exchangeRate > 1 && (
+                              <p className="text-[10px] font-medium text-gray-400 leading-tight whitespace-nowrap">≈ {formatCatalogPriceIn(product, currency === 'USD' ? 'PEN' : 'USD')}</p>
+                            )}
                             {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
                             {product.hasVariants && !hideStockInPOS && (
                               <span className="text-[10px] text-gray-500">
@@ -7306,6 +7311,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <p className={`text-sm font-bold truncate ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                               {formatCatalogPrice(product)}
                             </p>
+                            {posMultiCurrencyOn && exchangeRate > 1 && (
+                              <p className="text-[10px] font-medium text-gray-400 leading-tight truncate">≈ {formatCatalogPriceIn(product, currency === 'USD' ? 'PEN' : 'USD')}</p>
+                            )}
                             <div className="flex items-center justify-between mt-1">
                               {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
                               {product.hasVariants && (
@@ -7528,7 +7536,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <div className="flex items-center gap-1.5">
                     <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
                     <label className="text-xs font-medium text-gray-700">
-                      Moneda
+                      Moneda de cobro
                     </label>
                     {documentType === 'boleta' && (
                       <span className="text-[9px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
