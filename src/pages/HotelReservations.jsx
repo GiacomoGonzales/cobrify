@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useForm } from 'react-hook-form'
@@ -144,6 +144,7 @@ export default function HotelReservations() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('all')
+  const [roomFilter, setRoomFilter] = useState('all')
 
   // Reservation modal
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -397,17 +398,52 @@ export default function HotelReservations() {
     }
   }, [reservations, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filtered reservations
+  // Lista de cabañas para el selector de filtro (ordenadas por nombre, con orden numérico
+  // para que "4-..." < "5-..." < "6-...").
+  const sortedRooms = useMemo(
+    () => [...rooms].sort((a, b) =>
+      (a.name || a.number || '').localeCompare(b.name || b.number || '', 'es', { numeric: true })
+    ),
+    [rooms]
+  )
+
+  // Filtered reservations (pestaña + búsqueda + cabaña seleccionada)
   const filteredReservations = useMemo(() => {
     return reservations.filter(r => {
       const matchesTab = activeTab === 'all' || r.status === activeTab
+      const matchesRoom = roomFilter === 'all' || r.roomId === roomFilter
       const matchesSearch = !searchTerm ||
         r.guestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.documentNumber?.includes(searchTerm) ||
         r.roomName?.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesTab && matchesSearch
+      return matchesTab && matchesRoom && matchesSearch
     })
-  }, [reservations, activeTab, searchTerm])
+  }, [reservations, activeTab, searchTerm, roomFilter])
+
+  // Agrupar por cabaña y, dentro de cada cabaña, ordenar por fecha de llegada
+  // (próximas primero = check-in ascendente). Los grupos se ordenan por nombre de cabaña.
+  const groupedReservations = useMemo(() => {
+    const getInTime = (r) => {
+      const d = parseDateLocal(r.checkInDate || r.checkIn)
+      return d ? d.getTime() : 0
+    }
+    const groups = new Map()
+    for (const r of filteredReservations) {
+      const key = r.roomId || r.roomName || r.roomNumber || '__none__'
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          roomName: r.roomName || r.roomNumber || 'Sin cabaña',
+          reservations: [],
+        })
+      }
+      groups.get(key).reservations.push(r)
+    }
+    const arr = Array.from(groups.values())
+    arr.forEach(g => g.reservations.sort((a, b) => getInTime(a) - getInTime(b)))
+    arr.sort((a, b) => a.roomName.localeCompare(b.roomName, 'es', { numeric: true }))
+    return arr
+  }, [filteredReservations])
 
   // Available rooms for form
   // Mostrar TODAS las habitaciones: una misma habitación puede reservarse para
@@ -1138,6 +1174,18 @@ export default function HotelReservations() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            {/* Filtro por cabaña */}
+            <select
+              value={roomFilter}
+              onChange={(e) => setRoomFilter(e.target.value)}
+              title="Filtrar por cabaña"
+              className="h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-700 flex-shrink-0 w-full sm:w-auto sm:max-w-[14rem]"
+            >
+              <option value="all">Todas las cabañas</option>
+              {sortedRooms.map(room => (
+                <option key={room.id} value={room.id}>{room.name || room.number}</option>
+              ))}
+            </select>
           </div>
         </CardContent>
       </Card>
@@ -1156,17 +1204,22 @@ export default function HotelReservations() {
             </div>
           ) : (
             <>
-              {/* Mobile cards */}
-              <div className="lg:hidden divide-y divide-gray-100">
-                {filteredReservations.map((reservation) => (
-                  <div key={reservation.id} className="px-4 py-3">
+              {/* Mobile cards (agrupadas por cabaña) */}
+              <div className="lg:hidden">
+                {groupedReservations.map((group) => (
+                  <div key={group.key} className="border-b border-gray-200 last:border-b-0">
+                    <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700">Hab. {group.roomName}</span>
+                      <span className="text-xs text-gray-400">{group.reservations.length} reserva{group.reservations.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {group.reservations.map((reservation) => (
+                        <div key={reservation.id} className="px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium line-clamp-1 flex-1">{reservation.guestName}</p>
                       {getStatusBadge(reservation.status)}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                      <span>Hab. {reservation.roomName || reservation.roomNumber}</span>
-                      <span className="text-gray-300">|</span>
                       {reservation.pricingMode === 'hourly' ? (
                         <span>
                           {formatDate(reservation.checkInDate)} {reservation.checkInTime || ''} → {reservation.checkOutTime || ''}
@@ -1214,6 +1267,9 @@ export default function HotelReservations() {
                         </button>
                       </div>
                     </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1234,10 +1290,18 @@ export default function HotelReservations() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredReservations.map((reservation) => {
-                      const isHourly = reservation.pricingMode === 'hourly'
-                      return (
-                      <TableRow key={reservation.id}>
+                    {groupedReservations.map((group) => (
+                      <Fragment key={group.key}>
+                        <TableRow className="bg-gray-50 hover:bg-gray-50">
+                          <TableCell colSpan={8} className="py-2 font-semibold text-sm text-gray-700">
+                            Hab. {group.roomName}
+                            <span className="text-gray-400 font-normal"> · {group.reservations.length} reserva{group.reservations.length !== 1 ? 's' : ''}</span>
+                          </TableCell>
+                        </TableRow>
+                        {group.reservations.map((reservation) => {
+                          const isHourly = reservation.pricingMode === 'hourly'
+                          return (
+                          <TableRow key={reservation.id}>
                         <TableCell className="font-medium">
                           <div>
                             <p>{reservation.guestName}</p>
@@ -1312,9 +1376,11 @@ export default function HotelReservations() {
                             </button>
                           </div>
                         </TableCell>
-                      </TableRow>
-                      )
-                    })}
+                          </TableRow>
+                          )
+                        })}
+                      </Fragment>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
