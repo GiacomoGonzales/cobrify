@@ -14,6 +14,7 @@ import {
   startAfter,
   serverTimestamp,
   runTransaction,
+  onSnapshot,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 import { generatePetId, normalizePets } from '@/utils/petUtils'
@@ -620,6 +621,33 @@ export const getProducts = async (userId, options = {}) => {
   } catch (error) {
     console.error('Error al obtener productos:', error)
     return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Suscripción en TIEMPO REAL al catálogo de productos (onSnapshot).
+ * Mantiene el POS/listados sincronizados al instante con ediciones/renombres de
+ * productos hechos desde otra pestaña o dispositivo. Devuelve la función de
+ * desuscripción (llamarla en el cleanup del efecto).
+ */
+export const subscribeToProducts = (userId, callback) => {
+  try {
+    const q = collection(db, 'businesses', userId, 'products')
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const products = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+        callback({ success: true, data: products })
+      },
+      (error) => {
+        console.error('Error en el listener de productos:', error)
+        callback({ success: false, error: error.message })
+      }
+    )
+  } catch (error) {
+    console.error('Error al suscribirse a productos:', error)
+    callback({ success: false, error: error.message })
+    return () => {}
   }
 }
 

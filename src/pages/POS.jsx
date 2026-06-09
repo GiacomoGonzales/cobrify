@@ -69,7 +69,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge, markChargesAsInvoiced } from '@/services/hotelService'
 import {
-  getProducts,
+  subscribeToProducts,
   getCustomers,
   createInvoice,
   createInvoiceWithNumber,
@@ -2237,6 +2237,23 @@ export default function POS() {
     loadInitialData()
   }, [user, currentBusinessId])
 
+  // Productos en TIEMPO REAL: un listener (onSnapshot) mantiene el catálogo del POS
+  // siempre fresco, así un cambio/renombre de producto hecho desde otra pestaña o
+  // dispositivo se refleja al instante (sin tener que refrescar). En demo se usa demoData.
+  useEffect(() => {
+    if (isDemoMode) return
+    if (!user?.uid) return
+    const businessId = getBusinessId()
+    if (!businessId) return
+    setProductsLoading(true)
+    const unsubscribe = subscribeToProducts(businessId, (result) => {
+      if (result.success) setProducts(result.data || [])
+      setProductsLoading(false)
+    })
+    return () => { if (typeof unsubscribe === 'function') unsubscribe() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, currentBusinessId, isDemoMode])
+
   const loadInitialData = async () => {
     if (!user?.uid) return
 
@@ -2424,24 +2441,15 @@ export default function POS() {
         }
       }
 
-      // FASE 2: Cargar productos y clientes en background (datos pesados)
-      // El POS ya es usable mientras estos cargan
+      // FASE 2: Cargar clientes en background. Los PRODUCTOS ahora llegan por un
+      // listener en tiempo real (onSnapshot) — ver el useEffect de suscripción — para
+      // que ediciones/renombres se reflejen al instante sin refrescar el POS.
       setIsLoading(false)
-      setProductsLoading(true)
 
-      const [productsResult, customersResult] = await Promise.all([
-        getProducts(businessId),
-        getCustomers(businessId)
-      ])
-
-      console.log('🛒 POS getProducts resultado:', productsResult.success, '| cantidad:', productsResult.data?.length)
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
-      }
+      const customersResult = await getCustomers(businessId)
       if (customersResult.success) {
         setCustomers(customersResult.data || [])
       }
-      setProductsLoading(false)
       return
     } catch (error) {
       console.error('Error al cargar datos:', error)
