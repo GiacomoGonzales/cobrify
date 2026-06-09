@@ -8532,7 +8532,7 @@ export const resellerRenewClient = onCall(
     // === Catálogo V2 (resellers nuevos: por duración) ===
     const PLAN_MONTHS_V2 = { basico_mensual: 1, mensual: 1, semestral: 6, anual: 12 }
     const BASE_PRICES_V2 = { basico_mensual: 19.90, mensual: 29.90, semestral: 149.90, anual: 199.90 }
-    const MAXINV_V2 = { basico_mensual: 100, mensual: 500, semestral: 500, anual: 500 }
+    const MAXINV_V2 = { basico_mensual: 500, mensual: 1000, semestral: 1000, anual: 1000 }
     const ALLOWS_SUNAT_V2 = { basico_mensual: false, mensual: true, semestral: true, anual: true }
 
     // El plan y los meses se validan DENTRO de la transacción, según el

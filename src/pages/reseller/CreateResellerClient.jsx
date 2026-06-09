@@ -499,7 +499,7 @@ export default function CreateResellerClient() {
                   const meta = v2 ? PLANS_V2[planKey] : null
                   const tag = v2 ? (meta?.label?.split(' ')[0] || 'Plan') : (isQPse ? 'QPse' : 'SUNAT')
                   const limitText = v2
-                    ? (meta?.maxInvoices === 100 ? '100/mes' : '500/mes*')
+                    ? (meta?.maxInvoices ? `${meta.maxInvoices}/mes${meta.allowSunatDirect ? '*' : ''}` : '500/mes')
                     : (planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes')
 
                   return (
@@ -548,7 +548,7 @@ export default function CreateResellerClient() {
                     className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                   />
                   <span className="text-xs text-gray-600">
-                    Emitir con <b>SUNAT directo</b> (certificado propio) — comprobantes <b>ilimitados</b>. Sin marcar: QPse, 500/mes.
+                    Emitir con <b>SUNAT directo</b> (certificado propio) — comprobantes <b>ilimitados</b>. Sin marcar: QPse, {PLANS_V2[formData.plan]?.maxInvoices || 1000}/mes.
                   </span>
                 </label>
               )}

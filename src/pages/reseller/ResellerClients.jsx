@@ -692,7 +692,7 @@ export default function ResellerClients() {
                     className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                   />
                   <span className="text-sm text-gray-600">
-                    Emitir con <b>SUNAT directo</b> (certificado propio del cliente) — comprobantes <b>ilimitados</b>. Sin marcar: QPse, 500/mes.
+                    Emitir con <b>SUNAT directo</b> (certificado propio del cliente) — comprobantes <b>ilimitados</b>. Sin marcar: QPse, {PLANS_V2[renewalPlan]?.maxInvoices || 1000}/mes.
                   </span>
                 </label>
               )}

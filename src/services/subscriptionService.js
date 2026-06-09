@@ -47,7 +47,7 @@ export const PLANS = {
     pricePerMonth: 19.90,
     totalPrice: 19.90,
     emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 100, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
+    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
   },
   mensual: {
     name: "Plan Mensual - 1 Mes",
@@ -56,7 +56,7 @@ export const PLANS = {
     pricePerMonth: 29.90,
     totalPrice: 29.90,
     emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
   semestral: {
     name: "Plan Semestral - 6 Meses",
@@ -65,7 +65,7 @@ export const PLANS = {
     pricePerMonth: 24.98, // 149.90 / 6
     totalPrice: 149.90,
     emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
   anual: {
     name: "Plan Anual - 12 Meses",
@@ -74,7 +74,7 @@ export const PLANS = {
     pricePerMonth: 16.66, // 199.90 / 12
     totalPrice: 199.90,
     emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
 
   // ============================================

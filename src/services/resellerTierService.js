@@ -24,10 +24,10 @@ export const BASE_PRICES = {
 // El precio es por duración; el toggle QPse/SUNAT directo solo cambia el límite
 // de comprobantes (500 -> ilimitado). Básico es siempre 100 y solo QPse.
 export const PLANS_V2 = {
-  basico_mensual: { label: 'Básico Mensual', price: 19.90, months: 1, maxInvoices: 100, allowSunatDirect: false },
-  mensual:        { label: 'Mensual',        price: 29.90, months: 1, maxInvoices: 500, allowSunatDirect: true },
-  semestral:      { label: 'Semestral',      price: 149.90, months: 6, maxInvoices: 500, allowSunatDirect: true },
-  anual:          { label: 'Anual',          price: 199.90, months: 12, maxInvoices: 500, allowSunatDirect: true },
+  basico_mensual: { label: 'Básico Mensual', price: 19.90, months: 1, maxInvoices: 500, allowSunatDirect: false },
+  mensual:        { label: 'Mensual',        price: 29.90, months: 1, maxInvoices: 1000, allowSunatDirect: true },
+  semestral:      { label: 'Semestral',      price: 149.90, months: 6, maxInvoices: 1000, allowSunatDirect: true },
+  anual:          { label: 'Anual',          price: 199.90, months: 12, maxInvoices: 1000, allowSunatDirect: true },
 }
 export const BASE_PRICES_V2 = Object.fromEntries(
   Object.entries(PLANS_V2).map(([k, v]) => [k, v.price])
