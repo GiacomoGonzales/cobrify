@@ -2162,13 +2162,10 @@ export default function CreatePurchase() {
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-medium text-gray-700">
-                        Tipo de cambio (PEN por USD)
+                        Tipo de cambio (S/ por $)
                       </label>
                       {exchangeRateSource === 'sbs' && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
-                      )}
-                      {exchangeRateSource === 'cache' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 font-medium">Cache</span>
                       )}
                       {exchangeRateSource === 'manual' && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
