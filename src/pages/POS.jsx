@@ -819,6 +819,23 @@ export default function POS() {
     return { price, basePrice: baseInPEN, fixedPriceUSD: usd }
   }
 
+  // UX doble moneda: devuelve el precio UNITARIO de un ítem del carrito en AMBAS monedas
+  // (USD y PEN), usando el ancla (fixedPriceUSD / basePrice) cuando existe para máxima
+  // exactitud. Si no hay TC válido (>1), el equivalente cae a 0.
+  const getItemDualPrice = (item) => {
+    const tc = Number(exchangeRate) > 1 ? Number(exchangeRate) : 0
+    const sessionPrice = Number(item.price) || 0
+    let pen
+    if (Number.isFinite(Number(item.basePrice)) && Number(item.basePrice) > 0) pen = Number(item.basePrice)
+    else if (currency === 'PEN') pen = sessionPrice
+    else pen = tc > 0 ? Number((sessionPrice * tc).toFixed(2)) : 0
+    let usd
+    if (Number.isFinite(Number(item.fixedPriceUSD)) && Number(item.fixedPriceUSD) > 0) usd = Number(item.fixedPriceUSD)
+    else if (currency === 'USD') usd = sessionPrice
+    else usd = tc > 0 ? Number((pen / tc).toFixed(2)) : 0
+    return { usd, pen }
+  }
+
   // Multi-divisa: precio del producto en la moneda activa de la sesión.
   // - Sesión PEN: siempre devuelve product.price (PEN).
   // - Sesión USD: si product.priceUSD > 0, lo devuelve directamente (precio
@@ -7543,7 +7560,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     })}
                   </div>
 
-                  {currency === 'USD' && (
+                  {posMultiCurrencyOn && (
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5">
                         <label className="text-[11px] font-medium text-gray-700">
@@ -8714,6 +8731,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     return groups.map(group => {
                       const item = group.members[0]
                       const itemId = item.cartId || item.id
+                      const dualUnit = (posMultiCurrencyOn && exchangeRate > 1) ? getItemDualPrice(item) : null
                       const isSerialGroup = group.isSerial && group.members.length > 1
                       const displayQty = isSerialGroup ? group.members.length : item.quantity
                       const displayDiscount = isSerialGroup
@@ -8962,7 +8980,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               {/* Desglose precio unitario x cantidad, A LA IZQUIERDA del total
                                   (misma línea, para corroborar el precio sin agrandar la fila) */}
                               <span className="text-[10px] text-gray-400 whitespace-nowrap">
-                                {formatCurrency(item.price, currency)} × {displayQty}
+                                {dualUnit
+                                  ? `${formatCurrency(dualUnit.usd, 'USD')} · ${formatCurrency(dualUnit.pen, 'PEN')}`
+                                  : formatCurrency(item.price, currency)} × {displayQty}
                               </span>
                               <div className="text-right min-w-[58px]">
                                 {displayDiscount > 0 ? (
@@ -9191,15 +9211,17 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <div className="flex justify-between text-xl sm:text-2xl font-bold border-t pt-2">
                   <span className="flex items-center gap-2">
                     Total:
-                    {posMultiCurrencyOn && currency === 'USD' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">USD · TC {exchangeRate}</span>
+                    {posMultiCurrencyOn && exchangeRate > 1 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">TC {exchangeRate}</span>
                     )}
                   </span>
                   <span className="text-primary-600">{formatCurrency(amounts.total, currency)}</span>
                 </div>
-                {posMultiCurrencyOn && currency === 'USD' && exchangeRate > 0 && (
+                {posMultiCurrencyOn && exchangeRate > 1 && (
                   <div className="text-right text-xs text-gray-500 -mt-1">
-                    ≈ {formatCurrency(amounts.totalInBase, 'PEN')} al TC congelado
+                    ≈ {currency === 'USD'
+                        ? formatCurrency(amounts.totalInBase, 'PEN')
+                        : formatCurrency(convertFromBase(amounts.total, 'USD', exchangeRate), 'USD')}
                   </div>
                 )}
 
