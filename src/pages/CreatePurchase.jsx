@@ -141,6 +141,10 @@ export default function CreatePurchase() {
   const [exchangeRate, setExchangeRate] = useState(1)
   const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs' | 'cache' | 'manual' | null
   const [loadingRate, setLoadingRate] = useState(false)
+  // Multi-divisa: si la compra es en USD y se actualizan precios de venta, fijar el precio de
+  // venta como precio EN DÓLARES (priceUSD, ancla fija) en vez de convertirlo a un precio en
+  // soles congelado. Así el producto queda "base dólar" (en soles vale priceUSD × TC del día).
+  const [salePriceAsUSD, setSalePriceAsUSD] = useState(false)
 
   // Tipo de pago
   const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
@@ -1817,6 +1821,12 @@ export default function CreatePurchase() {
             if (!Number.isFinite(v) || v <= 0) return null
             return Math.round(convertToBase(v, currency, exchangeRate) * 100) / 100
           }
+          // Valor crudo en USD (para fijar priceUSD sin convertir). Solo aplica en modo ancla.
+          const salePriceUsdRaw = (raw) => {
+            const v = parseFloat(raw)
+            return Number.isFinite(v) && v > 0 ? v : null
+          }
+          const useUsdAnchor = salePriceAsUSD && currency === 'USD'
 
           if (product.hasVariants && product.variants?.length > 0) {
             // Producto con variantes: leer datos frescos de Firestore para no sobreescribir el stock
@@ -1826,10 +1836,22 @@ export default function CreatePurchase() {
             const updatedVariants = freshVariants.map(v => {
               const matchingItem = items.find(i => i.variantSku === v.sku)
               if (matchingItem) {
-                const p1 = salePriceToBase(matchingItem.salePrice)
                 const p2 = salePriceToBase(matchingItem.salePrice2)
                 const p3 = salePriceToBase(matchingItem.salePrice3)
                 const p4 = salePriceToBase(matchingItem.salePrice4)
+                if (useUsdAnchor) {
+                  // Precio de venta fijo en dólares: guardar priceUSD (ancla) y price = USD × TC.
+                  const usd1 = salePriceUsdRaw(matchingItem.salePrice)
+                  return {
+                    ...v,
+                    priceUSD: usd1 != null ? usd1 : (v.priceUSD ?? null),
+                    price: usd1 != null ? (Math.round(convertToBase(usd1, 'USD', exchangeRate) * 100) / 100) : v.price,
+                    price2: p2 != null ? p2 : v.price2,
+                    price3: p3 != null ? p3 : v.price3,
+                    price4: p4 != null ? p4 : v.price4,
+                  }
+                }
+                const p1 = salePriceToBase(matchingItem.salePrice)
                 return {
                   ...v,
                   price: p1 != null ? p1 : v.price,
@@ -1849,11 +1871,20 @@ export default function CreatePurchase() {
             // Producto sin variantes
             const item = items[0]
             const updates = {}
-            const p1 = salePriceToBase(item.salePrice)
             const p2 = salePriceToBase(item.salePrice2)
             const p3 = salePriceToBase(item.salePrice3)
             const p4 = salePriceToBase(item.salePrice4)
-            if (p1 != null) updates.price = p1
+            if (useUsdAnchor) {
+              // Precio de venta fijo en dólares: guardar priceUSD (ancla) y price = USD × TC.
+              const usd1 = salePriceUsdRaw(item.salePrice)
+              if (usd1 != null) {
+                updates.priceUSD = usd1
+                updates.price = Math.round(convertToBase(usd1, 'USD', exchangeRate) * 100) / 100
+              }
+            } else {
+              const p1 = salePriceToBase(item.salePrice)
+              if (p1 != null) updates.price = p1
+            }
             if (p2 != null) updates.price2 = p2
             if (p3 != null) updates.price3 = p3
             if (p4 != null) updates.price4 = p4
@@ -2172,6 +2203,19 @@ export default function CreatePurchase() {
                       se calcularán con este TC y no cambiarán aunque el dólar
                       fluctúe. El costo del producto se almacena en Soles.
                     </p>
+                    {businessSettings?.posCustomFields?.showSalePriceInPurchase && (
+                      <label className="flex items-start gap-2 pt-2 border-t border-emerald-200/70 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={salePriceAsUSD}
+                          onChange={(e) => setSalePriceAsUSD(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-[11px] text-gray-600 leading-relaxed">
+                          <span className="font-medium text-gray-700">Fijar precio de venta en dólares</span> — el precio de venta que ingreses se guarda como precio fijo en USD del producto (queda anclado al dólar; en soles valdrá precio × TC del día).
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
               </div>

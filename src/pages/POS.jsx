@@ -750,6 +750,14 @@ export default function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency])
 
+  // Multi-divisa: aunque la sesión esté en soles, asegurar un TC del día disponible para poder
+  // valuar productos anclados al dólar (precio en soles = priceUSD × TC).
+  useEffect(() => {
+    if (!posMultiCurrencyOn) return
+    if (exchangeRate <= 1) fetchExchangeRate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posMultiCurrencyOn])
+
   // Sincronizar el texto del input cuando el TC cambia desde afuera (SBS,
   // draft, etc.) — pero no mientras el usuario está escribiendo.
   useEffect(() => {
@@ -764,17 +772,25 @@ export default function POS() {
   // se recalculan, mantienen su precio definido por el usuario.
   useEffect(() => {
     if (!posMultiCurrencyOn) return
-    if (currency !== 'USD') return
     if (!exchangeRate || exchangeRate <= 0) return
     setCart(prev => prev.map(item => {
-      // Precio fijo USD: no recalcular con TC.
       const fixedUSD = Number(item.fixedPriceUSD)
-      if (Number.isFinite(fixedUSD) && fixedUSD > 0) return item
+      if (Number.isFinite(fixedUSD) && fixedUSD > 0) {
+        // Anclado al dólar: el precio en USD no cambia; recalculamos el equivalente en
+        // soles (basePrice). En sesión soles, el precio mostrado también = USD × TC.
+        if (exchangeRate <= 1) return item // sin TC válido aún, no tocar
+        const newBase = Number((fixedUSD * exchangeRate).toFixed(2))
+        const newPrice = currency === 'USD' ? fixedUSD : newBase
+        if (Math.abs((Number(item.basePrice) || 0) - newBase) < 0.005 &&
+            Math.abs((Number(item.price) || 0) - newPrice) < 0.005) return item
+        return { ...item, price: newPrice, basePrice: newBase }
+      }
+      // No anclado: solo recalcular el precio mostrado en sesión USD desde basePrice (PEN).
+      if (currency !== 'USD') return item
       const baseInPEN = Number(item.basePrice)
       if (!Number.isFinite(baseInPEN) || baseInPEN <= 0) return item
       const newPrice = Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
-      // Si el precio ya coincide (margen redondeo), no tocar para evitar
-      // renders innecesarios.
+      // Si el precio ya coincide (margen redondeo), no tocar para evitar renders innecesarios.
       if (Math.abs((Number(item.price) || 0) - newPrice) < 0.005) return item
       return { ...item, price: newPrice }
     }))
@@ -787,6 +803,20 @@ export default function POS() {
     const n = Number(priceInBase) || 0
     if (currency === BASE_CURRENCY || n === 0) return n
     return Number(convertFromBase(n, currency, exchangeRate).toFixed(2))
+  }
+
+  // Multi-divisa: arma el pricing de un ítem ANCLADO AL DÓLAR (producto/variante/presentación
+  // con priceUSD). El dólar es la referencia: en sesión USD vale priceUSD fijo, y el equivalente
+  // en soles = priceUSD × TC. Así, al cambiar el TC, lo que varía es el monto en soles, no el
+  // dólar. Si todavía no hay un TC válido (>1), cae al precio en soles de respaldo para no romper.
+  // Devuelve { price (moneda de sesión), basePrice (PEN), fixedPriceUSD } o null si no aplica.
+  const buildUsdAnchoredCartPricing = (priceUSD, fallbackPenPrice = 0) => {
+    const usd = Number(priceUSD)
+    if (!Number.isFinite(usd) || usd <= 0) return null
+    const tc = Number(exchangeRate) > 1 ? Number(exchangeRate) : 0
+    const baseInPEN = tc > 0 ? Number((usd * tc).toFixed(2)) : (Number(fallbackPenPrice) || 0)
+    const price = currency === 'USD' ? usd : baseInPEN
+    return { price, basePrice: baseInPEN, fixedPriceUSD: usd }
   }
 
   // Multi-divisa: precio del producto en la moneda activa de la sesión.
@@ -882,16 +912,20 @@ export default function POS() {
       // Si no hay basePrice (item viejo o editado manualmente), caemos al
       // método de conversión directa (puede perder precisión).
       let newPrice = oldPrice
+      let newBasePrice = item.basePrice
       const baseInPEN = Number(item.basePrice)
       const hasBase = Number.isFinite(baseInPEN) && baseInPEN > 0
-      if (newCurrency === 'USD' && hasFixedUSD) {
-        // Precio fijo en USD definido en el producto: usar tal cual.
-        newPrice = fixedUSD
+      if (hasFixedUSD) {
+        // Anclado al dólar: USD fijo; el equivalente en soles = priceUSD × TC. Al cambiar el
+        // TC varían los soles, no el dólar.
+        newBasePrice = Number((fixedUSD * effectiveRate).toFixed(2))
+        newPrice = newCurrency === 'USD' ? fixedUSD : newBasePrice
       } else if (hasBase) {
         // Recomputar desde la fuente PEN sin redondeos intermedios.
         newPrice = newCurrency === 'PEN'
           ? baseInPEN
           : Number(convertFromBase(baseInPEN, 'USD', effectiveRate).toFixed(2))
+        newBasePrice = baseInPEN
       } else {
         // Fallback (sin basePrice): conversión directa antigua.
         if (currency === 'PEN' && newCurrency === 'USD') {
@@ -909,7 +943,7 @@ export default function POS() {
           newItemDiscount = Number(convertToBase(item.itemDiscount, 'USD', effectiveRate).toFixed(2))
         }
       }
-      return { ...item, price: newPrice, itemDiscount: newItemDiscount }
+      return { ...item, price: newPrice, basePrice: newBasePrice, itemDiscount: newItemDiscount }
     }))
     setCurrency(newCurrency)
   }
@@ -3100,12 +3134,14 @@ export default function POS() {
       // se convierte con TC normalmente.
       const fixedUSD = Number(product.priceUSD)
       const hasFixedUSD = selectedPrice == null && Number.isFinite(fixedUSD) && fixedUSD > 0
+      // Anclado al dólar: priceUSD es la referencia (USD fijo; soles = USD × TC).
+      const usdAnchor = hasFixedUSD ? buildUsdAnchoredCartPricing(fixedUSD, Number(effectivePrice) || 0) : null
       const priceForCart = isFreeProduct
         ? 0
-        : (currency === 'USD' && hasFixedUSD
-          ? fixedUSD
-          : toSessionCurrency(effectivePrice))
-      const basePriceForCart = isFreeProduct ? 0 : Number(effectivePrice) || 0
+        : (usdAnchor ? usdAnchor.price : toSessionCurrency(effectivePrice))
+      const basePriceForCart = isFreeProduct
+        ? 0
+        : (usdAnchor ? usdAnchor.basePrice : Number(effectivePrice) || 0)
 
       const cartItem = {
         ...product,
@@ -3143,26 +3179,37 @@ export default function POS() {
   }
 
   // Construye el cartItem de una serie (helper compartido por single y bulk).
-  const buildSerialCartItem = (product, serial, batchToUse) => ({
-    ...product,
-    quantity: 1,
-    cartId: `${product.id}-serial-${serial.serialNumber}`,
-    serialNumber: serial.serialNumber,
-    serialId: serial.id,
-    // Si es Sin lote, limpiar batchNumber del producto
-    ...(batchToUse?.isNoLot && {
-      isNoLot: true,
-      batchNumber: null,
-      batchExpiryDate: null,
-      batchQuantity: batchToUse.quantity
-    }),
-    // Con lote normal
-    ...(batchToUse && !batchToUse.isNoLot && {
-      batchNumber: batchToUse.lotNumber,
-      batchExpiryDate: batchToUse.expiryDate,
-      batchQuantity: batchToUse.quantity
-    })
-  })
+  const buildSerialCartItem = (product, serial, batchToUse) => {
+    // Pricing: anclado al dólar si el producto tiene priceUSD; si no, su precio en soles
+    // convertido a la moneda de sesión. basePrice (PEN) como fuente de verdad.
+    const serialUSD = Number(product.priceUSD)
+    const serialAnchor = Number.isFinite(serialUSD) && serialUSD > 0
+      ? buildUsdAnchoredCartPricing(serialUSD, Number(product.price) || 0)
+      : null
+    return {
+      ...product,
+      price: serialAnchor ? serialAnchor.price : toSessionCurrency(Number(product.price) || 0),
+      basePrice: serialAnchor ? serialAnchor.basePrice : (Number(product.price) || 0),
+      ...(serialAnchor && { fixedPriceUSD: serialAnchor.fixedPriceUSD }),
+      quantity: 1,
+      cartId: `${product.id}-serial-${serial.serialNumber}`,
+      serialNumber: serial.serialNumber,
+      serialId: serial.id,
+      // Si es Sin lote, limpiar batchNumber del producto
+      ...(batchToUse?.isNoLot && {
+        isNoLot: true,
+        batchNumber: null,
+        batchExpiryDate: null,
+        batchQuantity: batchToUse.quantity
+      }),
+      // Con lote normal
+      ...(batchToUse && !batchToUse.isNoLot && {
+        batchNumber: batchToUse.lotNumber,
+        batchExpiryDate: batchToUse.expiryDate,
+        batchQuantity: batchToUse.quantity
+      })
+    }
+  }
 
   // Toggle de selección de una serie en el modal multi-select.
   const toggleSerialSelection = (serialId) => {
@@ -3376,11 +3423,22 @@ export default function POS() {
     const batchKey = isNoLotSale ? '-nolot' : batchToUse ? `-batch-${batchToUse.lotNumber}` : ''
     const cartId = `${product.id}${batchKey}-pres-${presentation.name}`
 
+    // Pricing de la presentación: anclado al dólar si tiene priceUSD; si no, su precio en soles
+    // convertido a la moneda de sesión. Guardamos basePrice (PEN) como fuente de verdad.
+    const presUSD = Number(presentation.priceUSD)
+    const presAnchor = Number.isFinite(presUSD) && presUSD > 0
+      ? buildUsdAnchoredCartPricing(presUSD, Number(presentation.price) || 0)
+      : null
+    const presPrice = presAnchor ? presAnchor.price : toSessionCurrency(Number(presentation.price) || 0)
+    const presBasePrice = presAnchor ? presAnchor.basePrice : (Number(presentation.price) || 0)
+
     // Crear un item del carrito con la información de la presentación y lote
     const cartItem = {
       ...product,
       cartId,
-      price: presentation.price,
+      price: presPrice,
+      basePrice: presBasePrice,
+      ...(presAnchor && { fixedPriceUSD: presAnchor.fixedPriceUSD }),
       presentationName: presentation.name,
       presentationFactor: presentation.factor,
       quantity: 1,
@@ -3506,8 +3564,16 @@ export default function POS() {
       return
     }
 
-    // Determinar el precio final
-    const finalPrice = selectedPrice !== null ? selectedPrice : variant.price
+    // Determinar el precio final (en moneda de sesión) y el ancla USD si la variante lo tiene.
+    // Si se eligió un nivel de precio explícito (selectedPrice != null), ese manda (en soles).
+    const variantUSD = Number(variant.priceUSD)
+    const hasVarFixedUSD = selectedPrice == null && Number.isFinite(variantUSD) && variantUSD > 0
+    const rawVariantPenPrice = selectedPrice !== null ? selectedPrice : variant.price
+    const variantAnchor = hasVarFixedUSD
+      ? buildUsdAnchoredCartPricing(variantUSD, Number(rawVariantPenPrice) || 0)
+      : null
+    const finalPrice = variantAnchor ? variantAnchor.price : toSessionCurrency(Number(rawVariantPenPrice) || 0)
+    const finalBasePrice = variantAnchor ? variantAnchor.basePrice : (Number(rawVariantPenPrice) || 0)
 
     // Create unique ID for variant (product ID + variant SKU)
     const variantCartId = `${product.id}-${variant.sku}`
@@ -3537,6 +3603,8 @@ export default function POS() {
         variantSku: variant.sku,
         variantAttributes: variant.attributes,
         price: finalPrice,
+        basePrice: finalBasePrice,
+        ...(variantAnchor && { fixedPriceUSD: variantAnchor.fixedPriceUSD }),
         stock: variant.stock,
         quantity: 1,
         isVariant: true,
@@ -3930,7 +3998,9 @@ export default function POS() {
     setCart(cart.map(item => {
       const currentItemId = item.cartId || item.id
       if (groupIds.has(currentItemId)) {
-        return { ...item, price: newPrice, basePrice: newBasePrice }
+        // Edición manual: el ítem pasa a precio manual; soltamos el ancla USD para que el
+        // recálculo por TC no lo sobreescriba con el priceUSD del catálogo.
+        return { ...item, price: newPrice, basePrice: newBasePrice, fixedPriceUSD: null }
       }
       return item
     }))

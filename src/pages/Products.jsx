@@ -279,7 +279,7 @@ export default function Products() {
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
-  const [newVariant, setNewVariant] = useState({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+  const [newVariant, setNewVariant] = useState({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
   const [variantWarehouseId, setVariantWarehouseId] = useState('') // almacén destino para todas las variantes
   const [editingVariantIndex, setEditingVariantIndex] = useState(null)
   const [editingVariant, setEditingVariant] = useState(null)
@@ -394,7 +394,7 @@ export default function Products() {
 
   // Presentations state (venta por presentaciones: unidad, pack, caja, etc.)
   const [presentations, setPresentations] = useState([])
-  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
+  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '', priceUSD: '' })
   const [editingPresentationIdx, setEditingPresentationIdx] = useState(null) // null = ninguna en edicion
 
   // Image upload state
@@ -643,7 +643,7 @@ export default function Products() {
     setVariants([])
     setVariantWarehouseId('')
     setNewAttributeName('')
-    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
     // Resetear stocks iniciales por almacén
     setWarehouseInitialStocks({})
     reset({
@@ -670,7 +670,7 @@ export default function Products() {
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
-    setNewPresentation({ name: '', factor: '', price: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
     setEditingPresentationIdx(null)
     setTaxAffectation('10') // Default: Gravado
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
@@ -724,7 +724,7 @@ export default function Products() {
     setVariantAttributes(product.variantAttributes || [])
     setVariants(product.variants || [])
     setNewAttributeName('')
-    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
 
     // Pre-seleccionar almacén si las variantes ya tienen warehouseStocks
     if (productHasVariants && product.variants?.length > 0) {
@@ -748,7 +748,7 @@ export default function Products() {
     // Load presentations if product has them (venta por presentaciones)
     setPresentations(product.presentations || [])
     setShowPresentations((product.presentations || []).length > 0)
-    setNewPresentation({ name: '', factor: '', price: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
     setEditingPresentationIdx(null)
 
     // Load pharmacy data if exists (pharmacy mode)
@@ -877,7 +877,7 @@ export default function Products() {
     // Clonar variantes pero limpiar IDs
     setVariants((product.variants || []).map(({ id, ...rest }) => rest))
     setNewAttributeName('')
-    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+    setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
 
     // Clonar modificadores con IDs nuevos para evitar conflictos
     setModifiers((product.modifiers || []).map(mod => ({
@@ -893,7 +893,7 @@ export default function Products() {
     const clonedPresentations = (product.presentations || []).map(({ id, ...rest }) => rest)
     setPresentations(clonedPresentations)
     setShowPresentations(clonedPresentations.length > 0)
-    setNewPresentation({ name: '', factor: '', price: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
 
     // Cargar datos de farmacia si existen
     setPharmacyData({
@@ -982,7 +982,7 @@ export default function Products() {
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
-    setNewPresentation({ name: '', factor: '', price: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
     // Limpiar imágenes
     setProductImages([])
     // Limpiar códigos de barra adicionales
@@ -1142,7 +1142,7 @@ export default function Products() {
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0 })) } : {}),
+        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0, priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null })) } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
@@ -1202,6 +1202,15 @@ export default function Products() {
             }]
           }
 
+          // Multi-divisa: precio fijo en USD por variante. Solo se persiste si
+          // el negocio tiene multi-divisa activada; PEN-only siempre null.
+          let variantPriceUSD = null
+          if (businessSettings?.multiCurrencyEnabled) {
+            const usdRaw = v.priceUSD
+            const usdVal = usdRaw === '' || usdRaw == null ? null : parseFloat(usdRaw)
+            variantPriceUSD = Number.isFinite(usdVal) && usdVal > 0 ? usdVal : null
+          }
+
           return {
             sku: v.sku,
             attributes: v.attributes,
@@ -1211,6 +1220,7 @@ export default function Products() {
             price4: v.price4 || null,
             stock: stockValue,
             warehouseStocks: variantWarehouseStocks,
+            priceUSD: variantPriceUSD,
           }
         })
         // Calculate base price as average of variant prices
@@ -3483,6 +3493,7 @@ export default function Products() {
       price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
       price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
       stock: newVariant.stock === '' ? null : parseInt(newVariant.stock),
+      priceUSD: newVariant.priceUSD ? parseFloat(newVariant.priceUSD) : null,
     }])
 
     // Reset new variant form
@@ -3495,6 +3506,7 @@ export default function Products() {
       price3: '',
       price4: '',
       stock: '',
+      priceUSD: '',
     })
   }
 
@@ -3520,6 +3532,7 @@ export default function Products() {
       price3: v.price3?.toString() || '',
       price4: v.price4?.toString() || '',
       stock: v.stock?.toString() || '',
+      priceUSD: v.priceUSD != null ? v.priceUSD.toString() : '',
     })
   }
 
@@ -3548,6 +3561,7 @@ export default function Products() {
       price3: editingVariant.price3 ? parseFloat(editingVariant.price3) : null,
       price4: editingVariant.price4 ? parseFloat(editingVariant.price4) : null,
       stock: editingVariant.stock === '' ? null : parseInt(editingVariant.stock),
+      priceUSD: editingVariant.priceUSD ? parseFloat(editingVariant.priceUSD) : null,
     }
     setVariants(updated)
     setEditingVariantIndex(null)
@@ -5997,7 +6011,7 @@ export default function Products() {
                       setShowPresentations(e.target.checked)
                       if (!e.target.checked) {
                         setPresentations([])
-                        setNewPresentation({ name: '', factor: '', price: '' })
+                        setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
                       }
                     }}
                     className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -6024,7 +6038,7 @@ export default function Products() {
                       setVariantAttributes([])
                       setVariants([])
                       setNewAttributeName('')
-                      setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '' })
+                      setNewVariant({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
                     }
                   }}
                   className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -6059,7 +6073,7 @@ export default function Products() {
                   {presentations.map((pres, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                       {editingPresentationIdx === idx ? (
-                        <div className="flex-1 grid grid-cols-3 gap-2">
+                        <div className={`flex-1 grid ${businessSettings?.multiCurrencyEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
                           <div>
                             <span className="text-xs text-gray-500">Nombre</span>
                             <input
@@ -6090,9 +6104,21 @@ export default function Products() {
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             />
                           </div>
+                          {businessSettings?.multiCurrencyEnabled && (
+                            <div>
+                              <span className="text-xs text-gray-500">Precio USD</span>
+                              <input
+                                type="number"
+                                step="any"
+                                value={pres.priceUSD ?? ''}
+                                onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, priceUSD: e.target.value } : p))}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              />
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className="flex-1 grid grid-cols-3 gap-2">
+                        <div className={`flex-1 grid ${businessSettings?.multiCurrencyEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
                           <div>
                             <span className="text-xs text-gray-500">Nombre</span>
                             <p className="text-sm font-medium">{pres.name}</p>
@@ -6105,13 +6131,19 @@ export default function Products() {
                             <span className="text-xs text-gray-500">Precio</span>
                             <p className="text-sm font-medium">S/ {parseFloat(pres.price || 0).toFixed(2)}</p>
                           </div>
+                          {businessSettings?.multiCurrencyEnabled && (
+                            <div>
+                              <span className="text-xs text-gray-500">Precio USD</span>
+                              <p className="text-sm font-medium">{pres.priceUSD != null ? `$${parseFloat(pres.priceUSD).toFixed(2)}` : '-'}</p>
+                            </div>
+                          )}
                         </div>
                       )}
                       {editingPresentationIdx === idx ? (
                         <button
                           type="button"
                           onClick={() => {
-                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0 } : p))
+                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0, priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null } : p))
                             setEditingPresentationIdx(null)
                           }}
                           className="p-1.5 text-green-600 hover:bg-green-50 rounded"
@@ -6180,6 +6212,19 @@ export default function Products() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
+                {businessSettings?.multiCurrencyEnabled && (
+                  <div className="w-24">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Precio USD</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="0.00"
+                      value={newPresentation.priceUSD}
+                      onChange={(e) => setNewPresentation(prev => ({ ...prev, priceUSD: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -6198,9 +6243,10 @@ export default function Products() {
                     setPresentations([...presentations, {
                       name: newPresentation.name.trim(),
                       factor: parseFloat(newPresentation.factor),
-                      price: parseFloat(newPresentation.price)
+                      price: parseFloat(newPresentation.price),
+                      priceUSD: (businessSettings?.multiCurrencyEnabled && newPresentation.priceUSD) ? parseFloat(newPresentation.priceUSD) : null
                     }])
-                    setNewPresentation({ name: '', factor: '', price: '' })
+                    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
                   }}
                   className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-1"
                 >
@@ -6965,6 +7011,21 @@ export default function Products() {
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                         </div>
+                        {businessSettings?.multiCurrencyEnabled && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Precio USD <span className="text-xs text-gray-400">(opcional)</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={newVariant.priceUSD}
+                              onChange={e => handleNewVariantChange('priceUSD', e.target.value)}
+                              placeholder="0.00"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                        )}
                       </div>
                       <div className="mt-3">
                         <Button
@@ -6998,6 +7059,9 @@ export default function Products() {
                                 </>
                               )}
                               <th className="px-2 py-2 text-left">Stock</th>
+                              {businessSettings?.multiCurrencyEnabled && (
+                                <th className="px-2 py-2 text-left">USD</th>
+                              )}
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
@@ -7035,6 +7099,11 @@ export default function Products() {
                                   <td className="px-2 py-1">
                                     <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
                                   </td>
+                                  {businessSettings?.multiCurrencyEnabled && (
+                                    <td className="px-2 py-1">
+                                      <input type="number" step="any" value={editingVariant.priceUSD} onChange={e => setEditingVariant({ ...editingVariant, priceUSD: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                    </td>
+                                  )}
                                   <td className="px-2 py-1">
                                     <div className="flex gap-1">
                                       <button type="button" onClick={handleSaveEditVariant} className="text-green-600 hover:text-green-800">
@@ -7062,6 +7131,9 @@ export default function Products() {
                                     </>
                                   )}
                                   <td className="px-2 py-2">{variant.stock !== null && variant.stock !== undefined ? formatStock(variant.stock) : 'N/A'}</td>
+                                  {businessSettings?.multiCurrencyEnabled && (
+                                    <td className="px-2 py-2 text-gray-600">{variant.priceUSD != null ? `$${parseFloat(variant.priceUSD).toFixed(2)}` : '-'}</td>
+                                  )}
                                   <td className="px-2 py-2">
                                     <div className="flex gap-1">
                                       <button

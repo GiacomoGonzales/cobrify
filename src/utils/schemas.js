@@ -124,6 +124,24 @@ export const productVariantSchema = z.object({
     .optional(),
   // NUEVO: Stock por almacén para variantes
   warehouseStocks: z.array(warehouseStockSchema).optional(),
+  // Precio fijo en USD por variante (multi-divisa). Mismo comportamiento que el
+  // priceUSD del producto base: en sesiones USD se usa directamente en vez de
+  // convertir `price` con el TC. Null cuando no aplica.
+  priceUSD: z
+    .number()
+    .positive('El precio USD debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
 })
 
 // Schema para Producto/Servicio
