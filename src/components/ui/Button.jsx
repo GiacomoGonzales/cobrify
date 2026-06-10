@@ -3,7 +3,9 @@ import { useBranding } from '@/contexts/BrandingContext'
 import { DEFAULT_BRANDING } from '@/services/brandingService'
 
 const variants = {
-  primary: 'bg-primary-600 border border-primary-700 text-white hover:bg-primary-700 focus:ring-primary-500',
+  // shadow-primary-600/20: sombra azulada suave (como el CTA del login). Solo aplica al
+  // primary default de Cobrify; los resellers con branding usan variantsNoColor (sin tinte).
+  primary: 'bg-primary-600 border border-primary-700 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-primary-600/20',
   secondary: 'bg-gray-200 border border-gray-300 text-gray-900 hover:bg-gray-300 focus:ring-gray-500',
   danger: 'bg-red-600 border border-red-700 text-white hover:bg-red-700 focus:ring-red-500',
   success: 'bg-green-600 border border-green-700 text-white hover:bg-green-700 focus:ring-green-500',
