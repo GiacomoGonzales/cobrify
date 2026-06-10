@@ -1,4 +1,5 @@
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { CHART, CHART_TOOLTIP } from './chartTheme'
 
 /**
  * Gráfico de área que muestra las ventas mensuales de los últimos 12 meses.
@@ -14,29 +15,25 @@ export default function YearlyMonthlyChart({ data }) {
       <AreaChart data={data} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="colorVentas" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+            <stop offset="0%" stopColor={CHART.primary} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={CHART.primary} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
-        <YAxis stroke="#6b7280" fontSize={12} />
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+        <XAxis dataKey="month" stroke={CHART.axis} fontSize={12} />
+        <YAxis stroke={CHART.axis} fontSize={12} />
         <Tooltip
-          contentStyle={{
-            backgroundColor: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-          }}
+          contentStyle={CHART_TOOLTIP}
           formatter={formatTooltip}
           labelStyle={{ fontWeight: 'bold' }}
         />
         <Area
           type="monotone"
           dataKey="ventas"
-          stroke="#3b82f6"
+          stroke={CHART.primary}
           strokeWidth={2.5}
           fill="url(#colorVentas)"
-          dot={{ fill: '#3b82f6', r: 3 }}
+          dot={{ fill: CHART.primary, r: 3 }}
           activeDot={{ r: 5 }}
         />
       </AreaChart>

@@ -591,9 +591,7 @@ export default function Customers() {
                 <p className="text-sm font-medium text-gray-600">Total Clientes</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{customers.length}</p>
               </div>
-              <div className="p-3 bg-primary-100 rounded-lg flex-shrink-0">
-                <User className="w-6 h-6 text-primary-600" />
-              </div>
+              <User className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -608,10 +606,10 @@ export default function Customers() {
               </div>
               <button
                 onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
-                className="p-3 bg-blue-100 rounded-lg flex-shrink-0 hover:bg-blue-200 transition-colors"
+                className="flex-shrink-0 hover:opacity-60 transition-opacity"
                 title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
               >
-                {showAmounts ? <Eye className="w-6 h-6 text-blue-600" /> : <EyeOff className="w-6 h-6 text-blue-600" />}
+                {showAmounts ? <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" /> : <EyeOff className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />}
               </button>
             </div>
           </CardContent>
@@ -628,10 +626,10 @@ export default function Customers() {
                 </div>
                 <button
                   onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
-                  className="p-3 bg-green-100 rounded-lg flex-shrink-0 hover:bg-green-200 transition-colors"
+                  className="flex-shrink-0 hover:opacity-60 transition-opacity"
                   title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
                 >
-                  {showAmounts ? <Eye className="w-6 h-6 text-green-600" /> : <EyeOff className="w-6 h-6 text-green-600" />}
+                  {showAmounts ? <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" /> : <EyeOff className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />}
                 </button>
               </div>
             </CardContent>
@@ -653,10 +651,10 @@ export default function Customers() {
                 </div>
                 <button
                   onClick={() => { const v = !showAmounts; setShowAmounts(v); localStorage.setItem('dashboard_show_amounts', v) }}
-                  className="p-3 bg-purple-100 rounded-lg flex-shrink-0 hover:bg-purple-200 transition-colors"
+                  className="flex-shrink-0 hover:opacity-60 transition-opacity"
                   title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
                 >
-                  {showAmounts ? <Eye className="w-6 h-6 text-purple-600" /> : <EyeOff className="w-6 h-6 text-purple-600" />}
+                  {showAmounts ? <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-600" /> : <EyeOff className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-600" />}
                 </button>
               </div>
             </CardContent>

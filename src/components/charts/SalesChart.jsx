@@ -1,4 +1,5 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { CHART, CHART_TOOLTIP } from './chartTheme'
 
 export default function SalesChart({ data }) {
   // Formateador para el tooltip - redondea a 2 decimales
@@ -10,15 +11,11 @@ export default function SalesChart({ data }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis dataKey="name" stroke="#6b7280" fontSize={12} />
-        <YAxis stroke="#6b7280" fontSize={12} />
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+        <XAxis dataKey="name" stroke={CHART.axis} fontSize={12} />
+        <YAxis stroke={CHART.axis} fontSize={12} />
         <Tooltip
-          contentStyle={{
-            backgroundColor: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-          }}
+          contentStyle={CHART_TOOLTIP}
           formatter={formatTooltipValue}
           labelStyle={{ fontWeight: 'bold' }}
         />
@@ -28,18 +25,18 @@ export default function SalesChart({ data }) {
         <Line
           type="monotone"
           dataKey="ventas"
-          stroke="#3b82f6"
+          stroke={CHART.primary}
           strokeWidth={2}
-          dot={{ fill: '#3b82f6', r: 4 }}
+          dot={{ fill: CHART.primary, r: 4 }}
           activeDot={{ r: 6 }}
         />
         <Line
           type="monotone"
           dataKey="ventasAnterior"
-          stroke="#9ca3af"
+          stroke={CHART.muted}
           strokeWidth={2}
           strokeDasharray="5 5"
-          dot={{ fill: '#9ca3af', r: 3 }}
+          dot={{ fill: CHART.muted, r: 3 }}
           activeDot={{ r: 5 }}
         />
       </LineChart>

@@ -805,7 +805,16 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="relative space-y-6 animate-fade-in">
+      {/* Degradado tenue de fondo (mismo lenguaje visual que login/landing), solo decorativo */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-4 inset-x-0 h-72 -z-10"
+        style={{
+          background:
+            'radial-gradient(46% 90% at 12% 0%, rgba(37, 99, 235, 0.07), transparent 70%), radial-gradient(40% 80% at 60% 0%, rgba(6, 182, 212, 0.06), transparent 70%), radial-gradient(36% 70% at 95% 0%, rgba(59, 130, 246, 0.05), transparent 70%)',
+        }}
+      />
       {/* Header */}
       <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
@@ -905,25 +914,16 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
-                <div
-                  className={`p-2 rounded-lg flex-shrink-0 ${
+                {/* Ícono suelto (sin chip), mismo patrón que las stat cards de Inventario */}
+                <stat.icon
+                  className={`w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 ${
                     stat.changeType === 'danger'
-                      ? 'bg-red-50'
+                      ? 'text-red-600'
                       : stat.changeType === 'warning'
-                      ? 'bg-yellow-50'
-                      : 'bg-primary-50'
+                      ? 'text-yellow-600'
+                      : 'text-primary-600'
                   }`}
-                >
-                  <stat.icon
-                    className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                      stat.changeType === 'danger'
-                        ? 'text-red-600'
-                        : stat.changeType === 'warning'
-                        ? 'text-yellow-600'
-                        : 'text-primary-600'
-                    }`}
-                  />
-                </div>
+                />
               </div>
             </CardContent>
           </Card>

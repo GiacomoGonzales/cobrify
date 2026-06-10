@@ -730,20 +730,19 @@ export default function OnlineOrders() {
 }
 
 function StatCard({ label, value, helper, color, icon: Icon, prominent = false }) {
+  // Ícono suelto (sin chip de fondo) — patrón unificado de stat cards en toda la app
   const colorMap = {
-    amber: 'text-amber-600 bg-amber-50',
-    blue: 'text-blue-600 bg-blue-50',
-    emerald: 'text-emerald-600 bg-emerald-50',
-    gray: 'text-gray-600 bg-gray-50',
+    amber: 'text-amber-600',
+    blue: 'text-primary-600',
+    emerald: 'text-emerald-600',
+    gray: 'text-gray-500',
   }
   const isProminent = prominent
   return (
     <Card className={isProminent ? 'ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50 to-white' : ''}>
       <CardContent className="p-3">
         <div className="flex items-center gap-2.5">
-          <div className={`${isProminent ? 'w-10 h-10' : 'w-9 h-9'} rounded-lg flex items-center justify-center ${colorMap[color] || colorMap.gray}`}>
-            <Icon className={isProminent ? 'w-5 h-5' : 'w-4 h-4'} />
-          </div>
+          <Icon className={`${isProminent ? 'w-7 h-7' : 'w-6 h-6'} flex-shrink-0 ${colorMap[color] || colorMap.gray}`} />
           <div className="min-w-0 flex-1">
             <p className="text-xs text-gray-500 leading-tight">{label}</p>
             <p className={`${isProminent ? 'text-lg' : 'text-xl'} font-bold text-gray-900 leading-tight truncate`}>{value}</p>

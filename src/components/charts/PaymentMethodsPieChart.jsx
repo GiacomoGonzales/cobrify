@@ -1,4 +1,5 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { CHART_SERIES, CHART_TOOLTIP } from './chartTheme'
 
 /**
  * Gráfico de torta con la distribución de ventas por método de pago.
@@ -6,9 +7,8 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recha
  * data: [{ name: 'Efectivo', value: 1200, percent: 35 }, ...]
  */
 
-// Paleta sobria — azul Cobrify como dominante, con apoyos neutrales y un toque
-// de verde/violeta para identificar Yape/Plin.
-const COLORS = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#6b7280', '#06b6d4', '#ec4899', '#84cc16']
+// Paleta unificada de la marca (familia azul/cian) — ver chartTheme.js
+const COLORS = CHART_SERIES
 
 export default function PaymentMethodsPieChart({ data }) {
   if (!data || data.length === 0) {
@@ -42,11 +42,7 @@ export default function PaymentMethodsPieChart({ data }) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{
-            backgroundColor: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-          }}
+          contentStyle={CHART_TOOLTIP}
           formatter={formatTooltip}
         />
         <Legend

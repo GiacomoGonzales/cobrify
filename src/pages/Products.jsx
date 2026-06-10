@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check, Printer, Layers, Boxes, Scale } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -408,7 +408,7 @@ export default function Products() {
       return saved ? JSON.parse(saved) : {}
     } catch { return {} }
   })
-  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false)
+  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false) // menú único "Opciones" del header
 
   // Verificar si las imágenes de productos están habilitadas (por admin O por preferencia del usuario)
   const canUseProductImages = hasFeature('productImages') || businessSettings?.enableProductImages
@@ -3866,128 +3866,110 @@ export default function Products() {
             Gestiona tu catálogo de productos y servicios
           </p>
         </div>
-        {/* Botones del header agrupados en 2 filas para mejor jerarquía visual:
-              Fila 1 — Acciones de datos: Importar / Exportar / Rappi / + Nuevo Producto
-              Fila 2 — Vista y categorización: Columnas / Categorías / Marcas
-            En desktop (lg+) ambas filas se ven a la derecha del título. En
-            móvil/tablet cada una toma su ancho y respira sin aplastarse. */}
-        <div className="flex flex-col gap-2 w-full lg:w-auto lg:items-end">
-          {/* Fila 1: Acciones de gestión de datos */}
-          <div className="flex flex-wrap gap-2 w-full lg:w-auto lg:justify-end">
+        {/* Acciones del header: solo la acción primaria (+ Nuevo Producto) a la vista;
+            el resto (Importar/Exportar, Categorías, Marcas, Columnas) vive en un único
+            menú "Opciones" para mantener la cabecera limpia en móvil y desktop. */}
+        <div className="flex gap-2 w-full lg:w-auto lg:justify-end">
+          {/* Menú único de acciones secundarias */}
+          <div className="relative flex-1 sm:flex-initial">
             <Button
               variant="outline"
-              onClick={() => setIsImportModalOpen(true)}
-              className="flex-1 sm:flex-initial"
+              onClick={() => setOptionsMenuOpen(!optionsMenuOpen)}
+              className={`w-full sm:w-auto ${hasHiddenColumns ? 'border-primary-400 text-primary-700' : ''}`}
+              title="Más opciones: importar, exportar, categorías, marcas, columnas"
             >
-              <Upload className="w-4 h-4 mr-2" />
-              Importar
+              <MoreVertical className="w-4 h-4 mr-2" />
+              <span>Opciones</span>
+              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${optionsMenuOpen ? 'rotate-180' : ''}`} />
             </Button>
-            {!hidePrivateData && (
-              <Button
-                variant="outline"
-                onClick={handleExportToExcel}
-                className="flex-1 sm:flex-initial"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Exportar
-              </Button>
+            {optionsMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 w-60 max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {/* Datos */}
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setIsImportModalOpen(true) }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Importar productos
+                  </button>
+                  {!hidePrivateData && (
+                    <button
+                      onClick={() => { setOptionsMenuOpen(false); handleExportToExcel() }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      Exportar a Excel
+                    </button>
+                  )}
+                  {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
+                    <button
+                      onClick={() => { setOptionsMenuOpen(false); handleExportForRappi() }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      title="Exporta SKUs en formato listo para Self Mapping en Portal Partners de Rappi"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      Exportar para Rappi
+                    </button>
+                  )}
+                  {/* Catálogo */}
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); openCategoryModal() }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <FolderPlus className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Gestionar categorías
+                  </button>
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); openBrandsModal() }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Tag className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Gestionar marcas
+                  </button>
+                  {/* Columnas visibles (se mantiene abierto el menú al togglear) */}
+                  <div className="border-t border-gray-100 my-1" />
+                  <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase">Columnas visibles</p>
+                  {Object.keys(columnLabels).map(key => {
+                    if (!columnsWithData[key]) return null
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleColumnPreference(key)}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                          columnPreferences[key] !== false
+                            ? 'bg-primary-600 border-primary-600'
+                            : 'border-gray-300'
+                        }`}>
+                          {columnPreferences[key] !== false && (
+                            <Check className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        {columnLabels[key]}
+                      </button>
+                    )
+                  })}
+                  {hasHiddenColumns && (
+                    <button
+                      onClick={() => resetColumnPreferences()}
+                      className="w-full px-3 py-2 text-left text-sm text-primary-600 hover:bg-gray-50 font-medium"
+                    >
+                      Mostrar todas las columnas
+                    </button>
+                  )}
+                </div>
+              </>
             )}
-            {businessMode === 'restaurant' && businessSettings?.rappiEnabled === true && (
-              <Button
-                variant="outline"
-                onClick={handleExportForRappi}
-                className="flex-1 sm:flex-initial"
-                title="Exporta SKUs en formato listo para Self Mapping en Portal Partners de Rappi"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Rappi
-              </Button>
-            )}
-            <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Producto
-            </Button>
           </div>
-
-          {/* Fila 2: Configuración de vista y categorización */}
-          <div className="flex flex-wrap gap-2 w-full lg:w-auto lg:justify-end">
-            {/* Selector de columnas visibles */}
-            <div className="relative flex-1 sm:flex-initial">
-              <Button
-                variant="outline"
-                onClick={() => setColumnSelectorOpen(!columnSelectorOpen)}
-                className={`w-full sm:w-auto ${hasHiddenColumns ? 'border-primary-400 text-primary-700' : ''}`}
-                title="Columnas visibles"
-              >
-                <SlidersHorizontal className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Columnas</span>
-              </Button>
-              {columnSelectorOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setColumnSelectorOpen(false)}
-                  />
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                    <div className="px-3 py-2 border-b border-gray-100">
-                      <p className="text-xs font-semibold text-gray-500 uppercase">Columnas visibles</p>
-                    </div>
-                    {Object.keys(columnLabels).map(key => {
-                      if (!columnsWithData[key]) return null
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => toggleColumnPreference(key)}
-                          className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                        >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                            columnPreferences[key] !== false
-                              ? 'bg-primary-600 border-primary-600'
-                              : 'border-gray-300'
-                          }`}>
-                            {columnPreferences[key] !== false && (
-                              <Check className="w-3 h-3 text-white" />
-                            )}
-                          </div>
-                          {columnLabels[key]}
-                        </button>
-                      )
-                    })}
-                    {hasHiddenColumns && (
-                      <>
-                        <div className="border-t border-gray-100 my-1" />
-                        <button
-                          onClick={() => {
-                            resetColumnPreferences()
-                            setColumnSelectorOpen(false)
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm text-primary-600 hover:bg-gray-50 font-medium"
-                        >
-                          Mostrar todas
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              onClick={openCategoryModal}
-              className="flex-1 sm:flex-initial"
-            >
-              <FolderPlus className="w-4 h-4 mr-2" />
-              Categorías
-            </Button>
-            <Button
-              variant="outline"
-              onClick={openBrandsModal}
-              className="flex-1 sm:flex-initial"
-            >
-              <Tag className="w-4 h-4 mr-2" />
-              Marcas
-            </Button>
-          </div>
+          {/* Acción primaria */}
+          <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Producto
+          </Button>
         </div>
       </div>
 
@@ -4291,9 +4273,7 @@ export default function Products() {
                 <p className="text-sm font-medium text-gray-600">Total Productos</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{products.length}</p>
               </div>
-              <div className="p-3 bg-primary-100 rounded-lg">
-                <Package className="w-6 h-6 text-primary-600" />
-              </div>
+              <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -4307,9 +4287,7 @@ export default function Products() {
                   <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalValue)}</p>
                   <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
                 </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-green-600" />
-                </div>
+                <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -4322,9 +4300,7 @@ export default function Products() {
                 <p className="text-sm font-medium text-gray-600">Stock Bajo</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{lowStockCount}</p>
               </div>
-              <div className="p-3 bg-red-100 rounded-lg">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-              </div>
+              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
