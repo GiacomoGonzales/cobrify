@@ -1057,6 +1057,28 @@ export default function CreatePurchase() {
         return false
       }
 
+      // El producto/insumo debe seguir existiendo en su catálogo actual.
+      // validateForm solo exigía que productId NO esté vacío, pero un productId "huérfano"
+      // (producto eliminado y vuelto a crear con otro ID, o compra cargada antes de existir el
+      // producto) pasaba la validación y al guardar el stock NO se actualizaba EN SILENCIO
+      // (CreatePurchase usa `products.find(p => p.id === ...)` y se salta sin avisar si no existe).
+      // Lo bloqueamos con un mensaje claro para que el usuario re-seleccione el ítem.
+      if (item.itemType === 'ingredient') {
+        if (ingredients.length > 0 && !ingredients.some(i => i.id === item.productId)) {
+          setMessage({
+            type: 'error',
+            text: `El insumo "${item.productName}" ya no está registrado (pudo eliminarse y recrearse). Elimínalo de la lista y vuelve a seleccionarlo del buscador para que el stock se actualice.`,
+          })
+          return false
+        }
+      } else if (products.length > 0 && !products.some(p => p.id === item.productId)) {
+        setMessage({
+          type: 'error',
+          text: `El producto "${item.productName}" ya no está registrado (pudo eliminarse y volverse a crear con otro código). Elimínalo de la lista y vuelve a seleccionarlo del buscador para que el stock se actualice correctamente.`,
+        })
+        return false
+      }
+
       // Validar cantidad - debe ser un número mayor a 0
       const qty = Number(item.quantity)
       if (isNaN(qty) || qty <= 0) {
