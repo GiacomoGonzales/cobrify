@@ -3,13 +3,13 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
-import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginSchema } from '@/utils/schemas'
 import { getResellerBranding, getResellerByHostname } from '@/services/brandingService'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import AuthShell from '@/components/AuthShell'
 
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false)
@@ -185,58 +185,56 @@ export default function Login() {
     )
   }
 
-  // Login por defecto de Cobrify (sin branding personalizado)
+  // Login por defecto de Cobrify (sin branding personalizado) — estilo landing
   return (
-    <div className="min-h-screen bg-primary-600 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <img
-            src="/logo.png"
-            alt="Cobrify - Sistema de facturación electrónica"
-            className="w-32 h-32 mx-auto mb-3 object-contain"
-            width="128"
-            height="128"
-          />
-          <h1 className="text-3xl font-bold text-white mb-1">Cobrify</h1>
-          <p className="text-sm text-primary-100">Sistema de facturación para Perú</p>
-        </div>
-
-        <Card className="shadow-2xl">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl">Iniciar Sesión</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Input
-                label="Correo Electrónico"
-                type="email"
-                placeholder="correo@ejemplo.com"
-                error={errors.email?.message}
-                {...register('email')}
-              />
-              <Input
-                label="Contraseña"
-                type="password"
-                placeholder="••••••••"
-                error={errors.password?.message}
-                {...register('password')}
-              />
-              {error && (
-                <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              )}
-              <Button type="submit" className="w-full" loading={isLoading}>
-                Iniciar Sesión
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <p className="text-center text-white text-xs mt-4 opacity-75">
-          © 2025 Cobrify. Sistema de facturación y cobranza.
-        </p>
+    <AuthShell>
+      <div className="text-center mb-6">
+        <img
+          src="/logo.png"
+          alt="Cobrify - Sistema de facturación electrónica"
+          className="w-24 h-24 mx-auto mb-3 object-contain"
+          width="96"
+          height="96"
+        />
+        <h1 className="text-3xl font-extrabold tracking-tight mb-1" style={{ color: 'var(--navy)' }}>Cobrify</h1>
+        <p className="text-sm" style={{ color: 'var(--body)' }}>Sistema de facturación para Perú</p>
       </div>
-    </div>
+
+      <Card className="shadow-xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl">Iniciar Sesión</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <Input
+              label="Correo Electrónico"
+              type="email"
+              placeholder="correo@ejemplo.com"
+              error={errors.email?.message}
+              {...register('email')}
+            />
+            <Input
+              label="Contraseña"
+              type="password"
+              placeholder="••••••••"
+              error={errors.password?.message}
+              {...register('password')}
+            />
+            {error && (
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+            <Button type="submit" className="w-full" loading={isLoading}>
+              Iniciar Sesión
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <p className="text-center text-xs mt-4" style={{ color: '#8898AA' }}>
+        © 2026 Cobrify. Sistema de facturación y cobranza.
+      </p>
+    </AuthShell>
   )
 }

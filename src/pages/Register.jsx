@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Button from '@/components/ui/Button'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import AuthShell from '@/components/AuthShell'
 
 // Schema de validación para el registro completo
 const registerSchema = z.object({
@@ -220,35 +221,34 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-primary-600 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
-        <div className="text-center mb-6">
-          <img
-            src="/logo.png"
-            alt="Cobrify - Sistema de facturación electrónica"
-            className="w-24 h-24 mx-auto mb-3 object-contain"
-            width="96"
-            height="96"
-          />
-          <h1 className="text-3xl font-bold text-white mb-1">Cobrify</h1>
-          <p className="text-sm text-primary-100">Sistema de facturación para Perú</p>
-        </div>
+    <AuthShell className="max-w-lg">
+      <div className="text-center mb-6">
+        <img
+          src="/logo.png"
+          alt="Cobrify - Sistema de facturación electrónica"
+          className="w-20 h-20 mx-auto mb-3 object-contain"
+          width="80"
+          height="80"
+        />
+        <h1 className="text-3xl font-extrabold tracking-tight mb-1" style={{ color: 'var(--navy)' }}>Cobrify</h1>
+        <p className="text-sm" style={{ color: 'var(--body)' }}>Sistema de facturación para Perú</p>
+      </div>
 
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-            step === 1 ? 'bg-white text-primary-600' : 'bg-primary-500 text-white'
-          }`}>
-            <User className="w-4 h-4" />
-            <span>1. Cuenta</span>
-          </div>
-          <ArrowRight className="w-4 h-4 text-primary-300" />
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-            step === 2 ? 'bg-white text-primary-600' : 'bg-primary-500 text-white'
-          }`}>
-            <Building2 className="w-4 h-4" />
-            <span>2. Negocio</span>
-          </div>
+      <div className="flex items-center justify-center gap-2 mb-4">
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${
+          step === 1 ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-[#425466] border-[#E6EBF1]'
+        }`}>
+          <User className="w-4 h-4" />
+          <span>1. Cuenta</span>
         </div>
+        <ArrowRight className="w-4 h-4 text-[#8898AA]" />
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${
+          step === 2 ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-[#425466] border-[#E6EBF1]'
+        }`}>
+          <Building2 className="w-4 h-4" />
+          <span>2. Negocio</span>
+        </div>
+      </div>
 
         {/* Register Card */}
         <Card className="shadow-2xl">
@@ -505,10 +505,9 @@ export default function Register() {
           </CardContent>
         </Card>
 
-        <p className="text-center text-white text-xs mt-4 opacity-75">
-          © 2025 Cobrify. Sistema de facturación y cobranza.
-        </p>
-      </div>
-    </div>
+      <p className="text-center text-xs mt-4" style={{ color: '#8898AA' }}>
+        © 2026 Cobrify. Sistema de facturación y cobranza.
+      </p>
+    </AuthShell>
   )
 }
