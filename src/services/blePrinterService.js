@@ -646,6 +646,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       socialMedia,
       website,
       logoUrl,
+      logoPrintScale,
       // Configuración
       hideRucIgvInNotaVenta,
       hideOnlyIgvInNotaVenta,
@@ -706,12 +707,17 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     if (logoUrl) {
       console.log('📷 Preparando logo para impresión BLE...');
       try {
-        const logoConfig = await prepareLogoForPrinting(logoUrl, paperWidth);
+        const logoConfig = await prepareLogoForPrinting(logoUrl, paperWidth, logoPrintScale);
 
         if (logoConfig.ready && logoConfig.base64) {
           console.log('✅ Logo listo, convirtiendo a comandos ESC/POS...');
-          // Determinar ancho máximo del logo según papel (30% más pequeño)
-          const maxLogoWidth = paperWidth === 58 ? 192 : 288; // Píxeles
+          // Ancho del logo según papel (baseline 192/288 px = "100%") ESCALADO por
+          // logoPrintScale (30–150%). Antes era FIJO → por eso el control de tamaño
+          // del logo no surtía efecto en ticketeras BLE. Acotado al máximo imprimible.
+          const pct = Math.max(30, Math.min(150, Number(logoPrintScale) || 100)) / 100;
+          const baseLogoWidth = paperWidth === 58 ? 192 : 288;
+          const paperMaxDots = paperWidth === 58 ? 384 : 576;
+          const maxLogoWidth = Math.min(paperMaxDots, Math.max(48, Math.round(baseLogoWidth * pct)));
 
           const logoCommands = await imageToEscPosCommands(logoConfig.base64, maxLogoWidth);
           commands.push(logoCommands);

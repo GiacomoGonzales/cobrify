@@ -1838,6 +1838,7 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       socialMedia: business?.socialMedia || '',
       website: business?.website || '',
       logoUrl: business?.logoUrl || '',
+      logoPrintScale: business?.logoPrintScale ?? 100, // escala del logo (%) — la usa el path BLE
 
       // Configuración
       hideRucIgvInNotaVenta: business?.hideRucIgvInNotaVenta || false,
