@@ -809,11 +809,11 @@ export default function LandingPageV2() {
             <div className="lp3r flex justify-center items-center" style={{ transitionDelay: '.12s' }}>
               {/* Play Store — atrás */}
               <div style={{ transform: 'rotate(-5deg)', zIndex: 1 }}>
-                <PhoneMock src="/landing/app-playstore.jpg" alt="Cobrify Perú en Google Play — 4.9★, 500+ descargas" width={194} />
+                <PhoneMock src="/landing/app-playstore.jpg?v=2" alt="Cobrify Perú en Google Play — 4.9★, 500+ descargas" width={194} />
               </div>
               {/* App Store — adelante */}
               <div style={{ transform: 'rotate(4deg)', zIndex: 2, marginLeft: '-70px', marginTop: '26px' }}>
-                <PhoneMock src="/landing/app-appstore.jpg" alt="Cobrify Perú en App Store — 5.0★" width={206} />
+                <PhoneMock src="/landing/app-appstore.jpg?v=2" alt="Cobrify Perú en App Store — 5.0★" width={206} />
               </div>
             </div>
           </div>
