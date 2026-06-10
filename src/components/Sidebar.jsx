@@ -2015,17 +2015,15 @@ function Sidebar() {
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" style={{ color: '#6B7280' }} />
-                  {!sidebarCollapsed && (
-                    <>
-                      <span className="font-medium text-sm flex-1 text-left">{item.label}</span>
-                      {expanded
-                        ? <ChevronDown className="w-4 h-4 text-gray-400" />
-                        : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                    </>
-                  )}
+                  {/* Label oculto solo en desktop colapsado (md:hidden), igual que los items normales.
+                      En móvil el drawer siempre es ancho completo, el label debe verse siempre. */}
+                  <span className={`font-medium text-sm flex-1 text-left ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+                  {expanded
+                    ? <ChevronDown className={`w-4 h-4 text-gray-400 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
+                    : <ChevronRight className={`w-4 h-4 text-gray-400 ${sidebarCollapsed ? 'md:hidden' : ''}`} />}
                 </button>
-                {expanded && !sidebarCollapsed && (
-                  <div className="ml-3 pl-3 border-l border-gray-200 space-y-0.5">
+                {expanded && (
+                  <div className={`ml-3 pl-3 border-l border-gray-200 space-y-0.5 ${sidebarCollapsed ? 'md:hidden' : ''}`}>
                     {item.children.map(child => (
                       <NavLink
                         key={child.path}
@@ -2149,8 +2147,8 @@ function Sidebar() {
                   style={realActive ? { color: branding.primaryColor } : hasOrderAlerts ? { color: '#EA580C' } : { color: '#6B7280' }}
                 />
                 <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
-                {hasOrderAlerts && !sidebarCollapsed && (
-                  <span className="ml-auto bg-orange-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                {hasOrderAlerts && (
+                  <span className={`ml-auto bg-orange-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse ${sidebarCollapsed ? 'md:hidden' : ''}`}>
                     {orderAlertCount}
                   </span>
                 )}
