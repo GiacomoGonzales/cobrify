@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -7,7 +7,7 @@ import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
-import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
+import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = [
@@ -89,6 +89,11 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [recipientName, setRecipientName] = useState('')
   const [recipientAddress, setRecipientAddress] = useState('')
   const [recipientCity, setRecipientCity] = useState('')
+
+  // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
+  const [recipientEstablishments, setRecipientEstablishments] = useState([])
+  const [showRecipientEstablishmentsModal, setShowRecipientEstablishmentsModal] = useState(false)
+  const [loadingRecipientEstablishments, setLoadingRecipientEstablishments] = useState(false)
 
   // Pagador del flete
   const [freightPayer, setFreightPayer] = useState('remitente') // remitente, destinatario, tercero
@@ -365,6 +370,54 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     } finally {
       setIsLookingUpRecipient(false)
     }
+  }
+
+  // Aplica dirección + ciudad (distrito/provincia/departamento) del establecimiento elegido.
+  const applyRecipientEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setRecipientAddress(dir)
+    const city = [est.distrito, est.provincia, est.departamento].filter(Boolean).join(', ')
+    if (city) setRecipientCity(city)
+  }
+
+  // Consultar establecimientos (anexos) del RUC del destinatario; varios → modal, uno → directo. (Igual que el POS.)
+  const handleViewRecipientEstablishments = async () => {
+    const ruc = (recipientDocNumber || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('Ingresa un RUC válido (11 dígitos) primero')
+      return
+    }
+    setLoadingRecipientEstablishments(true)
+    try {
+      const res = await consultarEstablecimientos(ruc)
+      if (!res.success) {
+        toast.error(res.error || 'No se pudieron obtener los establecimientos')
+        return
+      }
+      const list = res.data || []
+      if (list.length === 0) {
+        toast.info('Este RUC no tiene locales anexos en SUNAT — se mantiene el domicilio fiscal')
+        return
+      }
+      if (list.length === 1) {
+        applyRecipientEstablishment(list[0])
+        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        return
+      }
+      setRecipientEstablishments(list)
+      setShowRecipientEstablishmentsModal(true)
+    } catch (error) {
+      console.error('Error al consultar establecimientos:', error)
+      toast.error('Error al consultar establecimientos. Verifique su conexión.')
+    } finally {
+      setLoadingRecipientEstablishments(false)
+    }
+  }
+
+  const handleSelectRecipientEstablishment = (est) => {
+    applyRecipientEstablishment(est)
+    setShowRecipientEstablishmentsModal(false)
+    toast.success('Dirección del establecimiento aplicada')
   }
 
   // Validar formato de número de guía (T001-00000001, EG07-00000001, etc.)
@@ -1042,6 +1095,20 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               onChange={(e) => setRecipientCity(e.target.value)}
             />
           </div>
+          {recipientDocType === '6' && (
+            <button
+              type="button"
+              onClick={handleViewRecipientEstablishments}
+              disabled={loadingRecipientEstablishments}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-700 hover:text-primary-800 disabled:opacity-50"
+              title="Ver los establecimientos (anexos) registrados en SUNAT para elegir la dirección"
+            >
+              {loadingRecipientEstablishments
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Store className="w-3.5 h-3.5" />}
+              Ver establecimientos (SUNAT)
+            </button>
+          )}
 
           {/* Pagador del Flete */}
           <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
@@ -1698,6 +1765,45 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
 
         </div>
       </form>
+
+      {/* Modal: elegir establecimiento (anexo) del destinatario cuando el RUC tiene varios locales */}
+      <Modal
+        isOpen={showRecipientEstablishmentsModal}
+        onClose={() => setShowRecipientEstablishmentsModal(false)}
+        title="Elegir establecimiento"
+        size="md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Este RUC tiene varios establecimientos en SUNAT. Elige la dirección que corresponde:
+          </p>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {recipientEstablishments.map((est, idx) => (
+              <button
+                key={`${est.codigo}-${idx}`}
+                type="button"
+                onClick={() => handleSelectRecipientEstablishment(est)}
+                className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-1.5 py-0.5">
+                    {est.codigo || '—'}
+                  </span>
+                  {est.tipo && <span className="text-xs text-gray-500">{est.tipo}</span>}
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  {est.direccionCompleta || est.direccion || 'Sin dirección'}
+                </p>
+                {(est.distrito || est.provincia || est.departamento) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[est.distrito, est.provincia, est.departamento].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
     </Modal>
   )
 }

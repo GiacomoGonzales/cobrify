@@ -11,7 +11,7 @@ import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
-import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
+import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -119,6 +119,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [recipientProvince, setRecipientProvince] = useState('')
   const [recipientDistrict, setRecipientDistrict] = useState('')
   const [recipientEmail, setRecipientEmail] = useState('')
+
+  // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
+  const [recipientEstablishments, setRecipientEstablishments] = useState([])
+  const [showRecipientEstablishmentsModal, setShowRecipientEstablishmentsModal] = useState(false)
+  const [loadingRecipientEstablishments, setLoadingRecipientEstablishments] = useState(false)
 
   // Documentos relacionados
   const [relatedDocuments, setRelatedDocuments] = useState([])
@@ -1106,6 +1111,52 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }
 
+  // Consultar establecimientos (anexos) del RUC del destinatario. Si hay varios, abre un
+  // modal para elegir la dirección; si hay uno solo, la aplica directo. Es una consulta
+  // aparte a la API (1 crédito), por eso va con botón explícito. (Misma función que el POS.)
+  const handleViewRecipientEstablishments = async () => {
+    const ruc = (recipientDocNumber || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('Ingresa un RUC válido (11 dígitos) primero')
+      return
+    }
+    setLoadingRecipientEstablishments(true)
+    try {
+      const res = await consultarEstablecimientos(ruc)
+      if (!res.success) {
+        toast.error(res.error || 'No se pudieron obtener los establecimientos')
+        return
+      }
+      const list = res.data || []
+      if (list.length === 0) {
+        toast.info('Este RUC no tiene locales anexos en SUNAT — se mantiene el domicilio fiscal')
+        return
+      }
+      if (list.length === 1) {
+        const dir = list[0].direccionCompleta || list[0].direccion || ''
+        if (dir) setRecipientAddress(dir)
+        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        return
+      }
+      setRecipientEstablishments(list)
+      setShowRecipientEstablishmentsModal(true)
+    } catch (error) {
+      console.error('Error al consultar establecimientos:', error)
+      toast.error('Error al consultar establecimientos. Verifique su conexión.')
+    } finally {
+      setLoadingRecipientEstablishments(false)
+    }
+  }
+
+  // Elegir un establecimiento del modal → poner su dirección en el destinatario
+  // (un useEffect ya sincroniza esa dirección al punto de llegada).
+  const handleSelectRecipientEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setRecipientAddress(dir)
+    setShowRecipientEstablishmentsModal(false)
+    toast.success('Dirección del establecimiento aplicada')
+  }
+
   const handleSubmit = async (e, { skipSunat = false } = {}) => {
     e.preventDefault()
 
@@ -1578,6 +1629,20 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               value={recipientAddress}
               onChange={(e) => setRecipientAddress(e.target.value)}
             />
+            {recipientDocType === '6' && (
+              <button
+                type="button"
+                onClick={handleViewRecipientEstablishments}
+                disabled={loadingRecipientEstablishments}
+                className="inline-flex items-center gap-1.5 -mt-1 text-xs font-medium text-primary-700 hover:text-primary-800 disabled:opacity-50"
+                title="Ver los establecimientos (anexos) registrados en SUNAT para elegir la dirección"
+              >
+                {loadingRecipientEstablishments
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Store className="w-3.5 h-3.5" />}
+                Ver establecimientos (SUNAT)
+              </button>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select
@@ -2774,6 +2839,45 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           </p>
         </div>
       </form>
+
+      {/* Modal: elegir establecimiento (anexo) del destinatario cuando el RUC tiene varios locales */}
+      <Modal
+        isOpen={showRecipientEstablishmentsModal}
+        onClose={() => setShowRecipientEstablishmentsModal(false)}
+        title="Elegir establecimiento"
+        size="md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Este RUC tiene varios establecimientos en SUNAT. Elige la dirección que corresponde:
+          </p>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {recipientEstablishments.map((est, idx) => (
+              <button
+                key={`${est.codigo}-${idx}`}
+                type="button"
+                onClick={() => handleSelectRecipientEstablishment(est)}
+                className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-1.5 py-0.5">
+                    {est.codigo || '—'}
+                  </span>
+                  {est.tipo && <span className="text-xs text-gray-500">{est.tipo}</span>}
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  {est.direccionCompleta || est.direccion || 'Sin dirección'}
+                </p>
+                {(est.distrito || est.provincia || est.departamento) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[est.distrito, est.provincia, est.departamento].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
     </Modal>
   )
 }
