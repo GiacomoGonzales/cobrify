@@ -230,7 +230,10 @@ export default function LandingPageV2() {
             </div>
             <div className="lp3r relative mt-4 lg:mt-0" style={{ transitionDelay: '.18s' }}>
               <div className="absolute inset-0 z-0" style={{ background: 'radial-gradient(60% 60% at 55% 45%, rgba(37,99,235,.20), transparent 70%)' }} />
-              <img src="/landing/printer-cobrify.png?v=2" alt="Impresora térmica Cobrify imprimiendo una factura electrónica con QR" className="relative z-10 w-full max-w-[16rem] sm:max-w-[18rem] lg:max-w-[22rem] mx-auto lg:ml-auto" style={{ filter: 'drop-shadow(0 28px 50px rgba(10,37,64,.3))' }} />
+              <picture className="relative z-10 block w-full max-w-[16rem] sm:max-w-[18rem] lg:max-w-[22rem] mx-auto lg:ml-auto">
+                <source srcSet="/landing/printer-cobrify.webp" type="image/webp" />
+                <img src="/landing/printer-cobrify.png" alt="Impresora térmica Cobrify imprimiendo una factura electrónica con QR" className="block w-full" style={{ filter: 'drop-shadow(0 28px 50px rgba(10,37,64,.3))' }} />
+              </picture>
             </div>
           </div>
 
