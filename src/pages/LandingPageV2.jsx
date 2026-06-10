@@ -20,6 +20,25 @@ const RUBROS = [
   'Hoteles', 'Veterinarias', 'Pollerías', 'Ópticas', 'Licorerías', 'Librerías',
 ]
 
+// Mockup de teléfono (marco titanio + isla + reflejo) con una captura como pantalla.
+// `width` controla el tamaño; la isla escala proporcional. Reutilizado para Play Store y App Store.
+function PhoneMock({ src, alt, width = 210 }) {
+  const island = Math.round(width * 0.32)
+  return (
+    <div className="relative" style={{ width }}>
+      <div className="relative" style={{ borderRadius: '2.6rem', padding: '2px', background: 'linear-gradient(135deg,#5b5e66 0%,#23262d 18%,#0c0d11 50%,#1a1c21 78%,#3a3d44 100%)', boxShadow: '0 40px 70px -24px rgba(10,37,64,.55)' }}>
+        <div style={{ background: '#050608', borderRadius: '2.5rem', padding: '5px' }}>
+          <div className="relative overflow-hidden" style={{ borderRadius: '2.15rem' }}>
+            <img src={src} alt={alt} loading="lazy" className="block w-full" />
+            <div className="absolute left-1/2" style={{ top: '8px', transform: 'translateX(-50%)', width: island, height: Math.round(island * 0.28), borderRadius: '999px', background: '#050608' }} />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,0) 28%)' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LandingPageV2() {
   // Reveal discreto al hacer scroll (se desactiva con prefers-reduced-motion)
   useEffect(() => {
@@ -787,26 +806,14 @@ export default function LandingPageV2() {
                 </a>
               </div>
             </div>
-            <div className="lp3r flex justify-center" style={{ transitionDelay: '.12s' }}>
-              <div className="relative w-[256px]">
-                {/* Marco metálico (titanio) con la captura del Play Store */}
-                <div className="relative" style={{ borderRadius: '3rem', padding: '2px', background: 'linear-gradient(135deg,#5b5e66 0%,#23262d 18%,#0c0d11 50%,#1a1c21 78%,#3a3d44 100%)', boxShadow: '0 50px 90px -28px rgba(10,37,64,.5)' }}>
-                  {/* Botones laterales */}
-                  <span className="absolute" style={{ left: '-2px', top: '96px', width: '3px', height: '26px', borderRadius: '4px', background: 'linear-gradient(90deg,#6a6d76,#1f2228)' }} />
-                  <span className="absolute" style={{ left: '-2px', top: '138px', width: '3px', height: '46px', borderRadius: '4px', background: 'linear-gradient(90deg,#6a6d76,#1f2228)' }} />
-                  <span className="absolute" style={{ left: '-2px', top: '196px', width: '3px', height: '46px', borderRadius: '4px', background: 'linear-gradient(90deg,#6a6d76,#1f2228)' }} />
-                  <span className="absolute" style={{ right: '-2px', top: '156px', width: '3px', height: '66px', borderRadius: '4px', background: 'linear-gradient(270deg,#6a6d76,#1f2228)' }} />
-                  {/* Bisel negro + pantalla */}
-                  <div style={{ background: '#050608', borderRadius: '2.9rem', padding: '5px' }}>
-                    <div className="relative overflow-hidden" style={{ borderRadius: '2.55rem' }}>
-                      <img src="/landing/app-playstore.jpg" alt="Cobrify Perú en Google Play — 4.9 estrellas, 500+ descargas" loading="lazy" className="block w-full" />
-                      {/* Isla dinámica */}
-                      <div className="absolute left-1/2" style={{ top: '9px', transform: 'translateX(-50%)', width: '82px', height: '23px', borderRadius: '999px', background: '#050608' }} />
-                      {/* Reflejo de vidrio */}
-                      <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,0) 28%)' }} />
-                    </div>
-                  </div>
-                </div>
+            <div className="lp3r flex justify-center items-center" style={{ transitionDelay: '.12s' }}>
+              {/* Play Store — atrás */}
+              <div style={{ transform: 'rotate(-5deg)', zIndex: 1 }}>
+                <PhoneMock src="/landing/app-playstore.jpg" alt="Cobrify Perú en Google Play — 4.9★, 500+ descargas" width={194} />
+              </div>
+              {/* App Store — adelante */}
+              <div style={{ transform: 'rotate(4deg)', zIndex: 2, marginLeft: '-70px', marginTop: '26px' }}>
+                <PhoneMock src="/landing/app-appstore.jpg" alt="Cobrify Perú en App Store — 5.0★" width={206} />
               </div>
             </div>
           </div>
