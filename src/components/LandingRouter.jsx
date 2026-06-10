@@ -4,7 +4,7 @@ import { getResellerByHostname, getResellerBranding, DEFAULT_BRANDING } from '@/
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import LandingPage from '@/pages/LandingPage'
+import LandingPageV2 from '@/pages/LandingPageV2'
 import ResellerLandingPage from '@/pages/ResellerLandingPage'
 import CatalogoPublico from '@/pages/CatalogoPublico'
 import { Loader2 } from 'lucide-react'
@@ -210,5 +210,5 @@ export default function LandingRouter() {
   }
 
   // Si no hay reseller ni catálogo, mostrar landing de Cobrify
-  return <LandingPage />
+  return <LandingPageV2 />
 }
