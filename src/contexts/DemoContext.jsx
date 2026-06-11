@@ -1515,6 +1515,33 @@ const generateDemoData = () => {
         total: 180.00,
       },
     ],
+    // Historial de producción (armado/ensamblado de productos).
+    productions: [
+      {
+        id: 'prd1', productId: '12', productName: 'Kit Manicure Profesional', quantity: 10,
+        mode: 'manual', warehouseId: '3', totalCost: 600.00,
+        notes: 'Armado de kits para campaña de belleza.',
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000),
+      },
+      {
+        id: 'prd2', productId: '11', productName: 'Sérum Vitamina C', quantity: 20,
+        mode: 'manual', warehouseId: '3', totalCost: 900.00,
+        notes: 'Reposición de stock.',
+        createdAt: new Date(today.getTime() - 5 * 24 * 60 * 60000),
+      },
+      {
+        id: 'prd3', productId: '5', productName: 'Crema Hidratante Facial', quantity: 15,
+        mode: 'manual', warehouseId: '3', totalCost: 675.00,
+        notes: '',
+        createdAt: new Date(today.getTime() - 8 * 24 * 60 * 60000),
+      },
+      {
+        id: 'prd4', productId: '10', productName: 'Mascarilla Facial', quantity: 30,
+        mode: 'manual', warehouseId: '1', totalCost: 450.00,
+        notes: 'Producción para pedido mayorista.',
+        createdAt: new Date(today.getTime() - 12 * 24 * 60 * 60000),
+      },
+    ],
   }
 }
 

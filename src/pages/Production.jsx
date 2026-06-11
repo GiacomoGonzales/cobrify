@@ -29,7 +29,7 @@ import { getRecipeByProductId } from '@/services/recipeService'
 import { getProductions, executeRecipeProduction, executeManualProduction, checkProductionReadiness, deleteProduction } from '@/services/productionService'
 
 export default function Production() {
-  const { user, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   // Estado principal
@@ -73,6 +73,15 @@ export default function Production() {
   }, [user])
 
   const loadData = async () => {
+    // En modo demo no hay Firestore: usar los datos de ejemplo.
+    if (isDemoMode) {
+      setProducts(demoData?.products || [])
+      setWarehouses(demoData?.warehouses || [])
+      setProductions(demoData?.productions || [])
+      setBranches([])
+      setIsLoading(false)
+      return
+    }
     if (!user?.uid) return
     setIsLoading(true)
     try {
@@ -401,6 +410,14 @@ export default function Production() {
 
   const handleDeleteProduction = async (reverseStock = false) => {
     if (!productionToDelete) return
+    // En demo, eliminar solo en memoria.
+    if (isDemoMode) {
+      setProductions(prev => prev.filter(p => p.id !== productionToDelete.id))
+      toast.success('Registro de producción eliminado')
+      setIsDeleting(false)
+      setProductionToDelete(null)
+      return
+    }
     setIsDeleting(true)
     try {
       const businessId = getBusinessId()

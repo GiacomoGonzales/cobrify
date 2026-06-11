@@ -834,6 +834,39 @@ const generateRestaurantDemoData = () => {
         createdAt: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7),
       },
     ],
+    // Historial de producción de cocina (preparación de platos con receta).
+    productions: [
+      {
+        id: 'prd1', productId: '2', productName: 'Lomo Saltado', quantity: 25,
+        mode: 'recipe', warehouseId: 'wh1', totalCost: 312.50,
+        notes: 'Preparación para el almuerzo.',
+        createdAt: new Date(today.getTime() - 5 * 60 * 60000),
+      },
+      {
+        id: 'prd2', productId: '1', productName: 'Ceviche de Pescado', quantity: 18,
+        mode: 'recipe', warehouseId: 'wh2', totalCost: 270.00,
+        notes: 'Pescado fresco del día.',
+        createdAt: new Date(today.getTime() - 7 * 60 * 60000),
+      },
+      {
+        id: 'prd3', productId: '3', productName: 'Arroz con Pollo', quantity: 20,
+        mode: 'recipe', warehouseId: 'wh1', totalCost: 200.00,
+        notes: '',
+        createdAt: new Date(today.getTime() - 1 * 24 * 60 * 60000),
+      },
+      {
+        id: 'prd4', productId: '5', productName: 'Chicha Morada', quantity: 40,
+        mode: 'recipe', warehouseId: 'wh1', totalCost: 120.00,
+        notes: 'Jarra grande para el día.',
+        createdAt: new Date(today.getTime() - 1 * 24 * 60 * 60000),
+      },
+      {
+        id: 'prd5', productId: '7', productName: 'Suspiro Limeño', quantity: 15,
+        mode: 'manual', warehouseId: 'wh2', totalCost: 90.00,
+        notes: 'Postres del día.',
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000),
+      },
+    ],
   }
 }
 
