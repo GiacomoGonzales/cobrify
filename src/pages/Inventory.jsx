@@ -1059,7 +1059,11 @@ export default function Inventory() {
     }
 
     // Lote/vencimiento y series (solo productos sin variantes que los manejan)
-    const tracksBatch = productionProduct.trackExpiration && !productionProduct.hasVariants
+    // El lote/vencimiento solo aplica si el control de lotes está habilitado globalmente
+    // (farmacia o la preferencia "Control de Lotes y Vencimientos"); si está desactivado,
+    // no se exige aunque el producto tenga trackExpiration marcado de antes.
+    const batchControlEnabled = businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase
+    const tracksBatch = batchControlEnabled && productionProduct.trackExpiration && !productionProduct.hasVariants
     const tracksSerials = productionProduct.trackSerials && !productionProduct.hasVariants
 
     if (tracksBatch) {
@@ -4468,8 +4472,8 @@ export default function Inventory() {
                 placeholder="Ej: 10"
               />
 
-              {/* Lote y vencimiento (productos con lote, sin variantes) */}
-              {productionProduct?.trackExpiration && !productionProduct?.hasVariants && (
+              {/* Lote y vencimiento (productos con lote, sin variantes; solo si el control de lotes está habilitado) */}
+              {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && productionProduct?.trackExpiration && !productionProduct?.hasVariants && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Input
                     label="Lote"
