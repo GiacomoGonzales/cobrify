@@ -3885,7 +3885,7 @@ export default function Products() {
             {optionsMenuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-60 max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                   {/* Datos */}
                   <button
                     onClick={() => { setOptionsMenuOpen(false); setIsImportModalOpen(true) }}
