@@ -834,6 +834,26 @@ const generateRestaurantDemoData = () => {
         createdAt: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7),
       },
     ],
+    // Personal y asistencia
+    employees: [
+      { id: 'remp1', uid: 'remp1', displayName: 'Lucía Torres', email: 'lucia@restaurantedemo.com', department: 'Cocina', jobTitle: 'Chef Principal', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'remp2', uid: 'remp2', displayName: 'Juan Ríos', email: 'juan@restaurantedemo.com', department: 'Salón', jobTitle: 'Mozo', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'remp3', uid: 'remp3', displayName: 'Sofía Vargas', email: 'sofia@restaurantedemo.com', department: 'Caja', jobTitle: 'Cajera', hrStatus: 'active', employmentType: 'part_time' },
+      { id: 'remp4', uid: 'remp4', displayName: 'Miguel Chávez', email: 'miguel@restaurantedemo.com', department: 'Cocina', jobTitle: 'Ayudante de Cocina', hrStatus: 'active', employmentType: 'full_time' },
+    ],
+    attendanceRecords: [
+      { id: 'ratt1', userId: 'remp1', userName: 'Lucía Torres', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt2', userId: 'remp2', userName: 'Juan Ríos', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 11, 30), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt3', userId: 'remp3', userName: 'Sofía Vargas', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 11, 45), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt4', userId: 'remp1', userName: 'Lucía Torres', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 9, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt5', userId: 'remp1', userName: 'Lucía Torres', branchId: 'main', branchName: 'Restaurante Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 22, 15), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt6', userId: 'remp2', userName: 'Juan Ríos', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 11, 30), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt7', userId: 'remp2', userName: 'Juan Ríos', branchId: 'main', branchName: 'Restaurante Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 22, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt8', userId: 'remp4', userName: 'Miguel Chávez', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 8, 50), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt9', userId: 'remp4', userName: 'Miguel Chávez', branchId: 'main', branchName: 'Restaurante Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 21, 45), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt10', userId: 'remp3', userName: 'Sofía Vargas', branchId: 'main', branchName: 'Restaurante Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 11, 40), approvalStatus: 'approved', notes: '' },
+      { id: 'ratt11', userId: 'remp3', userName: 'Sofía Vargas', branchId: 'main', branchName: 'Restaurante Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 21, 30), approvalStatus: 'approved', notes: '' },
+    ],
     // Historial de producción de cocina (preparación de platos con receta).
     productions: [
       {

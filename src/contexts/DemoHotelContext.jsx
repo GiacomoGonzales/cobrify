@@ -306,6 +306,23 @@ const generateHotelDemoData = () => {
         createdAt: new Date(2024, 0, 1),
       },
     ],
+    // Personal y asistencia
+    employees: [
+      { id: 'hemp1', uid: 'hemp1', displayName: 'Valeria Quispe', email: 'valeria@hoteldemo.com', department: 'Recepción', jobTitle: 'Recepcionista', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'hemp2', uid: 'hemp2', displayName: 'Roberto Ccama', email: 'roberto@hoteldemo.com', department: 'Housekeeping', jobTitle: 'Camarero', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'hemp3', uid: 'hemp3', displayName: 'Paola Huillca', email: 'paola@hoteldemo.com', department: 'Restaurante', jobTitle: 'Mesera', hrStatus: 'active', employmentType: 'part_time' },
+    ],
+    attendanceRecords: [
+      { id: 'hatt1', userId: 'hemp1', userName: 'Valeria Quispe', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt2', userId: 'hemp2', userName: 'Roberto Ccama', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 30), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt3', userId: 'hemp3', userName: 'Paola Huillca', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 45), approvalStatus: 'pending', notes: '' },
+      { id: 'hatt4', userId: 'hemp1', userName: 'Valeria Quispe', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 7, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt5', userId: 'hemp1', userName: 'Valeria Quispe', branchId: 'main', branchName: 'Hotel Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 15, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt6', userId: 'hemp2', userName: 'Roberto Ccama', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 7, 28), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt7', userId: 'hemp2', userName: 'Roberto Ccama', branchId: 'main', branchName: 'Hotel Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 15, 10), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt8', userId: 'hemp3', userName: 'Paola Huillca', branchId: 'main', branchName: 'Hotel Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 7, 50), approvalStatus: 'approved', notes: '' },
+      { id: 'hatt9', userId: 'hemp3', userName: 'Paola Huillca', branchId: 'main', branchName: 'Hotel Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 15, 0), approvalStatus: 'approved', notes: '' },
+    ],
     suppliers: [
       {
         id: 'sup1',

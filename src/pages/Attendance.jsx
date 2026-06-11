@@ -124,7 +124,7 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
   const toast = useToast()
 
@@ -221,6 +221,18 @@ export default function Attendance() {
   }, [activeTab, employeesLoaded, canManage])
 
   const loadInitial = async () => {
+    if (isDemoMode) {
+      const mainBranch = { id: 'main', name: demoData?.business?.businessName || 'Sucursal Principal', address: demoData?.business?.address || '', attendance: {}, isMain: true }
+      setBranches([mainBranch])
+      setSubUsers(demoData?.employees || [])
+      setEmployees(demoData?.employees || [])
+      setEmployeesLoaded(true)
+      setMyWeekRecords(demoData?.attendanceRecords || [])
+      setRecords(demoData?.attendanceRecords || [])
+      setLastMark(demoData?.attendanceRecords?.[0] || null)
+      setLoading(false)
+      return
+    }
     if (!businessId) return
     setLoading(true)
     try {
@@ -266,6 +278,7 @@ export default function Attendance() {
   // Carga la lista de empleados (sub-usuarios con datos de personal).
   // Se hace lazy: solo cuando el owner abre la tab "Personal".
   const loadEmployees = async () => {
+    if (isDemoMode) return
     if (!businessId) return
     try {
       const res = await getEmployees(businessId)
@@ -280,6 +293,7 @@ export default function Attendance() {
 
   // Recarga branches + principal tras cualquier cambio (toggle, regenerar, geofence)
   const reloadBranches = async () => {
+    if (isDemoMode) return
     const [branchesRes, settingsRes] = await Promise.all([
       getBranches(businessId),
       getCompanySettings(businessId),
@@ -296,6 +310,7 @@ export default function Attendance() {
   }
 
   const loadRecords = async (filters = {}) => {
+    if (isDemoMode) return
     if (!businessId) return
     const res = await getAttendanceRecords(businessId, filters)
     if (res.success) setRecords(res.data || [])

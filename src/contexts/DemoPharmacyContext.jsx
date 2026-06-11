@@ -1405,7 +1405,7 @@ const generatePharmacyDemoData = () => {
         subtotal: 42.00, total: 42.00,
       },
       {
-        id: 'ford7', orderNumber: 2045, source: 'menu_digital', status: 'cancelled',
+        id: 'ford7ph', orderNumber: 2045, source: 'menu_digital', status: 'cancelled',
         createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000),
         customerName: 'Andrés Campos', customerPhone: '51955111333', customerEmail: '',
         customerAddress: 'Jr. Ica 540, Cercado de Lima',
@@ -1415,6 +1415,23 @@ const generatePharmacyDemoData = () => {
         ],
         subtotal: 25.00, total: 25.00,
       },
+    ],
+    // Personal y asistencia
+    employees: [
+      { id: 'pemp1', uid: 'pemp1', displayName: 'Dra. Carla Mendoza', email: 'carla@farmaciademo.com', department: 'Farmacia', jobTitle: 'Química Farmacéutica', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'pemp2', uid: 'pemp2', displayName: 'Jorge Salinas', email: 'jorge@farmaciademo.com', department: 'Ventas', jobTitle: 'Dependiente de Farmacia', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'pemp3', uid: 'pemp3', displayName: 'Ana Huanca', email: 'ana@farmaciademo.com', department: 'Caja', jobTitle: 'Cajera', hrStatus: 'active', employmentType: 'part_time' },
+    ],
+    attendanceRecords: [
+      { id: 'patt1', userId: 'pemp1', userName: 'Dra. Carla Mendoza', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'patt2', userId: 'pemp2', userName: 'Jorge Salinas', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'patt3', userId: 'pemp3', userName: 'Ana Huanca', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 0), approvalStatus: 'pending', notes: '' },
+      { id: 'patt4', userId: 'pemp1', userName: 'Dra. Carla Mendoza', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 8, 2), approvalStatus: 'approved', notes: '' },
+      { id: 'patt5', userId: 'pemp1', userName: 'Dra. Carla Mendoza', branchId: 'main', branchName: 'Farmacia Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 18, 10), approvalStatus: 'approved', notes: '' },
+      { id: 'patt6', userId: 'pemp2', userName: 'Jorge Salinas', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 8, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'patt7', userId: 'pemp2', userName: 'Jorge Salinas', branchId: 'main', branchName: 'Farmacia Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 18, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'patt8', userId: 'pemp3', userName: 'Ana Huanca', branchId: 'main', branchName: 'Farmacia Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 9, 10), approvalStatus: 'approved', notes: '' },
+      { id: 'patt9', userId: 'pemp3', userName: 'Ana Huanca', branchId: 'main', branchName: 'Farmacia Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 14, 30), approvalStatus: 'approved', notes: '' },
     ],
   }
 }

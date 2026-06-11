@@ -1376,6 +1376,23 @@ const generateVeterinaryDemoData = () => {
         subtotal: 65.00, total: 65.00,
       },
     ],
+    // Personal y asistencia
+    employees: [
+      { id: 'vemp1', uid: 'vemp1', displayName: 'Dr. Andrés Palomino', email: 'andres@veterinariademo.com', department: 'Clínica', jobTitle: 'Médico Veterinario', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'vemp2', uid: 'vemp2', displayName: 'Karina Flores', email: 'karina@veterinariademo.com', department: 'Tienda', jobTitle: 'Asistente de Tienda', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'vemp3', uid: 'vemp3', displayName: 'Luis Condori', email: 'luis@veterinariademo.com', department: 'Clínica', jobTitle: 'Auxiliar Veterinario', hrStatus: 'active', employmentType: 'part_time' },
+    ],
+    attendanceRecords: [
+      { id: 'vatt1', userId: 'vemp1', userName: 'Dr. Andrés Palomino', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt2', userId: 'vemp2', userName: 'Karina Flores', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt3', userId: 'vemp3', userName: 'Luis Condori', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 20), approvalStatus: 'pending', notes: '' },
+      { id: 'vatt4', userId: 'vemp1', userName: 'Dr. Andrés Palomino', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 9, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt5', userId: 'vemp1', userName: 'Dr. Andrés Palomino', branchId: 'main', branchName: 'Veterinaria Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 19, 0), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt6', userId: 'vemp2', userName: 'Karina Flores', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 9, 3), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt7', userId: 'vemp2', userName: 'Karina Flores', branchId: 'main', branchName: 'Veterinaria Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 18, 55), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt8', userId: 'vemp3', userName: 'Luis Condori', branchId: 'main', branchName: 'Veterinaria Demo', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 9, 15), approvalStatus: 'approved', notes: '' },
+      { id: 'vatt9', userId: 'vemp3', userName: 'Luis Condori', branchId: 'main', branchName: 'Veterinaria Demo', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 14, 0), approvalStatus: 'approved', notes: '' },
+    ],
   }
 }
 

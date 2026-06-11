@@ -1515,6 +1515,33 @@ const generateDemoData = () => {
         total: 180.00,
       },
     ],
+    // Personal y asistencia
+    employees: [
+      { id: 'emp1', uid: 'emp1', displayName: 'María López', email: 'maria.lopez@empresademo.com', department: 'Ventas', jobTitle: 'Ejecutiva de Ventas', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'emp2', uid: 'emp2', displayName: 'Carlos Mamani', email: 'carlos.mamani@empresademo.com', department: 'Almacén', jobTitle: 'Encargado de Almacén', hrStatus: 'active', employmentType: 'full_time' },
+      { id: 'emp3', uid: 'emp3', displayName: 'Rosa Quispe', email: 'rosa.quispe@empresademo.com', department: 'Administración', jobTitle: 'Asistente Administrativa', hrStatus: 'active', employmentType: 'part_time' },
+      { id: 'emp4', uid: 'emp4', displayName: 'Pedro Sánchez', email: 'pedro.sanchez@empresademo.com', department: 'Gerencia', jobTitle: 'Gerente General', hrStatus: 'active', employmentType: 'full_time' },
+    ],
+    attendanceRecords: [
+      // Hoy
+      { id: 'att1', userId: 'emp1', userName: 'María López', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'att2', userId: 'emp2', userName: 'Carlos Mamani', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 58), approvalStatus: 'approved', notes: '' },
+      { id: 'att3', userId: 'emp3', userName: 'Rosa Quispe', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 10), approvalStatus: 'pending', notes: '' },
+      // Ayer
+      { id: 'att4', userId: 'emp1', userName: 'María López', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 8, 2), approvalStatus: 'approved', notes: '' },
+      { id: 'att5', userId: 'emp1', userName: 'María López', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 17, 15), approvalStatus: 'approved', notes: '' },
+      { id: 'att6', userId: 'emp2', userName: 'Carlos Mamani', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 7, 55), approvalStatus: 'approved', notes: '' },
+      { id: 'att7', userId: 'emp2', userName: 'Carlos Mamani', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 17, 5), approvalStatus: 'approved', notes: '' },
+      { id: 'att8', userId: 'emp3', userName: 'Rosa Quispe', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 9, 3), approvalStatus: 'approved', notes: '' },
+      { id: 'att9', userId: 'emp3', userName: 'Rosa Quispe', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 14, 30), approvalStatus: 'approved', notes: '' },
+      // Hace 2 días
+      { id: 'att10', userId: 'emp1', userName: 'María López', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 8, 8), approvalStatus: 'approved', notes: '' },
+      { id: 'att11', userId: 'emp1', userName: 'María López', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 17, 10), approvalStatus: 'approved', notes: '' },
+      { id: 'att12', userId: 'emp4', userName: 'Pedro Sánchez', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 9, 30), approvalStatus: 'manual', notes: 'Ingreso desde reunión externa' },
+      { id: 'att13', userId: 'emp4', userName: 'Pedro Sánchez', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 18, 0), approvalStatus: 'manual', notes: '' },
+      { id: 'att14', userId: 'emp2', userName: 'Carlos Mamani', branchId: 'main', branchName: 'Sucursal Principal', type: 'in', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 7, 50), approvalStatus: 'approved', notes: '' },
+      { id: 'att15', userId: 'emp2', userName: 'Carlos Mamani', branchId: 'main', branchName: 'Sucursal Principal', type: 'out', timestamp: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 17, 20), approvalStatus: 'approved', notes: '' },
+    ],
     // Historial de producción (armado/ensamblado de productos).
     productions: [
       {
