@@ -1332,6 +1332,189 @@ const generateDemoData = () => {
         amount: 380.00,
       },
     ],
+    // Pedidos online (catálogo / menú digital). Cubren todos los estados para
+    // que el demo de "Pedidos Online" se vea poblado: activos (recibidos,
+    // aceptados, listos) e historial (completados, cancelados).
+    onlineOrders: [
+      {
+        id: 'ord1',
+        orderNumber: 1042,
+        source: 'menu_digital',
+        status: 'pending',
+        createdAt: new Date(today.getTime() - 8 * 60000), // hace 8 min
+        customerName: 'Ana Torres',
+        customerPhone: '51987111222',
+        customerEmail: 'ana.torres@gmail.com',
+        customerAddress: 'Av. Pardo 567, Dpto 402, Miraflores',
+        customerCoords: { lat: -12.1191, lng: -77.0306 },
+        notes: 'Por favor llamar antes de entregar.',
+        items: [
+          { productId: '11', name: 'Sérum Vitamina C', price: 95.00, quantity: 1, total: 95.00 },
+          { productId: '5', name: 'Crema Hidratante Facial', price: 85.00, quantity: 1, total: 85.00 },
+        ],
+        subtotal: 180.00,
+        total: 180.00,
+      },
+      {
+        id: 'ord2',
+        orderNumber: 1041,
+        source: 'menu_digital',
+        status: 'pending',
+        createdAt: new Date(today.getTime() - 45 * 60000), // hace 45 min (urgente)
+        customerName: 'Carlos Mendoza',
+        customerPhone: '51987333444',
+        customerEmail: '',
+        customerAddress: 'Calle Las Begonias 210, San Isidro',
+        notes: '',
+        items: [
+          { productId: '7', name: 'Audífonos Bluetooth', price: 250.00, quantity: 1, total: 250.00 },
+          { productId: '2', name: 'Mouse Inalámbrico', price: 45.00, quantity: 1, total: 45.00 },
+        ],
+        subtotal: 295.00,
+        total: 295.00,
+      },
+      {
+        id: 'ord3',
+        orderNumber: 1040,
+        source: 'menu_digital',
+        status: 'pending',
+        createdAt: new Date(today.getTime() - 130 * 60000), // hace ~2 h
+        customerName: 'Lucía Ramos',
+        customerPhone: '51986555888',
+        customerEmail: 'lucia.ramos@hotmail.com',
+        customerAddress: 'Jr. Huánuco 145, Lince',
+        notes: 'Pago contra entrega en efectivo.',
+        items: [
+          { productId: '10', name: 'Mascarilla Facial', price: 35.00, quantity: 2, total: 70.00 },
+          { productId: '12', name: 'Kit Manicure Profesional', price: 120.00, quantity: 1, total: 120.00 },
+        ],
+        subtotal: 190.00,
+        total: 190.00,
+      },
+      {
+        id: 'ord4',
+        orderNumber: 1039,
+        source: 'menu_digital',
+        status: 'accepted',
+        createdAt: new Date(today.getTime() - 190 * 60000), // hace ~3 h
+        customerName: 'Jorge Salazar',
+        customerPhone: '51999666111',
+        customerEmail: 'jsalazar@empresa.pe',
+        customerAddress: 'Av. Javier Prado Este 4200, Surco',
+        notes: 'Facturar a RUC 20512345678.',
+        items: [
+          { productId: '4', name: 'Monitor 24"', price: 650.00, quantity: 1, total: 650.00 },
+          { productId: '3', name: 'Teclado Mecánico', price: 180.00, quantity: 1, total: 180.00 },
+        ],
+        subtotal: 830.00,
+        total: 830.00,
+      },
+      {
+        id: 'ord5',
+        orderNumber: 1038,
+        source: 'menu_digital',
+        status: 'accepted',
+        createdAt: new Date(today.getTime() - 320 * 60000), // hace ~5 h
+        customerName: 'Diana Flores',
+        customerPhone: '51988777333',
+        customerEmail: 'diana.flores@gmail.com',
+        customerAddress: 'Calle Berlín 380, Miraflores',
+        notes: '',
+        items: [
+          { productId: '8', name: 'Webcam HD 1080p', price: 180.00, quantity: 1, total: 180.00 },
+          { productId: '9', name: 'Hub USB 7 puertos', price: 85.00, quantity: 1, total: 85.00 },
+        ],
+        subtotal: 265.00,
+        total: 265.00,
+      },
+      {
+        id: 'ord6',
+        orderNumber: 1037,
+        source: 'menu_digital',
+        status: 'ready',
+        createdAt: new Date(today.getTime() - 380 * 60000), // hace ~6 h
+        customerName: 'Pedro Castillo',
+        customerPhone: '51977222999',
+        customerEmail: 'pcastillo@outlook.com',
+        customerAddress: 'Av. La Marina 2100, San Miguel',
+        notes: 'Recoge en tienda.',
+        items: [
+          { productId: '1', name: 'Laptop HP 15"', price: 2500.00, quantity: 1, total: 2500.00 },
+        ],
+        subtotal: 2500.00,
+        total: 2500.00,
+      },
+      {
+        id: 'ord7',
+        orderNumber: 1036,
+        source: 'menu_digital',
+        status: 'completed',
+        createdAt: new Date(today.getTime() - 1 * 24 * 60 * 60000), // ayer
+        customerName: 'María Fernández',
+        customerPhone: '51987654321',
+        customerEmail: 'maria.fernandez@gmail.com',
+        customerAddress: 'Av. Benavides 1500, Surco',
+        notes: '',
+        items: [
+          { productId: '6', name: 'Aceite Esencial Lavanda', price: 65.00, quantity: 2, total: 130.00 },
+        ],
+        subtotal: 130.00,
+        total: 130.00,
+      },
+      {
+        id: 'ord8',
+        orderNumber: 1035,
+        source: 'menu_digital',
+        status: 'completed',
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000), // hace 2 días
+        customerName: 'Roberto Díaz',
+        customerPhone: '51966111777',
+        customerEmail: '',
+        customerAddress: 'Jr. Lampa 850, Cercado de Lima',
+        notes: '',
+        items: [
+          { productId: '7', name: 'Audífonos Bluetooth', price: 250.00, quantity: 1, total: 250.00 },
+          { productId: '2', name: 'Mouse Inalámbrico', price: 45.00, quantity: 2, total: 90.00 },
+        ],
+        subtotal: 340.00,
+        total: 340.00,
+      },
+      {
+        id: 'ord9',
+        orderNumber: 1034,
+        source: 'menu_digital',
+        status: 'completed',
+        createdAt: new Date(today.getTime() - 3 * 24 * 60 * 60000), // hace 3 días
+        // Mismo teléfono que el pedido 1042 (Ana Torres) → cliente recurrente
+        customerName: 'Ana Torres',
+        customerPhone: '51987111222',
+        customerEmail: 'ana.torres@gmail.com',
+        customerAddress: 'Av. Pardo 567, Dpto 402, Miraflores',
+        notes: '',
+        items: [
+          { productId: '5', name: 'Crema Hidratante Facial', price: 85.00, quantity: 1, total: 85.00 },
+        ],
+        subtotal: 85.00,
+        total: 85.00,
+      },
+      {
+        id: 'ord10',
+        orderNumber: 1033,
+        source: 'menu_digital',
+        status: 'cancelled',
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000), // hace 2 días
+        customerName: 'Luis Vargas',
+        customerPhone: '51955888222',
+        customerEmail: '',
+        customerAddress: 'Av. Universitaria 1800, Los Olivos',
+        notes: 'Cancelado por el cliente (demora en el delivery).',
+        items: [
+          { productId: '3', name: 'Teclado Mecánico', price: 180.00, quantity: 1, total: 180.00 },
+        ],
+        subtotal: 180.00,
+        total: 180.00,
+      },
+    ],
   }
 }
 

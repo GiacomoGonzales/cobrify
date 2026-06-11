@@ -146,7 +146,7 @@ const relativeDate = (ts) => {
 const ordinal = (n) => `${n}°`
 
 export default function OnlineOrders() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const appNavigate = useAppNavigate()
   const toast = useToast()
 
@@ -180,13 +180,18 @@ export default function OnlineOrders() {
 
   // Cargar datos del negocio para header del ticket/PDF
   useEffect(() => {
+    // En demo no hay Firestore: usar los datos del negocio de ejemplo.
+    if (isDemoMode) {
+      setCompanySettings(demoData?.business || null)
+      return
+    }
     if (!user?.uid) return
     const businessId = getBusinessId()
     if (!businessId) return
     getCompanySettings(businessId).then(result => {
       if (result.success) setCompanySettings(result.data)
     })
-  }, [user?.uid, getBusinessId])
+  }, [user?.uid, getBusinessId, isDemoMode, demoData])
 
   // Hook de impresión web
   const handleWebPrint = useReactToPrint({
@@ -272,8 +277,18 @@ export default function OnlineOrders() {
     }
   }
 
-  // Listener en tiempo real
+  // Modo demo: cargar los pedidos de ejemplo una sola vez (depende solo de
+  // demoData, que es estable). No se mezcla con el listener para que los
+  // cambios de estado locales no se pisen en cada render.
   useEffect(() => {
+    if (!isDemoMode) return
+    setOrders(demoData?.onlineOrders || [])
+    setLoading(false)
+  }, [isDemoMode, demoData])
+
+  // Listener en tiempo real (solo fuera de demo)
+  useEffect(() => {
+    if (isDemoMode) return
     if (!user?.uid) return
     const businessId = getBusinessId()
     if (!businessId) return
@@ -297,7 +312,7 @@ export default function OnlineOrders() {
     })
 
     return () => unsub()
-  }, [user?.uid, getBusinessId])
+  }, [user?.uid, getBusinessId, isDemoMode])
 
   // Mapa cliente → lista de sus pedidos (excluye cancelados para no inflar el contador)
   // Los pedidos vienen ordenados de más recientes a más antiguos (por el listener),
@@ -410,6 +425,14 @@ export default function OnlineOrders() {
   }
 
   const handleChangeStatus = async (order, newStatus, successMessage) => {
+    // En demo, actualizar el estado solo en memoria (sin Firestore) para que la
+    // interacción se sienta real sin escribir nada.
+    if (isDemoMode) {
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o))
+      toast.success(successMessage || 'Pedido actualizado')
+      return
+    }
+
     setUpdatingOrderId(order.id)
     try {
       const result = await updateOrderStatus(getBusinessId(), order.id, newStatus)
