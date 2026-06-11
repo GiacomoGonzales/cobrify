@@ -625,10 +625,6 @@ export default function Products() {
   }
 
   const openCreateModal = () => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setEditingProduct(null)
     setNoStock(false)
     setAllowDecimalQuantity(false)
@@ -992,6 +988,11 @@ export default function Products() {
   }
 
   const onSubmit = async data => {
+    if (isDemoMode) {
+      toast.info('En modo demo los cambios no se guardan')
+      closeModal()
+      return
+    }
     if (!user?.uid) return
 
     // Establecer isSaving INMEDIATAMENTE para prevenir múltiples clicks
