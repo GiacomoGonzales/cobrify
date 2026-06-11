@@ -1332,6 +1332,90 @@ const generatePharmacyDemoData = () => {
         createdAt: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 20),
       },
     ],
+    // Pedidos online (delivery de farmacia). Cubren todos los estados.
+    onlineOrders: [
+      {
+        id: 'ford1', orderNumber: 2051, source: 'menu_digital', status: 'pending',
+        createdAt: new Date(today.getTime() - 12 * 60000),
+        customerName: 'Rosa Quispe', customerPhone: '51987222111', customerEmail: 'rosa.q@gmail.com',
+        customerAddress: 'Av. Brasil 1450, Jesús María',
+        notes: 'Necesito la entrega antes de las 6pm.',
+        items: [
+          { productId: '4', name: 'Amoxicilina 500mg Cápsulas', price: 18.00, quantity: 2, total: 36.00 },
+          { productId: '1', name: 'Paracetamol 500mg Tabletas', price: 8.50, quantity: 1, total: 8.50 },
+        ],
+        subtotal: 44.50, total: 44.50,
+      },
+      {
+        id: 'ford2', orderNumber: 2050, source: 'menu_digital', status: 'pending',
+        createdAt: new Date(today.getTime() - 55 * 60000),
+        customerName: 'Miguel Ángel Soto', customerPhone: '51986333444', customerEmail: '',
+        customerAddress: 'Jr. Cusco 320, Cercado de Lima',
+        notes: 'Adjunto receta médica por WhatsApp.',
+        items: [
+          { productId: '5', name: 'Azitromicina 500mg Tabletas', price: 22.00, quantity: 1, total: 22.00 },
+          { productId: '7', name: 'Ambroxol Jarabe 120ml', price: 12.00, quantity: 1, total: 12.00 },
+        ],
+        subtotal: 34.00, total: 34.00,
+      },
+      {
+        id: 'ford3', orderNumber: 2049, source: 'menu_digital', status: 'accepted',
+        createdAt: new Date(today.getTime() - 180 * 60000),
+        customerName: 'Carmen Lévano', customerPhone: '51988555666', customerEmail: 'carmen.levano@hotmail.com',
+        customerAddress: 'Av. Salaverry 2100, San Isidro',
+        notes: '',
+        items: [
+          { productId: '2', name: 'Ibuprofeno 400mg Tabletas', price: 12.00, quantity: 2, total: 24.00 },
+          { productId: '3', name: 'Naproxeno 550mg Tabletas', price: 15.00, quantity: 1, total: 15.00 },
+        ],
+        subtotal: 39.00, total: 39.00,
+      },
+      {
+        id: 'ford4', orderNumber: 2048, source: 'menu_digital', status: 'ready',
+        createdAt: new Date(today.getTime() - 300 * 60000),
+        customerName: 'Julio Paredes', customerPhone: '51977888999', customerEmail: '',
+        customerAddress: 'Calle Los Pinos 180, Surquillo',
+        notes: 'Recoge en local.',
+        items: [
+          { productId: '6', name: 'Ciprofloxacino 500mg Tabletas', price: 25.00, quantity: 1, total: 25.00 },
+        ],
+        subtotal: 25.00, total: 25.00,
+      },
+      {
+        id: 'ford5', orderNumber: 2047, source: 'menu_digital', status: 'completed',
+        createdAt: new Date(today.getTime() - 1 * 24 * 60 * 60000),
+        customerName: 'Rosa Quispe', customerPhone: '51987222111', customerEmail: 'rosa.q@gmail.com',
+        customerAddress: 'Av. Brasil 1450, Jesús María',
+        notes: '',
+        items: [
+          { productId: '1', name: 'Paracetamol 500mg Tabletas', price: 8.50, quantity: 2, total: 17.00 },
+        ],
+        subtotal: 17.00, total: 17.00,
+      },
+      {
+        id: 'ford6', orderNumber: 2046, source: 'menu_digital', status: 'completed',
+        createdAt: new Date(today.getTime() - 3 * 24 * 60 * 60000),
+        customerName: 'Elena Vásquez', customerPhone: '51966444222', customerEmail: 'elena.v@gmail.com',
+        customerAddress: 'Av. Arequipa 3500, Lince',
+        notes: '',
+        items: [
+          { productId: '4', name: 'Amoxicilina 500mg Cápsulas', price: 18.00, quantity: 1, total: 18.00 },
+          { productId: '7', name: 'Ambroxol Jarabe 120ml', price: 12.00, quantity: 2, total: 24.00 },
+        ],
+        subtotal: 42.00, total: 42.00,
+      },
+      {
+        id: 'ford7', orderNumber: 2045, source: 'menu_digital', status: 'cancelled',
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60000),
+        customerName: 'Andrés Campos', customerPhone: '51955111333', customerEmail: '',
+        customerAddress: 'Jr. Ica 540, Cercado de Lima',
+        notes: 'Cancelado: producto sin receta requerida.',
+        items: [
+          { productId: '6', name: 'Ciprofloxacino 500mg Tabletas', price: 25.00, quantity: 1, total: 25.00 },
+        ],
+        subtotal: 25.00, total: 25.00,
+      },
+    ],
   }
 }
 

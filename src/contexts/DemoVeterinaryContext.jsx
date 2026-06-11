@@ -1291,6 +1291,91 @@ const generateVeterinaryDemoData = () => {
       { id: 'exp3', date: new Date(today.getFullYear(), today.getMonth(), 15), description: 'Sueldos del mes', category: 'personal', supplier: '', reference: 'PLANILLA-ENE', paymentMethod: 'transferencia', amount: 8500.00 },
       { id: 'exp4', date: new Date(today.getFullYear(), today.getMonth(), 10), description: 'Alquiler del local', category: 'servicios', supplier: 'Inmobiliaria Central', reference: 'ALQ-ENE-2025', paymentMethod: 'transferencia', amount: 4500.00 },
     ],
+    // Pedidos online de la tienda (alimentos y accesorios a domicilio).
+    onlineOrders: [
+      {
+        id: 'vord1', orderNumber: 3061, source: 'menu_digital', status: 'pending',
+        createdAt: new Date(today.getTime() - 10 * 60000),
+        customerName: 'María García', customerPhone: '51987101010', customerEmail: 'maria.garcia@gmail.com',
+        customerAddress: 'Av. Primavera 980, Surco',
+        notes: 'Tocar el timbre del 3er piso.',
+        items: [
+          { productId: '41', name: 'Alimento Húmedo Perro x 6 latas', price: 65.00, quantity: 1, total: 65.00 },
+          { productId: '35', name: 'Galletas para Perro x 500g', price: 25.00, quantity: 1, total: 25.00 },
+        ],
+        subtotal: 90.00, total: 90.00,
+      },
+      {
+        id: 'vord2', orderNumber: 3060, source: 'menu_digital', status: 'pending',
+        createdAt: new Date(today.getTime() - 50 * 60000),
+        customerName: 'Carlos Mendoza', customerPhone: '51986202020', customerEmail: '',
+        customerAddress: 'Calle Tarata 240, Miraflores',
+        notes: '',
+        items: [
+          { productId: '43', name: 'Arena para Gato 10kg', price: 45.00, quantity: 1, total: 45.00 },
+          { productId: '42', name: 'Alimento Húmedo Gato x 12 sobres', price: 48.00, quantity: 1, total: 48.00 },
+        ],
+        subtotal: 93.00, total: 93.00,
+      },
+      {
+        id: 'vord3', orderNumber: 3059, source: 'menu_digital', status: 'accepted',
+        createdAt: new Date(today.getTime() - 200 * 60000),
+        customerName: 'Ana Torres', customerPhone: '51988303030', customerEmail: 'ana.torres@gmail.com',
+        customerAddress: 'Av. La Molina 1500, La Molina',
+        notes: 'Perro grande, traer bolsa de 8kg.',
+        items: [
+          { productId: '39', name: 'Alimento Cachorro 8kg', price: 165.00, quantity: 1, total: 165.00 },
+          { productId: '36', name: 'Snacks Dentales x 7 unid', price: 28.00, quantity: 2, total: 56.00 },
+        ],
+        subtotal: 221.00, total: 221.00,
+      },
+      {
+        id: 'vord4', orderNumber: 3058, source: 'menu_digital', status: 'ready',
+        createdAt: new Date(today.getTime() - 320 * 60000),
+        customerName: 'Pedro Ruiz', customerPhone: '51977404040', customerEmail: '',
+        customerAddress: 'Jr. Áncash 410, Cercado de Lima',
+        notes: 'Recoge en local.',
+        items: [
+          { productId: '17', name: 'Shampoo Antipulgas 500ml', price: 35.00, quantity: 1, total: 35.00 },
+          { productId: '28', name: 'Rascador para Gatos', price: 75.00, quantity: 1, total: 75.00 },
+        ],
+        subtotal: 110.00, total: 110.00,
+      },
+      {
+        id: 'vord5', orderNumber: 3057, source: 'menu_digital', status: 'completed',
+        createdAt: new Date(today.getTime() - 1 * 24 * 60 * 60000),
+        customerName: 'María García', customerPhone: '51987101010', customerEmail: 'maria.garcia@gmail.com',
+        customerAddress: 'Av. Primavera 980, Surco',
+        notes: '',
+        items: [
+          { productId: '35', name: 'Galletas para Perro x 500g', price: 25.00, quantity: 2, total: 50.00 },
+        ],
+        subtotal: 50.00, total: 50.00,
+      },
+      {
+        id: 'vord6', orderNumber: 3056, source: 'menu_digital', status: 'completed',
+        createdAt: new Date(today.getTime() - 4 * 24 * 60 * 60000),
+        customerName: 'Rosa Méndez', customerPhone: '51966505050', customerEmail: 'rosa.mendez@gmail.com',
+        customerAddress: 'Av. Universitaria 2200, San Miguel',
+        notes: '',
+        items: [
+          { productId: '42', name: 'Alimento Húmedo Gato x 12 sobres', price: 48.00, quantity: 1, total: 48.00 },
+          { productId: '43', name: 'Arena para Gato 10kg', price: 45.00, quantity: 1, total: 45.00 },
+        ],
+        subtotal: 93.00, total: 93.00,
+      },
+      {
+        id: 'vord7', orderNumber: 3055, source: 'menu_digital', status: 'cancelled',
+        createdAt: new Date(today.getTime() - 3 * 24 * 60 * 60000),
+        customerName: 'Luis Fernández', customerPhone: '51955606060', customerEmail: '',
+        customerAddress: 'Calle Berlín 120, Miraflores',
+        notes: 'Cliente canceló: encontró stock más cerca.',
+        items: [
+          { productId: '41', name: 'Alimento Húmedo Perro x 6 latas', price: 65.00, quantity: 1, total: 65.00 },
+        ],
+        subtotal: 65.00, total: 65.00,
+      },
+    ],
   }
 }
 
