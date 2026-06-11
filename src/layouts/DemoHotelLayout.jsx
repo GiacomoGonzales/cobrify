@@ -38,24 +38,8 @@ export default function DemoHotelLayout() {
           style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.secondaryColor || branding.primaryColor})` }}
         />
 
-        {/* Demo Mode Banner */}
-        <div
-          className={`text-white shadow-sm z-50 flex-shrink-0 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}
-          style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.secondaryColor || branding.primaryColor})` }}
-        >
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
-            <div className="flex items-center justify-center">
-              <div className="flex items-center gap-2">
-                <div className="bg-white/20 rounded-full px-2 py-0.5 text-xs font-semibold">
-                  DEMO HOTEL
-                </div>
-                <p className="text-xs sm:text-sm">
-                  Explorando {branding.companyName} - Modo Hotel
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* El indicador de modo demo ahora vive dentro del Navbar (badge sutil),
+            no como una cinta aparte que ocupaba una fila y descuadraba el layout. */}
 
         {/* Main Content - Same as MainLayout */}
         <div className="flex flex-1 overflow-hidden">

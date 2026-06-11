@@ -8,7 +8,7 @@ import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from 
 import NotificationPanel from './NotificationPanel'
 
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, businessSettings } = useAppContext()
+  const { user, logout, subscription, isDemoMode, businessMode, businessSettings } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const { isInstallable, promptInstall } = usePWAInstall()
@@ -49,16 +49,37 @@ function Navbar() {
     return () => clearInterval(interval);
   }, [user?.uid, subscription, isDemoMode]);
 
+  // Etiqueta sutil del modo demo (el badge vive DENTRO del header, no como
+  // una cinta aparte que descuadra el layout). El modo se anexa en pantallas sm+.
+  const demoModeLabel = {
+    restaurant: 'Restaurante',
+    pharmacy: 'Farmacia',
+    hotel: 'Hotel',
+    veterinary: 'Veterinaria',
+  }[businessMode]
+
   return (
     <header className="sticky top-0 z-40 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6">
       {/* Left Side - Mobile Menu Button */}
-      <div className="flex items-center space-x-3 flex-1">
+      <div className="flex items-center space-x-3 flex-1 min-w-0">
         <button
           onClick={toggleMobileMenu}
           className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
         >
           <Menu className="w-6 h-6 text-gray-600" />
         </button>
+
+        {/* Badge de modo demo - sutil, dentro del header */}
+        {isDemoMode && (
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap"
+            title={`Estás explorando una versión de demostración${demoModeLabel ? ` (${demoModeLabel})` : ''}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: branding.primaryColor }} />
+            DEMO
+            {demoModeLabel && <span className="hidden sm:inline font-normal text-gray-400">· {demoModeLabel}</span>}
+          </span>
+        )}
       </div>
 
       {/* Right Side */}
