@@ -1773,7 +1773,16 @@ export default function Purchases() {
                   <TableBody>
                     {viewingPurchase.items?.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell>{item.productName}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-1.5">
+                            {item.productName}
+                            {item.isBonus && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
+                                Bonificación
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={item.itemType === 'ingredient' ? 'success' : 'default'} className="text-xs">
                             {item.itemType === 'ingredient' ? 'Ingrediente' : 'Producto'}
@@ -1781,10 +1790,10 @@ export default function Purchases() {
                         </TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.unitPrice, viewingPurchase?.currency)}
+                          {item.isBonus ? <span className="text-green-700 font-medium">Gratis</span> : formatCurrency(item.unitPrice, viewingPurchase?.currency)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(item.quantity * item.unitPrice, viewingPurchase?.currency)}
+                          {item.isBonus ? <span className="text-green-700">Gratis</span> : formatCurrency(item.quantity * item.unitPrice, viewingPurchase?.currency)}
                         </TableCell>
                       </TableRow>
                     ))}
