@@ -5795,24 +5795,6 @@ export default function Settings() {
                       </span>
                     </div>
                   </SettingToggle>
-
-                  <SettingToggle
-                    checked={allowCustomEmissionDate}
-                    onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
-                    title="Permitir seleccionar fecha de emisión en el POS"
-                    description={allowCustomEmissionDate
-                      ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
-                      : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
-                  >
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-blue-700 font-medium">
-                        {allowCustomEmissionDate
-                          ? 'Útil para regularizar ventas de días anteriores'
-                          : 'Emisión con fecha actual solamente'}
-                      </span>
-                    </div>
-                  </SettingToggle>
                 </div>
               </div>
 

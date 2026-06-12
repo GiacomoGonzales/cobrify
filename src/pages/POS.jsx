@@ -4832,7 +4832,7 @@ export default function POS() {
     // a mano). Esto evita que una pestaña del POS abierta de un día para otro "congele"
     // la fecha y emita las ventas de hoy con la fecha de ayer.
     const currentDate = getLocalDateString()
-    const useCustomDate = businessSettings?.allowCustomEmissionDate && emissionDateEditedRef.current
+    const useCustomDate = emissionDateEditedRef.current
     const emissionDateToUse = useCustomDate ? emissionDate : currentDate
     if (emissionDate !== emissionDateToUse) {
       setEmissionDate(emissionDateToUse)
@@ -7739,28 +7739,26 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
 
               {/* 5. Fecha de Emisión */}
-              {businessSettings?.allowCustomEmissionDate && (
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Fecha de Emisión
-                  </label>
-                  <input
-                    type="date"
-                    value={emissionDate}
-                    max={documentType === 'nota_venta' ? undefined : getLocalDateString()}
-                    min={documentType === 'nota_venta' ? undefined : (() => {
-                      const today = new Date()
-                      const maxDaysBack = documentType === 'factura' ? 3 : 7
-                      const minDate = new Date(today)
-                      minDate.setDate(today.getDate() - maxDaysBack)
-                      return getLocalDateString(minDate)
-                    })()}
-                    onChange={e => { setEmissionDate(e.target.value); emissionDateEditedRef.current = true }}
-                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Fecha de Emisión
+                </label>
+                <input
+                  type="date"
+                  value={emissionDate}
+                  max={documentType === 'nota_venta' ? undefined : getLocalDateString()}
+                  min={documentType === 'nota_venta' ? undefined : (() => {
+                    const today = new Date()
+                    const maxDaysBack = documentType === 'factura' ? 3 : 7
+                    const minDate = new Date(today)
+                    minDate.setDate(today.getDate() - maxDaysBack)
+                    return getLocalDateString(minDate)
+                  })()}
+                  onChange={e => { setEmissionDate(e.target.value); emissionDateEditedRef.current = true }}
+                  className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+              </div>
 
               {/* 5b. Hora del evento (Meta Ads) */}
               {businessSettings?.metaAdsEnabled && (
