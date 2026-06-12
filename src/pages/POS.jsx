@@ -647,6 +647,18 @@ export default function POS() {
     addIgv: false // Si true, se agrega IGV al precio ingresado
   })
 
+  // Aplicar la afectación por defecto del negocio (Configuración > Preferencias)
+  // cuando businessSettings carga, SOLO si el usuario aún no tocó el modal
+  // (el modal recuerda la última afectación elegida durante la sesión).
+  const customProductDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (customProductDefaultApplied.current) return
+    const def = businessSettings?.defaultTaxAffectation
+    if (!def || def === '10') return
+    customProductDefaultApplied.current = true
+    setCustomProduct(prev => (prev.name || prev.price ? prev : { ...prev, taxAffectation: def }))
+  }, [businessSettings?.defaultTaxAffectation])
+
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
@@ -3750,8 +3762,8 @@ export default function POS() {
       unit: 'NIU',
       isBonificacion: false,
       // El '30' de una bonificación es efecto del check, no elección del
-      // usuario: no se hereda al siguiente item.
-      ...(prev.isBonificacion ? { taxAffectation: '10' } : {}),
+      // usuario: no se hereda al siguiente item (vuelve al default del negocio).
+      ...(prev.isBonificacion ? { taxAffectation: businessSettings?.defaultTaxAffectation || '10' } : {}),
     }))
     setShowCustomProductModal(false)
   }
@@ -9808,7 +9820,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             quantity: 1,
             unit: 'NIU',
             isBonificacion: false,
-            ...(prev.isBonificacion ? { taxAffectation: '10' } : {}),
+            ...(prev.isBonificacion ? { taxAffectation: businessSettings?.defaultTaxAffectation || '10' } : {}),
           }))
         }}
         title="Agregar Producto Personalizado"

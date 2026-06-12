@@ -222,7 +222,7 @@ const ProductFormModal = ({
   const [priceMinQtys, setPriceMinQtys] = useState({ price2: '', price3: '', price4: '' })
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
   const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (isIgvExempt ? 'exempt' : 'standard')
-  const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : '10')
+  const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : (businessSettings?.defaultTaxAffectation || '10'))
   const [igvRate, setIgvRate] = useState(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
@@ -359,7 +359,7 @@ const ProductFormModal = ({
       setCatalogVisible(false)
       setUseAutoPriceByQty(false)
       setPriceMinQtys({ price2: '', price3: '', price4: '' })
-      setTaxAffectation(isIgvExempt ? '20' : '10')
+      setTaxAffectation(isIgvExempt ? '20' : (businessSettings?.defaultTaxAffectation || '10'))
       setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
       setWarehouseInitialStocks({})
       setStockEdits({})

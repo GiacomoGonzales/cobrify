@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -668,7 +668,7 @@ export default function Products() {
     setShowPresentations(false)
     setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
     setEditingPresentationIdx(null)
-    setTaxAffectation('10') // Default: Gravado
+    setTaxAffectation(businessSettings?.defaultTaxAffectation || '10') // Default configurable (Configuración > Preferencias)
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
     // Resetear datos de farmacia
     setPharmacyData({
@@ -3434,6 +3434,50 @@ export default function Products() {
     }
   }
 
+  // Cambiar masivamente la afectación IGV (gravado/exonerado/inafecto) de los
+  // productos seleccionados. Pensado para negocios (ej. zona de selva) que
+  // cambian su afectación por defecto y necesitan convertir el catálogo existente.
+  const handleBulkSetTaxAffectation = async (affectation) => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const result = await updateProduct(businessId, productId, { taxAffectation: affectation })
+          if (result.success) successCount++
+          else errorCount++
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      const label = affectation === '20' ? 'Exonerado' : affectation === '30' ? 'Inafecto' : 'Gravado'
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) ahora con afectación: ${label}`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de afectación IGV:', error)
+      toast.error('Error al cambiar la afectación IGV')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   // Variant management functions
   const handleAddAttribute = () => {
     if (!newAttributeName.trim()) {
@@ -4240,6 +4284,15 @@ export default function Products() {
                 >
                   <Scale className="w-4 h-4 mr-2" />
                   Permitir decimales
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('taxAffectation')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Percent className="w-4 h-4 mr-2" />
+                  Afectación IGV
                 </Button>
                 <Button
                   variant="outline"
@@ -8302,6 +8355,8 @@ export default function Products() {
             ? 'Mostrar en catálogo'
             : bulkAction === 'allowDecimals'
             ? 'Permitir decimales'
+            : bulkAction === 'taxAffectation'
+            ? 'Afectación IGV'
             : 'Activar/Desactivar productos'
         }
         size="md"
@@ -8534,6 +8589,60 @@ export default function Products() {
                       Activar decimales
                     </>
                   )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'taxAffectation' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  ¿Qué afectación IGV quieres aplicar a los {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}?
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Gravado: paga IGV. Exonerado: no paga IGV (ej. zona de selva, productos del Apéndice I). Inafecto: fuera del ámbito del impuesto.
+                  El cambio aplica a las ventas NUEVAS; los comprobantes ya emitidos no se modifican.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkSetTaxAffectation('10')}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Percent className="w-4 h-4 mr-2" />
+                  )}
+                  Gravado
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkSetTaxAffectation('30')}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <X className="w-4 h-4 mr-2" />
+                  )}
+                  Inafecto
+                </Button>
+                <Button
+                  onClick={() => handleBulkSetTaxAffectation('20')}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Exonerado
                 </Button>
               </div>
             </>

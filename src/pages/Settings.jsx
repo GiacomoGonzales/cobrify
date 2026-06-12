@@ -444,6 +444,12 @@ export default function Settings() {
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
   const [showDescriptionInPOS, setShowDescriptionInPOS] = useState(false)
 
+  // Afectación IGV por defecto al CREAR productos e items personalizados
+  // ('10' gravado — comportamiento histórico, '20' exonerado, '30' inafecto).
+  // Útil para negocios de zona de selva con taxConfig estándar que venden
+  // mayormente exonerado y solo gravan algunos productos puntuales.
+  const [defaultTaxAffectation, setDefaultTaxAffectation] = useState('10')
+
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
 
@@ -1224,6 +1230,8 @@ export default function Settings() {
         // Cargar configuración de presentaciones de venta
         setPresentationsEnabled(businessData.presentationsEnabled || false)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
+        // Afectación IGV por defecto al crear productos
+        setDefaultTaxAffectation(businessData.defaultTaxAffectation || '10')
         if (businessData.priceLabels) {
           setPriceLabels({
             price1: businessData.priceLabels.price1 || 'Público',
@@ -3332,6 +3340,32 @@ export default function Settings() {
                       description="Habilita control de lotes, fechas de vencimiento, alertas y selección de lotes en ventas, compras e inventario"
                     />
                   )}
+
+                  {/* Afectación IGV por defecto al crear productos */}
+                  <div className="flex items-start justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">Afectación IGV por defecto</p>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        Afectación con la que nacen los productos nuevos (creación, importación, compras) y los productos personalizados del punto de venta.
+                        Útil si vendes mayormente exonerado (ej. zona de selva) y solo gravas algunos productos.
+                        Cada producto se puede cambiar individualmente después.
+                      </p>
+                      {defaultTaxAffectation !== '10' && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-2 inline-block">
+                          Los productos ya creados no cambian: usa la acción masiva &quot;Afectación IGV&quot; en Productos para convertirlos.
+                        </p>
+                      )}
+                    </div>
+                    <select
+                      value={defaultTaxAffectation}
+                      onChange={(e) => setDefaultTaxAffectation(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 flex-shrink-0"
+                    >
+                      <option value="10">Gravado (IGV)</option>
+                      <option value="20">Exonerado</option>
+                      <option value="30">Inafecto</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -3962,6 +3996,7 @@ export default function Settings() {
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
                       enableManualStockEdit: enableManualStockEdit,
+                      defaultTaxAffectation: defaultTaxAffectation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
                       metaAdsEnabled: metaAdsEnabled,

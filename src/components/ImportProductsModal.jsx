@@ -10,7 +10,7 @@ import { Share } from '@capacitor/share'
 import { getWarehouses } from '@/services/warehouseService'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [] }) {
-  const { businessMode, getBusinessId } = useAppContext()
+  const { businessMode, getBusinessId, businessSettings } = useAppContext()
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -466,7 +466,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           const rawValue = String(row.afectacion_igv || row.Afectacion_Igv || row.AFECTACION_IGV || row.afectacionIgv || row.tax_affectation || row.taxAffectation || '').trim().toUpperCase()
           if (rawValue === 'EXONERADO' || rawValue === '20') return '20'
           if (rawValue === 'INAFECTO' || rawValue === '30') return '30'
-          return '10' // Default: GRAVADO
+          if (rawValue === 'GRAVADO' || rawValue === '10') return '10'
+          // Sin columna en el Excel: usar la afectación por defecto del negocio
+          return businessSettings?.defaultTaxAffectation || '10'
         })(),
         igvRate: (() => {
           const rawValue = String(row.tasa_igv || row.Tasa_Igv || row.TASA_IGV || row.tasaIgv || row.igv_rate || row.Igv_Rate || row.IGV_RATE || row.igvRate || '').trim()
