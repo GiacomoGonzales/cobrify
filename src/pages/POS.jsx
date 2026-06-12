@@ -553,24 +553,6 @@ export default function POS() {
     ))
   }, [companySettings])
 
-  // Saldo a favor del cliente: se recarga cuando cambia el documento del cliente.
-  // Solo para documentos válidos (DNI 8 / RUC 11) y fuera del modo demo.
-  useEffect(() => {
-    const docNum = (customerData.documentNumber || '').trim()
-    if (isDemoMode || (docNum.length !== 8 && docNum.length !== 11)) {
-      setCustomerStoreCredit({ total: 0, notes: [] })
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      const res = await getCustomerStoreCredit(getBusinessId(), docNum)
-      if (cancelled) return
-      setCustomerStoreCredit(res.success ? res.data : { total: 0, notes: [] })
-    })()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerData.documentNumber, isDemoMode])
-
   // Hotel: habitaciones ocupadas y selección de habitación para cargo
   const [occupiedRooms, setOccupiedRooms] = useState([])
   const [selectedRoom, setSelectedRoom] = useState(null)
@@ -713,6 +695,25 @@ export default function POS() {
     detractionAmount: '', // Monto de detracción
     goodsServiceCode: '', // Código de bien o servicio SUNAT
   })
+
+  // Saldo a favor del cliente: se recarga cuando cambia el documento del cliente.
+  // Solo para documentos válidos (DNI 8 / RUC 11) y fuera del modo demo.
+  // OJO: este effect debe ir DESPUÉS de la declaración de customerData (TDZ).
+  useEffect(() => {
+    const docNum = (customerData.documentNumber || '').trim()
+    if (isDemoMode || (docNum.length !== 8 && docNum.length !== 11)) {
+      setCustomerStoreCredit({ total: 0, notes: [] })
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const res = await getCustomerStoreCredit(getBusinessId(), docNum)
+      if (cancelled) return
+      setCustomerStoreCredit(res.success ? res.data : { total: 0, notes: [] })
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerData.documentNumber, isDemoMode])
 
   // Estados para pagos parciales (solo notas de venta)
   const [enablePartialPayment, setEnablePartialPayment] = useState(false)
