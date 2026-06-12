@@ -33,6 +33,7 @@ import {
   PanelLeftClose,
   PanelRightClose,
   BedDouble,
+  Wallet,
   Pause,
   Play,
   LayoutGrid,
@@ -82,6 +83,8 @@ import {
   sendInvoiceToSunat,
   upsertCustomerFromSale,
   getCashRegisterSession,
+  getCustomerStoreCredit,
+  redeemStoreCredit,
 } from '@/services/firestoreService'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
@@ -112,6 +115,7 @@ const PAYMENT_METHODS = {
   PEDIDOSYA: 'PedidosYa',
   DIDIFOOD: 'DiDiFood',
   ROOM: 'Cargo a Habitación',
+  CREDIT_NOTE: 'Saldo a favor',
 }
 
 // Mapeo de IDs de restricción (lowercase) a keys del POS (uppercase)
@@ -528,6 +532,11 @@ export default function POS() {
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: getDefaultPaymentMethod(), amount: '' }])
 
+  // Saldo a favor del cliente (store credit): notas de crédito que el cliente
+  // conserva y puede usar como pago. Se carga al seleccionar/identificar al
+  // cliente por documento. { total, notes: [{id, number, available, ...}] }
+  const [customerStoreCredit, setCustomerStoreCredit] = useState({ total: 0, notes: [] })
+
   // companySettings llega async; al montar aún no estaba listo. Cuando carga, aplicar el
   // método de pago por defecto configurado SI el formulario sigue pristino (sin borrador/
   // edición). Los reinicios (Nueva Venta) ya lo aplican vía getDefaultPaymentMethod.
@@ -543,6 +552,24 @@ export default function POS() {
         : prev
     ))
   }, [companySettings])
+
+  // Saldo a favor del cliente: se recarga cuando cambia el documento del cliente.
+  // Solo para documentos válidos (DNI 8 / RUC 11) y fuera del modo demo.
+  useEffect(() => {
+    const docNum = (customerData.documentNumber || '').trim()
+    if (isDemoMode || (docNum.length !== 8 && docNum.length !== 11)) {
+      setCustomerStoreCredit({ total: 0, notes: [] })
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const res = await getCustomerStoreCredit(getBusinessId(), docNum)
+      if (cancelled) return
+      setCustomerStoreCredit(res.success ? res.data : { total: 0, notes: [] })
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerData.documentNumber, isDemoMode])
 
   // Hotel: habitaciones ocupadas y selección de habitación para cargo
   const [occupiedRooms, setOccupiedRooms] = useState([])
@@ -4634,11 +4661,18 @@ export default function POS() {
     const newPayments = [...payments]
     newPayments[index].method = method
 
+    // Saldo a favor: el monto no puede exceder lo disponible del cliente.
+    const creditCap = method === 'CREDIT_NOTE' ? customerStoreCredit.total : Infinity
+
     // Auto-fill del monto. Para UN solo pago NO tocamos el monto acá (evita el
     // parpadeo del botón): solo marcamos para que un layout-effect lo complete con
     // el total YA recalculado (incluye el recargo por tarjeta), antes del paint.
     // Para pagos múltiples mantenemos el autocompletado con el saldo.
-    if (newPayments.length === 1) {
+    // Excepción: saldo a favor se autocompleta acá con el tope (no por el effect).
+    if (method === 'CREDIT_NOTE') {
+      const base = newPayments.length === 1 ? amounts.total : remaining
+      newPayments[index].amount = Math.max(0, Math.min(base, creditCap)).toString()
+    } else if (newPayments.length === 1) {
       pendingAmountSyncRef.current = true
     } else if (!newPayments[index].amount && payments.length > 1) {
       newPayments[index].amount = remaining.toString()
@@ -4681,6 +4715,13 @@ export default function POS() {
   // Actualizar monto de pago
   const handlePaymentAmountChange = (index, amount) => {
     const newPayments = [...payments]
+    // Saldo a favor: clamp al disponible del cliente.
+    if (newPayments[index].method === 'CREDIT_NOTE') {
+      const num = parseFloat(amount)
+      if (!Number.isNaN(num) && num > customerStoreCredit.total) {
+        amount = customerStoreCredit.total.toString()
+      }
+    }
     newPayments[index].amount = amount
     setPayments(newPayments)
   }
@@ -4706,11 +4747,15 @@ export default function POS() {
     if (saleCompleted) return
     setPayments(prev => {
       if (prev.length !== 1 || !prev[0].method) return prev
-      const newAmount = amounts.total > 0 ? amounts.total.toString() : ''
+      // Saldo a favor: capear al disponible (no llenar con el total completo).
+      const cap = prev[0].method === 'CREDIT_NOTE'
+        ? Math.min(amounts.total, customerStoreCredit.total)
+        : amounts.total
+      const newAmount = cap > 0 ? cap.toString() : ''
       if (prev[0].amount === newAmount) return prev
       return [{ ...prev[0], amount: newAmount }]
     })
-  }, [amounts.total, saleCompleted])
+  }, [amounts.total, saleCompleted, customerStoreCredit.total])
 
   // Eliminar un método de pago
   const handleRemovePaymentMethod = (index) => {
@@ -4981,6 +5026,16 @@ export default function POS() {
     // EXCEPCIÓN: Si es venta al crédito, no requiere método de pago
     if (!isCreditSale && allPayments.length === 0) {
       abortCheckout('Debes seleccionar al menos un método de pago')
+      return
+    }
+
+    // Saldo a favor aplicado (monto efectivo, ya capeado al total). No puede
+    // exceder el disponible del cliente. La redención se registra tras guardar.
+    const creditApplied = allPayments
+      .filter(p => p.methodKey === 'CREDIT_NOTE')
+      .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+    if (creditApplied > customerStoreCredit.total + PAYMENT_EPSILON) {
+      abortCheckout(`El saldo a favor aplicado (${formatCurrency(creditApplied)}) supera el disponible (${formatCurrency(customerStoreCredit.total)}).`)
       return
     }
 
@@ -5611,6 +5666,31 @@ export default function POS() {
         setLastInvoiceNumber(numberResult.number)
         setLastInvoiceData(invoiceData)
         setSaleCompleted(true)
+
+        // Redimir saldo a favor: descontar de las notas de crédito del cliente
+        // (FIFO) lo que se aplicó como pago "Saldo a favor". No bloquea la venta:
+        // si falla, la venta ya está guardada y se avisa para revisar.
+        if (creditApplied > 0 && customerData.documentNumber) {
+          try {
+            const redeemRes = await redeemStoreCredit(businessId, customerData.documentNumber, creditApplied, {
+              invoiceId,
+              invoiceNumber: numberResult.number,
+            })
+            if (redeemRes.success) {
+              console.log('✅ Saldo a favor redimido:', redeemRes.data)
+              setCustomerStoreCredit(prev => ({
+                total: Math.max(0, Math.round((prev.total - (redeemRes.data?.applied || 0)) * 100) / 100),
+                notes: prev.notes,
+              }))
+            } else {
+              console.error('❌ Error al redimir saldo a favor:', redeemRes.error)
+              toast.error('Venta guardada, pero no se pudo descontar el saldo a favor: ' + (redeemRes.error || ''), 6000)
+            }
+          } catch (err) {
+            console.error('❌ Excepción al redimir saldo a favor:', err)
+            toast.error('Venta guardada, pero falló el descuento del saldo a favor: ' + (err.message || ''), 6000)
+          }
+        }
 
         // Si la venta vino de un folio de hotel, marcar esos cargos como facturados
         // Usamos la ref (sobrevive a edits del cart) + fallback al cart
@@ -9385,6 +9465,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   ) : (
                     <>
                       <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
+                      {customerStoreCredit.total > 0 && (
+                        <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm">
+                          <Wallet className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          <span className="text-emerald-800">
+                            Este cliente tiene <span className="font-bold">{formatCurrency(customerStoreCredit.total, currency)}</span> de saldo a favor.
+                          </span>
+                        </div>
+                      )}
                   {payments.map((payment, index) => {
                     // Métodos ya seleccionados en otras filas (no la actual)
                     const usedMethods = payments
@@ -9411,6 +9499,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     ].filter(([, , permKey]) =>
                       !allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes(permKey)
                     )
+
+                    // Saldo a favor: se ofrece como método solo si el cliente tiene
+                    // saldo disponible (notas de crédito sin redimir). No pasa por el
+                    // filtro de permisos (no es un medio de pago configurable).
+                    if (customerStoreCredit.total > 0) {
+                      methodDefs.push(['CREDIT_NOTE', 'Saldo a favor'])
+                    }
 
                     return (
                     <div key={index} className="flex flex-col gap-2">

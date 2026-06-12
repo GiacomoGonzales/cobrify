@@ -193,6 +193,124 @@ export const getInvoices = async userId => {
   }
 }
 
+// ==================== SALDO A FAVOR (STORE CREDIT) ====================
+
+/**
+ * Calcula el saldo a favor disponible de un cliente: suma de las notas de
+ * crédito marcadas como `storeCredit` (saldo a favor) menos lo ya redimido.
+ * Devuelve también el detalle de cada NC ordenado por antigüedad (FIFO) para
+ * consumirlas de la más vieja a la más nueva.
+ *
+ * Se filtra por `documentType` (un solo filtro de igualdad → no requiere índice
+ * compuesto) y el resto (storeCredit, documento, saldo) se evalúa en cliente.
+ *
+ * @param {string} businessId
+ * @param {string} documentNumber - Documento del cliente (DNI/RUC)
+ * @returns {Promise<{success:boolean, data?:{total:number, notes:Array}, error?:string}>}
+ */
+export const getCustomerStoreCredit = async (businessId, documentNumber) => {
+  try {
+    const docNum = (documentNumber || '').trim()
+    if (!businessId || !docNum) return { success: true, data: { total: 0, notes: [] } }
+
+    const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+    const q = query(invoicesRef, where('documentType', '==', 'nota_credito'))
+    const snapshot = await getDocs(q)
+
+    const notes = []
+    snapshot.docs.forEach(d => {
+      const nc = { id: d.id, ...d.data() }
+      if (!nc.storeCredit) return
+      if (nc.customer?.documentNumber !== docNum) return
+      if (nc.status === 'voided') return
+      if (nc.sunatStatus === 'rejected') return
+      const creditTotal = Number(nc.creditTotal ?? nc.total) || 0
+      const redeemed = Number(nc.creditRedeemed) || 0
+      const available = Math.round((creditTotal - redeemed) * 100) / 100
+      if (available <= 0) return
+      notes.push({
+        id: nc.id,
+        number: nc.number,
+        creditTotal,
+        redeemed,
+        available,
+        currency: nc.currency || 'PEN',
+        issueDate: nc.issueDate || nc.createdAt || null,
+      })
+    })
+
+    // FIFO: más antigua primero
+    notes.sort((a, b) => {
+      const ta = a.issueDate?.seconds ?? (a.issueDate ? new Date(a.issueDate).getTime() / 1000 : 0)
+      const tb = b.issueDate?.seconds ?? (b.issueDate ? new Date(b.issueDate).getTime() / 1000 : 0)
+      return ta - tb
+    })
+
+    const total = Math.round(notes.reduce((s, n) => s + n.available, 0) * 100) / 100
+    return { success: true, data: { total, notes } }
+  } catch (error) {
+    console.error('Error al obtener saldo a favor del cliente:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Redime (consume) saldo a favor del cliente por `amount`, tomando de sus notas
+ * de crédito FIFO (más antiguas primero). En cada NC incrementa `creditRedeemed`
+ * y agrega un registro a `creditRedemptions` con la venta donde se aplicó.
+ * Re-lee cada NC fresh antes de actualizar para no pisar redenciones concurrentes.
+ *
+ * @param {string} businessId
+ * @param {string} documentNumber
+ * @param {number} amount - Monto a consumir
+ * @param {{invoiceId?:string, invoiceNumber?:string}} saleInfo
+ * @returns {Promise<{success:boolean, data?:{applied:number, redeemedFrom:Array}, error?:string}>}
+ */
+export const redeemStoreCredit = async (businessId, documentNumber, amount, saleInfo = {}) => {
+  try {
+    let toApply = Math.round((Number(amount) || 0) * 100) / 100
+    if (toApply <= 0) return { success: true, data: { applied: 0, redeemedFrom: [] } }
+
+    const creditRes = await getCustomerStoreCredit(businessId, documentNumber)
+    if (!creditRes.success) return creditRes
+    const notes = creditRes.data.notes
+
+    const redeemedFrom = []
+    const nowIso = new Date().toISOString()
+    for (const note of notes) {
+      if (toApply <= 0) break
+      const ncRef = doc(db, 'businesses', businessId, 'invoices', note.id)
+      const snap = await getDoc(ncRef)
+      if (!snap.exists()) continue
+      const data = snap.data()
+      const prevRedeemed = Number(data.creditRedeemed) || 0
+      const creditTotal = Number(data.creditTotal ?? data.total) || 0
+      const freshAvailable = Math.round((creditTotal - prevRedeemed) * 100) / 100
+      const realTake = Math.round(Math.min(freshAvailable, toApply) * 100) / 100
+      if (realTake <= 0) continue
+      const redemption = {
+        invoiceId: saleInfo.invoiceId || null,
+        invoiceNumber: saleInfo.invoiceNumber || '',
+        amount: realTake,
+        date: nowIso,
+      }
+      await updateDoc(ncRef, {
+        creditRedeemed: Math.round((prevRedeemed + realTake) * 100) / 100,
+        creditRedemptions: [...(Array.isArray(data.creditRedemptions) ? data.creditRedemptions : []), redemption],
+        updatedAt: serverTimestamp(),
+      })
+      redeemedFrom.push({ noteId: note.id, noteNumber: note.number, amount: realTake })
+      toApply = Math.round((toApply - realTake) * 100) / 100
+    }
+
+    const applied = Math.round(redeemedFrom.reduce((s, r) => s + r.amount, 0) * 100) / 100
+    return { success: true, data: { applied, redeemedFrom } }
+  } catch (error) {
+    console.error('Error al redimir saldo a favor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 /**
  * Obtener facturas de un usuario filtradas por sucursal
  * @param {string} userId - ID del negocio
