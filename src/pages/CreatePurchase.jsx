@@ -2412,17 +2412,11 @@ export default function CreatePurchase() {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Items de Compra</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">
-                  Los precios unitarios deben incluir IGV (18%)
-                </p>
-              </div>
-              <Button onClick={addItem} variant="outline" size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar Item
-              </Button>
+            <div>
+              <CardTitle>Items de Compra</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Los precios unitarios deben incluir IGV (18%)
+              </p>
             </div>
             {/* Tabs para seleccionar tipo de items */}
             {ingredients.length > 0 && (
@@ -3059,6 +3053,16 @@ export default function CreatePurchase() {
               </div>
             ))}
           </div>
+
+          {/* Agregar otro item al final (como en Cotizaciones) */}
+          <button
+            type="button"
+            onClick={addItem}
+            className="flex w-full items-center justify-center gap-2 px-4 py-3 mt-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {itemMode === 'ingredients' ? 'Agregar un ingrediente' : 'Agregar un producto'}
+          </button>
 
           {products.length === 0 && ingredients.length === 0 && (
             <Alert type="warning" className="mt-4">
