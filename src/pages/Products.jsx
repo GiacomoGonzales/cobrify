@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -3437,7 +3437,7 @@ export default function Products() {
   // Cambiar masivamente la afectación IGV (gravado/exonerado/inafecto) de los
   // productos seleccionados. Pensado para negocios (ej. zona de selva) que
   // cambian su afectación por defecto y necesitan convertir el catálogo existente.
-  const handleBulkSetTaxAffectation = async (affectation) => {
+  const handleBulkSetTaxAffectation = async (affectation, rate = null) => {
     if (selectedProducts.size === 0) return
 
     setIsProcessingBulk(true)
@@ -3447,9 +3447,15 @@ export default function Products() {
       let successCount = 0
       let errorCount = 0
 
+      // Para gravado en negocios estándar, fija la tasa por producto (18% o 10.5%)
+      const updates = { taxAffectation: affectation }
+      if (affectation === '10' && taxType === 'standard' && rate != null) {
+        updates.igvRate = rate
+      }
+
       for (const productId of selectedProducts) {
         try {
-          const result = await updateProduct(businessId, productId, { taxAffectation: affectation })
+          const result = await updateProduct(businessId, productId, updates)
           if (result.success) successCount++
           else errorCount++
         } catch (error) {
@@ -3461,7 +3467,13 @@ export default function Products() {
       await loadProducts()
       setSelectedProducts(new Set())
 
-      const label = affectation === '20' ? 'Exonerado' : affectation === '30' ? 'Inafecto' : 'Gravado'
+      const label = affectation === '20'
+        ? 'Exonerado'
+        : affectation === '30'
+        ? 'Inafecto'
+        : (affectation === '10' && taxType === 'standard' && rate != null)
+        ? `Gravado (${rate}%)`
+        : 'Gravado'
       if (successCount > 0) {
         toast.success(`${successCount} producto(s) ahora con afectación: ${label}`)
       }
@@ -8597,35 +8609,83 @@ export default function Products() {
           {bulkAction === 'taxAffectation' && (
             <>
               <p className="text-sm text-gray-500">
-                Selecciona la afectación para los <span className="font-medium text-gray-700">{selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}</span> seleccionados. El cambio aplica a ventas nuevas; los comprobantes ya emitidos no se modifican.
+                Selecciona la afectación para {selectedProducts.size === 1 ? 'el' : 'los'} <span className="font-medium text-gray-700">{selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}</span> seleccionado{selectedProducts.size !== 1 ? 's' : ''}. El cambio aplica a ventas nuevas; los comprobantes ya emitidos no se modifican.
               </p>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => handleBulkSetTaxAffectation('10')}
-                  disabled={isProcessingBulk}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-colors disabled:opacity-50 text-center"
-                >
-                  <span className="text-2xl">💰</span>
-                  <span className="font-semibold text-gray-800 text-sm">Gravado</span>
-                  <span className="text-xs text-gray-500">Incluye IGV</span>
-                </button>
+              <div className="space-y-2">
+                {taxType === 'standard' ? (
+                  <>
+                    <button
+                      onClick={() => handleBulkSetTaxAffectation('10', 18)}
+                      disabled={isProcessingBulk}
+                      className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
+                    >
+                      <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
+                        <Percent className="w-4 h-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-gray-900">Gravado 18%</span>
+                        <span className="block text-xs text-gray-500">IGV estándar</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
+                    </button>
+                    <button
+                      onClick={() => handleBulkSetTaxAffectation('10', 10.5)}
+                      disabled={isProcessingBulk}
+                      className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
+                    >
+                      <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex-shrink-0">
+                        <Utensils className="w-4 h-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-gray-900">Gravado 10.5%</span>
+                        <span className="block text-xs text-gray-500">Ley Restaurantes</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => handleBulkSetTaxAffectation('10')}
+                    disabled={isProcessingBulk}
+                    className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
+                  >
+                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
+                      <Percent className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-gray-900">Gravado</span>
+                      <span className="block text-xs text-gray-500">Incluye IGV</span>
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
+                  </button>
+                )}
                 <button
                   onClick={() => handleBulkSetTaxAffectation('20')}
                   disabled={isProcessingBulk}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors disabled:opacity-50 text-center"
+                  className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                 >
-                  <span className="text-2xl">🌿</span>
-                  <span className="font-semibold text-gray-800 text-sm">Exonerado</span>
-                  <span className="text-xs text-gray-500">Sin IGV</span>
+                  <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex-shrink-0">
+                    <Leaf className="w-4 h-4" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-gray-900">Exonerado</span>
+                    <span className="block text-xs text-gray-500">Sin IGV (ej. zona de selva)</span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
                 </button>
                 <button
                   onClick={() => handleBulkSetTaxAffectation('30')}
                   disabled={isProcessingBulk}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-center"
+                  className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                 >
-                  <span className="text-2xl">🚫</span>
-                  <span className="font-semibold text-gray-800 text-sm">Inafecto</span>
-                  <span className="text-xs text-gray-500">Fuera del IGV</span>
+                  <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex-shrink-0">
+                    <Ban className="w-4 h-4" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-gray-900">Inafecto</span>
+                    <span className="block text-xs text-gray-500">Fuera del ámbito del IGV</span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
                 </button>
               </div>
               {isProcessingBulk && (
