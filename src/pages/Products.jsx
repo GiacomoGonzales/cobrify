@@ -8596,53 +8596,47 @@ export default function Products() {
 
           {bulkAction === 'taxAffectation' && (
             <>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  ¿Qué afectación IGV quieres aplicar a los {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}?
-                </p>
-                <p className="text-sm text-blue-700 mt-1">
-                  Gravado: paga IGV. Exonerado: no paga IGV (ej. zona de selva, productos del Apéndice I). Inafecto: fuera del ámbito del impuesto.
-                  El cambio aplica a las ventas NUEVAS; los comprobantes ya emitidos no se modifican.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row justify-end gap-2">
-                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
-                  Cancelar
-                </Button>
-                <Button
-                  variant="outline"
+              <p className="text-sm text-gray-500">
+                Selecciona la afectación para los <span className="font-medium text-gray-700">{selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}</span> seleccionados. El cambio aplica a ventas nuevas; los comprobantes ya emitidos no se modifican.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <button
                   onClick={() => handleBulkSetTaxAffectation('10')}
                   disabled={isProcessingBulk}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-colors disabled:opacity-50 text-center"
                 >
-                  {isProcessingBulk ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Percent className="w-4 h-4 mr-2" />
-                  )}
-                  Gravado
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleBulkSetTaxAffectation('30')}
-                  disabled={isProcessingBulk}
-                >
-                  {isProcessingBulk ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <X className="w-4 h-4 mr-2" />
-                  )}
-                  Inafecto
-                </Button>
-                <Button
+                  <span className="text-2xl">💰</span>
+                  <span className="font-semibold text-gray-800 text-sm">Gravado</span>
+                  <span className="text-xs text-gray-500">Incluye IGV</span>
+                </button>
+                <button
                   onClick={() => handleBulkSetTaxAffectation('20')}
                   disabled={isProcessingBulk}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors disabled:opacity-50 text-center"
                 >
-                  {isProcessingBulk ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4 mr-2" />
-                  )}
-                  Exonerado
+                  <span className="text-2xl">🌿</span>
+                  <span className="font-semibold text-gray-800 text-sm">Exonerado</span>
+                  <span className="text-xs text-gray-500">Sin IGV</span>
+                </button>
+                <button
+                  onClick={() => handleBulkSetTaxAffectation('30')}
+                  disabled={isProcessingBulk}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-center"
+                >
+                  <span className="text-2xl">🚫</span>
+                  <span className="font-semibold text-gray-800 text-sm">Inafecto</span>
+                  <span className="text-xs text-gray-500">Fuera del IGV</span>
+                </button>
+              </div>
+              {isProcessingBulk && (
+                <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Aplicando cambios...
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
                 </Button>
               </div>
             </>
