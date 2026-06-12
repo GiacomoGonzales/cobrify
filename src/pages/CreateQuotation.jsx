@@ -1776,13 +1776,7 @@ export default function CreateQuotation() {
           {/* Items */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Productos / Servicios</CardTitle>
-                <Button type="button" size="sm" onClick={addItem}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Agregar Item
-                </Button>
-              </div>
+              <CardTitle>Productos / Servicios</CardTitle>
             </CardHeader>
             <CardContent>
               {/* Desktop: Tabla compacta */}
