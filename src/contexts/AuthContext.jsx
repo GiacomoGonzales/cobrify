@@ -311,7 +311,11 @@ export const AuthProvider = ({ children }) => {
                 : 'retail'
 
               setBusinessMode(mode)
-              setBusinessSettings(businessData) // Guardar toda la configuración
+              // Múltiples precios y presentaciones de venta: habilitados para todos por
+              // defecto en la app interna (ya no son opciones configurables). NO se fuerza
+              // en el documento de Firestore, para no alterar el catálogo público, que lee
+              // el flag del doc para decidir si muestra precios mayorista/VIP al cliente final.
+              setBusinessSettings({ ...businessData, multiplePricesEnabled: true, presentationsEnabled: true })
 
               console.log('✅ businessMode establecido a:', mode)
 
@@ -614,7 +618,9 @@ export const AuthProvider = ({ children }) => {
       const businessDoc = await getDoc(businessRef)
       if (businessDoc.exists()) {
         const businessData = businessDoc.data()
-        setBusinessSettings(businessData)
+        // Múltiples precios y presentaciones: habilitados para todos por defecto en la
+        // app interna (ver nota en la carga inicial). No se fuerza en el doc de Firestore.
+        setBusinessSettings({ ...businessData, multiplePricesEnabled: true, presentationsEnabled: true })
         const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport', 'hotel', 'logistics', 'veterinary']
         const mode = validModes.includes(businessData.businessMode) ? businessData.businessMode : 'retail'
         setBusinessMode(mode)

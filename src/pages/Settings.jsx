@@ -4667,17 +4667,7 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <div>
-                    <SettingToggle
-                      checked={multiplePricesEnabled}
-                      onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
-                      title="Habilitar múltiples precios por producto"
-                      description={multiplePricesEnabled
-                        ? '✓ Habilitado: Podrás asignar hasta 3 precios diferentes a cada producto. Al vender, podrás elegir qué precio aplicar o asignar un nivel de precio a cada cliente.'
-                        : '✗ Deshabilitado: Solo se usará un precio por producto (comportamiento normal).'}
-                    />
-
-                    {multiplePricesEnabled && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="pt-1">
                         <p className="text-xs text-gray-500 mb-3">Personaliza los nombres de cada nivel de precio:</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
@@ -4867,49 +4857,6 @@ export default function Settings() {
                           )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
-              {/* Presentaciones de Venta */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Presentaciones de Venta</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Permite vender productos en diferentes presentaciones (Unidad, Pack, Caja, etc.)
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <SettingToggle
-                      checked={presentationsEnabled}
-                      onChange={(e) => setPresentationsEnabled(e.target.checked)}
-                      title="Habilitar presentaciones de venta por producto"
-                      description={presentationsEnabled
-                        ? '✓ Habilitado: Podrás definir múltiples presentaciones por producto (ej: Unidad, Media Docena, Caja x24). Al vender, elegirás la presentación y el stock se descontará automáticamente.'
-                        : '✗ Deshabilitado: Los productos se venderán con una sola unidad de medida (comportamiento normal).'}
-                    />
-
-                    {presentationsEnabled && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
-                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div className="text-xs text-blue-800">
-                            <p className="font-medium mb-1">¿Cómo funciona?</p>
-                            <ul className="list-disc list-inside space-y-1 text-blue-700">
-                              <li>El stock se maneja en la unidad más pequeña (ej: unidades)</li>
-                              <li>Cada presentación tiene un factor de conversión y precio</li>
-                              <li>Al vender, el stock se descuenta según el factor</li>
-                              <li>Ejemplo: Vender 1 "Caja x24" descuenta 24 unidades</li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

@@ -29,7 +29,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoHotelContext,
       businessMode: 'hotel',
-      businessSettings: { businessMode: 'hotel', enableProductImages: true, posCustomFields: {} },
+      businessSettings: { businessMode: 'hotel', enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true, posCustomFields: {} },
       userFeatures: { expenseManagement: true },
       hasFeature: (feature) => ['expenseManagement'].includes(feature),
       getBusinessId: demoHotelContext.getBusinessId,
@@ -51,7 +51,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoVeterinaryContext.demoData,
       businessMode: 'veterinary',
-      businessSettings: { businessMode: 'veterinary', enableProductImages: true, batchControlEnabled: true },
+      businessSettings: { businessMode: 'veterinary', enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true, batchControlEnabled: true },
       userFeatures: { expenseManagement: true },
       hasFeature: (feature) => ['expenseManagement'].includes(feature),
       getBusinessId: () => demoVeterinaryContext.demoData.user.uid,
@@ -73,7 +73,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoPharmacyContext.demoData,
       businessMode: 'pharmacy', // Modo farmacia
-      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true },
+      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true },
       userFeatures: { expenseManagement: true },
       hasFeature: (feature) => ['expenseManagement'].includes(feature),
       getBusinessId: () => demoPharmacyContext.demoData.user.uid,
@@ -95,7 +95,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoRestaurantContext,
       businessMode: 'restaurant', // Modo restaurante
-      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true }, // Habilitar guías e imágenes en demo
+      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true }, // Habilitar guías e imágenes en demo
       userFeatures: { expenseManagement: true }, // Features habilitados en demo
       hasFeature: (feature) => ['expenseManagement'].includes(feature), // Features disponibles en demo
       getBusinessId: demoRestaurantContext.getBusinessId,
@@ -117,7 +117,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoContext.demoData,
       businessMode: 'retail', // Modo por defecto en demo
-      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true }, // Habilitar guías e imágenes en demo
+      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true }, // Habilitar guías e imágenes en demo
       userFeatures: { expenseManagement: true }, // Features habilitados en demo
       hasFeature: (feature) => ['expenseManagement'].includes(feature), // Features disponibles en demo
       getBusinessId: () => demoContext.demoData.user.uid, // Retornar el ID del usuario demo
