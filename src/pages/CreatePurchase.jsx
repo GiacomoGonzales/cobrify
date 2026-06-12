@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -188,6 +188,9 @@ export default function CreatePurchase() {
   // Selección de variante (talla, color, etc.) vía modal — igual que en Cotizaciones
   const [showVariantModal, setShowVariantModal] = useState(false)
   const [pendingVariantProduct, setPendingVariantProduct] = useState(null)
+
+  // Editar precios de venta de un item vía modal (en vez de campos inline que estorban)
+  const [salePriceModalIndex, setSalePriceModalIndex] = useState(null)
 
   // Laboratories for pharmacy mode
   const [laboratories, setLaboratories] = useState([])
@@ -2695,71 +2698,25 @@ export default function CreatePurchase() {
                       </button>
                     </td>
                   </tr>
-                  {/* Fila de precios de venta */}
+                  {/* Precios de venta → botón que abre modal (no estorba con campos inline) */}
                   {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
                     <tr className="bg-blue-50/40 border-b border-gray-200">
                       <td colSpan={99} className="px-4 py-1.5">
-                        <div className="flex items-center flex-wrap gap-3">
-                          <span className="text-xs font-medium text-blue-600">
-                            Precios de venta
-                            <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">{currency}</span>
-                            {currency !== 'PEN' && (
-                              <span className="ml-2 text-[10px] font-normal text-gray-500">(se guardará convertido a PEN con TC {Number(exchangeRate || 0).toFixed(2)})</span>
-                            )}:
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              placeholder="0.00"
-                              value={item.salePrice || ''}
-                              onChange={e => updateItem(index, 'salePrice', e.target.value)}
-                              className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                          </div>
-                          {businessSettings?.multiplePricesEnabled && (
-                            <>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price2 || 'P2'}</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  placeholder="0.00"
-                                  value={item.salePrice2 || ''}
-                                  onChange={e => updateItem(index, 'salePrice2', e.target.value)}
-                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price3 || 'P3'}</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  placeholder="0.00"
-                                  value={item.salePrice3 || ''}
-                                  onChange={e => updateItem(index, 'salePrice3', e.target.value)}
-                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-blue-600 whitespace-nowrap">{businessSettings?.priceLabels?.price4 || 'P4'}</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  placeholder="0.00"
-                                  value={item.salePrice4 || ''}
-                                  onChange={e => updateItem(index, 'salePrice4', e.target.value)}
-                                  className="w-24 px-2 py-1 text-sm text-center border border-blue-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
-                              </div>
-                            </>
+                        <button
+                          type="button"
+                          onClick={() => setSalePriceModalIndex(index)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                          Editar precios de venta
+                          {item.salePrice ? (
+                            <span className="font-normal text-gray-500">
+                              · {businessSettings?.priceLabels?.price1 || 'P. Venta'} {formatCurrency(Number(item.salePrice) || 0, currency)}
+                            </span>
+                          ) : (
+                            <span className="font-normal text-gray-400">· sin definir</span>
                           )}
-                        </div>
+                        </button>
                       </td>
                     </tr>
                   )}
@@ -3048,71 +3005,23 @@ export default function CreatePurchase() {
                   {item.isBonus ? 'Bonificación (gratis) — toca para quitar' : 'Marcar como bonificación (gratis)'}
                 </button>
 
-                {/* Precios de venta - móvil */}
-                {businessSettings?.posCustomFields?.showSalePriceInPurchase && (
-                  <>
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
-                    <span>Precios de venta</span>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">{currency}</span>
-                    {currency !== 'PEN' && (
-                      <span className="text-[10px] font-normal text-gray-500">→ PEN con TC {Number(exchangeRate || 0).toFixed(2)}</span>
+                {/* Precios de venta - móvil → botón que abre modal */}
+                {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
+                  <button
+                    type="button"
+                    onClick={() => setSalePriceModalIndex(index)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50/60 border border-blue-200 rounded-lg"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Tag className="w-4 h-4" />
+                      Editar precios de venta
+                    </span>
+                    {item.salePrice ? (
+                      <span className="font-normal text-gray-500 text-xs">{formatCurrency(Number(item.salePrice) || 0, currency)}</span>
+                    ) : (
+                      <span className="font-normal text-gray-400 text-xs">sin definir</span>
                     )}
-                  </div>
-                  <div className={`grid gap-2 ${businessSettings?.multiplePricesEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    <div>
-                      <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price1 || 'P. Venta'}</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="0.00"
-                        value={item.salePrice || ''}
-                        onChange={e => updateItem(index, 'salePrice', e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-                    {businessSettings?.multiplePricesEnabled && (
-                      <>
-                        <div>
-                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price2 || 'Precio 2'}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="0.00"
-                            value={item.salePrice2 || ''}
-                            onChange={e => updateItem(index, 'salePrice2', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price3 || 'Precio 3'}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="0.00"
-                            value={item.salePrice3 || ''}
-                            onChange={e => updateItem(index, 'salePrice3', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-blue-600 mb-1">{businessSettings?.priceLabels?.price4 || 'Precio 4'}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="0.00"
-                            value={item.salePrice4 || ''}
-                            onChange={e => updateItem(index, 'salePrice4', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-blue-300 bg-blue-50/30 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  </>
+                  </button>
                 )}
 
                 {/* Números de serie - móvil */}
@@ -3407,6 +3316,62 @@ export default function CreatePurchase() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Modal: Editar precios de venta del item */}
+      <Modal
+        isOpen={salePriceModalIndex !== null}
+        onClose={() => setSalePriceModalIndex(null)}
+        title="Precios de venta"
+        maxWidth="md"
+      >
+        {salePriceModalIndex !== null && purchaseItems[salePriceModalIndex] && (() => {
+          const item = purchaseItems[salePriceModalIndex]
+          const idx = salePriceModalIndex
+          const priceFields = [
+            { key: 'salePrice', label: businessSettings?.priceLabels?.price1 || 'Precio de venta' },
+            ...(businessSettings?.multiplePricesEnabled ? [
+              { key: 'salePrice2', label: businessSettings?.priceLabels?.price2 || 'Precio 2' },
+              { key: 'salePrice3', label: businessSettings?.priceLabels?.price3 || 'Precio 3' },
+              { key: 'salePrice4', label: businessSettings?.priceLabels?.price4 || 'Precio 4' },
+            ] : []),
+          ]
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="truncate">{item.productName || 'Producto'}</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 flex-shrink-0">{currency}</span>
+              </div>
+              {currency !== 'PEN' && (
+                <p className="text-xs text-gray-500">
+                  Los precios se guardarán convertidos a PEN con el tipo de cambio {Number(exchangeRate || 0).toFixed(2)}.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                {priceFields.map(f => (
+                  <div key={f.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0.00"
+                      value={item[f.key] || ''}
+                      onChange={e => updateItem(idx, f.key, e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                Estos precios actualizarán el producto en tu catálogo al registrar la compra.
+              </p>
+              <div className="flex justify-end">
+                <Button onClick={() => setSalePriceModalIndex(null)}>Listo</Button>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
     </div>
   )
