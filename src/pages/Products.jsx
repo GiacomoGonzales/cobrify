@@ -8619,9 +8619,7 @@ export default function Products() {
                       disabled={isProcessingBulk}
                       className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                     >
-                      <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
-                        <Percent className="w-4 h-4" />
-                      </span>
+                      <Percent className="w-5 h-5 text-blue-600 flex-shrink-0" />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium text-gray-900">Gravado 18%</span>
                         <span className="block text-xs text-gray-500">IGV estándar</span>
@@ -8633,9 +8631,7 @@ export default function Products() {
                       disabled={isProcessingBulk}
                       className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                     >
-                      <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex-shrink-0">
-                        <Utensils className="w-4 h-4" />
-                      </span>
+                      <Utensils className="w-5 h-5 text-amber-600 flex-shrink-0" />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium text-gray-900">Gravado 10.5%</span>
                         <span className="block text-xs text-gray-500">Ley Restaurantes</span>
@@ -8649,9 +8645,7 @@ export default function Products() {
                     disabled={isProcessingBulk}
                     className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                   >
-                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
-                      <Percent className="w-4 h-4" />
-                    </span>
+                    <Percent className="w-5 h-5 text-blue-600 flex-shrink-0" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-medium text-gray-900">Gravado</span>
                       <span className="block text-xs text-gray-500">Incluye IGV</span>
@@ -8664,9 +8658,7 @@ export default function Products() {
                   disabled={isProcessingBulk}
                   className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                 >
-                  <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex-shrink-0">
-                    <Leaf className="w-4 h-4" />
-                  </span>
+                  <Leaf className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-medium text-gray-900">Exonerado</span>
                     <span className="block text-xs text-gray-500">Sin IGV (ej. zona de selva)</span>
@@ -8678,9 +8670,7 @@ export default function Products() {
                   disabled={isProcessingBulk}
                   className="group w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-gray-50 transition-colors disabled:opacity-50 text-left"
                 >
-                  <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex-shrink-0">
-                    <Ban className="w-4 h-4" />
-                  </span>
+                  <Ban className="w-5 h-5 text-gray-500 flex-shrink-0" />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-medium text-gray-900">Inafecto</span>
                     <span className="block text-xs text-gray-500">Fuera del ámbito del IGV</span>
