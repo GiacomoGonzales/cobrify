@@ -41,8 +41,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
     if (invoice.documentType === 'factura') return 'FACTURA ELECTRÓNICA'
     if (invoice.documentType === 'boleta') return 'BOLETA DE VENTA ELECTRÓNICA'
     if (invoice.documentType === 'nota_venta') return 'NOTA DE VENTA'
+    if (invoice.documentType === 'cotizacion') return 'COTIZACIÓN'
     return 'COMPROBANTE'
   }
+
+  const isQuotation = invoice.documentType === 'cotizacion'
 
   const getDocumentTypeCode = () => {
     if (invoice.documentType === 'factura') return '01'
@@ -88,6 +91,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       const series = invoice.series || 'N001'
       const number = invoice.number || '1'
       // Pad number to 8 digits
+      const paddedNumber = number.toString().padStart(8, '0')
+      return `${series}-${paddedNumber}`
+    }
+
+    // Para cotizaciones sin formato, usar serie COT
+    if (isQuotation) {
+      const series = invoice.series || 'COT'
+      const number = invoice.number || '1'
       const paddedNumber = number.toString().padStart(8, '0')
       return `${series}-${paddedNumber}`
     }
@@ -701,14 +712,47 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         </div>
         <div className="info-row">
           <span className="info-label">Hora:</span>
-          <span>{formatTime(invoice.issueDate || invoice.createdAt)}</span>
+          <span>{formatTime(isQuotation ? invoice.createdAt : (invoice.issueDate || invoice.createdAt))}</span>
         </div>
+        {isQuotation && Number(invoice.validityDays) > 0 && (
+          <div className="info-row">
+            <span className="info-label">Validez:</span>
+            <span>{Number(invoice.validityDays)} día{Number(invoice.validityDays) !== 1 ? 's' : ''}</span>
+          </div>
+        )}
       </div>
 
       {/* Datos del Cliente */}
-      {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
+      {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta' || isQuotation) && (
         <div className="ticket-section">
           <div className="section-title">DATOS DEL CLIENTE</div>
+
+          {isQuotation && (
+            <>
+              {customerData.documentNumber && customerData.documentNumber !== '-' && (
+                <div className="info-row">
+                  <span className="info-label">{customerData.documentNumber.length === 11 ? 'RUC:' : 'Doc:'}</span>
+                  <span>{customerData.documentNumber}</span>
+                </div>
+              )}
+              <div className="info-row">
+                <span className="info-label">Cliente:</span>
+                <span>{(customerData.businessName && customerData.businessName !== '-') ? customerData.businessName : customerData.name}</span>
+              </div>
+              {customerData.address && (
+                <div className="info-row">
+                  <span className="info-label">Dirección:</span>
+                  <span>{customerData.address}</span>
+                </div>
+              )}
+              {customerData.phone && (
+                <div className="info-row">
+                  <span className="info-label">Teléfono:</span>
+                  <span>{customerData.phone}</span>
+                </div>
+              )}
+            </>
+          )}
 
           {customerData.code && (
             <div className="info-row">
@@ -924,7 +968,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           </div>
         )}
 
-        {!(invoice.documentType === 'nota_venta' && (companySettings?.hideRucIgvInNotaVenta || companySettings?.hideOnlyIgvInNotaVenta)) && (
+        {!(invoice.documentType === 'nota_venta' && (companySettings?.hideRucIgvInNotaVenta || companySettings?.hideOnlyIgvInNotaVenta)) && !(isQuotation && invoice.hideIgv) && (
           <>
             <div className="total-row">
               <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
@@ -958,7 +1002,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           </div>
         )}
         <div className="total-row final">
-          <span>TOTAL A PAGAR:</span>
+          <span>{isQuotation ? 'TOTAL:' : 'TOTAL A PAGAR:'}</span>
           <span>{formatCurrency(invoice.total || 0)}</span>
         </div>
       </div>
@@ -992,7 +1036,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         </div>
       )}
 
-      {/* Métodos de Pago */}
+      {/* Métodos de Pago (no aplica a cotizaciones) */}
+      {!isQuotation && (
       <div className="ticket-section">
         <div className="section-title">FORMA DE PAGO</div>
         {(() => {
@@ -1063,6 +1108,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           </div>
         )}
       </div>
+      )}
 
       {/* Condiciones de Pago para Facturas al Crédito */}
       {invoice.documentType === 'factura' && invoice.paymentType === 'credito' && (
@@ -1106,11 +1152,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         <div className="representation-text">
           {invoice.documentType === 'nota_venta'
             ? 'DOCUMENTO NO VÁLIDO PARA FINES TRIBUTARIOS'
+            : isQuotation
+            ? 'COTIZACIÓN - NO VÁLIDO COMO COMPROBANTE DE PAGO'
             : 'REPRESENTACIÓN IMPRESA DE LA ' + getDocumentTypeName()
           }
         </div>
 
-        {invoice.documentType !== 'nota_venta' && (
+        {invoice.documentType !== 'nota_venta' && !isQuotation && (
           <>
             {/* Hash SUNAT */}
             {invoice.sunatHash && (

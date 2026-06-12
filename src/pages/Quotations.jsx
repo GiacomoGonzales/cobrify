@@ -46,7 +46,8 @@ import {
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
-import { printQuotationTicket } from '@/services/thermalPrinterService'
+import { printQuotationTicket, getPrinterConfig } from '@/services/thermalPrinterService'
+import InvoiceTicket from '@/components/InvoiceTicket'
 import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
@@ -81,6 +82,16 @@ export default function Quotations() {
   const [visibleCount, setVisibleCount] = useState(20)
   const [isExporting, setIsExporting] = useState(false)
   const ITEMS_PER_PAGE = 20
+
+  // Impresión web de ticket (window.print con el mismo diseño de las boletas)
+  const [ticketQuotation, setTicketQuotation] = useState(null)
+  const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
+  const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [compactPrint, setCompactPrint] = useState(false)
+  const [printMargins, setPrintMargins] = useState(8)
+  const [simplePrint, setSimplePrint] = useState(false)
+  const [a4SheetPrint, setA4SheetPrint] = useState(false)
+  const [showItemUnit, setShowItemUnit] = useState(false)
 
   // Helper para manejar fechas de Firestore y Date objects
   const getDateFromTimestamp = (timestamp) => {
@@ -414,7 +425,8 @@ export default function Quotations() {
     }
   }
 
-  // Imprimir cotización en ticketera térmica (solo app nativa)
+  // Imprimir cotización en formato ticket: app nativa → ticketera térmica (ESC/POS);
+  // web → window.print con el mismo diseño de ticket de las boletas (InvoiceTicket).
   const handlePrintTicket = async (quotation) => {
     if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
       toast.error(
@@ -424,29 +436,58 @@ export default function Quotations() {
       return
     }
 
-    // Leer ancho de papel guardado por el dispositivo (58 o 80mm)
-    let paperWidth = 58
-    try {
-      const saved = localStorage.getItem('factuya_printerConfig')
-      if (saved) {
-        const cfg = JSON.parse(saved)
-        if (cfg.paperWidth === 58 || cfg.paperWidth === 80) paperWidth = cfg.paperWidth
-      }
-    } catch { /* usar default */ }
+    if (Capacitor.isNativePlatform()) {
+      // Leer ancho de papel guardado por el dispositivo (58 o 80mm)
+      let paperWidth = 58
+      try {
+        const saved = localStorage.getItem('factuya_printerConfig')
+        if (saved) {
+          const cfg = JSON.parse(saved)
+          if (cfg.paperWidth === 58 || cfg.paperWidth === 80) paperWidth = cfg.paperWidth
+        }
+      } catch { /* usar default */ }
 
-    try {
-      const result = await printQuotationTicket(quotation, companySettings, paperWidth)
-      if (result?.success) {
-        toast.success('Cotización enviada a la ticketera')
-      } else if (result?.error === 'Printer not connected') {
-        toast.error('No hay una impresora conectada. Conéctala desde Configuración > Impresora.', 5000)
-      } else {
-        toast.error(result?.error || 'No se pudo imprimir la cotización')
+      try {
+        const result = await printQuotationTicket(quotation, companySettings, paperWidth)
+        if (result?.success) {
+          toast.success('Cotización enviada a la ticketera')
+        } else if (result?.error === 'Printer not connected') {
+          toast.error('No hay una impresora conectada. Conéctala desde Configuración > Impresora.', 5000)
+        } else {
+          toast.error(result?.error || 'No se pudo imprimir la cotización')
+        }
+      } catch (error) {
+        console.error('Error al imprimir cotización en ticketera:', error)
+        toast.error('Error al imprimir en la ticketera')
       }
-    } catch (error) {
-      console.error('Error al imprimir cotización en ticketera:', error)
-      toast.error('Error al imprimir en la ticketera')
+      return
     }
+
+    // Web: releer la config FRESCA de localStorage antes de imprimir (mismo fix
+    // que POS/Ventas: no usar valores cacheados en memoria).
+    try {
+      const fresh = await getPrinterConfig(getBusinessId())
+      if (fresh.success && fresh.config) {
+        setTicketPaperWidth(fresh.config.paperWidth || 80)
+        setWebPrintLegible(fresh.config.webPrintLegible || false)
+        setCompactPrint(fresh.config.compactPrint || false)
+        setPrintMargins(fresh.config.printMargins ?? 8)
+        setSimplePrint(fresh.config.simplePrint || false)
+        setA4SheetPrint(fresh.config.a4SheetPrint || false)
+        setShowItemUnit(fresh.config.showItemUnit || false)
+      }
+    } catch (e) {
+      console.error('Error releyendo config de impresora antes de imprimir:', e)
+    }
+
+    setTicketQuotation({
+      ...quotation,
+      documentType: 'cotizacion',
+      emissionDate: quotation.issueDate || quotation.createdAt,
+    })
+    await new Promise(r => setTimeout(r, 120))
+    window.print()
+    setTicketQuotation(null)
   }
 
   // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
@@ -915,15 +956,13 @@ export default function Quotations() {
                           <Download className="w-4 h-4 text-green-600" />
                           <span>Descargar PDF</span>
                         </button>
-                        {Capacitor.isNativePlatform() && (
-                          <button
-                            onClick={() => { setOpenMenuId(null); handlePrintTicket(quotation) }}
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                          >
-                            <Printer className="w-4 h-4 text-gray-700" />
-                            <span>Imprimir en ticketera</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => { setOpenMenuId(null); handlePrintTicket(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Printer className="w-4 h-4 text-gray-700" />
+                          <span>{Capacitor.isNativePlatform() ? 'Imprimir en ticketera' : 'Imprimir ticket'}</span>
+                        </button>
                         <button
                           onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/nueva?clone=${quotation.id}`) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
@@ -1119,19 +1158,17 @@ export default function Quotations() {
                                   <span>Descargar PDF</span>
                                 </button>
 
-                                {/* Imprimir en ticketera (solo app nativa) */}
-                                {Capacitor.isNativePlatform() && (
-                                  <button
-                                    onClick={() => {
-                                      setOpenMenuId(null)
-                                      handlePrintTicket(quotation)
-                                    }}
-                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                  >
-                                    <Printer className="w-4 h-4 text-gray-700" />
-                                    <span>Imprimir en ticketera</span>
-                                  </button>
-                                )}
+                                {/* Imprimir ticket (app: ticketera térmica / web: window.print) */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    handlePrintTicket(quotation)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Printer className="w-4 h-4 text-gray-700" />
+                                  <span>{Capacitor.isNativePlatform() ? 'Imprimir en ticketera' : 'Imprimir ticket'}</span>
+                                </button>
 
                                 {/* Duplicar cotización */}
                                 <button
@@ -1494,6 +1531,23 @@ export default function Quotations() {
         onClose={() => setDispatchGuideQuotation(null)}
         referenceInvoice={dispatchGuideQuotation ? mapQuotationForDispatchGuide(dispatchGuideQuotation) : null}
       />
+
+      {/* Ticket oculto para impresión web (mismo diseño que las boletas) */}
+      {ticketQuotation && (
+        <div className="hidden print:block">
+          <InvoiceTicket
+            invoice={ticketQuotation}
+            companySettings={companySettings}
+            paperWidth={ticketPaperWidth}
+            webPrintLegible={webPrintLegible}
+            compactPrint={compactPrint}
+            printMargins={printMargins}
+            simplePrint={simplePrint}
+            a4SheetPrint={a4SheetPrint}
+            showItemUnit={showItemUnit}
+          />
+        </div>
+      )}
     </div>
   )
 }
