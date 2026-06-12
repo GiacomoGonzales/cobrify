@@ -1781,11 +1781,11 @@ export default function CreateQuotation() {
             <CardContent>
               {/* Desktop: Tabla compacta */}
               <div className="hidden lg:block">
-                <table className="w-full">
+                <table className="w-full table-fixed">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[35%]">Producto</th>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]">Cant.</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[14%]">Cant.</th>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[18%]">Unidad</th>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[14%]">P. Unit.</th>
                       <th className="text-right text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[14%]">Subtotal</th>
