@@ -40,6 +40,7 @@ import {
   Minus,
   ClipboardList,
   RefreshCw,
+  Wallet,
   Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -3548,6 +3549,35 @@ Gracias por tu preferencia.`
                 </div>
               </div>
             </div>
+
+            {/* ========== SALDO A FAVOR (store credit) ========== */}
+            {viewingInvoice.documentType === 'nota_credito' && viewingInvoice.storeCredit && (() => {
+              const creditTotal = Number(viewingInvoice.creditTotal ?? viewingInvoice.total) || 0
+              const redeemed = Number(viewingInvoice.creditRedeemed) || 0
+              const available = Math.max(0, creditTotal - redeemed)
+              return (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-emerald-800 flex items-center gap-1.5">
+                        <Wallet className="w-4 h-4" /> Saldo a favor del cliente
+                      </p>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Usable como pago en ventas futuras de {viewingInvoice.customer?.name || 'este cliente'}.
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-emerald-700">{formatCurrency(available, viewingInvoice.currency)}</p>
+                      {redeemed > 0 && (
+                        <p className="text-xs text-emerald-600 mt-0.5">
+                          Usado: {formatCurrency(redeemed, viewingInvoice.currency)} de {formatCurrency(creditTotal, viewingInvoice.currency)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* ========== ERROR SUNAT ========== */}
             {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (

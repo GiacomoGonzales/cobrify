@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search } from 'lucide-react'
+import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search, Wallet, Banknote } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -85,6 +85,13 @@ export default function CreateCreditNote() {
   // con ese monto.
   const [globalDiscountMode, setGlobalDiscountMode] = useState(false)
   const [globalDiscountAmount, setGlobalDiscountAmount] = useState('')
+
+  // Forma de compensación al cliente:
+  //   - 'refund'       → se le devuelve el efectivo (comportamiento histórico).
+  //   - 'store_credit' → el cliente NO recibe dinero; la NC queda como saldo a
+  //                      favor para usar en compras futuras (se aplica como
+  //                      método de pago en el POS). No altera el XML de la NC.
+  const [compensationType, setCompensationType] = useState('refund')
 
   // Form data para factura externa
   const [externalData, setExternalData] = useState({
@@ -535,6 +542,16 @@ export default function CreateCreditNote() {
         status: 'pending',
         sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
 
+        // Saldo a favor (store credit). Si el cliente no recibe efectivo, la NC
+        // queda como saldo usable en ventas futuras. Disponible = creditTotal -
+        // creditRedeemed. La redención se registra al cobrar en el POS (Fase 2).
+        storeCredit: compensationType === 'store_credit',
+        ...(compensationType === 'store_credit' && {
+          creditTotal: total,
+          creditRedeemed: 0,
+          creditRedemptions: [],
+        }),
+
         // Metadata
         userId: user.uid,
         issueDate: new Date(),
@@ -733,6 +750,16 @@ export default function CreateCreditNote() {
         status: 'pending',
         sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
 
+        // Saldo a favor (store credit). Si el cliente no recibe efectivo, la NC
+        // queda como saldo usable en ventas futuras. Disponible = creditTotal -
+        // creditRedeemed. La redención se registra al cobrar en el POS (Fase 2).
+        storeCredit: compensationType === 'store_credit',
+        ...(compensationType === 'store_credit' && {
+          creditTotal: total,
+          creditRedeemed: 0,
+          creditRedemptions: [],
+        }),
+
         // Metadata
         userId: user.uid,
         issueDate: new Date(),
@@ -928,6 +955,56 @@ export default function CreateCreditNote() {
     ? calculateTotals()
     : { subtotal: 0, igv: 0, total: 0 }
   const externalTotals = externalData.items.length > 0 ? calculateExternalTotals() : { subtotal: 0, igv: 0, total: 0 }
+
+  // Total relevante según el modo activo (para el texto del selector de compensación)
+  const activeTotal = mode === CREDIT_NOTE_MODES.EXTERNAL ? externalTotals.total : totals.total
+  const activeCurrency = mode === CREDIT_NOTE_MODES.EXTERNAL ? 'PEN' : selectedInvoice?.currency
+
+  // Selector "Forma de compensación al cliente" — compartido por ambos formularios.
+  // Determina si la NC genera saldo a favor (store credit) o es devolución de efectivo.
+  const compensationSelector = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Forma de compensación al cliente</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'refund' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+            <input
+              type="radio"
+              name="compensationType"
+              checked={compensationType === 'refund'}
+              onChange={() => setCompensationType('refund')}
+              className="mt-0.5 flex-shrink-0"
+            />
+            <div>
+              <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
+                <Banknote className="w-4 h-4 text-gray-500" /> Devolución de efectivo
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">Le devuelves el dinero al cliente. No queda saldo pendiente.</p>
+            </div>
+          </label>
+          <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'store_credit' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+            <input
+              type="radio"
+              name="compensationType"
+              checked={compensationType === 'store_credit'}
+              onChange={() => setCompensationType('store_credit')}
+              className="mt-0.5 flex-shrink-0"
+            />
+            <div>
+              <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
+                <Wallet className="w-4 h-4 text-primary-600" /> Saldo a favor del cliente
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                El cliente conserva {activeTotal > 0 ? formatCurrency(activeTotal, activeCurrency) : 'el monto'} para usar en compras futuras.
+              </p>
+            </div>
+          </label>
+        </div>
+      </CardContent>
+    </Card>
+  )
 
   if (isLoading) {
     return (
@@ -1290,6 +1367,9 @@ export default function CreateCreditNote() {
           </Card>
         )}
 
+            {/* Compensación al cliente (saldo a favor vs devolución) */}
+            {selectedInvoice && compensationSelector}
+
             {/* Actions */}
             <div className="flex justify-end gap-3">
               <Button
@@ -1571,6 +1651,9 @@ export default function CreateCreditNote() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Compensación al cliente (saldo a favor vs devolución) */}
+          {compensationSelector}
 
           {/* Actions */}
           <div className="flex justify-end gap-3">
