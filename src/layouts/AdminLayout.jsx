@@ -16,7 +16,8 @@ import {
   Building2,
   CalendarClock,
   Bell,
-  Sparkles
+  Sparkles,
+  UserPlus
 } from 'lucide-react'
 
 const navItems = [
@@ -31,6 +32,12 @@ const navItems = [
     icon: Users,
     label: 'Usuarios',
     description: 'Gestión de cuentas'
+  },
+  {
+    path: '/app/admin/create-account',
+    icon: UserPlus,
+    label: 'Crear Cuenta',
+    description: 'Registrar un nuevo negocio'
   },
   {
     path: '/app/admin/resellers',

@@ -7,9 +7,10 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
+import { auth, secondaryAuth, db } from '@/lib/firebase'
 import { createSubscription } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
+import { createWarehouse } from './warehouseService'
 
 /**
  * Servicio de autenticación con Firebase
@@ -96,6 +97,90 @@ export const registerUser = async (email, password, displayName, businessData = 
     return { success: true, user: userCredential.user }
   } catch (error) {
     console.error('Error en registro:', error)
+    return { success: false, error: getErrorMessage(error.code || error.message) }
+  }
+}
+
+/**
+ * Crear una cuenta de negocio COMPLETA desde el panel de administración, SIN
+ * desloguear al admin actual.
+ *
+ * Usa la instancia secundaria de Firebase (`secondaryAuth`, con inMemoryPersistence)
+ * para crear el usuario de Auth — igual que el flujo de sub-usuarios — y luego escribe
+ * todos los documentos desde la sesión del admin (las reglas permiten a isAdmin escribir
+ * users/businesses/subscriptions). Crea el negocio COMPLETO (series + datos) y el almacén
+ * principal, porque el nuevo usuario NO pasará por el flujo de BusinessCreate.
+ */
+export const registerBusinessAsAdmin = async (email, password, displayName, businessData = null) => {
+  try {
+    // 1. Crear el usuario en la instancia SECUNDARIA (no afecta la sesión del admin).
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
+    const newUid = userCredential.user.uid
+    if (displayName) {
+      try { await updateProfile(userCredential.user, { displayName }) } catch (e) { /* no crítico */ }
+    }
+    // Cerrar la sesión secundaria de inmediato.
+    try { await signOut(secondaryAuth) } catch (e) { /* no crítico */ }
+
+    // 2. Marcar como Business Owner (users/{uid}).
+    try {
+      await setAsBusinessOwner(newUid, email, displayName)
+    } catch (ownerError) {
+      console.error('Error al marcar como business owner:', ownerError)
+    }
+
+    // 3. Crear el negocio COMPLETO con TODAS las series por defecto (mismo set que
+    //    BusinessCreate), para que la cuenta quede lista sin pasos extra.
+    try {
+      const businessRef = doc(db, 'businesses', newUid)
+      await setDoc(businessRef, {
+        ruc: businessData?.ruc || '',
+        businessName: businessData?.businessName || '',
+        name: businessData?.tradeName || businessData?.businessName || '',
+        phone: businessData?.phone || '',
+        email,
+        address: businessData?.address || '',
+        district: businessData?.district || '',
+        province: businessData?.province || '',
+        department: businessData?.department || '',
+        ubigeo: businessData?.ubigeo || '',
+        series: {
+          factura: { serie: 'F001', lastNumber: 0 },
+          boleta: { serie: 'B001', lastNumber: 0 },
+          nota_venta: { serie: 'N001', lastNumber: 0 },
+          cotizacion: { serie: 'C001', lastNumber: 0 },
+          nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+          nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+          nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+          nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+          guia_remision: { serie: 'T001', lastNumber: 0 },
+          guia_transportista: { serie: 'V001', lastNumber: 0 },
+        },
+        sunat: { enabled: false, environment: 'beta', solUser: '', homologated: false },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+    } catch (businessError) {
+      console.error('Error al guardar datos del negocio:', businessError)
+    }
+
+    // 4. Suscripción de prueba.
+    try {
+      await createSubscription(newUid, email, displayName || email, 'trial')
+    } catch (subscriptionError) {
+      console.error('Error al crear suscripción de prueba:', subscriptionError)
+    }
+
+    // 5. Almacén principal por defecto.
+    try {
+      await createWarehouse(newUid, { name: 'Almacén Principal', isDefault: true })
+    } catch (whError) {
+      console.error('Error al crear almacén principal:', whError)
+    }
+
+    return { success: true, userId: newUid }
+  } catch (error) {
+    console.error('Error en registro (admin):', error)
     return { success: false, error: getErrorMessage(error.code || error.message) }
   }
 }
