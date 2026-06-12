@@ -106,11 +106,20 @@ export default function BusinessCreate() {
         phone: data.phone || '',
         email: data.email,
         ownerId: user.uid,
-        // Series por defecto
+        // Series por defecto COMPLETAS (todos los tipos de documento), para que la
+        // cuenta nueva quede lista sin tener que entrar a Configuración > Series a
+        // "Editar y Guardar". Mismas series que el default de Configuración.
         series: {
           factura: { serie: 'F001', lastNumber: 0 },
           boleta: { serie: 'B001', lastNumber: 0 },
           nota_venta: { serie: 'N001', lastNumber: 0 },
+          cotizacion: { serie: 'C001', lastNumber: 0 },
+          nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+          nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+          nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+          nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+          guia_remision: { serie: 'T001', lastNumber: 0 },
+          guia_transportista: { serie: 'V001', lastNumber: 0 },
         },
         // SUNAT deshabilitado por defecto
         sunat: {
