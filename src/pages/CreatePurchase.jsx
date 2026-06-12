@@ -2642,7 +2642,7 @@ export default function CreatePurchase() {
                             type="date"
                             value={item.expirationDate || ''}
                             onChange={e => updateItem(index, 'expirationDate', e.target.value)}
-                            style={{ paddingTop: '5px', paddingBottom: '5px' }}
+                            style={{ height: '30px', minHeight: 0, paddingTop: 0, paddingBottom: 0 }}
                             className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
                         </td>
@@ -2933,7 +2933,8 @@ export default function CreatePurchase() {
                         type="date"
                         value={item.expirationDate || ''}
                         onChange={e => updateItem(index, 'expirationDate', e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        style={{ height: '30px', minHeight: 0, paddingTop: 0, paddingBottom: 0 }}
+                        className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
                   </div>
