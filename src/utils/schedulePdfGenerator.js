@@ -203,23 +203,21 @@ export const generateSchedulePDF = async ({
   // Nombre legible de la sucursal de una celda (modo integrado por usuario).
   const branchNameOf = (cell) => {
     const id = cellBranchId(cell)
-    if (id === MAIN_BRANCH_ID) return 'Principal'
-    const b = (branches || []).find((x) => x.id === id)
-    return b?.name || 'Sucursal'
+    const b = (branches || []).find((x) => x.id === id || (id === MAIN_BRANCH_ID && x.isMain))
+    return b?.name || (id === MAIN_BRANCH_ID ? 'Principal' : 'Sucursal')
   }
   const resetCellText = () => {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(31, 41, 55)
   }
-  // Línea inferior con la sucursal (y opcionalmente el refrigerio), modo integrado.
-  const drawBranchLine = (label, cx, rowY, breakMin = 0) => {
+  // Línea inferior con la sucursal (modo integrado por usuario).
+  const drawBranchLine = (label, cx, rowY) => {
     if (!label) return
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(6.5)
     doc.setTextColor(107, 114, 128)
-    const txt = breakMin > 0 ? `${label} · −${breakMin}m` : label
-    doc.text(truncate(txt, 24), cx, rowY + rowHeight - 1.8, { align: 'center' })
+    doc.text(truncate(label, 24), cx, rowY + rowHeight - 1.8, { align: 'center' })
   }
 
   const renderCell = (cell, x, rowY) => {
@@ -300,13 +298,7 @@ export const generateSchedulePDF = async ({
     doc.text(timeText, cx, contentY, { align: 'center' })
 
     if (branchLabel) {
-      // Modo integrado: el refrigerio va junto a la sucursal en la línea inferior.
-      drawBranchLine(branchLabel, cx, rowY, cell.breakMinutes || 0)
-    } else if (cell.breakMinutes > 0) {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      doc.setTextColor(107, 114, 128)
-      doc.text(`break ${cell.breakMinutes}m`, cx, rowY + rowHeight - 2, { align: 'center' })
+      drawBranchLine(branchLabel, cx, rowY)
     }
     resetCellText()
   }

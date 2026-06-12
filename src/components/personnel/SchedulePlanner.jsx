@@ -254,10 +254,14 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     if (template.isRest) {
       setCell(userId, dayKey, { rest: true, branchId: effectiveBranchId })
     } else if (template.isRecovery) {
-      // Recuperación: día visible en el horario pero NO suma horas semanales.
-      // Útil para reponer un día perdido o cubrir una falta sin contabilizarlo
-      // como hora extra en el cómputo del salario.
-      setCell(userId, dayKey, { recovery: true, branchId: effectiveBranchId })
+      // Recuperación: visible en el horario pero NO suma horas semanales.
+      // Si la plantilla tiene horario, se usa (para ver exactamente cuántas
+      // horas de recuperación están programadas); si no, bloque sin horario.
+      if (template.startTime && template.endTime) {
+        setCustom(userId, dayKey, template.startTime, template.endTime, 0, true)
+      } else {
+        setCell(userId, dayKey, { recovery: true, branchId: effectiveBranchId })
+      }
     } else {
       setCell(userId, dayKey, {
         templateId: template.id || null,
@@ -536,6 +540,18 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
       if (d && cellBranchId(d) === branchId) filtered[key] = d
     }
     return calculateWeekHours(filtered)
+  }
+
+  const calculateBranchRecoveryHours = (daysObj, branchId) => {
+    if (!daysObj) return 0
+    let total = 0
+    for (const key of DAY_KEYS) {
+      const c = daysObj[key]
+      if (!c || !c.recovery || !c.start || !c.end) continue
+      if (cellBranchId(c) !== branchId) continue
+      total += calcShiftHours(c.start, c.end, 0)
+    }
+    return total
   }
 
   // ----- Render -----
@@ -1020,10 +1036,18 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                       <td className="px-4 py-2 text-right">
                         {(() => {
                           const branchHours = calculateBranchHours(sch.days, selectedBranchId)
+                          const recoveryHours = calculateBranchRecoveryHours(sch.days, selectedBranchId)
                           return (
-                            <span className={`font-semibold ${branchHours > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                              {branchHours.toFixed(1)}h
-                            </span>
+                            <>
+                              <span className={`font-semibold ${branchHours > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                                {branchHours.toFixed(1)}h
+                              </span>
+                              {recoveryHours > 0 && (
+                                <div className="text-[10px] text-orange-600 leading-tight" title="Horas de recuperación (no suman al total)">
+                                  +{recoveryHours.toFixed(1)}h recup.
+                                </div>
+                              )}
+                            </>
                           )
                         })()}
                         {sch.publishedAt && (
