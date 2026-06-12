@@ -260,8 +260,8 @@ const ProductFormModal = ({
   // Product location state (for enableProductLocation preference, all modes)
   const [productLocation, setProductLocation] = useState('')
 
-  // Check if product images are enabled
-  const canUseProductImages = showImages && (hasFeature?.('productImages') || businessSettings?.enableProductImages)
+  // Imágenes habilitadas para todos por defecto; solo respeta el control del invocador (showImages).
+  const canUseProductImages = showImages
 
   // Track previous isOpen to only reset when modal transitions from closed to open
   const prevIsOpenRef = useRef(false)

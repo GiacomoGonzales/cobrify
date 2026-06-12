@@ -3301,16 +3301,6 @@ export default function Settings() {
                   Controla qué información se gestiona en el catálogo y cómo se edita el stock.
                 </p>
                 <div className="space-y-3">
-                  {/* Imágenes de productos */}
-                  <SettingToggle
-                    checked={enableProductImages}
-                    onChange={(e) => setEnableProductImages(e.target.checked)}
-                    title="Habilitar imágenes de productos"
-                    description={enableProductImages
-                      ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
-                      : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
-                  />
-
                   {/* Ubicación de productos */}
                   <SettingToggle
                     checked={enableProductLocation}

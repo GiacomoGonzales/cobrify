@@ -410,8 +410,8 @@ export default function Products() {
   })
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false) // menú único "Opciones" del header
 
-  // Verificar si las imágenes de productos están habilitadas (por admin O por preferencia del usuario)
-  const canUseProductImages = hasFeature('productImages') || businessSettings?.enableProductImages
+  // Imágenes de productos: habilitadas para todos por defecto (ya no es una opción configurable).
+  const canUseProductImages = true
 
   const {
     register,
