@@ -185,6 +185,10 @@ export default function CreatePurchase() {
   // Estado para menú de crear (producto o ingrediente)
   const [showCreateMenu, setShowCreateMenu] = useState({})
 
+  // Selección de variante (talla, color, etc.) vía modal — igual que en Cotizaciones
+  const [showVariantModal, setShowVariantModal] = useState(false)
+  const [pendingVariantProduct, setPendingVariantProduct] = useState(null)
+
   // Laboratories for pharmacy mode
   const [laboratories, setLaboratories] = useState([])
 
@@ -594,6 +598,15 @@ export default function CreatePurchase() {
     setPurchaseItems(newItems)
   }
 
+  // Confirmar la variante elegida en el modal
+  const handleVariantSelection = (variant) => {
+    if (!pendingVariantProduct) return
+    const { index, product } = pendingVariantProduct
+    setShowVariantModal(false)
+    setPendingVariantProduct(null)
+    selectProduct(index, product, variant)
+  }
+
   const updateSerialNumber = (itemIndex, serialIndex, value) => {
     const newItems = [...purchaseItems]
     const serials = [...(newItems[itemIndex].serialNumbers || [])]
@@ -675,51 +688,54 @@ export default function CreatePurchase() {
   const getFilteredProducts = getFilteredItems
 
   // Seleccionar producto o ingrediente
-  const selectProduct = (index, item) => {
-    // Si el producto tiene variantes, expandir en múltiples filas (una por variante)
-    if (item.hasVariants && item.variants?.length > 0) {
-      const newItems = [...purchaseItems]
-      // Reemplazar la fila actual con las variantes
-      const isExemptVar = item.taxAffectation === '20' || item.taxAffectation === '30'
-      const variantRows = item.variants.map(v => {
-        const variantLabel = Object.values(v.attributes || {}).join(' / ')
-        const costValue = item.cost && item.cost > 0 ? item.cost : 0
-        return {
-          productId: item.id,
-          productName: `${item.name} — ${variantLabel}`,
-          variantSku: v.sku,
-          variantLabel,
-          quantity: '',
-          unitPrice: 0,
-          cost: costValue,
-          costWithoutIGV: costValue > 0 ? (isExemptVar ? costValue : costValue / 1.18) : 0,
-          batchNumber: '',
-          expirationDate: '',
-          itemType: 'product',
-          unit: item.unit || 'NIU',
-          isVariant: true,
-          taxAffectation: item.taxAffectation || '10',
-          salePrice: v.price || '',
-          salePrice2: v.price2 || '',
-          salePrice3: v.price3 || '',
-          salePrice4: v.price4 || '',
-          hasVariants: true,
-          trackSerials: item.trackSerials || false,
-          serialNumbers: [],
-        }
-      })
-
-      newItems.splice(index, 1, ...variantRows)
-      setPurchaseItems(newItems)
-
-      // Actualizar búsquedas para cada fila nueva
-      const newSearches = { ...productSearches }
+  const selectProduct = (index, item, selectedVariant = null) => {
+    // Si el producto tiene variantes (talla, color, etc.) y no se eligió una,
+    // mostrar el modal de selección (igual que en Cotizaciones) en vez de
+    // expandir un montón de filas editables.
+    if (item.hasVariants && item.variants?.length > 0 && !selectedVariant) {
+      setPendingVariantProduct({ index, product: item })
+      setShowVariantModal(true)
       const newDropdowns = { ...showProductDropdowns }
-      variantRows.forEach((_, i) => {
-        newSearches[index + i] = variantRows[i].productName
-        newDropdowns[index + i] = false
-      })
+      newDropdowns[index] = false
+      setShowProductDropdowns(newDropdowns)
+      return
+    }
+
+    // Si se eligió una variante desde el modal, hidratar la fila actual con ella.
+    if (selectedVariant) {
+      const newItems = [...purchaseItems]
+      const variantLabel = Object.values(selectedVariant.attributes || {}).join(' / ')
+      const isExemptVar = item.taxAffectation === '20' || item.taxAffectation === '30'
+      const costValue = item.cost && item.cost > 0 ? item.cost : 0
+      newItems[index] = {
+        ...newItems[index],
+        productId: item.id,
+        productName: `${item.name} — ${variantLabel}`,
+        variantSku: selectedVariant.sku,
+        variantLabel,
+        isVariant: true,
+        hasVariants: true,
+        itemType: 'product',
+        unit: item.unit || 'NIU',
+        taxAffectation: item.taxAffectation || '10',
+        trackSerials: item.trackSerials || false,
+        serialNumbers: [],
+        cost: costValue,
+        costWithoutIGV: costValue > 0 ? (isExemptVar ? costValue : costValue / 1.18) : 0,
+        salePrice: selectedVariant.price || '',
+        salePrice2: selectedVariant.price2 || '',
+        salePrice3: selectedVariant.price3 || '',
+        salePrice4: selectedVariant.price4 || '',
+        presentations: [],
+        presentationName: '',
+        presentationFactor: 1,
+      }
+      setPurchaseItems(newItems)
+      const newSearches = { ...productSearches }
+      newSearches[index] = newItems[index].productName
       setProductSearches(newSearches)
+      const newDropdowns = { ...showProductDropdowns }
+      newDropdowns[index] = false
       setShowProductDropdowns(newDropdowns)
       return
     }
@@ -2447,11 +2463,11 @@ export default function CreatePurchase() {
         <CardContent className="p-0 sm:p-6 overflow-visible">
           {/* Vista de tabla para desktop */}
           <div className="hidden md:block">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 'w-[25%]' : 'w-[35%]'}`}>Producto</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]">Cant.</th>
+                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 'w-[25%]' : 'w-[34%]'}`}>Producto</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Cant.</th>
                   {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                     <>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[10%]">Lote</th>
@@ -2467,7 +2483,7 @@ export default function CreatePurchase() {
               <tbody className="divide-y divide-gray-100">
                 {purchaseItems.map((item, index) => (
                   <React.Fragment key={index}>
-                  <tr className="hover:bg-gray-50">
+                  <tr className="hover:bg-gray-50 [&>td]:align-top">
                     {/* Producto */}
                     <td className="px-4 py-2">
                       <div className="flex gap-1">
@@ -3343,6 +3359,54 @@ export default function CreatePurchase() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal: Selección de Variante (talla, color, etc.) */}
+      <Modal
+        isOpen={showVariantModal}
+        onClose={() => {
+          setShowVariantModal(false)
+          setPendingVariantProduct(null)
+        }}
+        title={`Seleccionar variante - ${pendingVariantProduct?.product?.name || ''}`}
+        maxWidth="md"
+      >
+        {pendingVariantProduct?.product && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Selecciona la variante que estás comprando:
+            </p>
+            <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
+              {pendingVariantProduct.product.variants?.map((variant, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleVariantSelection(variant)}
+                  className="group flex items-center gap-3 p-3 border border-gray-200 rounded-xl text-left transition-colors hover:border-primary-400 hover:bg-gray-50"
+                >
+                  <div className="flex-1 min-w-0">
+                    {variant.sku && (
+                      <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(variant.attributes || {}).map(([key, value]) => (
+                        <span key={key} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                          {key}: {value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <Plus className="w-5 h-5 text-primary-600 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
+            {pendingVariantProduct.product.variants?.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No hay variantes disponibles.</p>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   )
