@@ -17,9 +17,6 @@ import {
 import {
   AreaChart,
   Area,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,7 +27,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getAdminStats, getSystemAlerts } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
-import { CHART, CHART_TOOLTIP, CHART_SERIES } from '@/components/charts/chartTheme'
+import { CHART, CHART_TOOLTIP } from '@/components/charts/chartTheme'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null)
@@ -278,32 +275,44 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Distribución por Plan */}
+        {/* Ventas por Mes */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base lg:text-lg font-semibold text-gray-900">Distribución por Plan</h3>
-            <Activity className="w-5 h-5 text-cyan-600 flex-shrink-0" />
+            <h3 className="text-base lg:text-lg font-semibold text-gray-900">Ventas por Mes</h3>
+            <DollarSign className="w-5 h-5 text-emerald-600 flex-shrink-0" />
           </div>
           <div className="h-56 sm:h-64 lg:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={stats?.planDistribution || []}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={3}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                  labelLine={false}
-                >
-                  {(stats?.planDistribution || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_SERIES[index % CHART_SERIES.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={CHART_TOOLTIP} />
-              </PieChart>
+              <AreaChart data={stats?.revenueChartData || []}>
+                <defs>
+                  <linearGradient id="colorVentas" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART.cyan} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={CHART.cyan} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: CHART.axis }}
+                  stroke={CHART.grid}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
+                />
+                <Tooltip
+                  contentStyle={CHART_TOOLTIP}
+                  formatter={(value) => [`S/ ${Number(value).toFixed(2)}`, 'Ventas']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="monto"
+                  stroke={CHART.cyan}
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#colorVentas)"
+                  name="Ventas"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>

@@ -43,6 +43,7 @@ export async function getAdminStats() {
     const recentPayments = []
     const recentUsers = []
     const monthlyGrowth = {}
+    const monthlyRevenue = {}
 
     // Inicializar usersByPlan con todos los planes
     Object.keys(PLANS).forEach(planKey => {
@@ -124,6 +125,12 @@ export async function getAdminStats() {
           const paymentDate = payment.date?.toDate?.() || new Date(payment.date)
           totalRevenue += payment.amount || 0
 
+          // Ventas por mes (para el gráfico de crecimiento de ingresos)
+          if (paymentDate instanceof Date && !isNaN(paymentDate)) {
+            const revKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
+            monthlyRevenue[revKey] = (monthlyRevenue[revKey] || 0) + (payment.amount || 0)
+          }
+
           // Pagos recientes (último mes)
           if (paymentDate >= startOfMonth) {
             recentPayments.push({
@@ -157,6 +164,9 @@ export async function getAdminStats() {
     // Preparar datos para gráfico de crecimiento mensual
     const growthChartData = prepareGrowthChartData(monthlyGrowth)
 
+    // Preparar datos para gráfico de ventas por mes (desde paymentHistory)
+    const revenueChartData = prepareRevenueChartData(monthlyRevenue)
+
     // Preparar datos para gráfico de distribución por plan
     let customPlansData = {}
     try { customPlansData = await getCustomPlans() } catch (e) { /* ignore */ }
@@ -187,7 +197,8 @@ export async function getAdminStats() {
       planDistribution,
       recentPayments: recentPayments.slice(0, 10),
       recentUsers: recentUsers.slice(0, 10),
-      growthChartData
+      growthChartData,
+      revenueChartData
     }
   } catch (error) {
     console.error('Error al obtener estadísticas:', error)
@@ -222,6 +233,30 @@ function prepareGrowthChartData(monthlyGrowth) {
     accumulated += m.nuevos
     m.total = accumulated
   })
+
+  return months
+}
+
+/**
+ * Prepara datos para el gráfico de ventas por mes (monto de pagos recibidos).
+ * Últimos 12 meses, igual estructura que el gráfico de crecimiento.
+ */
+function prepareRevenueChartData(monthlyRevenue) {
+  const months = []
+  const now = new Date()
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+  for (let i = 11; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+
+    months.push({
+      month: monthNames[date.getMonth()],
+      year: date.getFullYear(),
+      key,
+      monto: Math.round((monthlyRevenue[key] || 0) * 100) / 100
+    })
+  }
 
   return months
 }
