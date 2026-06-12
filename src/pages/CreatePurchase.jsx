@@ -541,9 +541,24 @@ export default function CreatePurchase() {
   }
 
   const removeItem = index => {
-    if (purchaseItems.length > 1) {
-      setPurchaseItems(purchaseItems.filter((_, i) => i !== index))
+    if (purchaseItems.length <= 1) return
+    setPurchaseItems(purchaseItems.filter((_, i) => i !== index))
+    // Los mapas auxiliares están indexados por POSICIÓN del array, así que al
+    // quitar una fila hay que desplazar las claves (si no, la búsqueda/nombre de
+    // la fila eliminada se queda pegada en la fila que ocupa su índice).
+    const reindex = (obj) => {
+      const next = {}
+      Object.keys(obj).forEach(k => {
+        const ki = Number(k)
+        if (ki < index) next[ki] = obj[ki]
+        else if (ki > index) next[ki - 1] = obj[ki]
+        // ki === index se descarta
+      })
+      return next
     }
+    setProductSearches(prev => reindex(prev))
+    setShowProductDropdowns(prev => reindex(prev))
+    setShowCreateMenu(prev => reindex(prev))
   }
 
   const updateItem = (index, field, value) => {
