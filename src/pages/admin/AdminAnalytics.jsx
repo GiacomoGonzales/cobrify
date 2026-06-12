@@ -29,8 +29,7 @@ import {
   LineChart,
   Line
 } from 'recharts'
-
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+import { CHART, CHART_TOOLTIP, CHART_SERIES } from '@/components/charts/chartTheme'
 
 export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true)
@@ -62,7 +61,7 @@ export default function AdminAnalytics() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Cargando analytics...</p>
         </div>
       </div>
@@ -87,7 +86,7 @@ export default function AdminAnalytics() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-indigo-600 text-indigo-600'
+                  ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -165,18 +164,16 @@ function OverviewTab({ stats, analytics }) {
         {kpis.map((kpi, index) => (
           <div
             key={index}
-            className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-3 sm:p-5 border border-gray-200"
+            className="bg-white rounded-xl shadow-sm p-3 sm:p-5 border border-gray-200"
           >
             <div className="flex items-center justify-between mb-2 sm:mb-3">
-              <div className="p-1.5 sm:p-2 bg-indigo-100 rounded-lg">
-                <kpi.icon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
-              </div>
+              <kpi.icon className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
               <span className={`text-xs font-medium ${kpi.positive ? 'text-green-600' : 'text-red-600'} hidden sm:inline`}>
                 {kpi.change}
               </span>
             </div>
-            <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{kpi.value}</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">{kpi.label}</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{kpi.value}</p>
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mt-0.5 sm:mt-1">{kpi.label}</p>
           </div>
         ))}
       </div>
@@ -184,7 +181,7 @@ function OverviewTab({ stats, analytics }) {
       {/* Quick Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         {/* Plan Distribution */}
-        <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
           <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Distribución por Plan</h3>
           <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -199,26 +196,26 @@ function OverviewTab({ stats, analytics }) {
                   label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                 >
                   {(stats?.planDistribution || []).map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={index} fill={CHART_SERIES[index % CHART_SERIES.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={CHART_TOOLTIP} />
               </RechartsPie>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Emission Methods */}
-        <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
           <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Métodos de Emisión</h3>
           <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.emissionMethods || []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: CHART.axis }} />
+                <YAxis tick={{ fontSize: 12, fill: CHART.axis }} />
+                <Tooltip contentStyle={CHART_TOOLTIP} />
+                <Bar dataKey="value" fill={CHART.primary} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -237,9 +234,9 @@ function GrowthTab({ stats }) {
           <p className="text-xs sm:text-sm text-green-600 font-medium">Nuevos este mes</p>
           <p className="text-xl sm:text-3xl font-bold text-green-700 mt-1">{stats?.newThisMonth || 0}</p>
         </div>
-        <div className="bg-blue-50 rounded-xl p-3 sm:p-5 border border-blue-200">
-          <p className="text-xs sm:text-sm text-blue-600 font-medium">Mes anterior</p>
-          <p className="text-xl sm:text-3xl font-bold text-blue-700 mt-1">{stats?.newLastMonth || 0}</p>
+        <div className="bg-primary-50 rounded-xl p-3 sm:p-5 border border-primary-200">
+          <p className="text-xs sm:text-sm text-primary-600 font-medium">Mes anterior</p>
+          <p className="text-xl sm:text-3xl font-bold text-primary-700 mt-1">{stats?.newLastMonth || 0}</p>
         </div>
         <div className={`${stats?.growthRate >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} rounded-xl p-3 sm:p-5 border`}>
           <p className={`text-xs sm:text-sm font-medium ${stats?.growthRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -252,39 +249,39 @@ function GrowthTab({ stats }) {
       </div>
 
       {/* Growth Chart */}
-      <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
         <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Crecimiento Mensual</h3>
         <div className="h-64 sm:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={stats?.growthChartData || []}>
               <defs>
                 <linearGradient id="colorNuevos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%" stopColor={CHART.primary} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART.primary} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  <stop offset="5%" stopColor={CHART.cyan} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART.cyan} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
               <XAxis
                 dataKey="month"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 12, fill: CHART.axis }}
                 tickFormatter={(value, index) => {
                   const data = stats?.growthChartData?.[index]
                   return data ? `${value} ${data.year?.toString().slice(-2)}` : value
                 }}
               />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12, fill: CHART.axis }} />
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
                     return (
-                      <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                      <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
                         <p className="font-medium">{label}</p>
-                        <p className="text-indigo-600">Nuevos: {payload[0]?.value}</p>
-                        <p className="text-green-600">Total acumulado: {payload[1]?.value}</p>
+                        <p className="text-primary-600">Nuevos: {payload[0]?.value}</p>
+                        <p className="text-cyan-600">Total acumulado: {payload[1]?.value}</p>
                       </div>
                     )
                   }
@@ -294,7 +291,7 @@ function GrowthTab({ stats }) {
               <Area
                 type="monotone"
                 dataKey="nuevos"
-                stroke="#6366f1"
+                stroke={CHART.primary}
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#colorNuevos)"
@@ -302,7 +299,7 @@ function GrowthTab({ stats }) {
               <Area
                 type="monotone"
                 dataKey="total"
-                stroke="#22c55e"
+                stroke={CHART.cyan}
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#colorTotal)"
@@ -320,14 +317,12 @@ function UsageTab({ analytics }) {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Total Documents */}
-      <div className="bg-indigo-50 rounded-xl p-4 sm:p-6 border border-indigo-200">
+      <div className="bg-primary-50 rounded-xl p-4 sm:p-6 border border-primary-200">
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className="p-3 sm:p-4 bg-indigo-100 rounded-xl">
-            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
-          </div>
+          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
           <div>
-            <p className="text-xs sm:text-sm text-indigo-600 font-medium">Total documentos este mes</p>
-            <p className="text-2xl sm:text-4xl font-bold text-indigo-700">{analytics?.totalDocuments?.toLocaleString() || 0}</p>
+            <p className="text-xs sm:text-sm text-primary-600 font-medium">Total documentos este mes</p>
+            <p className="text-2xl sm:text-4xl font-bold text-primary-700">{analytics?.totalDocuments?.toLocaleString() || 0}</p>
           </div>
         </div>
       </div>
@@ -337,7 +332,7 @@ function UsageTab({ analytics }) {
         <div className="p-3 sm:p-4 border-b border-gray-200">
           <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Top 10 Usuarios por Uso</h3>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-100">
           {(analytics?.topUsers || []).length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">
               No hay datos de uso disponibles
@@ -349,7 +344,7 @@ function UsageTab({ analytics }) {
                 className="flex items-center gap-3 p-3 sm:p-4 hover:bg-gray-50"
               >
                 <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-white text-xs sm:text-sm ${
-                  index === 0 ? 'bg-yellow-500' :
+                  index === 0 ? 'bg-amber-500' :
                   index === 1 ? 'bg-gray-400' :
                   index === 2 ? 'bg-amber-600' :
                   'bg-gray-300'
@@ -361,7 +356,7 @@ function UsageTab({ analytics }) {
                   <p className="text-xs text-gray-500 truncate">{user.email}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="font-bold text-indigo-600 text-sm sm:text-base">{user.documents}</p>
+                  <p className="font-bold text-primary-600 text-sm sm:text-base">{user.documents}</p>
                   <p className="text-xs text-gray-500">docs</p>
                 </div>
               </div>
@@ -380,7 +375,7 @@ function DistributionTab({ stats, analytics }) {
         {/* Plan Distribution */}
         <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
           <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
-            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
             Usuarios por Plan
           </h3>
           <div className="h-56 sm:h-72">
@@ -398,10 +393,10 @@ function DistributionTab({ stats, analytics }) {
                   label={({ name, value }) => `${name}: ${value}`}
                 >
                   {(stats?.planDistribution || []).map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={index} fill={CHART_SERIES[index % CHART_SERIES.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={CHART_TOOLTIP} />
                 <Legend />
               </RechartsPie>
             </ResponsiveContainer>
@@ -411,7 +406,7 @@ function DistributionTab({ stats, analytics }) {
         {/* Business Mode Distribution */}
         <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
           <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
-            <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
             Tipo de Negocio
           </h3>
           <div className="h-56 sm:h-72">
@@ -429,10 +424,10 @@ function DistributionTab({ stats, analytics }) {
                   label={({ name, value }) => `${name}: ${value}`}
                 >
                   {(analytics?.businessModes || []).map((_, index) => (
-                    <Cell key={index} fill={COLORS[(index + 2) % COLORS.length]} />
+                    <Cell key={index} fill={CHART_SERIES[(index + 2) % CHART_SERIES.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={CHART_TOOLTIP} />
                 <Legend />
               </RechartsPie>
             </ResponsiveContainer>
@@ -442,19 +437,19 @@ function DistributionTab({ stats, analytics }) {
         {/* Emission Methods Distribution */}
         <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 lg:col-span-2">
           <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
-            <Server className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            <Server className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
             Métodos de Emisión
           </h3>
           <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.emissionMethods || []} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: CHART.axis }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: CHART.axis }} width={120} />
+                <Tooltip contentStyle={CHART_TOOLTIP} />
+                <Bar dataKey="value" fill={CHART.primary} radius={[0, 4, 4, 0]}>
                   {(analytics?.emissionMethods || []).map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={index} fill={CHART_SERIES[index % CHART_SERIES.length]} />
                   ))}
                 </Bar>
               </BarChart>

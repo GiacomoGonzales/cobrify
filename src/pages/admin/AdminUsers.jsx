@@ -66,10 +66,10 @@ import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/ware
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const STATUS_COLORS = {
-  active: 'bg-green-100 text-green-800',
-  trial: 'bg-blue-100 text-blue-800',
-  suspended: 'bg-red-100 text-red-800',
-  expired: 'bg-yellow-100 text-yellow-800'
+  active: 'bg-green-100 text-green-700',
+  trial: 'bg-blue-100 text-blue-700',
+  suspended: 'bg-red-100 text-red-700',
+  expired: 'bg-amber-100 text-amber-700'
 }
 
 const STATUS_LABELS = {
@@ -1802,38 +1802,38 @@ export default function AdminUsers() {
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Users className="w-5 h-5 sm:w-8 sm:h-8 text-gray-400" />
-            <span className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</span>
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 flex-shrink-0" />
+            <span className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Total</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Total</p>
         </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-green-200">
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <CheckCircle className="w-5 h-5 sm:w-8 sm:h-8 text-green-500" />
-            <span className="text-lg sm:text-2xl font-bold text-green-600">{stats.active}</span>
+            <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
+            <span className="text-xl sm:text-2xl font-bold text-green-600">{stats.active}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Activos</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Activos</p>
         </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-blue-200">
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Clock className="w-5 h-5 sm:w-8 sm:h-8 text-blue-500" />
-            <span className="text-lg sm:text-2xl font-bold text-blue-600">{stats.trial}</span>
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
+            <span className="text-xl sm:text-2xl font-bold text-blue-600">{stats.trial}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Trial</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Trial</p>
         </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-yellow-200 hidden sm:block">
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200 hidden sm:block">
           <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <AlertTriangle className="w-5 h-5 sm:w-8 sm:h-8 text-yellow-500" />
-            <span className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.expired}</span>
+            <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
+            <span className="text-xl sm:text-2xl font-bold text-amber-600">{stats.expired}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Vencidos</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Vencidos</p>
         </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-red-200 hidden sm:block">
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200 hidden sm:block">
           <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Ban className="w-5 h-5 sm:w-8 sm:h-8 text-red-500" />
-            <span className="text-lg sm:text-2xl font-bold text-red-600">{stats.suspended}</span>
+            <Ban className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
+            <span className="text-xl sm:text-2xl font-bold text-red-600">{stats.suspended}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Suspendidos</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Suspendidos</p>
         </div>
       </div>
 
@@ -1846,16 +1846,14 @@ export default function AdminUsers() {
             className="w-full p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
           >
             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-              <div className="p-2 rounded-lg bg-indigo-50">
-                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
-              </div>
+              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
               <div className="text-left min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500">Tasa de Retención</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-500">Tasa de Retención</p>
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className={`text-xl sm:text-2xl font-bold ${
                     renewalStats.rate === null ? 'text-gray-400' :
                     renewalStats.rate > 70 ? 'text-green-600' :
-                    renewalStats.rate >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    renewalStats.rate >= 40 ? 'text-amber-600' : 'text-red-600'
                   }`}>
                     {renewalStats.rate !== null ? `${renewalStats.rate}%` : '—'}
                   </span>
@@ -1932,16 +1930,14 @@ export default function AdminUsers() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="w-full p-3 sm:p-4 flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-              <div className="p-2 rounded-lg bg-emerald-50">
-                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
-              </div>
+              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600 flex-shrink-0" />
               <div className="text-left min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500">Tasa Histórica</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-500">Tasa Histórica</p>
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className={`text-xl sm:text-2xl font-bold ${
                     renewalStats.lifetimeRate === null ? 'text-gray-400' :
                     renewalStats.lifetimeRate > 70 ? 'text-emerald-600' :
-                    renewalStats.lifetimeRate >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    renewalStats.lifetimeRate >= 40 ? 'text-amber-600' : 'text-red-600'
                   }`}>
                     {renewalStats.lifetimeRate !== null ? `${renewalStats.lifetimeRate}%` : '—'}
                   </span>
@@ -1974,7 +1970,7 @@ export default function AdminUsers() {
           className="flex items-center justify-between w-full text-left"
         >
           <h3 className="text-sm font-semibold text-gray-900">Distribución Geográfica</h3>
-          <span className="text-xs text-indigo-600">{showMap ? 'Ocultar' : 'Ver mapa'}</span>
+          <span className="text-xs text-primary-600">{showMap ? 'Ocultar' : 'Ver mapa'}</span>
         </button>
         {showMap && (
           <div className="mt-3">
@@ -1994,7 +1990,7 @@ export default function AdminUsers() {
               placeholder="Buscar por nombre, email, RUC, teléfono, dirección..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
 
@@ -2003,7 +1999,7 @@ export default function AdminUsers() {
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Estado</option>
               <option value="active">Activos</option>
@@ -2015,7 +2011,7 @@ export default function AdminUsers() {
             <select
               value={planFilter}
               onChange={e => setPlanFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Plan</option>
               {Object.entries(PLANS).map(([key, plan]) => (
@@ -2026,7 +2022,7 @@ export default function AdminUsers() {
             <select
               value={sourceFilter}
               onChange={e => setSourceFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Origen ({stats.cobrify}+{stats.reseller})</option>
               <option value="cobrify">Cobrify ({stats.cobrify})</option>
@@ -2048,7 +2044,7 @@ export default function AdminUsers() {
             <select
               value={vendedorFilter}
               onChange={e => setVendedorFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Vendedor</option>
               <option value="none">Sin vendedor</option>
@@ -2065,7 +2061,7 @@ export default function AdminUsers() {
             <select
               value={modeFilter}
               onChange={e => setModeFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Modo</option>
               <option value="retail">Retail ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
@@ -2078,7 +2074,7 @@ export default function AdminUsers() {
             <select
               value={igvFilter}
               onChange={e => setIgvFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">IGV</option>
               <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
@@ -2089,7 +2085,7 @@ export default function AdminUsers() {
             <button
               onClick={loadUsers}
               disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Recargar"
             >
               <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -2097,7 +2093,7 @@ export default function AdminUsers() {
 
             <button
               onClick={() => openVendedorForm()}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-xs sm:text-sm"
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-xs sm:text-sm"
               title="Gestionar vendedores"
             >
               <UserCheck className="w-4 h-4" />
@@ -2116,7 +2112,7 @@ export default function AdminUsers() {
 
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs sm:text-sm"
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs sm:text-sm"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar</span>
@@ -2167,21 +2163,21 @@ export default function AdminUsers() {
                 {/* Header: Negocio + Estado */}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-cyan-50' : 'bg-primary-50'}`}>
                       {user.userNumber ? (
-                        <span className="text-[10px] font-bold text-indigo-600">{user.userNumber}</span>
+                        <span className="text-[10px] font-bold text-primary-700">{user.userNumber}</span>
                       ) : (
-                        <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
+                        <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-cyan-700' : 'text-primary-700'}`} />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 text-sm truncate">{user.businessName}</p>
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
                       {user.createdByReseller && (
-                        <p className="text-[10px] text-purple-600 truncate">↳ {user.resellerName}</p>
+                        <p className="text-[10px] text-cyan-600 truncate">↳ {user.resellerName}</p>
                       )}
                       {user.vendedorId && (
-                        <p className="text-[10px] text-orange-600 font-medium truncate">
+                        <p className="text-[10px] text-amber-600 font-medium truncate">
                           V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
                         </p>
                       )}
@@ -2195,7 +2191,7 @@ export default function AdminUsers() {
                 {/* Info Row: Plan + SUNAT + Vencimiento */}
                 <div className="flex items-center justify-between text-xs mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
                       {getPlanDisplay(user)}
                     </span>
                     {user.emissionMethod && user.emissionMethod !== 'none' && (
@@ -2229,7 +2225,7 @@ export default function AdminUsers() {
                         user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
                           ? 'bg-red-500'
                           : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
-                            ? 'bg-yellow-500'
+                            ? 'bg-amber-500'
                             : 'bg-emerald-500'
                       }`}
                       style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
@@ -2258,7 +2254,7 @@ export default function AdminUsers() {
                 <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
                   <button
                     onClick={() => setSelectedUser(user)}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" /> Ver
                   </button>
@@ -2296,10 +2292,10 @@ export default function AdminUsers() {
         {/* Vista desktop - Tabla */}
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50/80 border-b border-gray-200 sticky top-0">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
                 <th
-                  className="px-2 py-2.5 text-center text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors w-12"
+                  className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors w-12"
                   onClick={() => handleSort('userNumber')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -2307,18 +2303,18 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('businessName')}
                 >
                   <div className="flex items-center gap-1">
                     Negocio <SortIcon field="businessName" />
                   </div>
                 </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contacto
                 </th>
                 <th
-                  className="px-2 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('plan')}
                 >
                   <div className="flex items-center gap-1">
@@ -2326,7 +2322,7 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-2 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('status')}
                 >
                   <div className="flex items-center gap-1">
@@ -2334,18 +2330,18 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('usage')}
                 >
                   <div className="flex items-center gap-1">
                     Uso <SortIcon field="usage" />
                   </div>
                 </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   SUNAT
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('department')}
                 >
                   <div className="flex items-center gap-1">
@@ -2353,7 +2349,7 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('periodEnd')}
                 >
                   <div className="flex items-center gap-1">
@@ -2361,14 +2357,14 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('createdAt')}
                 >
                   <div className="flex items-center gap-1">
                     Registro <SortIcon field="createdAt" />
                   </div>
                 </th>
-                <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 uppercase tracking-wide w-16">
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
 
                 </th>
               </tr>
@@ -2392,7 +2388,7 @@ export default function AdminUsers() {
                 filteredUsers.map((user, index) => (
                   <tr
                     key={user.id}
-                    className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                    className="hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => setSelectedUser(user)}
                   >
                     {/* N° */}
@@ -2406,8 +2402,8 @@ export default function AdminUsers() {
                         }}
                         className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-colors ${
                           user.userNumber
-                            ? 'bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700'
-                            : 'bg-gray-50 text-gray-300 hover:bg-indigo-50 hover:text-indigo-400 border border-dashed border-gray-300'
+                            ? 'bg-gray-100 text-gray-700 hover:bg-primary-100 hover:text-primary-700'
+                            : 'bg-gray-50 text-gray-300 hover:bg-primary-50 hover:text-primary-400 border border-dashed border-gray-300'
                         }`}
                         title="Editar número"
                       >
@@ -2417,8 +2413,8 @@ export default function AdminUsers() {
                     {/* Negocio + Email + RUC */}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
-                          <Building2 className={`w-3.5 h-3.5 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-cyan-50' : 'bg-primary-50'}`}>
+                          <Building2 className={`w-3.5 h-3.5 ${user.createdByReseller ? 'text-cyan-700' : 'text-primary-700'}`} />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
@@ -2445,12 +2441,12 @@ export default function AdminUsers() {
                           <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{user.email}</p>
                           {user.ruc && <p className="text-[9px] text-gray-400">RUC: {user.ruc}</p>}
                           {user.createdByReseller && (
-                            <p className="text-[9px] text-purple-600 font-medium truncate max-w-[150px]">
+                            <p className="text-[9px] text-cyan-600 font-medium truncate max-w-[150px]">
                               ↳ {user.resellerName}
                             </p>
                           )}
                           {user.vendedorId && (
-                            <p className="text-[9px] text-orange-600 font-medium truncate max-w-[150px]">
+                            <p className="text-[9px] text-amber-600 font-medium truncate max-w-[150px]">
                               V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
                             </p>
                           )}
@@ -2472,7 +2468,7 @@ export default function AdminUsers() {
                     </td>
                     {/* Plan */}
                     <td className="px-2 py-2">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
                         {getPlanDisplay(user)}
                       </span>
                     </td>
@@ -2483,7 +2479,7 @@ export default function AdminUsers() {
                           user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
                           user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                           user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
-                          'bg-yellow-50 text-yellow-700 border border-yellow-100'
+                          'bg-amber-50 text-amber-700 border border-amber-100'
                         }`}>
                           {STATUS_LABELS[user.status]}
                         </span>
@@ -2503,7 +2499,7 @@ export default function AdminUsers() {
                               user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
                                 ? 'bg-red-500'
                                 : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
-                                  ? 'bg-yellow-500'
+                                  ? 'bg-amber-500'
                                   : 'bg-emerald-500'
                             }`}
                             style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
@@ -2537,7 +2533,7 @@ export default function AdminUsers() {
                               <span className="text-red-600 font-bold" title="Rechazados SUNAT">✗{sunatStats[user.userId].rejected}</span>
                             )}
                             {sunatStats[user.userId].pending > 0 && (
-                              <span className="text-yellow-600" title="Pendientes envío SUNAT">⏳{sunatStats[user.userId].pending}</span>
+                              <span className="text-amber-600" title="Pendientes envío SUNAT">⏳{sunatStats[user.userId].pending}</span>
                             )}
                           </div>
                         ) : loadingSunatStats ? (
@@ -2658,7 +2654,7 @@ export default function AdminUsers() {
                                 setShowAssignVendedorModal(true)
                                 setActionMenuUser(null)
                               }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+                              className="w-full px-3 py-1.5 text-left text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2"
                             >
                               <UserCheck className="w-3.5 h-3.5" /> Asignar vendedor
                             </button>
@@ -2689,9 +2685,9 @@ export default function AdminUsers() {
       {/* User Detail Modal */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Detalles del Usuario</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Detalles del Usuario</h2>
               <button
                 onClick={() => setSelectedUser(null)}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -2703,17 +2699,17 @@ export default function AdminUsers() {
             <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Header */}
               <div className="flex items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Building2 className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary-700" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">{selectedUser.businessName}</h3>
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{selectedUser.businessName}</h3>
                   <p className="text-sm text-gray-500 truncate">{selectedUser.email}</p>
                   <div className="flex flex-wrap gap-1 sm:gap-2 mt-2">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedUser.status]}`}>
                       {STATUS_LABELS[selectedUser.status]}
                     </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
                       {getPlanDisplay(selectedUser)}
                     </span>
                   </div>
@@ -2794,7 +2790,7 @@ export default function AdminUsers() {
                           currentLimit > 0 && usagePercentage > 90
                             ? 'bg-red-500'
                             : currentLimit > 0 && usagePercentage > 70
-                              ? 'bg-yellow-500'
+                              ? 'bg-amber-500'
                               : 'bg-green-500'
                         }`}
                         style={{ width: currentLimit > 0 ? `${Math.min(usagePercentage, 100)}%` : '5%' }}
@@ -2809,18 +2805,18 @@ export default function AdminUsers() {
                           value={newInvoiceLimit === -1 ? '' : newInvoiceLimit}
                           onChange={(e) => setNewInvoiceLimit(e.target.value === '' ? -1 : parseInt(e.target.value) || 0)}
                           placeholder="∞ ilimitado"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                         <button
                           onClick={() => handleSaveInvoiceLimit(selectedUser.id)}
                           disabled={savingInvoiceLimit}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                          className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition-colors disabled:opacity-50"
                         >
                           {savingInvoiceLimit ? '...' : 'Guardar'}
                         </button>
                         <button
                           onClick={() => setEditingInvoiceLimit(false)}
-                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+                          className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
                         >
                           ✕
                         </button>
@@ -2840,8 +2836,8 @@ export default function AdminUsers() {
 
               {/* Sub-usuarios */}
               {selectedUser.subUsers && selectedUser.subUsers.length > 0 && (
-                <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-                  <div className="flex items-center gap-2 text-indigo-700 mb-3">
+                <div className="bg-primary-50 rounded-lg p-4 border border-primary-100">
+                  <div className="flex items-center gap-2 text-primary-700 mb-3">
                     <Users className="w-5 h-5" />
                     <span className="font-medium">Sub-usuarios ({selectedUser.subUsers.length})</span>
                   </div>
@@ -2853,7 +2849,7 @@ export default function AdminUsers() {
                           <p className="text-xs text-gray-500">{subUser.email}</p>
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          subUser.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          subUser.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
                           {subUser.isActive ? 'Activo' : 'Inactivo'}
                         </span>
@@ -2895,7 +2891,7 @@ export default function AdminUsers() {
                   onClick={() => {
                     openFeaturesModal(selectedUser)
                   }}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-xs sm:text-sm"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200 text-xs sm:text-sm"
                 >
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
                   Features
@@ -2955,10 +2951,10 @@ export default function AdminUsers() {
       {/* Modal de Configuración SUNAT */}
       {showSunatModal && sunatUserToEdit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
               <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-bold text-gray-900">Configurar Emisión</h2>
+                <h2 className="text-base sm:text-xl font-semibold text-gray-900">Configurar Emisión</h2>
                 <p className="text-xs sm:text-sm text-gray-500 truncate">{sunatUserToEdit.businessName}</p>
               </div>
               <button
@@ -2977,7 +2973,7 @@ export default function AdminUsers() {
               {/* Loading state */}
               {loadingSunatConfig ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+                  <Loader2 className="w-10 h-10 text-primary-600 animate-spin mb-4" />
                   <p className="text-gray-500">Cargando configuración...</p>
                 </div>
               ) : (
@@ -3065,7 +3061,7 @@ export default function AdminUsers() {
                 <select
                   value={sunatForm.emissionMethod}
                   onChange={e => setSunatForm({ ...sunatForm, emissionMethod: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="none">Sin configurar</option>
                   <option value="qpse">QPse (500 docs/mes)</option>
@@ -3088,7 +3084,7 @@ export default function AdminUsers() {
                     <select
                       value={sunatForm.qpseEnvironment}
                       onChange={e => setSunatForm({ ...sunatForm, qpseEnvironment: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="demo">Demo (Pruebas)</option>
                       <option value="production">Producción</option>
@@ -3104,7 +3100,7 @@ export default function AdminUsers() {
                       value={sunatForm.qpseUsuario}
                       onChange={e => setSunatForm({ ...sunatForm, qpseUsuario: e.target.value })}
                       placeholder="usuario@empresa.com"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
 
@@ -3118,7 +3114,7 @@ export default function AdminUsers() {
                         value={sunatForm.qpsePassword}
                         onChange={e => setSunatForm({ ...sunatForm, qpsePassword: e.target.value })}
                         placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 pr-10"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
                       />
                       <button
                         type="button"
@@ -3136,7 +3132,7 @@ export default function AdminUsers() {
                     {sunatForm.qpseEnvironment === 'production' ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
                     ) : (
-                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
+                      <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">En pruebas</span>
                     )}
                   </div>
                 </div>
@@ -3157,7 +3153,7 @@ export default function AdminUsers() {
                     <select
                       value={sunatForm.sunatEnvironment}
                       onChange={e => setSunatForm({ ...sunatForm, sunatEnvironment: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="beta">Beta (Pruebas)</option>
                       <option value="production">Producción</option>
@@ -3173,7 +3169,7 @@ export default function AdminUsers() {
                       value={sunatForm.solUser}
                       onChange={e => setSunatForm({ ...sunatForm, solUser: e.target.value })}
                       placeholder="MODDATOS"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
 
@@ -3187,7 +3183,7 @@ export default function AdminUsers() {
                         value={sunatForm.solPassword}
                         onChange={e => setSunatForm({ ...sunatForm, solPassword: e.target.value })}
                         placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
                       />
                       <button
                         type="button"
@@ -3217,7 +3213,7 @@ export default function AdminUsers() {
                           value={sunatForm.clientId}
                           onChange={e => setSunatForm({ ...sunatForm, clientId: e.target.value })}
                           placeholder="ej: 12345678901-abc123..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
                       <div>
@@ -3230,7 +3226,7 @@ export default function AdminUsers() {
                             value={sunatForm.clientSecret}
                             onChange={e => setSunatForm({ ...sunatForm, clientSecret: e.target.value })}
                             placeholder="••••••••"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
                           />
                           <button
                             type="button"
@@ -3254,7 +3250,7 @@ export default function AdminUsers() {
                         value={sunatForm.certificatePassword}
                         onChange={e => setSunatForm({ ...sunatForm, certificatePassword: e.target.value })}
                         placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
                       />
                       <button
                         type="button"
@@ -3286,9 +3282,9 @@ export default function AdminUsers() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                          <span className="text-sm text-yellow-700">Sin certificado</span>
+                        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <AlertTriangle className="w-5 h-5 text-amber-600" />
+                          <span className="text-sm text-amber-700">Sin certificado</span>
                         </div>
                       </div>
                     )}
@@ -3316,7 +3312,7 @@ export default function AdminUsers() {
                     {sunatForm.sunatEnvironment === 'production' ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
                     ) : (
-                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
+                      <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">En pruebas</span>
                     )}
                   </div>
                 </div>
@@ -3337,7 +3333,7 @@ export default function AdminUsers() {
                 <button
                   onClick={saveSunatConfig}
                   disabled={savingSunat}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   {savingSunat ? (
                     <>
@@ -3362,10 +3358,10 @@ export default function AdminUsers() {
       {/* Modal de Features */}
       {showFeaturesModal && featuresUserToEdit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
               <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-bold text-gray-900">Features Especiales</h2>
+                <h2 className="text-base sm:text-xl font-semibold text-gray-900">Features Especiales</h2>
                 <p className="text-xs sm:text-sm text-gray-500 truncate">{featuresUserToEdit.businessName}</p>
               </div>
               <button
@@ -3385,11 +3381,11 @@ export default function AdminUsers() {
               </p>
 
               {/* Feature: Imágenes de productos */}
-              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+              <div className="bg-primary-50 rounded-lg p-4 border border-primary-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Image className="w-5 h-5 text-purple-600" />
+                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                      <Image className="w-5 h-5 text-primary-600" />
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">Imágenes de productos</h3>
@@ -3403,23 +3399,23 @@ export default function AdminUsers() {
                       onChange={e => setFeaturesForm({ ...featuresForm, productImages: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                   </label>
                 </div>
                 {featuresForm.productImages && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-purple-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-purple-600" />
-                    <span className="text-sm text-purple-700 font-medium">Feature habilitado</span>
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-primary-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-primary-600" />
+                    <span className="text-sm text-primary-700 font-medium">Feature habilitado</span>
                   </div>
                 )}
               </div>
 
               {/* Feature: Ocultar métodos de pago */}
-              <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <CreditCard className="w-5 h-5 text-orange-600" />
+                    <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-amber-600" />
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">Ocultar métodos de pago</h3>
@@ -3433,13 +3429,13 @@ export default function AdminUsers() {
                       onChange={e => setFeaturesForm({ ...featuresForm, hidePaymentMethods: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
                   </label>
                 </div>
                 {featuresForm.hidePaymentMethods && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-orange-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-orange-600" />
-                    <span className="text-sm text-orange-700 font-medium">Todas las ventas serán en Efectivo</span>
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-amber-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm text-amber-700 font-medium">Todas las ventas serán en Efectivo</span>
                   </div>
                 )}
               </div>
@@ -3578,7 +3574,7 @@ export default function AdminUsers() {
                 <button
                   onClick={saveFeatures}
                   disabled={savingFeatures}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   {savingFeatures ? (
                     <>
@@ -3633,10 +3629,10 @@ export default function AdminUsers() {
       {/* Modal de Sucursales */}
       {showBranchesModal && branchesUserToEdit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
               <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-xl font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
                   <Store className="w-5 h-5 text-cyan-600" />
                   Gestionar Sucursales
                   <button
@@ -3670,7 +3666,7 @@ export default function AdminUsers() {
                 <h3 className="font-medium text-gray-900 mb-3">Sucursales Activas</h3>
                 {loadingBranches ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-cyan-600" />
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -3684,14 +3680,14 @@ export default function AdminUsers() {
                                 type="text"
                                 value={mainBranchName}
                                 onChange={(e) => setMainBranchName(e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                 placeholder="Nombre de la sucursal"
                                 autoFocus
                               />
                               <button
                                 onClick={handleSaveMainBranchName}
                                 disabled={savingMainBranch}
-                                className="px-3 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                               >
                                 {savingMainBranch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                               </button>
@@ -3700,7 +3696,7 @@ export default function AdminUsers() {
                                   setEditingMainBranch(false)
                                   setMainBranchName(branchesUserToEdit?.mainBranchName || 'Sucursal Principal')
                                 }}
-                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -3800,7 +3796,7 @@ export default function AdminUsers() {
                       value={branchForm.name}
                       onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
                       placeholder="Ej: Tienda Centro, Sucursal Norte"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
 
@@ -3813,7 +3809,7 @@ export default function AdminUsers() {
                       value={branchForm.address}
                       onChange={e => setBranchForm({ ...branchForm, address: e.target.value })}
                       placeholder="Dirección completa para comprobantes"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
 
@@ -3827,7 +3823,7 @@ export default function AdminUsers() {
                         value={branchForm.phone}
                         onChange={e => setBranchForm({ ...branchForm, phone: e.target.value })}
                         placeholder="01-1234567"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
                     <div>
@@ -3839,7 +3835,7 @@ export default function AdminUsers() {
                         value={branchForm.email}
                         onChange={e => setBranchForm({ ...branchForm, email: e.target.value })}
                         placeholder="sucursal@empresa.com"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
                   </div>
@@ -3853,7 +3849,7 @@ export default function AdminUsers() {
                       value={branchForm.location}
                       onChange={e => setBranchForm({ ...branchForm, location: e.target.value })}
                       placeholder="Lima, Arequipa, etc."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
 
@@ -3868,7 +3864,7 @@ export default function AdminUsers() {
                         <select
                           value={branchForm.department}
                           onChange={e => handleUbigeoChange('department', e.target.value)}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         >
                           <option value="">Seleccione</option>
                           {DEPARTAMENTOS.map(dept => (
@@ -3884,7 +3880,7 @@ export default function AdminUsers() {
                           value={branchForm.province}
                           onChange={e => handleUbigeoChange('province', e.target.value)}
                           disabled={!branchForm.department}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:bg-gray-100"
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
                         >
                           <option value="">Seleccione</option>
                           {getProvincias(branchForm.department).map(prov => (
@@ -3900,7 +3896,7 @@ export default function AdminUsers() {
                           value={branchForm.district}
                           onChange={e => handleUbigeoChange('district', e.target.value)}
                           disabled={!branchForm.province}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:bg-gray-100"
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
                         >
                           <option value="">Seleccione</option>
                           {getDistritos(branchForm.department, branchForm.province).map(dist => (
@@ -3925,7 +3921,7 @@ export default function AdminUsers() {
                         id="isDefault"
                         checked={branchForm.isDefault}
                         onChange={e => setBranchForm({ ...branchForm, isDefault: e.target.checked })}
-                        className="w-4 h-4 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                       <label htmlFor="isDefault" className="text-sm text-gray-700">
                         Establecer como sucursal principal
@@ -3945,7 +3941,7 @@ export default function AdminUsers() {
                     <button
                       onClick={handleSaveBranch}
                       disabled={savingBranch || !branchForm.name.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                     >
                       {savingBranch ? (
                         <>
@@ -3979,8 +3975,8 @@ export default function AdminUsers() {
       {/* Modal para editar límite de sucursales */}
       {showEditLimitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Store className="w-5 h-5 text-cyan-600" />
               Límite de Sucursales
             </h3>
@@ -3997,7 +3993,7 @@ export default function AdminUsers() {
                   min="-1"
                   value={editingMaxBranches}
                   onChange={e => setEditingMaxBranches(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   -1 = Ilimitado, 1 = Una sucursal, 2+ = Múltiples
@@ -4013,7 +4009,7 @@ export default function AdminUsers() {
                 <button
                   onClick={handleSaveMaxBranches}
                   disabled={savingMaxBranches}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   {savingMaxBranches ? (
                     <>
@@ -4036,14 +4032,14 @@ export default function AdminUsers() {
       {/* Modal de confirmación de eliminación */}
       {showDeleteModal && userToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                   <Trash2 className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Eliminar Usuario</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Eliminar Usuario</h2>
                   <p className="text-sm text-gray-500">Esta acción no se puede deshacer</p>
                 </div>
               </div>
@@ -4062,8 +4058,8 @@ export default function AdminUsers() {
                 </p>
               </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm text-amber-800">
                   <strong>Advertencia:</strong> Se eliminará la cuenta de Firebase Auth y el documento del usuario.
                 </p>
               </div>
@@ -4092,7 +4088,7 @@ export default function AdminUsers() {
                   setDeleteWithData(false)
                 }}
                 disabled={deletingUser}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -4122,14 +4118,14 @@ export default function AdminUsers() {
       {/* Modal editar número de usuario */}
       {showNumberModal && userToEditNumber && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-sm">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <Edit2 className="w-6 h-6 text-indigo-600" />
+                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                  <Edit2 className="w-6 h-6 text-primary-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Editar N° de Usuario</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Editar N° de Usuario</h2>
                   <p className="text-sm text-gray-500 truncate">{userToEditNumber.businessName}</p>
                 </div>
               </div>
@@ -4146,7 +4142,7 @@ export default function AdminUsers() {
                   value={numberInput}
                   onChange={(e) => setNumberInput(e.target.value)}
                   placeholder="Ej: 1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg font-bold text-center"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-lg font-bold text-center"
                   autoFocus
                   onKeyDown={e => {
                     if (e.key === 'Enter') handleSaveUserNumber()
@@ -4172,14 +4168,14 @@ export default function AdminUsers() {
                   setNumberInput('')
                 }}
                 disabled={savingNumber}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveUserNumber}
                 disabled={savingNumber || !numberInput.trim()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {savingNumber ? (
                   <>
@@ -4200,14 +4196,14 @@ export default function AdminUsers() {
 
       {showContactModal && userToEditContact && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                   <Edit2 className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Editar Contacto</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Editar Contacto</h2>
                   <p className="text-sm text-gray-500">{userToEditContact.businessName}</p>
                 </div>
               </div>
@@ -4223,7 +4219,7 @@ export default function AdminUsers() {
                   value={contactNameInput}
                   onChange={(e) => setContactNameInput(e.target.value)}
                   placeholder="Ej: Juan Pérez"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
 
@@ -4247,14 +4243,14 @@ export default function AdminUsers() {
                   setContactNameInput('')
                 }}
                 disabled={savingContact}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveContactName}
                 disabled={savingContact || !contactNameInput.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {savingContact ? (
                   <>
@@ -4276,10 +4272,10 @@ export default function AdminUsers() {
       {/* Modal de Crear/Editar Vendedor */}
       {showVendedorModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">
+                <h2 className="text-lg font-semibold text-gray-900">
                   {editingVendedor ? 'Editar Vendedor' : 'Nuevo Vendedor'}
                 </h2>
                 <p className="text-sm text-gray-500">Agente de venta</p>
@@ -4297,7 +4293,7 @@ export default function AdminUsers() {
                   value={vendedorForm.name}
                   onChange={e => setVendedorForm({ ...vendedorForm, name: e.target.value })}
                   placeholder="Ej: Luis Huaman"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
@@ -4307,7 +4303,7 @@ export default function AdminUsers() {
                   value={vendedorForm.phone}
                   onChange={e => setVendedorForm({ ...vendedorForm, phone: e.target.value })}
                   placeholder="51987654321"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -4318,7 +4314,7 @@ export default function AdminUsers() {
                     value={vendedorForm.yapeNumber}
                     onChange={e => setVendedorForm({ ...vendedorForm, yapeNumber: e.target.value })}
                     placeholder="987 654 321"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -4328,7 +4324,7 @@ export default function AdminUsers() {
                     value={vendedorForm.yapeName}
                     onChange={e => setVendedorForm({ ...vendedorForm, yapeName: e.target.value })}
                     placeholder="Luis Huaman"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -4340,7 +4336,7 @@ export default function AdminUsers() {
                     value={vendedorForm.bcpAccount}
                     onChange={e => setVendedorForm({ ...vendedorForm, bcpAccount: e.target.value })}
                     placeholder="1234567890123"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -4350,7 +4346,7 @@ export default function AdminUsers() {
                     value={vendedorForm.bcpCci}
                     onChange={e => setVendedorForm({ ...vendedorForm, bcpCci: e.target.value })}
                     placeholder="00212345678901234567"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -4361,7 +4357,7 @@ export default function AdminUsers() {
                   value={vendedorForm.titular}
                   onChange={e => setVendedorForm({ ...vendedorForm, titular: e.target.value })}
                   placeholder="Luis Huaman"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
@@ -4369,7 +4365,7 @@ export default function AdminUsers() {
                 <select
                   value={vendedorForm.linkedUserId}
                   onChange={e => setVendedorForm({ ...vendedorForm, linkedUserId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                 >
                   <option value="">-- Sin vincular --</option>
                   {users.map(u => (
@@ -4419,14 +4415,14 @@ export default function AdminUsers() {
               <button
                 onClick={() => setShowVendedorModal(false)}
                 disabled={savingVendedor}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveVendedor}
                 disabled={savingVendedor || !vendedorForm.name.trim()}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {savingVendedor ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
@@ -4442,14 +4438,14 @@ export default function AdminUsers() {
       {/* Modal de Asignar Vendedor a Usuario */}
       {showAssignVendedorModal && userToAssignVendedor && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                  <UserCheck className="w-6 h-6 text-orange-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                  <UserCheck className="w-6 h-6 text-amber-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Asignar Vendedor</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Asignar Vendedor</h2>
                   <p className="text-sm text-gray-500">{userToAssignVendedor.businessName}</p>
                 </div>
               </div>
@@ -4461,7 +4457,7 @@ export default function AdminUsers() {
                 <select
                   value={selectedVendedorId}
                   onChange={e => setSelectedVendedorId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">Sin vendedor (Quantio)</option>
                   {vendedores.map(v => (
@@ -4470,8 +4466,8 @@ export default function AdminUsers() {
                 </select>
               </div>
 
-              <div className="bg-orange-50 rounded-lg p-3">
-                <p className="text-xs text-orange-700">
+              <div className="bg-amber-50 rounded-lg p-3">
+                <p className="text-xs text-amber-700">
                   Si se asigna un vendedor, al suspenderse este cliente verá los datos de pago del vendedor y las notificaciones de pago no mostrarán montos.
                 </p>
               </div>
@@ -4485,14 +4481,14 @@ export default function AdminUsers() {
                   setSelectedVendedorId('')
                 }}
                 disabled={savingAssignment}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleAssignVendedor}
                 disabled={savingAssignment}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {savingAssignment ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
@@ -4508,7 +4504,7 @@ export default function AdminUsers() {
       {/* Modal de Subscriptions Huérfanas */}
       {showOrphansModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
@@ -4586,7 +4582,7 @@ export default function AdminUsers() {
             <div className="border-t border-gray-200 p-4 flex justify-end">
               <button
                 onClick={() => setShowOrphansModal(false)}
-                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg"
+                className="px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
               >
                 Cerrar
               </button>

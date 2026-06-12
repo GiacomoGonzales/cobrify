@@ -94,7 +94,7 @@ export default function AdminInvestorReport() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-600 mr-2" />
+        <RefreshCw className="w-6 h-6 animate-spin text-primary-600 mr-2" />
         <span className="text-gray-500">Cargando reporte...</span>
       </div>
     )
@@ -106,14 +106,12 @@ export default function AdminInvestorReport() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl p-6 text-white">
+      <div className="bg-gray-900 rounded-xl p-6 text-white">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="p-3 bg-white/20 backdrop-blur rounded-xl">
-              <Sparkles className="w-7 h-7" />
-            </div>
+            <Sparkles className="w-7 h-7 flex-shrink-0 mt-0.5" />
             <div>
-              <h1 className="text-2xl font-bold">Reporte de Inversores</h1>
+              <h1 className="text-2xl font-semibold">Reporte de Inversores</h1>
               <p className="text-sm opacity-90 mt-1">
                 Métricas consolidadas de toda la plataforma. Cálculo bajo demanda para optimizar costos.
               </p>
@@ -131,7 +129,7 @@ export default function AdminInvestorReport() {
           <button
             onClick={handleRecalculate}
             disabled={recalculating}
-            className="bg-white text-indigo-700 hover:bg-white/90 px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+            className="bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             {recalculating ? (
               <>
@@ -155,7 +153,7 @@ export default function AdminInvestorReport() {
       )}
 
       {!hasData && !recalculating && (
-        <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center">
+        <div className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
           <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <h3 className="font-semibold text-gray-900 mb-1">Aún no se ha generado el reporte</h3>
           <p className="text-sm text-gray-500 mb-4">
@@ -417,11 +415,11 @@ export default function AdminInvestorReport() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 uppercase">#</th>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 uppercase">Empresa</th>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 uppercase">Modo</th>
-                        <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 uppercase">Comprobantes</th>
-                        <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 uppercase">Facturado</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">Modo</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">Comprobantes</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">Facturado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -442,7 +440,7 @@ export default function AdminInvestorReport() {
           )}
 
           {/* Footer info */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500 flex flex-wrap items-center gap-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-500 flex flex-wrap items-center gap-3">
             <Activity className="w-3.5 h-3.5" />
             <span>Reporte calculado en {report.calculationTimeSeconds}s sobre {fmtNumber(report.businessesProcessed)} negocios.</span>
             <span className="text-gray-300">·</span>
@@ -457,29 +455,27 @@ export default function AdminInvestorReport() {
 // ===== Sub-componentes =====
 
 function BigStat({ icon, label, value, caption, gradient }) {
+  const accent = (gradient || '').includes('emerald') ? 'text-emerald-600'
+    : (gradient || '').includes('purple') || (gradient || '').includes('pink') ? 'text-cyan-600'
+    : 'text-primary-600'
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} text-white p-5`}>
-      <div className="absolute -right-4 -bottom-4 opacity-10">
-        <div className="text-[7rem] leading-none font-bold">$</div>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+      <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-gray-500 mb-2">
+        <span className={`${accent} flex-shrink-0`}>{icon}</span>
+        {label}
       </div>
-      <div className="relative">
-        <div className="flex items-center gap-2 opacity-80 text-xs uppercase font-semibold tracking-wide mb-2">
-          {icon}
-          {label}
-        </div>
-        <div className="text-3xl font-bold tracking-tight">{value}</div>
-        {caption && <div className="text-xs opacity-80 mt-1">{caption}</div>}
-      </div>
+      <div className="text-2xl font-bold text-gray-900 tracking-tight">{value}</div>
+      {caption && <div className="text-xs text-gray-500 mt-1">{caption}</div>}
     </div>
   )
 }
 
 function Section({ icon, title, children, right }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          <span className="text-indigo-600">{icon}</span>
+          <span className="text-primary-600">{icon}</span>
           {title}
         </h3>
         {right}
@@ -491,7 +487,7 @@ function Section({ icon, title, children, right }) {
 
 function RetentionCard({ label, caption, rate, numerator, denominator, numeratorLabel, denominatorLabel, color }) {
   const colors = {
-    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+    indigo: { bg: 'bg-primary-50', text: 'text-primary-700', border: 'border-primary-200' },
     emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
   }
   const c = colors[color] || colors.indigo
@@ -501,7 +497,7 @@ function RetentionCard({ label, caption, rate, numerator, denominator, numerator
     : 'text-red-600'
 
   return (
-    <div className={`rounded-xl p-5 border-2 ${c.bg} ${c.border}`}>
+    <div className={`rounded-xl p-5 border ${c.bg} ${c.border}`}>
       <p className={`text-xs uppercase font-semibold ${c.text}`}>{label}</p>
       <div className="flex items-baseline gap-3 mt-1">
         <span className={`text-4xl font-bold tabular-nums ${rateColor}`}>
@@ -522,17 +518,17 @@ function RetentionCard({ label, caption, rate, numerator, denominator, numerator
 
 function Stat({ label, value, caption, color = 'gray' }) {
   const colors = {
-    indigo: 'text-indigo-700',
+    indigo: 'text-primary-700',
     emerald: 'text-emerald-700',
     blue: 'text-blue-700',
     amber: 'text-amber-700',
     red: 'text-red-700',
-    purple: 'text-purple-700',
-    pink: 'text-pink-700',
+    purple: 'text-primary-700',
+    pink: 'text-cyan-700',
     gray: 'text-gray-900',
   }
   return (
-    <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
       <div className="text-[11px] uppercase font-semibold text-gray-500 tracking-wide">{label}</div>
       <div className={`text-xl font-bold mt-0.5 tabular-nums ${colors[color] || colors.gray}`}>{value}</div>
       {caption && <div className="text-[11px] text-gray-500 mt-0.5">{caption}</div>}
@@ -543,17 +539,17 @@ function Stat({ label, value, caption, color = 'gray' }) {
 function FeatureCard({ icon, label, count, total, color = 'gray' }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   const colors = {
-    emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    blue: 'bg-blue-100 text-blue-700 border-blue-200',
-    amber: 'bg-amber-100 text-amber-700 border-amber-200',
-    purple: 'bg-purple-100 text-purple-700 border-purple-200',
-    indigo: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    pink: 'bg-pink-100 text-pink-700 border-pink-200',
-    gray: 'bg-gray-100 text-gray-700 border-gray-200',
+    emerald: 'text-emerald-600',
+    blue: 'text-blue-600',
+    amber: 'text-amber-600',
+    purple: 'text-primary-600',
+    indigo: 'text-primary-600',
+    pink: 'text-cyan-600',
+    gray: 'text-gray-600',
   }
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3">
-      <div className={`inline-flex items-center justify-center p-1.5 rounded ${colors[color] || colors.gray} mb-1.5`}>
+      <div className={`${colors[color] || colors.gray} mb-1.5`}>
         {icon}
       </div>
       <div className="text-[11px] uppercase font-semibold text-gray-500">{label}</div>
@@ -573,7 +569,7 @@ function DistributionRow({ label, count, total }) {
       <span className="text-sm font-medium text-gray-700 w-32 truncate">{label}</span>
       <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+          className="h-full bg-primary-500 rounded-full"
           style={{ width: `${pct}%` }}
         />
       </div>

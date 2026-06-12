@@ -122,7 +122,7 @@ export default function AdminSettings() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Cargando configuración...</p>
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function AdminSettings() {
               onClick={() => setActiveSection(section.id)}
               className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeSection === section.id
-                  ? 'border-indigo-600 text-indigo-600'
+                  ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -161,7 +161,7 @@ export default function AdminSettings() {
             <button
               onClick={saveSettings}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm"
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm"
             >
               {saving ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -356,12 +356,12 @@ function PlansSection({ plans }) {
         {visiblePlanEntries.map(([key, plan]) => (
           <div
             key={key}
-            className={`rounded-xl border p-3 sm:p-5 hover:shadow-md transition-shadow ${
+            className={`rounded-xl border shadow-sm p-3 sm:p-5 ${
               hiddenPlanKeys.includes(key) ? 'bg-gray-50 border-dashed border-gray-300 opacity-60' : 'bg-white border-gray-200'
             }`}
           >
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-bold text-gray-900 text-sm sm:text-base">{plan.name}</h3>
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{plan.name}</h3>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 key === 'trial' || key === 'free'
                   ? 'bg-blue-100 text-blue-800'
@@ -492,7 +492,7 @@ function PlansSection({ plans }) {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Ej: Plan Especial - Restaurante Juan"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
@@ -500,7 +500,7 @@ function PlansSection({ plans }) {
                 <select
                   value={form.emissionMethod}
                   onChange={(e) => setForm({ ...form, emissionMethod: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="qpse">QPse</option>
                   <option value="sunat_direct">SUNAT Directo</option>
@@ -513,7 +513,7 @@ function PlansSection({ plans }) {
                   type="number" min="1" max="36"
                   value={form.months}
                   onChange={(e) => setForm({ ...form, months: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
@@ -522,7 +522,7 @@ function PlansSection({ plans }) {
                   type="number" min="0" step="0.01"
                   value={form.totalPrice}
                   onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
@@ -531,7 +531,7 @@ function PlansSection({ plans }) {
                   type="number" min="-1"
                   value={form.maxInvoicesPerMonth}
                   onChange={(e) => setForm({ ...form, maxInvoicesPerMonth: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <p className="text-xs text-gray-400 mt-0.5">-1 = ilimitado</p>
               </div>
@@ -541,7 +541,7 @@ function PlansSection({ plans }) {
                   type="number" min="1"
                   value={form.maxBranches}
                   onChange={(e) => setForm({ ...form, maxBranches: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -551,7 +551,7 @@ function PlansSection({ plans }) {
                 <input
                   type="checkbox" checked={form.includesIgv}
                   onChange={(e) => setForm({ ...form, includesIgv: e.target.checked })}
-                  className="w-4 h-4 text-amber-600 rounded"
+                  className="w-4 h-4 text-primary-600 rounded"
                 />
                 Precio incluye IGV (18%)
               </label>
@@ -559,7 +559,7 @@ function PlansSection({ plans }) {
                 <input
                   type="checkbox" checked={form.sunatIntegration}
                   onChange={(e) => setForm({ ...form, sunatIntegration: e.target.checked })}
-                  className="w-4 h-4 text-amber-600 rounded"
+                  className="w-4 h-4 text-primary-600 rounded"
                 />
                 Integración SUNAT
               </label>
@@ -567,7 +567,7 @@ function PlansSection({ plans }) {
                 <input
                   type="checkbox" checked={form.multiUser}
                   onChange={(e) => setForm({ ...form, multiUser: e.target.checked })}
-                  className="w-4 h-4 text-amber-600 rounded"
+                  className="w-4 h-4 text-primary-600 rounded"
                 />
                 Multi-usuario
               </label>
@@ -580,7 +580,7 @@ function PlansSection({ plans }) {
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 placeholder="Notas internas del admin..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
@@ -604,7 +604,7 @@ function PlansSection({ plans }) {
                 {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingPlan ? 'Actualizar' : 'Crear'}
               </button>
-              <button onClick={resetForm} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+              <button onClick={resetForm} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
                 Cancelar
               </button>
             </div>
@@ -624,10 +624,10 @@ function PlansSection({ plans }) {
             {Object.entries(customPlans).map(([key, plan]) => (
               <div
                 key={key}
-                className="bg-white rounded-xl border-2 border-amber-200 p-3 sm:p-5 hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl shadow-sm border border-amber-200 p-3 sm:p-5"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate flex-1 mr-2">{plan.name}</h3>
+                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate flex-1 mr-2">{plan.name}</h3>
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                     Custom
                   </span>
@@ -712,7 +712,7 @@ function NotificationsSection({ settings, onChange }) {
         <div className="space-y-4">
           <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
             <div className="flex items-center gap-3">
-              <Users className="w-5 h-5 text-indigo-600" />
+              <Users className="w-5 h-5 text-primary-600" />
               <div>
                 <p className="font-medium text-gray-900">Nuevo usuario registrado</p>
                 <p className="text-sm text-gray-500">Mostrar notificación cuando un nuevo usuario se registra</p>
@@ -722,7 +722,7 @@ function NotificationsSection({ settings, onChange }) {
               type="checkbox"
               checked={settings.notifyOnNewUser !== false}
               onChange={e => onChange('notifyOnNewUser', e.target.checked)}
-              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
             />
           </label>
 
@@ -738,7 +738,7 @@ function NotificationsSection({ settings, onChange }) {
               type="checkbox"
               checked={settings.notifyOnPayment !== false}
               onChange={e => onChange('notifyOnPayment', e.target.checked)}
-              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
             />
           </label>
 
@@ -754,7 +754,7 @@ function NotificationsSection({ settings, onChange }) {
               type="checkbox"
               checked={settings.notifyOnExpiring !== false}
               onChange={e => onChange('notifyOnExpiring', e.target.checked)}
-              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
             />
           </label>
         </div>
@@ -772,7 +772,7 @@ function NotificationsSection({ settings, onChange }) {
               max="30"
               value={settings.daysBeforeExpiry || 3}
               onChange={e => onChange('daysBeforeExpiry', parseInt(e.target.value) || 3)}
-              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
             <p className="mt-1 text-sm text-gray-500">
               Se mostrarán alertas para suscripciones que vencen en los próximos {settings.daysBeforeExpiry || 3} días
@@ -831,7 +831,7 @@ function ExceptionsList({ exceptions, onChange }) {
           onChange={e => setInputId(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addException()}
           placeholder="Business ID"
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <button
           onClick={addException}
@@ -957,7 +957,7 @@ function SystemSection({ settings, onChange }) {
               type="checkbox"
               checked={settings.allowNewRegistrations}
               onChange={e => onChange('allowNewRegistrations', e.target.checked)}
-              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
             />
           </label>
 
@@ -1014,7 +1014,7 @@ function SystemSection({ settings, onChange }) {
               <button
                 onClick={scanProducts}
                 disabled={scanning}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm font-medium"
               >
                 {scanning ? 'Escaneando...' : 'Escanear'}
               </button>
@@ -1088,7 +1088,7 @@ function SystemSection({ settings, onChange }) {
               max="30"
               value={settings.defaultTrialDays}
               onChange={e => onChange('defaultTrialDays', parseInt(e.target.value) || 7)}
-              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
             <p className="mt-1 text-sm text-gray-500">
               Período de prueba gratuita para nuevos usuarios
@@ -1198,7 +1198,7 @@ function MaintenanceSection() {
 
         <div className="space-y-4">
           {/* Limpieza de suscripciones de sub-usuarios */}
-          <div className="bg-amber-50 rounded-lg p-5 border border-amber-200">
+          <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
             <div className="flex items-start gap-3">
               <Trash2 className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
               <div className="flex-1">
@@ -1321,9 +1321,9 @@ function CloudinaryCleanupCard() {
   }
 
   return (
-    <div className="bg-rose-50 rounded-lg p-5 border border-rose-200">
+    <div className="bg-red-50 rounded-xl p-5 border border-red-200">
       <div className="flex items-start gap-3">
-        <Trash2 className="w-6 h-6 text-rose-600 flex-shrink-0 mt-1" />
+        <Trash2 className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
         <div className="flex-1">
           <h4 className="font-medium text-gray-900">Limpiar Cloudinary · borrar lo ya migrado a R2</h4>
           <p className="text-sm text-gray-600 mt-1">
@@ -1340,7 +1340,7 @@ function CloudinaryCleanupCard() {
             <button
               onClick={runDryRun}
               disabled={scanning || cleaning}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-300 text-rose-700 rounded-lg hover:bg-rose-50 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50"
             >
               {scanning ? (
                 <><RefreshCw className="w-4 h-4 animate-spin" /> Escaneando...</>
@@ -1351,7 +1351,7 @@ function CloudinaryCleanupCard() {
             <button
               onClick={runCleanup}
               disabled={scanning || cleaning}
-              className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
             >
               {cleaning ? (
                 <><RefreshCw className="w-4 h-4 animate-spin" /> Limpiando...</>
@@ -1362,7 +1362,7 @@ function CloudinaryCleanupCard() {
           </div>
 
           {scanResult && (
-            <div className="mt-3 p-3 bg-white rounded-lg border border-rose-200 text-sm space-y-1">
+            <div className="mt-3 p-3 bg-white rounded-lg border border-red-200 text-sm space-y-1">
               <p><strong>URLs vivas en Firestore:</strong> {scanResult.liveUrlsCollected}</p>
               <p><strong>Assets en Cloudinary:</strong> {scanResult.cloudinaryAssetsScanned}</p>
               <p><strong>Huérfanos (a borrar):</strong> {scanResult.orphansFound}</p>
@@ -1487,9 +1487,9 @@ function CloudinaryInventoryCard() {
               {candidates.length > 0 ? (
                 <div className="mt-2">
                   <p className="font-medium text-gray-900">Candidatos a piloto (de menor a mayor):</p>
-                  <div className="mt-1 max-h-72 overflow-auto border border-amber-100 rounded">
+                  <div className="mt-1 max-h-72 overflow-auto border border-gray-200 rounded-lg">
                     <table className="w-full text-xs">
-                      <thead className="bg-amber-50 text-gray-600">
+                      <thead className="bg-gray-50 font-medium text-gray-500 uppercase tracking-wider">
                         <tr>
                           <th className="text-left px-2 py-1">Negocio</th>
                           <th className="text-right px-2 py-1">Cloudinary</th>
@@ -1497,9 +1497,9 @@ function CloudinaryInventoryCard() {
                           <th className="text-right px-2 py-1">Logos/portadas</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-gray-100">
                         {candidates.map((b) => (
-                          <tr key={b.businessId} className="border-t border-amber-100">
+                          <tr key={b.businessId} className="hover:bg-gray-50">
                             <td className="px-2 py-1">
                               <span className="text-gray-900">{b.businessName}</span>
                               {b.failed && <span className="text-red-600"> (error)</span>}
@@ -1749,7 +1749,7 @@ function R2MigrationCard() {
   const busy = scanningAll || batchRunning || anyBusy
 
   return (
-    <div className="bg-cyan-50 rounded-lg p-5 border border-cyan-200">
+    <div className="bg-cyan-50 rounded-xl p-5 border border-cyan-200">
       <div className="flex items-start gap-3">
         <ImageIcon className="w-6 h-6 text-cyan-600 flex-shrink-0 mt-1" />
         <div className="flex-1 min-w-0">
@@ -1802,7 +1802,7 @@ function R2MigrationCard() {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Buscar negocio..."
-                  className="flex-1 min-w-[160px] border border-cyan-300 rounded-lg px-3 py-2 bg-white text-sm"
+                  className="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <button
                   onClick={loadBusinesses}

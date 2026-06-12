@@ -22,9 +22,9 @@ import {
 
 const STATUS_CONFIG = {
   draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-700', icon: Clock },
-  sending: { label: 'Enviando', color: 'bg-blue-100 text-blue-700', icon: Loader2 },
+  sending: { label: 'Enviando', color: 'bg-primary-100 text-primary-700', icon: Loader2 },
   sent: { label: 'Enviada', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  partial: { label: 'Parcial', color: 'bg-yellow-100 text-yellow-700', icon: AlertCircle },
+  partial: { label: 'Parcial', color: 'bg-amber-100 text-amber-700', icon: AlertCircle },
   failed: { label: 'Fallida', color: 'bg-red-100 text-red-700', icon: AlertCircle }
 }
 
@@ -218,25 +218,25 @@ export default function AdminNotifications() {
           icon={Bell}
           label="Total Campañas"
           value={stats.total}
-          color="from-orange-500 to-amber-600"
+          color="text-primary-600"
         />
         <StatCard
           icon={Send}
           label="Enviadas"
           value={stats.sent}
-          color="from-green-500 to-emerald-600"
+          color="text-green-600"
         />
         <StatCard
           icon={CheckCircle}
           label="Tasa de Éxito"
           value={`${stats.successRate}%`}
-          color="from-blue-500 to-cyan-600"
+          color="text-cyan-600"
         />
         <StatCard
           icon={Users}
           label="Destinatarios Total"
           value={stats.totalRecipients}
-          color="from-purple-500 to-violet-600"
+          color="text-primary-600"
         />
       </div>
 
@@ -250,20 +250,20 @@ export default function AdminNotifications() {
               placeholder="Buscar campañas..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div className="flex gap-2">
             <button
               onClick={loadCampaigns}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Actualizar</span>
             </button>
             <button
               onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Nueva Campaña
@@ -276,7 +276,7 @@ export default function AdminNotifications() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
           </div>
         ) : filteredCampaigns.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
@@ -289,12 +289,12 @@ export default function AdminNotifications() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Título</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Destino</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Destinatarios</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Enviados</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Título</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Destino</th>
+                  <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Destinatarios</th>
+                  <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Enviados</th>
+                  <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -358,7 +358,7 @@ export default function AdminNotifications() {
                 value={title}
                 onChange={e => setTitle(e.target.value.slice(0, 100))}
                 placeholder="Título de la notificación"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 maxLength={100}
               />
               <p className="text-xs text-gray-400 mt-1">{title.length}/100</p>
@@ -372,7 +372,7 @@ export default function AdminNotifications() {
                 onChange={e => setMessage(e.target.value.slice(0, 500))}
                 placeholder="Contenido de la notificación"
                 rows={3}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 maxLength={500}
               />
               <p className="text-xs text-gray-400 mt-1">{message.length}/500</p>
@@ -389,7 +389,7 @@ export default function AdminNotifications() {
                       key={key}
                       className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         targetMode === key
-                          ? 'border-orange-500 bg-orange-50'
+                          ? 'border-primary-500 bg-primary-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
@@ -399,7 +399,7 @@ export default function AdminNotifications() {
                         value={key}
                         checked={targetMode === key}
                         onChange={() => handleTargetModeChange(key)}
-                        className="accent-orange-500"
+                        className="accent-primary-600"
                       />
                       <Icon className="w-4 h-4 text-gray-500" />
                       <span className="text-sm">{cfg.label}</span>
@@ -443,16 +443,16 @@ export default function AdminNotifications() {
                     placeholder="Buscar usuario por email o negocio..."
                     value={userSearch}
                     onChange={e => setUserSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 {manualUserIds.length > 0 && (
-                  <p className="text-sm text-orange-600 font-medium">{manualUserIds.length} usuario(s) seleccionado(s)</p>
+                  <p className="text-sm text-primary-600 font-medium">{manualUserIds.length} usuario(s) seleccionado(s)</p>
                 )}
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
                   {loadingUsers ? (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+                      <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
                     </div>
                   ) : filteredUsers.length === 0 ? (
                     <div className="text-center py-6 text-gray-400 text-sm">
@@ -468,7 +468,7 @@ export default function AdminNotifications() {
                           type="checkbox"
                           checked={manualUserIds.includes(u.id)}
                           onChange={() => toggleManualUser(u.id)}
-                          className="accent-orange-500 rounded"
+                          className="accent-primary-600 rounded"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-gray-800 truncate">{u.email}</div>
@@ -490,21 +490,21 @@ export default function AdminNotifications() {
             {/* Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
               {showConfirm && (
-                <p className="text-sm text-orange-600 mr-auto font-medium">
+                <p className="text-sm text-amber-600 mr-auto font-medium">
                   ¿Confirmas el envío?
                 </p>
               )}
               <button
                 onClick={() => { setShowConfirm(false); setShowCreateModal(false) }}
                 disabled={sending}
-                className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSend}
                 disabled={!canSend || sending}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {sending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -532,12 +532,10 @@ function StatCard({ icon: Icon, label, value, color }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
       <div className="flex items-center gap-3">
-        <div className={`p-2.5 rounded-lg bg-gradient-to-br ${color} shadow-md flex-shrink-0`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
+        <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${color} flex-shrink-0`} />
         <div className="min-w-0">
-          <p className="text-xs text-gray-500 truncate">{label}</p>
-          <p className="text-xl font-bold text-gray-900">{value}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">{label}</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
         </div>
       </div>
     </div>
@@ -548,11 +546,11 @@ function Modal({ onClose, title, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -576,8 +574,8 @@ function FilterSection({ label, options, selected, onToggle }) {
             onClick={() => onToggle(opt.value)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               selected.includes(opt.value)
-                ? 'bg-orange-500 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white text-gray-600 border border-gray-200 hover:border-primary-300'
             }`}
           >
             {opt.label}
@@ -630,13 +628,13 @@ function CampaignDetail({ campaign }) {
       {/* Stats */}
       {campaign.status !== 'draft' && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-blue-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-blue-600">Destinatarios</p>
-            <p className="text-xl font-bold text-blue-700">{campaign.totalRecipients || 0}</p>
+          <div className="bg-primary-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-primary-600">Destinatarios</p>
+            <p className="text-xl font-bold text-primary-700">{campaign.totalRecipients || 0}</p>
           </div>
-          <div className="bg-purple-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-purple-600">Tokens</p>
-            <p className="text-xl font-bold text-purple-700">{campaign.totalTokens || 0}</p>
+          <div className="bg-cyan-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-cyan-600">Tokens</p>
+            <p className="text-xl font-bold text-cyan-700">{campaign.totalTokens || 0}</p>
           </div>
           <div className="bg-green-50 rounded-lg p-3 text-center">
             <p className="text-xs text-green-600">Exitosos</p>

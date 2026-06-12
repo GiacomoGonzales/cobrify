@@ -261,11 +261,11 @@ export default function AdminExpirations() {
   }
 
   const tabs = [
-    { id: 'today', label: 'Hoy', count: counts.today, icon: CalendarDays, color: 'text-red-600 bg-red-100' },
-    { id: 'week', label: 'Esta semana', count: counts.week, icon: Clock, color: 'text-amber-600 bg-amber-100' },
-    { id: 'month', label: 'Este mes', count: counts.month, icon: CalendarDays, color: 'text-blue-600 bg-blue-100' },
-    { id: 'overdue', label: 'Vencidos', count: counts.overdue, icon: XCircle, color: 'text-gray-600 bg-gray-100' },
-    { id: 'archived', label: 'Archivados', count: counts.archived, icon: Archive, color: 'text-slate-600 bg-slate-100' },
+    { id: 'today', label: 'Hoy', count: counts.today, icon: CalendarDays, color: 'text-red-600' },
+    { id: 'week', label: 'Esta semana', count: counts.week, icon: Clock, color: 'text-amber-600' },
+    { id: 'month', label: 'Este mes', count: counts.month, icon: CalendarDays, color: 'text-blue-600' },
+    { id: 'overdue', label: 'Vencidos', count: counts.overdue, icon: XCircle, color: 'text-gray-600' },
+    { id: 'archived', label: 'Archivados', count: counts.archived, icon: Archive, color: 'text-gray-500' },
   ]
 
   const filteredSubs = getFilteredSubs()
@@ -274,7 +274,7 @@ export default function AdminExpirations() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-purple-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Cargando vencimientos...</p>
         </div>
       </div>
@@ -291,7 +291,7 @@ export default function AdminExpirations() {
         </div>
         <button
           onClick={loadSubscriptions}
-          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <RefreshCw className="w-5 h-5" />
           Actualizar
@@ -304,17 +304,15 @@ export default function AdminExpirations() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`bg-white rounded-xl p-4 border-2 transition-colors text-left ${
-              activeTab === tab.id ? 'border-purple-500' : 'border-gray-200 hover:border-gray-300'
+            className={`bg-white rounded-xl p-4 shadow-sm border-2 transition-colors text-left ${
+              activeTab === tab.id ? 'border-primary-500' : 'border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${tab.color}`}>
-                <tab.icon className="w-5 h-5" />
-              </div>
+              <tab.icon className={`w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 ${tab.color}`} />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{tab.count}</p>
-                <p className="text-xs text-gray-500">{tab.label}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{tab.count}</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-500">{tab.label}</p>
               </div>
             </div>
           </button>
@@ -322,7 +320,7 @@ export default function AdminExpirations() {
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-xl p-4 border border-gray-200">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
@@ -330,13 +328,13 @@ export default function AdminExpirations() {
             placeholder="Buscar por nombre o email..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {filteredSubs.length === 0 ? (
           <div className="p-12 text-center">
             <CheckCircle className="w-16 h-16 text-green-300 mx-auto mb-4" />
@@ -347,14 +345,14 @@ export default function AdminExpirations() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Negocio</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vencimiento</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Días</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Negocio</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vencimiento</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Días</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {filteredSubs.map(sub => {
                   const days = getDaysUntilExpiry(sub.currentPeriodEnd)
                   const isOverdue = days !== null && days < 0
@@ -362,7 +360,7 @@ export default function AdminExpirations() {
                   const isSuspended = sub.accessBlocked || sub.status === 'suspended'
 
                   return (
-                    <tr key={sub.id} className="hover:bg-gray-50">
+                    <tr key={sub.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-medium text-gray-900">{sub.businessName || 'Sin nombre'}</p>
@@ -380,12 +378,12 @@ export default function AdminExpirations() {
                       <td className="px-4 py-3">
                         {days !== null && (
                           <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            isSuspended ? 'bg-gray-100 text-gray-600' :
-                            isOverdue ? 'bg-red-100 text-red-800' :
-                            isToday ? 'bg-red-100 text-red-800' :
-                            days <= 3 ? 'bg-orange-100 text-orange-800' :
-                            days <= 7 ? 'bg-amber-100 text-amber-800' :
-                            'bg-blue-100 text-blue-800'
+                            isSuspended ? 'bg-gray-100 text-gray-700' :
+                            isOverdue ? 'bg-red-100 text-red-700' :
+                            isToday ? 'bg-red-100 text-red-700' :
+                            days <= 3 ? 'bg-amber-100 text-amber-700' :
+                            days <= 7 ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
                           }`}>
                             {isSuspended ? 'Suspendido' :
                              isOverdue ? `${Math.abs(days)}d vencido` :
@@ -402,14 +400,14 @@ export default function AdminExpirations() {
                             <>
                               <button
                                 onClick={() => handleUnarchive(sub)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 title="Desarchivar"
                               >
                                 <ArchiveRestore className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleQuickRenew(sub.id, sub.plan || 'qpse_1_month')}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Renovar (mismo plan)"
                               >
                                 <CreditCard className="w-4 h-4" />
@@ -419,7 +417,7 @@ export default function AdminExpirations() {
                             <>
                               <button
                                 onClick={() => handleQuickRenew(sub.id, sub.plan || 'qpse_1_month')}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Renovar (mismo plan)"
                               >
                                 <CreditCard className="w-4 h-4" />
@@ -427,7 +425,7 @@ export default function AdminExpirations() {
                               {!isSuspended && (isOverdue || isToday) && (
                                 <button
                                   onClick={() => handleSuspend(sub.id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                   title="Suspender"
                                 >
                                   <Ban className="w-4 h-4" />
@@ -435,7 +433,7 @@ export default function AdminExpirations() {
                               )}
                               <button
                                 onClick={() => openWhatsApp(sub)}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Contactar WhatsApp"
                               >
                                 <MessageCircle className="w-4 h-4" />
@@ -444,7 +442,7 @@ export default function AdminExpirations() {
                               {(isSuspended || isOverdue) && (
                                 <button
                                   onClick={() => handleArchive(sub)}
-                                  className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
                                   title="Archivar (no contar en estadísticas)"
                                 >
                                   <Archive className="w-4 h-4" />

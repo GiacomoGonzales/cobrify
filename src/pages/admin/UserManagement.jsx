@@ -279,11 +279,11 @@ export default function UserManagement() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-600">Administra suscripciones y pagos</p>
+          <p className="text-gray-500">Administra suscripciones y pagos</p>
         </div>
         <button
           onClick={loadSubscriptions}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Actualizar
@@ -292,49 +292,49 @@ export default function UserManagement() {
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Total Usuarios</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Total Usuarios</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
-            <Users className="w-8 h-8 text-blue-500" />
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Activos</p>
-              <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Activos</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.active}</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-500" />
+            <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Suspendidos</p>
-              <p className="text-2xl font-bold text-red-600">{stats.suspended}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Suspendidos</p>
+              <p className="text-xl sm:text-2xl font-bold text-red-600">{stats.suspended}</p>
             </div>
-            <XCircle className="w-8 h-8 text-red-500" />
+            <XCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">En Prueba</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.trial}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">En Prueba</p>
+              <p className="text-xl sm:text-2xl font-bold text-amber-600">{stats.trial}</p>
             </div>
-            <Clock className="w-8 h-8 text-orange-500" />
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
           </div>
         </div>
       </div>
 
       {/* Filtros y búsqueda */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -343,7 +343,7 @@ export default function UserManagement() {
               placeholder="Buscar por email, negocio o ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -352,7 +352,7 @@ export default function UserManagement() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Todos</option>
               <option value="active">Activos</option>
@@ -364,7 +364,7 @@ export default function UserManagement() {
       </div>
 
       {/* Tabla de usuarios */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
@@ -398,7 +398,7 @@ export default function UserManagement() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-gray-100">
                 {filteredSubscriptions.map((sub) => {
                   // Convertir correctamente el Timestamp de Firestore para fecha de fin
                   let periodEnd = null;
@@ -435,7 +435,7 @@ export default function UserManagement() {
                   return (
                     <React.Fragment key={sub.id}>
                       {/* Fila principal del Business Owner */}
-                      <tr className={isBlocked ? 'bg-red-50' : ''}>
+                      <tr className={isBlocked ? 'bg-red-50' : 'hover:bg-gray-50 transition-colors'}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             {/* Botón expandir/colapsar */}
@@ -495,7 +495,7 @@ export default function UserManagement() {
                             Suspendido
                           </span>
                         ) : isExpired ? (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
                             Vencido
                           </span>
                         ) : (
@@ -584,7 +584,7 @@ export default function UserManagement() {
                               setModalType('config');
                               setShowModal(true);
                             }}
-                            className="text-purple-600 hover:text-purple-900"
+                            className="text-primary-600 hover:text-primary-900"
                             title="Configurar Emisión"
                           >
                             <Settings className="w-5 h-5" />
@@ -592,7 +592,7 @@ export default function UserManagement() {
 
                           <button
                             onClick={() => openExtendModal(sub)}
-                            className="text-orange-600 hover:text-orange-900"
+                            className="text-amber-600 hover:text-amber-800"
                             title="Extender suscripción"
                             disabled={actionLoading}
                           >
@@ -736,10 +736,10 @@ export default function UserManagement() {
       {/* Modal Extender Suscripción */}
       {showExtendModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-md w-full p-6">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Extender Suscripción</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Extender Suscripción</h2>
                 <p className="text-sm text-gray-600">{selectedUser.businessName || selectedUser.email}</p>
               </div>
               <button
@@ -748,7 +748,7 @@ export default function UserManagement() {
                   setSelectedUser(null);
                   setExtendDate('');
                 }}
-                className="text-gray-400 hover:text-gray-600 text-2xl"
+                className="text-gray-400 hover:text-gray-600 text-2xl transition-colors"
               >
                 ✕
               </button>
@@ -779,7 +779,7 @@ export default function UserManagement() {
                   value={extendDate}
                   onChange={(e) => setExtendDate(e.target.value)}
                   min={format(new Date(), 'yyyy-MM-dd')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -818,7 +818,7 @@ export default function UserManagement() {
               )}
 
               {/* Info */}
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
                 <strong>Nota:</strong> Esta acción NO registra un pago. Solo extiende la fecha de vencimiento.
               </div>
 
@@ -831,7 +831,7 @@ export default function UserManagement() {
                     setSelectedUser(null);
                     setExtendDate('');
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                   disabled={actionLoading}
                 >
                   Cancelar
@@ -840,7 +840,7 @@ export default function UserManagement() {
                   type="button"
                   onClick={handleExtendSubscription}
                   disabled={actionLoading || !extendDate}
-                  className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
+                  className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
                 >
                   {actionLoading ? (
                     <>

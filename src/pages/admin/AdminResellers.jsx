@@ -372,7 +372,7 @@ export default function AdminResellers() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Cargando resellers...</p>
         </div>
       </div>
@@ -389,7 +389,7 @@ export default function AdminResellers() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="w-5 h-5" />
           Nuevo Reseller
@@ -398,54 +398,46 @@ export default function AdminResellers() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 bg-indigo-100 rounded-lg">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
-            </div>
+            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-xs text-gray-500">Total Resellers</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Total Resellers</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-            </div>
+            <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.active}</p>
-              <p className="text-xs text-gray-500">Activos</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.active}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Activos</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 bg-amber-100 rounded-lg">
-              <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" />
-            </div>
+            <Wallet className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">S/ {stats.totalBalance.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">Saldo Total</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">S/ {stats.totalBalance.toFixed(2)}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Saldo Total</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-            </div>
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.totalClients}</p>
-              <p className="text-xs text-gray-500">Clientes Totales</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalClients}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Clientes Totales</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+      <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
@@ -454,12 +446,12 @@ export default function AdminResellers() {
               placeholder="Buscar..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <button
             onClick={loadResellers}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
@@ -467,7 +459,7 @@ export default function AdminResellers() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {filteredResellers.length === 0 ? (
           <div className="p-12 text-center">
             <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -476,21 +468,21 @@ export default function AdminResellers() {
         ) : (
           <>
             {/* Mobile Card View */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="sm:hidden divide-y divide-gray-100">
               {filteredResellers.map(reseller => (
-                <div key={reseller.id} className="p-3 hover:bg-gray-50">
+                <div key={reseller.id} className="p-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <Building2 className="w-4 h-4 text-indigo-600" />
+                      <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Building2 className="w-4 h-4 text-primary-700" />
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900 text-sm truncate">{reseller.companyName}</p>
                         <p className="text-xs text-gray-500 truncate">{reseller.email}</p>
                         {reseller.customDomain && (
                           <div className="flex items-center gap-1 mt-0.5">
-                            <Globe className="w-2.5 h-2.5 text-indigo-400" />
-                            <span className="text-xs text-indigo-600 truncate">
+                            <Globe className="w-2.5 h-2.5 text-primary-400" />
+                            <span className="text-xs text-primary-600 truncate">
                               {reseller.customDomain}
                             </span>
                           </div>
@@ -511,7 +503,7 @@ export default function AdminResellers() {
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
                         <Percent className="w-3 h-3" />
                         {reseller.effectiveDiscount}%
-                        {reseller.hasOverride && <Crown className="w-3 h-3 text-purple-500" />}
+                        {reseller.hasOverride && <Crown className="w-3 h-3 text-primary-500" />}
                       </span>
                       {reseller.pricingModel === 'v2'
                         ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">v2</span>
@@ -523,19 +515,19 @@ export default function AdminResellers() {
                   <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
                     <button
                       onClick={() => openDepositModal(reseller)}
-                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg text-xs flex items-center gap-1"
+                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg text-xs flex items-center gap-1 transition-colors"
                     >
                       <Plus className="w-4 h-4" /> Saldo
                     </button>
                     <button
                       onClick={() => openEditModal(reseller)}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                      className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => toggleResellerStatus(reseller)}
-                      className={`p-2 rounded-lg ${
+                      className={`p-2 rounded-lg transition-colors ${
                         reseller.isActive !== false
                           ? 'text-red-500 hover:bg-red-50'
                           : 'text-green-500 hover:bg-green-50'
@@ -557,22 +549,22 @@ export default function AdminResellers() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contacto</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nivel</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clientes</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nivel</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clientes</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {filteredResellers.map(reseller => (
-                    <tr key={reseller.id} className="hover:bg-gray-50">
+                    <tr key={reseller.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                            <Building2 className="w-5 h-5 text-indigo-600" />
+                          <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-primary-700" />
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{reseller.companyName}</p>
@@ -585,8 +577,8 @@ export default function AdminResellers() {
                         <p className="text-sm text-gray-500">{reseller.email}</p>
                         {reseller.customDomain && (
                           <div className="flex items-center gap-1 mt-1">
-                            <Globe className="w-3 h-3 text-indigo-400" />
-                            <span className="text-xs text-indigo-600">
+                            <Globe className="w-3 h-3 text-primary-400" />
+                            <span className="text-xs text-primary-600">
                               {reseller.customDomain}
                             </span>
                           </div>
@@ -599,7 +591,7 @@ export default function AdminResellers() {
                             <div className="flex items-center gap-1">
                               <span className="font-medium text-gray-900">{reseller.currentTier?.name}</span>
                               {reseller.hasOverride && (
-                                <Crown className="w-3 h-3 text-purple-500" title="Descuento manual" />
+                                <Crown className="w-3 h-3 text-primary-500" title="Descuento manual" />
                               )}
                             </div>
                             <span className="text-sm text-green-600 font-medium">{reseller.effectiveDiscount}% desc.</span>
@@ -616,7 +608,7 @@ export default function AdminResellers() {
                           <span className="font-medium text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
                           <button
                             onClick={() => openDepositModal(reseller)}
-                            className="p-1 text-green-600 hover:bg-green-50 rounded"
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
                             title="Agregar saldo"
                           >
                             <Plus className="w-4 h-4" />
@@ -642,13 +634,13 @@ export default function AdminResellers() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => openEditModal(reseller)}
-                            className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                            className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => toggleResellerStatus(reseller)}
-                            className={`p-2 rounded-lg ${
+                            className={`p-2 rounded-lg transition-colors ${
                               reseller.isActive !== false
                                 ? 'text-red-500 hover:bg-red-50'
                                 : 'text-green-500 hover:bg-green-50'
@@ -674,14 +666,14 @@ export default function AdminResellers() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900">
                 {selectedReseller ? 'Editar Reseller' : 'Nuevo Reseller'}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -703,14 +695,14 @@ export default function AdminResellers() {
                         setFoundUser(null)
                         setUserSearchError('')
                       }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                       placeholder="usuario@ejemplo.com"
                       disabled={foundUser}
                     />
                     <button
                       onClick={searchUserByEmail}
                       disabled={searchingUser || foundUser}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       {searchingUser ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -793,7 +785,7 @@ export default function AdminResellers() {
                         type="text"
                         value={formData.companyName}
                         onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="Mi Empresa SAC"
                       />
                     </div>
@@ -803,7 +795,7 @@ export default function AdminResellers() {
                         type="text"
                         value={formData.ruc}
                         onChange={e => setFormData({ ...formData, ruc: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="20123456789"
                         maxLength={11}
                       />
@@ -814,7 +806,7 @@ export default function AdminResellers() {
                         type="tel"
                         value={formData.phone}
                         onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="987654321"
                       />
                     </div>
@@ -824,7 +816,7 @@ export default function AdminResellers() {
                         type="text"
                         value={formData.contactName}
                         onChange={e => setFormData({ ...formData, contactName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="Juan Pérez"
                       />
                     </div>
@@ -837,7 +829,7 @@ export default function AdminResellers() {
                         type="number"
                         value={formData.discountOverride}
                         onChange={e => setFormData({ ...formData, discountOverride: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         min="0"
                         max="100"
                         placeholder="Automático por nivel"
@@ -851,7 +843,7 @@ export default function AdminResellers() {
                       <select
                         value={formData.pricingModel}
                         onChange={e => setFormData({ ...formData, pricingModel: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <option value="v2">Nuevo (v2) — Básico/Mensual/Semestral/Anual · desc. 10/20/30%</option>
                         <option value="legacy">Antiguo (legacy) — QPse/SUNAT 1/6/12 · desc. 20/30/40%</option>
@@ -866,7 +858,7 @@ export default function AdminResellers() {
                         type="number"
                         value={formData.balance}
                         onChange={e => setFormData({ ...formData, balance: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         min="0"
                         step="0.01"
                       />
@@ -877,7 +869,7 @@ export default function AdminResellers() {
                           type="checkbox"
                           checked={formData.isActive}
                           onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
-                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+                          className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
                         />
                         <span className="text-sm font-medium text-gray-700">Reseller activo</span>
                       </label>
@@ -887,20 +879,20 @@ export default function AdminResellers() {
                   {/* Sección de Dominio (solo admin) */}
                   <div className="border-t border-gray-200 pt-4 mt-4">
                     <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-indigo-500" />
+                      <Globe className="w-4 h-4 text-primary-500" />
                       Dominio Personalizado
                     </h3>
 
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">
                         Dominio del Reseller
-                        <span className="text-xs text-indigo-500 ml-1">(requiere configuración DNS)</span>
+                        <span className="text-xs text-primary-500 ml-1">(requiere configuración DNS)</span>
                       </label>
                       <input
                         type="text"
                         value={formData.customDomain}
                         onChange={e => setFormData({ ...formData, customDomain: e.target.value.toLowerCase() })}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="facturacion.miempresa.com"
                       />
                       {formData.customDomain && (
@@ -936,14 +928,14 @@ export default function AdminResellers() {
                     setFoundUser(null)
                     setUserSearchError('')
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={saveReseller}
                   disabled={saving || (!selectedReseller && !foundUser)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   {saving ? (
                     <>
@@ -966,12 +958,12 @@ export default function AdminResellers() {
       {/* Deposit Modal */}
       {showDepositModal && selectedReseller && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Agregar Saldo</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Agregar Saldo</h2>
               <button
                 onClick={() => setShowDepositModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -993,7 +985,7 @@ export default function AdminResellers() {
                     type="number"
                     value={depositAmount}
                     onChange={e => setDepositAmount(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="0.00"
                     min="0"
                     step="0.01"
@@ -1007,7 +999,7 @@ export default function AdminResellers() {
                   type="text"
                   value={depositNote}
                   onChange={e => setDepositNote(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Ej: Yape 12345, Transferencia BCP"
                 />
               </div>
@@ -1015,14 +1007,14 @@ export default function AdminResellers() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowDepositModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={addDeposit}
                   disabled={saving || !depositAmount}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
                   {saving ? (
                     <>

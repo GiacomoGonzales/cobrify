@@ -24,12 +24,12 @@ import {
 } from 'lucide-react'
 
 const PAYMENT_METHODS = {
-  yape: { name: 'Yape', color: 'bg-purple-100 text-purple-800' },
-  plin: { name: 'Plin', color: 'bg-green-100 text-green-800' },
-  transferencia: { name: 'Transferencia', color: 'bg-blue-100 text-blue-800' },
-  efectivo: { name: 'Efectivo', color: 'bg-yellow-100 text-yellow-800' },
-  tarjeta: { name: 'Tarjeta', color: 'bg-indigo-100 text-indigo-800' },
-  otro: { name: 'Otro', color: 'bg-gray-100 text-gray-800' }
+  yape: { name: 'Yape', color: 'bg-primary-100 text-primary-700' },
+  plin: { name: 'Plin', color: 'bg-green-100 text-green-700' },
+  transferencia: { name: 'Transferencia', color: 'bg-blue-100 text-blue-700' },
+  efectivo: { name: 'Efectivo', color: 'bg-amber-100 text-amber-700' },
+  tarjeta: { name: 'Tarjeta', color: 'bg-cyan-100 text-cyan-700' },
+  otro: { name: 'Otro', color: 'bg-gray-100 text-gray-700' }
 }
 
 export default function AdminPayments() {
@@ -255,48 +255,40 @@ export default function AdminPayments() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-green-100 rounded-lg sm:rounded-xl">
-              <DollarSign className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
-            </div>
+            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Total</p>
-              <p className="text-base sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(totalAmount)}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Total</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(totalAmount)}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-blue-100 rounded-lg sm:rounded-xl">
-              <CreditCard className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
-            </div>
+            <CreditCard className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Pagos</p>
-              <p className="text-base sm:text-2xl font-bold text-gray-900">{totalCount}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Pagos</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{totalCount}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-indigo-100 rounded-lg sm:rounded-xl">
-              <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-600" />
-            </div>
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Filtrado</p>
-              <p className="text-base sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(filteredStats.total)}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Filtrado</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(filteredStats.total)}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-purple-100 rounded-lg sm:rounded-xl">
-              <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
-            </div>
+            <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-600 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Promedio</p>
-              <p className="text-base sm:text-2xl font-bold text-gray-900 truncate">
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Promedio</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                 {formatCurrency(filteredStats.count > 0 ? filteredStats.total / filteredStats.count : 0)}
               </p>
             </div>
@@ -316,20 +308,20 @@ export default function AdminPayments() {
                 placeholder="Buscar..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <button
               onClick={loadPayments}
               disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Recargar"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar</span>
@@ -341,7 +333,7 @@ export default function AdminPayments() {
             <select
               value={methodFilter}
               onChange={e => setMethodFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Todos los métodos</option>
               {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
@@ -354,21 +346,21 @@ export default function AdminPayments() {
                 type="date"
                 value={dateRange.start}
                 onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))}
-                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <span className="text-gray-400 text-sm">-</span>
               <input
                 type="date"
                 value={dateRange.end}
                 onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))}
-                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-4 h-4" /> Limpiar
               </button>
@@ -385,12 +377,12 @@ export default function AdminPayments() {
       {/* Method breakdown (when filtered) */}
       {Object.keys(filteredStats.byMethod).length > 1 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Desglose por método</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Desglose por método</h3>
           <div className="flex flex-wrap gap-3">
             {Object.entries(filteredStats.byMethod).map(([method, amount]) => (
               <div
                 key={method}
-                className={`px-3 py-2 rounded-lg ${PAYMENT_METHODS[method]?.color || 'bg-gray-100 text-gray-800'}`}
+                className={`px-3 py-2 rounded-lg ${PAYMENT_METHODS[method]?.color || 'bg-gray-100 text-gray-700'}`}
               >
                 <span className="font-medium">{PAYMENT_METHODS[method]?.name || method}:</span>
                 <span className="ml-2">{formatCurrency(amount)}</span>
@@ -405,7 +397,7 @@ export default function AdminPayments() {
         {/* Loading state */}
         {loading && (
           <div className="px-4 py-12 text-center">
-            <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+            <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-2" />
             <p className="text-gray-500">Cargando pagos...</p>
           </div>
         )}
@@ -420,13 +412,13 @@ export default function AdminPayments() {
 
         {/* Mobile Card View */}
         {!loading && filteredPayments.length > 0 && (
-          <div className="sm:hidden divide-y divide-gray-200">
+          <div className="sm:hidden divide-y divide-gray-100">
             {filteredPayments.map(payment => (
-              <div key={payment.id} className="p-3 hover:bg-gray-50">
+              <div key={payment.id} className="p-3 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-4 h-4 text-indigo-600" />
+                    <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-4 h-4 text-primary-600" />
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">{payment.businessName}</p>
@@ -439,7 +431,7 @@ export default function AdminPayments() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-800'}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-700'}`}>
                       {PAYMENT_METHODS[payment.method]?.name || payment.method}
                     </span>
                     <span className="text-gray-500">{payment.planName || PLANS[payment.plan]?.name || payment.plan}</span>
@@ -449,7 +441,7 @@ export default function AdminPayments() {
                       <CheckCircle className="w-3 h-3" /> OK
                     </span>
                   ) : payment.status === 'pending' ? (
-                    <span className="inline-flex items-center gap-1 text-yellow-600">
+                    <span className="inline-flex items-center gap-1 text-amber-600">
                       <Clock className="w-3 h-3" /> Pend.
                     </span>
                   ) : (
@@ -467,7 +459,7 @@ export default function AdminPayments() {
                   </div>
                 )}
                 {/* Botones móvil */}
-                <div className="mt-2 flex items-center justify-end gap-2 border-t pt-2">
+                <div className="mt-2 flex items-center justify-end gap-2 border-t border-gray-100 pt-2">
                   <button
                     onClick={() => openEditModal(payment)}
                     className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -533,16 +525,16 @@ export default function AdminPayments() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {filteredPayments.map(payment => (
-                  <tr key={payment.id} className="hover:bg-gray-50">
+                  <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {formatDate(payment.date)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <Building2 className="w-4 h-4 text-indigo-600" />
+                        <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center">
+                          <Building2 className="w-4 h-4 text-primary-600" />
                         </div>
                         <div>
                           <p className="font-medium text-gray-900 text-sm">{payment.businessName}</p>
@@ -556,7 +548,7 @@ export default function AdminPayments() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-700'}`}>
                         {PAYMENT_METHODS[payment.method]?.name || payment.method}
                       </span>
                     </td>
@@ -571,7 +563,7 @@ export default function AdminPayments() {
                           <CheckCircle className="w-4 h-4" /> Completado
                         </span>
                       ) : payment.status === 'pending' ? (
-                        <span className="inline-flex items-center gap-1 text-yellow-600 text-sm">
+                        <span className="inline-flex items-center gap-1 text-amber-600 text-sm">
                           <Clock className="w-4 h-4" /> Pendiente
                         </span>
                       ) : (
@@ -612,7 +604,7 @@ export default function AdminPayments() {
       {/* Modal de Editar Pago */}
       {editingPayment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Editar Pago</h3>
               <button
@@ -643,7 +635,7 @@ export default function AdminPayments() {
                   step="0.01"
                   value={editForm.amount}
                   onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -655,7 +647,7 @@ export default function AdminPayments() {
                 <select
                   value={editForm.method}
                   onChange={e => setEditForm({ ...editForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
                     <option key={key} value={key}>{method.name}</option>
@@ -672,7 +664,7 @@ export default function AdminPayments() {
                   type="date"
                   value={editForm.date}
                   onChange={e => setEditForm({ ...editForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -684,7 +676,7 @@ export default function AdminPayments() {
                 <select
                   value={editForm.status}
                   onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="completed">Completado</option>
                   <option value="pending">Pendiente</option>
@@ -701,7 +693,7 @@ export default function AdminPayments() {
                   value={editForm.notes}
                   onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Notas adicionales..."
                 />
               </div>
@@ -710,7 +702,7 @@ export default function AdminPayments() {
             <div className="p-4 border-t border-gray-200 flex gap-3">
               <button
                 onClick={() => setEditingPayment(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={savingEdit}
               >
                 Cancelar
@@ -718,7 +710,7 @@ export default function AdminPayments() {
               <button
                 onClick={handleSaveEdit}
                 disabled={savingEdit}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {savingEdit ? (
                   <>
@@ -740,7 +732,7 @@ export default function AdminPayments() {
       {/* Modal de Confirmar Eliminación */}
       {confirmDelete && deletingPayment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-sm w-full">
             <div className="p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Eliminar Pago</h3>
             </div>
@@ -773,7 +765,7 @@ export default function AdminPayments() {
                   setConfirmDelete(false)
                   setDeletingPayment(null)
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={savingEdit}
               >
                 Cancelar
@@ -781,7 +773,7 @@ export default function AdminPayments() {
               <button
                 onClick={handleDeletePayment}
                 disabled={savingEdit}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {savingEdit ? (
                   <>
