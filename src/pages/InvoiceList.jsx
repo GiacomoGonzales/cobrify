@@ -3727,6 +3727,12 @@ Gracias por tu preferencia.`
                           {item.unit && <span className="text-gray-400">• {item.unit}</span>}
                           {item.taxAffectation === '20' && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Exonerado</span>}
                           {item.taxAffectation === '30' && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Inafecto</span>}
+                          {/* En comprobantes MIXTOS, etiquetar también los gravados: un item
+                              gravado sin etiqueta entre 30 exonerados es invisible (reporte
+                              de usuario: "todos dicen exonerado pero hay S/4 gravado") */}
+                          {(item.taxAffectation || '10') === '10' && (viewingInvoice.opExoneradas > 0 || viewingInvoice.opInafectas > 0) && (
+                            <span className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-medium">Gravado</span>
+                          )}
                         </div>
                         {item.batchBreakdown && item.batchBreakdown.length > 0 ? (
                           <p className="text-xs text-blue-600 mt-1">

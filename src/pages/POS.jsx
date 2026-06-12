@@ -3737,8 +3737,22 @@ export default function POS() {
     setCart([...cart, customProductItem])
     toast.success('Producto personalizado agregado al carrito')
 
-    // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: taxConfig.igvRate || 18, addIgv: false, isBonificacion: false })
+    // Resetear y cerrar modal. La AFECTACIÓN (gravado/exonerado/inafecto) y
+    // addIgv se MANTIENEN para el siguiente item: un negocio que vende
+    // exonerado agrega muchos items personalizados seguidos y re-seleccionar
+    // "Exonerado" cada vez provocaba que un olvido pasara como Gravado
+    // (reporte de usuario: 31 items, 1 quedó gravado por S/4 + IGV).
+    setCustomProduct(prev => ({
+      ...prev,
+      name: '',
+      price: '',
+      quantity: 1,
+      unit: 'NIU',
+      isBonificacion: false,
+      // El '30' de una bonificación es efecto del check, no elección del
+      // usuario: no se hereda al siguiente item.
+      ...(prev.isBonificacion ? { taxAffectation: '10' } : {}),
+    }))
     setShowCustomProductModal(false)
   }
 
@@ -9786,7 +9800,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         isOpen={showCustomProductModal}
         onClose={() => {
           setShowCustomProductModal(false)
-          setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
+          // Mantener afectación y addIgv elegidas (ver comentario en handleAddCustomProduct)
+          setCustomProduct(prev => ({
+            ...prev,
+            name: '',
+            price: '',
+            quantity: 1,
+            unit: 'NIU',
+            isBonificacion: false,
+            ...(prev.isBonificacion ? { taxAffectation: '10' } : {}),
+          }))
         }}
         title="Agregar Producto Personalizado"
         size="md"
