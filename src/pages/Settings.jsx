@@ -3362,26 +3362,6 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Inventario y compras */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Inventario y compras</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Opciones para el registro de compras y la gestión de inventario.
-                </p>
-                <div className="space-y-3">
-                  {/* Mostrar precios de venta en compras */}
-                  <SettingToggle
-                    checked={posCustomFields.showSalePriceInPurchase}
-                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showSalePriceInPurchase: e.target.checked })}
-                    title="Precios de venta en compras"
-                    description="Mostrar y actualizar precios de venta al registrar una compra. Si tienes múltiples precios o variantes, se mostrarán todos"
-                  />
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
-
               {/* Dispositivo */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Dispositivo</h3>

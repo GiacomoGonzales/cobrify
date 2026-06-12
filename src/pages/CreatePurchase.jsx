@@ -77,6 +77,8 @@ const cleanUndefined = (obj) => {
 export default function CreatePurchase() {
   const { user } = useAuth()
   const { getBusinessId, businessMode, businessSettings } = useAppContext()
+  // Precios de venta en compras: habilitado para todos por defecto (ya no es una opción configurable).
+  const showSalePriceInPurchase = true
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const location = useLocation()
@@ -1933,8 +1935,8 @@ export default function CreatePurchase() {
         await Promise.all(ingredientStockUpdates)
       }
 
-      // 5. Actualizar precios de venta si la opción está activa
-      if (businessSettings?.posCustomFields?.showSalePriceInPurchase) {
+      // 5. Actualizar precios de venta
+      if (showSalePriceInPurchase) {
         const priceUpdates = []
         // Agrupar items por productId para manejar variantes
         const productItemsGrouped = {}
@@ -2337,7 +2339,7 @@ export default function CreatePurchase() {
                       se calcularán con este TC y no cambiarán aunque el dólar
                       fluctúe. El costo del producto se almacena en Soles.
                     </p>
-                    {businessSettings?.posCustomFields?.showSalePriceInPurchase && (
+                    {showSalePriceInPurchase && (
                       <label className="flex items-start gap-2 pt-2 border-t border-emerald-200/70 cursor-pointer">
                         <input
                           type="checkbox"
@@ -2708,7 +2710,7 @@ export default function CreatePurchase() {
                     </td>
                   </tr>
                   {/* Precios de venta → botón que abre modal (no estorba con campos inline) */}
-                  {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
+                  {showSalePriceInPurchase && item.productId && (
                     <tr className="bg-blue-50/40 border-b border-gray-200">
                       <td colSpan={99} className="px-4 py-1.5">
                         <button
@@ -3016,7 +3018,7 @@ export default function CreatePurchase() {
                 </button>
 
                 {/* Precios de venta - móvil → botón que abre modal */}
-                {businessSettings?.posCustomFields?.showSalePriceInPurchase && item.productId && (
+                {showSalePriceInPurchase && item.productId && (
                   <button
                     type="button"
                     onClick={() => setSalePriceModalIndex(index)}
