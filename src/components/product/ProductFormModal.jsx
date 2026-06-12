@@ -772,7 +772,7 @@ const ProductFormModal = ({
                   {...register('sku')}
                   helperText="Código interno de tu negocio"
                 />
-                {businessSettings?.autoSku && !initialData && (
+                {!initialData && (
                   <button
                     type="button"
                     onClick={async () => {

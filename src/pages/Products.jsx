@@ -5542,7 +5542,7 @@ export default function Products() {
                 {...register('sku')}
                 helperText="Código interno de tu negocio"
               />
-              {businessSettings?.autoSku && !editingProduct && (
+              {!editingProduct && (
                 <button
                   type="button"
                   onClick={async () => {

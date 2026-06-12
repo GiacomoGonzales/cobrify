@@ -4497,16 +4497,6 @@ export default function Settings() {
                       : '✗ Deshabilitado: Los productos se mostrarán siempre con el nombre registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener consistencia en los comprobantes.'}
                   />
 
-                  {/* SKU automático */}
-                  <SettingToggle
-                    checked={autoSku}
-                    onChange={(e) => setAutoSku(e.target.checked)}
-                    title="SKU automático al crear productos"
-                    description={autoSku
-                      ? '✓ Habilitado: Al crear un nuevo producto se generará automáticamente un SKU secuencial (PROD-0001, PROD-0002, etc.). Puedes modificarlo antes de guardar si lo deseas.'
-                      : '✗ Deshabilitado: El campo SKU quedará vacío al crear un producto y deberás ingresarlo manualmente si lo necesitas.'}
-                  />
-
                   {/* Ocultar productos sin stock en POS */}
                   <SettingToggle
                     checked={posCustomFields.hideOutOfStockInPOS}
