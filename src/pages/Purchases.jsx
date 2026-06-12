@@ -443,7 +443,9 @@ export default function Purchases() {
               continue
             }
 
-            const quantityToDeduct = parseFloat(item.quantity) || 0
+            // Presentación: la cantidad guardada es por presentación (sacos);
+            // el stock se revierte en unidades base (cantidad × factor).
+            const quantityToDeduct = (parseFloat(item.quantity) || 0) * (Number(item.presentationFactor) || 1)
             if (quantityToDeduct <= 0) continue
 
             // Descontar stock usando transacción atómica + aplicar limpieza de lotes/series
@@ -765,7 +767,8 @@ export default function Purchases() {
         )
         if (already) { alreadyOk++; continue }
 
-        const qty = parseFloat(item.quantity) || 0
+        // Presentación → unidades base (cantidad × factor)
+        const qty = (parseFloat(item.quantity) || 0) * (Number(item.presentationFactor) || 1)
         if (qty <= 0) { skipped++; continue }
 
         // Aplicar stock (transacción atómica)
@@ -1788,7 +1791,14 @@ export default function Purchases() {
                             {item.itemType === 'ingredient' ? 'Ingrediente' : 'Producto'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell className="text-center">
+                          {item.quantity}
+                          {Number(item.presentationFactor) > 1 && (
+                            <div className="text-[10px] text-gray-500 whitespace-nowrap">
+                              {item.presentationName || 'presentación'} ×{item.presentationFactor} = {parseFloat(((parseFloat(item.quantity) || 0) * item.presentationFactor).toFixed(2))} {item.unit || 'und'}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           {item.isBonus ? <span className="text-green-700 font-medium">Gratis</span> : formatCurrency(item.unitPrice, viewingPurchase?.currency)}
                         </TableCell>

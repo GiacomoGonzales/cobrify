@@ -484,6 +484,14 @@ export default function CreatePurchase() {
                 unit: item.unit || 'NIU',
                 taxAffectation: item.taxAffectation || '10',
                 isBonus: !!item.isBonus,
+                // Presentación con la que se compró (cantidad/costo por presentación)
+                presentationName: item.presentationName || '',
+                presentationFactor: Number(item.presentationFactor) || 1,
+                presentations: (
+                  businessSettings?.presentationsEnabled &&
+                  !item.variantSku &&
+                  Array.isArray(prod?.presentations) && prod.presentations.length > 0
+                ) ? prod.presentations : [],
                 variantSku: item.variantSku || null,
                 isVariant: !!item.variantSku,
                 hasVariants: !!item.variantSku,
@@ -559,6 +567,30 @@ export default function CreatePurchase() {
       newItems[index].cost = 0
       newItems[index].costWithoutIGV = 0
     }
+    setPurchaseItems(newItems)
+  }
+
+  // Cambiar la presentación de compra de una línea ('' = unidad base).
+  // Cantidad y costo pasan a expresarse POR PRESENTACIÓN; se sugiere el costo
+  // (costo base del producto × factor), editable por el usuario.
+  const selectPresentation = (index, presName) => {
+    const newItems = [...purchaseItems]
+    const row = { ...newItems[index] }
+    const pres = (row.presentations || []).find(p => p.name === presName) || null
+    const factor = pres ? (Number(pres.factor) || 1) : 1
+    row.presentationName = pres ? pres.name : ''
+    row.presentationFactor = factor
+    if (!row.isBonus) {
+      const prod = products.find(p => p.id === row.productId)
+      const baseCost = Number(prod?.cost) || 0
+      if (baseCost > 0) {
+        const isExempt = row.taxAffectation === '20' || row.taxAffectation === '30'
+        const newCost = Math.round(baseCost * factor * 100) / 100
+        row.cost = newCost
+        row.costWithoutIGV = isExempt ? newCost : newCost / 1.18
+      }
+    }
+    newItems[index] = row
     setPurchaseItems(newItems)
   }
 
@@ -699,6 +731,17 @@ export default function CreatePurchase() {
     newItems[index].taxAffectation = item.taxAffectation || '10'
     newItems[index].trackSerials = item.trackSerials || false
     newItems[index].serialNumbers = []
+    // Presentaciones de compra (saco, caja, etc.): permiten ingresar cantidad y
+    // costo POR PRESENTACIÓN; el stock entra en unidad base (cantidad × factor).
+    // No aplica a series (1 serie = 1 unidad base) ni ingredientes.
+    newItems[index].presentations = (
+      businessSettings?.presentationsEnabled &&
+      item.itemType !== 'ingredient' &&
+      !item.trackSerials &&
+      Array.isArray(item.presentations) && item.presentations.length > 0
+    ) ? item.presentations : []
+    newItems[index].presentationName = ''
+    newItems[index].presentationFactor = 1
 
     const isExempt = item.taxAffectation === '20' || item.taxAffectation === '30'
 
@@ -1218,6 +1261,12 @@ export default function CreatePurchase() {
             ...(item.batchNumber && { batchNumber: item.batchNumber }),
             ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
             ...(item.isBonus && { isBonus: true }),
+            // Presentación: quantity y unitPrice quedan POR PRESENTACIÓN; el
+            // factor permite reconstruir las unidades base (stock, anulación).
+            ...(Number(item.presentationFactor) > 1 && {
+              presentationName: item.presentationName || '',
+              presentationFactor: Number(item.presentationFactor),
+            }),
           })),
         subtotal: amounts.subtotal,
         igv: amounts.igv,
@@ -1268,18 +1317,21 @@ export default function CreatePurchase() {
           return { productId, variantSku: variantSku || null }
         }
 
-        // Agrupar cantidades originales por producto + variante
+        // Agrupar cantidades originales por producto + variante.
+        // SIEMPRE en unidades base: cantidad × factor de presentación (sacos→kg).
         const originalQuantities = {}
         originalProductItems.forEach(item => {
           const key = makeKey(item.productId, item.variantSku)
-          originalQuantities[key] = (originalQuantities[key] || 0) + (parseFloat(item.quantity) || 0)
+          const baseQty = (parseFloat(item.quantity) || 0) * (Number(item.presentationFactor) || 1)
+          originalQuantities[key] = (originalQuantities[key] || 0) + baseQty
         })
 
-        // Agrupar cantidades nuevas por producto + variante
+        // Agrupar cantidades nuevas por producto + variante (también en unidades base)
         const newQuantities = {}
         productItems.forEach(item => {
           const key = makeKey(item.productId, item.variantSku)
-          newQuantities[key] = (newQuantities[key] || 0) + (parseFloat(item.quantity) || 0)
+          const baseQty = (parseFloat(item.quantity) || 0) * (Number(item.presentationFactor) || 1)
+          newQuantities[key] = (newQuantities[key] || 0) + baseQty
         })
 
         // Calcular diferencias (productos+variante que estaban en original)
@@ -1431,8 +1483,13 @@ export default function CreatePurchase() {
             items: [] // Guardar items originales para lotes
           }
         }
-        const qty = parseFloat(item.quantity) || 0
-        const cost = parseFloat(item.cost) || 0
+        // Presentación: la línea se ingresó POR PRESENTACIÓN (4 sacos a S/100),
+        // pero el stock y el costo del producto viven en unidad base (kg).
+        // Cantidad base = cantidad × factor; costo unitario base = costo ÷ factor.
+        // El dinero total no cambia: (4×50) × (100÷50) = 4 × 100.
+        const presFactor = Number(item.presentationFactor) || 1
+        const qty = (parseFloat(item.quantity) || 0) * presFactor
+        const cost = (parseFloat(item.cost) || 0) / presFactor
         // CRÍTICO multi-divisa: el costo del PRODUCTO se almacena siempre en
         // moneda base (PEN). Si la compra fue en USD, convertimos cada item
         // ANTES de acumular para que el promedio ponderado y los costos en
@@ -1543,12 +1600,14 @@ export default function CreatePurchase() {
 
             for (const item of itemsWithBatch) {
               const itemBatchNumber = String(item.batchNumber || '').trim()
-              const itemQty = parseFloat(item.quantity) || 0
+              // Presentación → unidades base (igual que en groupedProducts)
+              const itemPresFactor = Number(item.presentationFactor) || 1
+              const itemQty = (parseFloat(item.quantity) || 0) * itemPresFactor
               const itemExpDate = item.expirationDate
                 ? Timestamp.fromDate(parseLocalDate(item.expirationDate))
                 : null
-              // costPrice del lote también en PEN base (ver razón en groupedProducts).
-              const itemCostNative = parseFloat(item.cost) || 0
+              // costPrice del lote también en PEN base y POR UNIDAD BASE.
+              const itemCostNative = (parseFloat(item.cost) || 0) / itemPresFactor
               const itemCost = convertToBase(itemCostNative, currency, exchangeRate)
 
               // Solo intentamos merge si hay batchNumber identificable.
@@ -1665,9 +1724,14 @@ export default function CreatePurchase() {
           if (!product) return
           if (product.trackStock === false) return
 
-          const qty = parseFloat(item.quantity) || 0
+          // Presentación → unidades base para el kardex (4 sacos ×50 = 200)
+          const movPresFactor = Number(item.presentationFactor) || 1
+          const qty = (parseFloat(item.quantity) || 0) * movPresFactor
           if (qty <= 0) return
 
+          const presNote = movPresFactor > 1
+            ? ` (${parseFloat(item.quantity) || 0} × ${item.presentationName || 'presentación'} ×${movPresFactor})`
+            : ''
           const cleanSerials = (item.serialNumbers || []).filter(sn => sn?.trim?.())
           return createStockMovement(businessId, {
             productId: item.productId,
@@ -1681,7 +1745,7 @@ export default function CreatePurchase() {
             ...(item.variantSku && { variantSku: item.variantSku }),
             ...(item.batchNumber && { batchNumber: item.batchNumber }),
             ...(cleanSerials.length > 0 && { serialNumbers: cleanSerials }),
-            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}${item.variantSku ? ` (${item.variantLabel || item.variantSku})` : ''}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${cleanSerials.length > 0 ? ` (Series: ${cleanSerials.join(', ')})` : ''}`
+            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}${presNote}${item.variantSku ? ` (${item.variantLabel || item.variantSku})` : ''}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${cleanSerials.length > 0 ? ` (Series: ${cleanSerials.join(', ')})` : ''}`
           })
         })
 
@@ -2502,6 +2566,20 @@ export default function CreatePurchase() {
                           )}
                         </div>
                       </div>
+                      {/* Presentación de compra (saco, caja...) — solo si el producto tiene */}
+                      {item.presentations?.length > 0 && (
+                        <select
+                          value={item.presentationName || ''}
+                          onChange={e => selectPresentation(index, e.target.value)}
+                          className={`mt-1 w-full px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${(item.presentationFactor || 1) > 1 ? 'border-primary-300 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-gray-50 text-gray-600'}`}
+                          title="Presentación con la que compras: la cantidad y el costo se ingresan por presentación"
+                        >
+                          <option value="">Unidad base ({item.unit || 'NIU'})</option>
+                          {item.presentations.map(p => (
+                            <option key={p.name} value={p.name}>{p.name} (×{p.factor} {item.unit || ''})</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     {/* Cantidad */}
                     <td className="px-2 py-2">
@@ -2513,6 +2591,11 @@ export default function CreatePurchase() {
                         onChange={e => updateItem(index, 'quantity', e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
+                      {(item.presentationFactor || 1) > 1 && parseFloat(item.quantity) > 0 && (
+                        <p className="mt-0.5 text-[10px] text-center text-primary-600 whitespace-nowrap">
+                          = {parseFloat((((parseFloat(item.quantity) || 0) * item.presentationFactor)).toFixed(2))} {item.unit || 'und'}
+                        </p>
+                      )}
                     </td>
                     {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
                     {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
@@ -2832,6 +2915,23 @@ export default function CreatePurchase() {
                   </div>
                 </div>
 
+                {/* Presentación de compra (saco, caja...) — solo si el producto tiene */}
+                {item.presentations?.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Presentación</label>
+                    <select
+                      value={item.presentationName || ''}
+                      onChange={e => selectPresentation(index, e.target.value)}
+                      className={`w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${(item.presentationFactor || 1) > 1 ? 'border-primary-300 bg-primary-50 text-primary-700 font-medium' : 'border-gray-300'}`}
+                    >
+                      <option value="">Unidad base ({item.unit || 'NIU'})</option>
+                      {item.presentations.map(p => (
+                        <option key={p.name} value={p.name}>{p.name} (×{p.factor} {item.unit || ''})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
                 {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                   <div className="grid grid-cols-2 gap-2">
@@ -2888,6 +2988,11 @@ export default function CreatePurchase() {
                       onChange={e => updateItem(index, 'quantity', e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
+                    {(item.presentationFactor || 1) > 1 && parseFloat(item.quantity) > 0 && (
+                      <p className="mt-0.5 text-[10px] text-center text-primary-600">
+                        = {parseFloat((((parseFloat(item.quantity) || 0) * item.presentationFactor)).toFixed(2))} {item.unit || 'und'}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">s/IGV</label>
