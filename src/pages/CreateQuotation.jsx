@@ -1794,7 +1794,7 @@ export default function CreateQuotation() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {quotationItems.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
+                      <tr key={index} className="hover:bg-gray-50 [&>td]:align-top">
                         {/* Producto - búsqueda inline */}
                         <td className="px-4 py-2">
                           <div className="relative">
