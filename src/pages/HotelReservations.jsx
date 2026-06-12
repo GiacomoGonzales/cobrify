@@ -533,6 +533,7 @@ export default function HotelReservations() {
     // Evitar doble reserva: la misma habitación no puede tener fechas que se crucen con
     // otra reserva activa (confirmada o con check-in). Solo aplica a reservas por noche.
     if (!isHourly) {
+      const todayStr = new Date().toISOString().split('T')[0]
       const overlap = reservations.find(r => {
         if (r.roomId !== data.roomId) return false
         if (r.status !== 'confirmed' && r.status !== 'checked_in') return false
@@ -541,6 +542,9 @@ export default function HotelReservations() {
         const exIn = r.checkInDate || r.checkIn
         const exOut = r.checkOutDate || r.checkOut
         if (!exIn || !exOut) return false
+        // Reservas confirmed cuyo checkout ya pasó son restos huérfanos (sin check-in
+        // ni cancelación). No deben bloquear nuevas reservas futuras.
+        if (r.status === 'confirmed' && exOut < todayStr) return false
         // Se cruzan si: nuevoCheckIn < existenteCheckOut Y nuevoCheckOut > existenteCheckIn
         return data.checkInDate < exOut && data.checkOutDate > exIn
       })
