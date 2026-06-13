@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { UserPlus, Loader2, CheckCircle, Eye, EyeOff } from 'lucide-react'
+import { UserPlus, Loader2, CheckCircle, Eye, EyeOff, Search } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { registerBusinessAsAdmin } from '@/services/authService'
+import { consultarRUC } from '@/services/documentLookupService'
 
 const EMPTY_FORM = {
   name: '',
@@ -22,9 +23,42 @@ export default function AdminCreateAccount() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [lookingUpRuc, setLookingUpRuc] = useState(false)
   const [lastCreated, setLastCreated] = useState(null)
 
   const setField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  // Buscar datos del RUC en SUNAT y rellenar el formulario automáticamente
+  const handleLookupRuc = async () => {
+    const ruc = form.ruc.trim()
+    if (!/^\d{11}$/.test(ruc)) {
+      toast.error('Ingresa un RUC válido de 11 dígitos')
+      return
+    }
+    setLookingUpRuc(true)
+    try {
+      const result = await consultarRUC(ruc)
+      if (result.success) {
+        setForm((prev) => ({
+          ...prev,
+          businessName: result.data.razonSocial || prev.businessName,
+          tradeName: result.data.nombreComercial || prev.tradeName,
+          address: result.data.direccion || prev.address,
+          department: result.data.departamento || prev.department,
+          province: result.data.provincia || prev.province,
+          district: result.data.distrito || prev.district,
+        }))
+        toast.success('Datos del RUC cargados')
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (err) {
+      console.error('Error al buscar RUC:', err)
+      toast.error('Error al consultar el RUC. Intenta nuevamente.')
+    } finally {
+      setLookingUpRuc(false)
+    }
+  }
 
   const validate = () => {
     if (!form.name.trim()) return 'Ingresa el nombre del responsable.'
@@ -141,7 +175,28 @@ export default function AdminCreateAccount() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>RUC *</label>
-              <input type="text" inputMode="numeric" maxLength={11} value={form.ruc} onChange={setField('ruc')} className={inputClass} placeholder="20123456789" />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={11}
+                  value={form.ruc}
+                  onChange={setField('ruc')}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLookupRuc() } }}
+                  className={`${inputClass} flex-1`}
+                  placeholder="20123456789"
+                />
+                <button
+                  type="button"
+                  onClick={handleLookupRuc}
+                  disabled={lookingUpRuc}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex-shrink-0"
+                  title="Buscar datos del RUC en SUNAT"
+                >
+                  {lookingUpRuc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  <span className="hidden sm:inline">Buscar</span>
+                </button>
+              </div>
             </div>
             <div>
               <label className={labelClass}>Razón social *</label>
