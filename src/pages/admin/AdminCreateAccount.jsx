@@ -6,6 +6,9 @@ import { consultarRUC } from '@/services/documentLookupService'
 import { uploadImage } from '@/services/imageUploadService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SidebarModulesPicker from '@/components/SidebarModulesPicker'
+import ImportProductsModal from '@/components/ImportProductsModal'
+import { importParsedProducts } from '@/services/productBulkImportService'
+import { FileSpreadsheet } from 'lucide-react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -146,6 +149,10 @@ export default function AdminCreateAccount() {
   // Opciones de la pestaña Documentos
   const [docPrefs, setDocPrefs] = useState(DEFAULT_DOC_PREFS)
   const dp = (k, v) => setDocPrefs((p) => ({ ...p, [k]: v }))
+
+  // Importación de productos por Excel (se parsean antes; se escriben tras crear la cuenta)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [pendingProducts, setPendingProducts] = useState([])
 
   const handleLogoChange = (e) => {
     const file = e.target.files?.[0]
@@ -324,6 +331,22 @@ export default function AdminCreateAccount() {
             toast.error('La cuenta se creó, pero el logo no se pudo subir. Puedes agregarlo luego.')
           }
         }
+        // Importar productos del Excel (si se cargaron) al negocio recién creado.
+        if (pendingProducts.length > 0 && result.userId) {
+          try {
+            const imp = await importParsedProducts(result.userId, pendingProducts, { businessMode })
+            if (imp.success > 0) {
+              toast.success(`${imp.success} producto(s) importado(s)`)
+            }
+            if (imp.errors && imp.errors.length > 0) {
+              console.error('Errores al importar productos:', imp.errors)
+              toast.error(`${imp.errors.length} producto(s) no se pudieron importar`)
+            }
+          } catch (impErr) {
+            console.error('Error al importar productos:', impErr)
+            toast.error('La cuenta se creó, pero los productos no se pudieron importar.')
+          }
+        }
         toast.success('Cuenta creada correctamente')
         setLastCreated({ email: form.email.trim(), businessName: form.businessName.trim() })
         setForm(EMPTY_FORM)
@@ -340,6 +363,7 @@ export default function AdminCreateAccount() {
         setSalesPrefs(DEFAULT_SALES_PREFS)
         setPriceLabels({ price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' })
         setDocPrefs(DEFAULT_DOC_PREFS)
+        setPendingProducts([])
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -811,6 +835,37 @@ export default function AdminCreateAccount() {
         </div>
         </div>{/* fin grid 2 columnas: Ventas | Documentos */}
 
+        {/* Productos iniciales por Excel (ancho completo) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Productos iniciales (opcional)</h3>
+              <p className="text-sm text-gray-500">Carga el catálogo del cliente desde una plantilla de Excel. Se importará al crear la cuenta.</p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {pendingProducts.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
+                  <CheckCircle className="w-4 h-4" />
+                  {pendingProducts.length} producto(s) listos
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                {pendingProducts.length > 0 ? 'Cambiar archivo' : 'Cargar desde Excel'}
+              </button>
+              {pendingProducts.length > 0 && (
+                <button type="button" onClick={() => setPendingProducts([])} className="text-sm text-red-600 hover:text-red-700">
+                  Quitar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Personalizar menú lateral (ancho completo) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar menú lateral</h3>
@@ -829,6 +884,19 @@ export default function AdminCreateAccount() {
           </button>
         </div>
       </form>
+
+      {/* Modal de importación de productos: parsea el Excel y guarda el preview;
+          la escritura ocurre al crear la cuenta (importParsedProducts). */}
+      <ImportProductsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        businessModeOverride={businessMode}
+        skipWarehouseSelector={true}
+        onImport={(preview) => {
+          setPendingProducts(preview)
+          return { success: preview.length, errors: [] }
+        }}
+      />
     </div>
   )
 }

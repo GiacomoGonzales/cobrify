@@ -9,8 +9,12 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getWarehouses } from '@/services/warehouseService'
 
-export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [] }) {
-  const { businessMode, getBusinessId, businessSettings } = useAppContext()
+export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [], businessModeOverride = null, skipWarehouseSelector = false }) {
+  const ctx = useAppContext()
+  // En el onboarding (crear cuenta) el modo viene por prop (el del negocio que se
+  // está creando), no del contexto del admin.
+  const businessMode = businessModeOverride || ctx.businessMode
+  const { getBusinessId, businessSettings } = ctx
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -19,12 +23,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
-  // Cargar almacenes al abrir el modal
+  // Cargar almacenes al abrir el modal. En el onboarding se omite (el negocio aún
+  // no existe; el stock irá al "Almacén Principal" que se crea al crear la cuenta).
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !skipWarehouseSelector) {
       loadWarehouses()
     }
-  }, [isOpen])
+  }, [isOpen, skipWarehouseSelector])
 
   const loadWarehouses = async () => {
     try {
