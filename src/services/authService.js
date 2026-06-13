@@ -144,6 +144,13 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         province: businessData?.province || '',
         department: businessData?.department || '',
         ubigeo: businessData?.ubigeo || '',
+        // Preferencias de arranque elegidas en el onboarding (modo + catálogo + menú)
+        businessMode: businessData?.businessMode || 'retail',
+        enableProductLocation: businessData?.enableProductLocation || false,
+        enableManualStockEdit: businessData?.enableManualStockEdit || false,
+        defaultTaxAffectation: businessData?.defaultTaxAffectation || '10',
+        posCustomFields: businessData?.posCustomFields || {},
+        hiddenMenuItems: Array.isArray(businessData?.hiddenMenuItems) ? businessData.hiddenMenuItems : [],
         series: {
           factura: { serie: 'F001', lastNumber: 0 },
           boleta: { serie: 'B001', lastNumber: 0 },

@@ -5,6 +5,7 @@ import { registerBusinessAsAdmin } from '@/services/authService'
 import { consultarRUC } from '@/services/documentLookupService'
 import { uploadImage } from '@/services/imageUploadService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import SidebarModulesPicker from '@/components/SidebarModulesPicker'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -36,6 +37,14 @@ export default function AdminCreateAccount() {
   // Logo de la empresa (se sube tras crear la cuenta y se guarda en logoUrl)
   const [logoFile, setLogoFile] = useState(null)
   const [logoPreview, setLogoPreview] = useState('')
+
+  // Preferencias de arranque
+  const [businessMode, setBusinessMode] = useState('retail')
+  const [enableProductLocation, setEnableProductLocation] = useState(false)
+  const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
+  const [batchControl, setBatchControl] = useState(false)
+  const [defaultTaxAffectation, setDefaultTaxAffectation] = useState('10')
+  const [hiddenMenuItems, setHiddenMenuItems] = useState([])
 
   const handleLogoChange = (e) => {
     const file = e.target.files?.[0]
@@ -155,6 +164,13 @@ export default function AdminCreateAccount() {
           province: loc.province,
           district: loc.district,
           ubigeo: getUbigeo(),
+          // Preferencias de arranque
+          businessMode,
+          enableProductLocation,
+          enableManualStockEdit,
+          defaultTaxAffectation,
+          posCustomFields: { showBatchExpiryInPurchase: batchControl },
+          hiddenMenuItems,
         }
       )
 
@@ -176,6 +192,12 @@ export default function AdminCreateAccount() {
         setProvinceCode('01')
         setDistrictCode('')
         clearLogo()
+        setBusinessMode('retail')
+        setEnableProductLocation(false)
+        setEnableManualStockEdit(false)
+        setBatchControl(false)
+        setDefaultTaxAffectation('10')
+        setHiddenMenuItems([])
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -381,6 +403,59 @@ export default function AdminCreateAccount() {
                   <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={handleLogoChange} className="hidden" />
                 </label>
               )}
+            </div>
+
+            {/* Tipo de negocio */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Tipo de negocio</h3>
+              <p className="text-sm text-gray-500 mb-4">Define los módulos y el flujo del negocio.</p>
+              <select value={businessMode} onChange={(e) => setBusinessMode(e.target.value)} className={`${inputClass} bg-white`}>
+                <option value="retail">Retail (Tienda/Comercio)</option>
+                <option value="restaurant">Restaurante</option>
+                <option value="pharmacy">Farmacia</option>
+                <option value="veterinary">Veterinaria</option>
+                <option value="hotel">Hotelería</option>
+                <option value="transport">Transporte</option>
+                <option value="logistics">Logística</option>
+              </select>
+            </div>
+
+            {/* Catálogo y productos */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Catálogo y productos</h3>
+                <p className="text-sm text-gray-500">Cómo se gestiona el catálogo y el stock.</p>
+              </div>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={enableProductLocation} onChange={(e) => setEnableProductLocation(e.target.checked)} className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
+                <span className="text-sm text-gray-700"><span className="font-medium block">Habilitar ubicación de productos</span><span className="text-xs text-gray-500">Asignar ubicación física a cada producto (ej. P1-3A-4R).</span></span>
+              </label>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={enableManualStockEdit} onChange={(e) => setEnableManualStockEdit(e.target.checked)} className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
+                <span className="text-sm text-gray-700"><span className="font-medium block">Permitir editar stock manualmente desde productos</span><span className="text-xs text-gray-500">Ajustar stock al editar un producto (queda como movimiento auditable).</span></span>
+              </label>
+              {businessMode !== 'pharmacy' && (
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={batchControl} onChange={(e) => setBatchControl(e.target.checked)} className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
+                  <span className="text-sm text-gray-700"><span className="font-medium block">Control de Lotes y Vencimientos</span><span className="text-xs text-gray-500">Lotes, fechas de vencimiento y alertas en ventas, compras e inventario.</span></span>
+                </label>
+              )}
+              <div>
+                <label className={labelClass}>Afectación IGV por defecto</label>
+                <select value={defaultTaxAffectation} onChange={(e) => setDefaultTaxAffectation(e.target.value)} className={`${inputClass} bg-white`}>
+                  <option value="10">Gravado (IGV)</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Afectación con la que nacen los productos nuevos. Se puede cambiar por producto.</p>
+              </div>
+            </div>
+
+            {/* Personalizar menú lateral */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar menú lateral</h3>
+              <p className="text-sm text-gray-500 mb-4">Elige qué módulos mostrar. Desmarca los que no use para simplificar su navegación.</p>
+              <SidebarModulesPicker businessMode={businessMode} hiddenMenuItems={hiddenMenuItems} onChange={setHiddenMenuItems} />
             </div>
           </div>{/* fin columna derecha */}
         </div>{/* fin grid 2 columnas */}
