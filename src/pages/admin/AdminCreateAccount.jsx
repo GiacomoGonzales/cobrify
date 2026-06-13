@@ -1,9 +1,12 @@
 import React, { useState } from 'react'
-import { UserPlus, Loader2, CheckCircle, Eye, EyeOff, Search } from 'lucide-react'
+import { UserPlus, Loader2, CheckCircle, Eye, EyeOff, Search, ImagePlus, X } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { registerBusinessAsAdmin } from '@/services/authService'
 import { consultarRUC } from '@/services/documentLookupService'
+import { uploadImage } from '@/services/imageUploadService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 const EMPTY_FORM = {
   name: '',
@@ -29,6 +32,33 @@ export default function AdminCreateAccount() {
   const [departmentCode, setDepartmentCode] = useState('15')
   const [provinceCode, setProvinceCode] = useState('01')
   const [districtCode, setDistrictCode] = useState('')
+
+  // Logo de la empresa (se sube tras crear la cuenta y se guarda en logoUrl)
+  const [logoFile, setLogoFile] = useState(null)
+  const [logoPreview, setLogoPreview] = useState('')
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('El logo debe ser una imagen (JPG, PNG o WEBP)')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('El logo no debe superar los 2MB')
+      return
+    }
+    setLogoFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => setLogoPreview(ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const clearLogo = () => {
+    setLogoFile(null)
+    setLogoPreview('')
+  }
 
   const setField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
@@ -129,12 +159,23 @@ export default function AdminCreateAccount() {
       )
 
       if (result.success) {
+        // Subir el logo (si se cargó) y guardarlo en el negocio recién creado.
+        if (logoFile && result.userId) {
+          try {
+            const url = await uploadImage(logoFile, { folder: 'cobrify/branding', businessId: result.userId })
+            if (url) await updateDoc(doc(db, 'businesses', result.userId), { logoUrl: url })
+          } catch (logoErr) {
+            console.error('Error al subir el logo:', logoErr)
+            toast.error('La cuenta se creó, pero el logo no se pudo subir. Puedes agregarlo luego.')
+          }
+        }
         toast.success('Cuenta creada correctamente')
         setLastCreated({ email: form.email.trim(), businessName: form.businessName.trim() })
         setForm(EMPTY_FORM)
         setDepartmentCode('15')
         setProvinceCode('01')
         setDistrictCode('')
+        clearLogo()
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -150,7 +191,7 @@ export default function AdminCreateAccount() {
   const labelClass = 'block text-sm font-medium text-gray-700 mb-1'
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
         <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Crear Nueva Cuenta</h2>
         <p className="text-sm text-gray-500">Registra un nuevo negocio sin salir de tu sesión de administrador.</p>
@@ -168,6 +209,9 @@ export default function AdminCreateAccount() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Columna izquierda: acceso + negocio */}
+          <div className="space-y-6">
         {/* Datos de acceso */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <h3 className="text-base font-semibold text-gray-900 mb-1">Datos de acceso</h3>
@@ -307,6 +351,39 @@ export default function AdminCreateAccount() {
             )}
           </div>
         </div>
+          </div>{/* fin columna izquierda */}
+
+          {/* Columna derecha: configuración del negocio */}
+          <div className="space-y-6">
+            {/* Logo de la empresa */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Logo de la empresa</h3>
+              <p className="text-sm text-gray-500 mb-4">Aparecerá en sus comprobantes, tickets y catálogo. (Opcional)</p>
+              {logoPreview ? (
+                <div className="flex items-center gap-4">
+                  <img src={logoPreview} alt="Logo" className="w-20 h-20 object-contain rounded-lg border border-gray-200 bg-gray-50" />
+                  <div className="flex flex-col gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer w-fit">
+                      <ImagePlus className="w-4 h-4" />
+                      Cambiar logo
+                      <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={handleLogoChange} className="hidden" />
+                    </label>
+                    <button type="button" onClick={clearLogo} className="inline-flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 w-fit">
+                      <X className="w-4 h-4" /> Quitar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-gray-50 transition-colors cursor-pointer text-center">
+                  <ImagePlus className="w-7 h-7 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">Subir logo</span>
+                  <span className="text-xs text-gray-400">JPG, PNG o WEBP · máx 2MB</span>
+                  <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={handleLogoChange} className="hidden" />
+                </label>
+              )}
+            </div>
+          </div>{/* fin columna derecha */}
+        </div>{/* fin grid 2 columnas */}
 
         <div className="flex justify-end">
           <button
