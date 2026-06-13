@@ -17,7 +17,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function WarehouseExits() {
-  const { user, getBusinessId, isDemoMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
   // Seguridad: el usuario secundario solo ve salidas de sus almacenes habilitados
   const canAccess = useLocationAccess()
   const toast = useToast()
@@ -61,6 +61,15 @@ export default function WarehouseExits() {
     if (!user?.uid) return
     setIsLoading(true)
     try {
+      if (isDemoMode) {
+        setExits((demoData?.warehouseExits || []).filter(canAccess))
+        setProjects(demoData?.projects || [])
+        setProducts(demoData?.products || [])
+        setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(demoData?.warehouses || []) : (demoData?.warehouses || []))
+        setBusinessInfo(demoData?.business || {})
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [exitsResult, projectsResult, productsResult, warehousesResult, settingsResult] = await Promise.all([
         getWarehouseExits(businessId),

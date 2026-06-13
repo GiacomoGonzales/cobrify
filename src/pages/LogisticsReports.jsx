@@ -8,7 +8,7 @@ import { getWarehouseReturns } from '@/services/warehouseReturnService'
 import { getProjects } from '@/services/projectService'
 
 export default function LogisticsReports() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [exits, setExits] = useState([])
@@ -29,6 +29,13 @@ export default function LogisticsReports() {
     if (!user?.uid) return
     setIsLoading(true)
     try {
+      if (isDemoMode) {
+        setExits(demoData?.warehouseExits || [])
+        setReturns(demoData?.warehouseReturns || [])
+        setProjects(demoData?.projects || [])
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [exitsResult, returnsResult, projectsResult] = await Promise.all([
         getWarehouseExits(businessId),

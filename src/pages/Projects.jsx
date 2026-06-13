@@ -29,7 +29,7 @@ const STATUS_CONFIG = {
 }
 
 export default function Projects() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [projects, setProjects] = useState([])
@@ -58,6 +58,10 @@ export default function Projects() {
     if (!user?.uid) return
     setIsLoading(true)
     try {
+      if (isDemoMode) {
+        setProjects(demoData?.projects || [])
+        return
+      }
       const result = await getProjects(getBusinessId())
       if (result.success) {
         setProjects(result.data || [])

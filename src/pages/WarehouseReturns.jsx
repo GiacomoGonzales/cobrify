@@ -23,7 +23,7 @@ const CONDITION_CONFIG = {
 }
 
 export default function WarehouseReturns() {
-  const { user, getBusinessId, isDemoMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
   // Seguridad: el usuario secundario solo ve retornos de sus almacenes habilitados
   const canAccess = useLocationAccess()
   const toast = useToast()
@@ -57,6 +57,15 @@ export default function WarehouseReturns() {
     if (!user?.uid) return
     setIsLoading(true)
     try {
+      if (isDemoMode) {
+        setReturns((demoData?.warehouseReturns || []).filter(canAccess))
+        setProjects(demoData?.projects || [])
+        setProducts(demoData?.products || [])
+        setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(demoData?.warehouses || []) : (demoData?.warehouses || []))
+        setBusinessInfo(demoData?.business || {})
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [returnsResult, projectsResult, productsResult, warehousesResult, settingsResult] = await Promise.all([
         getWarehouseReturns(businessId),
