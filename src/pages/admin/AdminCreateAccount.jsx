@@ -3,6 +3,7 @@ import { UserPlus, Loader2, CheckCircle, Eye, EyeOff, Search } from 'lucide-reac
 import { useToast } from '@/contexts/ToastContext'
 import { registerBusinessAsAdmin } from '@/services/authService'
 import { consultarRUC } from '@/services/documentLookupService'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const EMPTY_FORM = {
   name: '',
@@ -13,9 +14,6 @@ const EMPTY_FORM = {
   tradeName: '',
   phone: '',
   address: '',
-  department: '',
-  province: '',
-  district: '',
 }
 
 export default function AdminCreateAccount() {
@@ -27,7 +25,31 @@ export default function AdminCreateAccount() {
   const [noRuc, setNoRuc] = useState(false)
   const [lastCreated, setLastCreated] = useState(null)
 
+  // Ubicación (ubigeo) — selectores encadenados, default Lima/Lima
+  const [departmentCode, setDepartmentCode] = useState('15')
+  const [provinceCode, setProvinceCode] = useState('01')
+  const [districtCode, setDistrictCode] = useState('')
+
   const setField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const getProvincias = (deptCode) => PROVINCIAS[deptCode] || []
+  const getDistritos = (deptCode, provCode) => DISTRITOS[`${deptCode}${provCode}`] || []
+  const getUbigeo = () => (departmentCode && provinceCode && districtCode) ? `${departmentCode}${provinceCode}${districtCode}` : ''
+  const getLocationNames = () => ({
+    department: DEPARTAMENTOS.find(d => d.code === departmentCode)?.name || '',
+    province: getProvincias(departmentCode).find(p => p.code === provinceCode)?.name || '',
+    district: getDistritos(departmentCode, provinceCode).find(d => d.code === districtCode)?.name || '',
+  })
+
+  // Buscar códigos de ubigeo por nombre (para autocompletar desde el RUC)
+  const matchByName = (list, name) => {
+    if (!name) return ''
+    const n = name.toUpperCase().trim()
+    const found = (list || []).find(x =>
+      x.name.toUpperCase() === n || x.name.toUpperCase().includes(n) || n.includes(x.name.toUpperCase())
+    )
+    return found?.code || ''
+  }
 
   // Buscar datos del RUC en SUNAT y rellenar el formulario automáticamente
   const handleLookupRuc = async () => {
@@ -45,10 +67,18 @@ export default function AdminCreateAccount() {
           businessName: result.data.razonSocial || prev.businessName,
           tradeName: result.data.nombreComercial || prev.tradeName,
           address: result.data.direccion || prev.address,
-          department: result.data.departamento || prev.department,
-          province: result.data.provincia || prev.province,
-          district: result.data.distrito || prev.district,
         }))
+        // Convertir nombres de ubicación a códigos de ubigeo encadenados
+        const deptCode = matchByName(DEPARTAMENTOS, result.data.departamento)
+        if (deptCode) {
+          setDepartmentCode(deptCode)
+          const provCode = matchByName(PROVINCIAS[deptCode], result.data.provincia)
+          if (provCode) {
+            setProvinceCode(provCode)
+            const distCode = matchByName(DISTRITOS[`${deptCode}${provCode}`], result.data.distrito)
+            if (distCode) setDistrictCode(distCode)
+          }
+        }
         toast.success('Datos del RUC cargados')
       } else {
         toast.error(result.error || 'No se encontraron datos para este RUC')
@@ -80,6 +110,7 @@ export default function AdminCreateAccount() {
 
     setSubmitting(true)
     try {
+      const loc = getLocationNames()
       const result = await registerBusinessAsAdmin(
         form.email.trim(),
         form.password,
@@ -90,9 +121,10 @@ export default function AdminCreateAccount() {
           tradeName: form.tradeName.trim(),
           phone: form.phone.trim(),
           address: form.address.trim(),
-          department: form.department.trim(),
-          province: form.province.trim(),
-          district: form.district.trim(),
+          department: loc.department,
+          province: loc.province,
+          district: loc.district,
+          ubigeo: getUbigeo(),
         }
       )
 
@@ -100,6 +132,9 @@ export default function AdminCreateAccount() {
         toast.success('Cuenta creada correctamente')
         setLastCreated({ email: form.email.trim(), businessName: form.businessName.trim() })
         setForm(EMPTY_FORM)
+        setDepartmentCode('15')
+        setProvinceCode('01')
+        setDistrictCode('')
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -231,16 +266,45 @@ export default function AdminCreateAccount() {
             </div>
             <div>
               <label className={labelClass}>Departamento</label>
-              <input type="text" value={form.department} onChange={setField('department')} className={inputClass} placeholder="Lima" />
+              <select
+                value={departmentCode}
+                onChange={(e) => { setDepartmentCode(e.target.value); setProvinceCode(''); setDistrictCode('') }}
+                className={`${inputClass} bg-white`}
+              >
+                <option value="">Selecciona...</option>
+                {DEPARTAMENTOS.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
+              </select>
             </div>
             <div>
               <label className={labelClass}>Provincia</label>
-              <input type="text" value={form.province} onChange={setField('province')} className={inputClass} placeholder="Lima" />
+              <select
+                value={provinceCode}
+                onChange={(e) => { setProvinceCode(e.target.value); setDistrictCode('') }}
+                disabled={!departmentCode}
+                className={`${inputClass} bg-white disabled:bg-gray-100`}
+              >
+                <option value="">Selecciona...</option>
+                {getProvincias(departmentCode).map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
             </div>
             <div>
               <label className={labelClass}>Distrito</label>
-              <input type="text" value={form.district} onChange={setField('district')} className={inputClass} placeholder="Miraflores" />
+              <select
+                value={districtCode}
+                onChange={(e) => setDistrictCode(e.target.value)}
+                disabled={!provinceCode}
+                className={`${inputClass} bg-white disabled:bg-gray-100`}
+              >
+                <option value="">Selecciona...</option>
+                {getDistritos(departmentCode, provinceCode).map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
+              </select>
             </div>
+            {getUbigeo() && (
+              <div className="sm:col-span-2 flex items-center gap-2 text-sm text-gray-600">
+                <span>Ubigeo:</span>
+                <span className="font-mono font-semibold text-gray-900">{getUbigeo()}</span>
+              </div>
+            )}
           </div>
         </div>
 
