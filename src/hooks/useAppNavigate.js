@@ -30,6 +30,8 @@ export function useAppNavigate() {
         prefix = '/demohotel'
       } else if (location.pathname.startsWith('/demoveterinary')) {
         prefix = '/demoveterinary'
+      } else if (location.pathname.startsWith('/demologistics')) {
+        prefix = '/demologistics'
       } else {
         prefix = '/demo'
       }
