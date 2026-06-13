@@ -59,6 +59,46 @@ const DEFAULT_SALES_PREFS = {
   requirePaymentBeforeKitchen: false,
 }
 
+const DEFAULT_DOC_PREFS = {
+  // Apariencia del PDF
+  pdfAccentColor: '#1E40AF',
+  pdfSpacious: false,
+  pdfA5: false,
+  // Contenido de comprobantes y cotizaciones
+  showProductCodeInQuotation: false,
+  showProductCodeInInvoices: true,
+  showProductDescriptionInQuotation: true,
+  showImagesInQuotations: false,
+  showImagesInInvoices: false,
+  hideBatchAndExpiryInDocuments: false,
+  invoiceFooterTerms: '',
+  // Ticket térmico
+  ticketFooterMessage: '',
+  ticketQrEnabled: false,
+  ticketQrContent: '',
+  ticketQrCaption: '',
+  // Módulos de documentos
+  dispatchGuidesEnabled: false,
+  exitNoteEnabled: false,
+  // SUNAT / gestión
+  autoSendToSunat: false,
+  allowDeleteInvoices: false,
+  // Privacidad
+  hideDashboardDataFromSecondary: false,
+  hideCashExpectedFromCashier: false,
+}
+
+const PDF_ACCENT_COLORS = [
+  { color: '#464646', name: 'Gris' },
+  { color: '#1E40AF', name: 'Azul' },
+  { color: '#065F46', name: 'Verde' },
+  { color: '#7C2D12', name: 'Marrón' },
+  { color: '#581C87', name: 'Púrpura' },
+  { color: '#0F172A', name: 'Negro' },
+  { color: '#B91C1C', name: 'Rojo' },
+  { color: '#0E7490', name: 'Cyan' },
+]
+
 // Toggle compacto reutilizable (checkbox + título + descripción)
 function OnboardToggle({ checked, onChange, title, description }) {
   return (
@@ -102,6 +142,10 @@ export default function AdminCreateAccount() {
   const [salesPrefs, setSalesPrefs] = useState(DEFAULT_SALES_PREFS)
   const [priceLabels, setPriceLabels] = useState({ price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' })
   const sp = (k, v) => setSalesPrefs((p) => ({ ...p, [k]: v }))
+
+  // Opciones de la pestaña Documentos
+  const [docPrefs, setDocPrefs] = useState(DEFAULT_DOC_PREFS)
+  const dp = (k, v) => setDocPrefs((p) => ({ ...p, [k]: v }))
 
   const handleLogoChange = (e) => {
     const file = e.target.files?.[0]
@@ -264,6 +308,8 @@ export default function AdminCreateAccount() {
             itemStatusTracking: salesPrefs.itemStatusTracking,
             requirePaymentBeforeKitchen: salesPrefs.requirePaymentBeforeKitchen,
           } : undefined,
+          // Documentos y comprobantes
+          ...docPrefs,
         }
       )
 
@@ -293,6 +339,7 @@ export default function AdminCreateAccount() {
         setHiddenMenuItems([])
         setSalesPrefs(DEFAULT_SALES_PREFS)
         setPriceLabels({ price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' })
+        setDocPrefs(DEFAULT_DOC_PREFS)
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -308,7 +355,7 @@ export default function AdminCreateAccount() {
   const labelClass = 'block text-sm font-medium text-gray-700 mb-1'
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-7xl">
       <div>
         <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Crear Nueva Cuenta</h2>
         <p className="text-sm text-gray-500">Registra un nuevo negocio sin salir de tu sesión de administrador.</p>
@@ -545,14 +592,16 @@ export default function AdminCreateAccount() {
                 <p className="text-xs text-gray-500 mt-1">Afectación con la que nacen los productos nuevos. Se puede cambiar por producto.</p>
               </div>
             </div>
+          </div>{/* fin columna derecha (datos + config básica) */}
+        </div>{/* fin grid superior */}
 
-            {/* Ventas y Punto de Venta */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-5">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Ventas y Punto de Venta</h3>
-                <p className="text-sm text-gray-500">Cómo opera el POS, los comprobantes y la caja.</p>
-              </div>
-
+        {/* Ventas y Punto de Venta (ancho completo) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="mb-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Ventas y Punto de Venta</h3>
+            <p className="text-sm text-gray-500">Cómo opera el POS, los comprobantes y la caja.</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
               {/* Inventario */}
               <div className="space-y-3">
                 <OnboardToggle checked={salesPrefs.allowNegativeStock} onChange={(v) => sp('allowNegativeStock', v)} title="Permitir vender productos sin stock" description="Vender aunque el stock sea 0 o negativo." />
@@ -681,16 +730,89 @@ export default function AdminCreateAccount() {
                   )}
                 </div>
               )}
+          </div>{/* fin grid interno Ventas */}
+        </div>{/* fin tarjeta Ventas */}
+
+        {/* Documentos y comprobantes (ancho completo) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="mb-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Documentos y comprobantes</h3>
+            <p className="text-sm text-gray-500">Apariencia del PDF, contenido de comprobantes, ticket y guías.</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+            {/* Apariencia del PDF */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Apariencia del PDF</p>
+              <div>
+                <label className={labelClass}>Color de acento del PDF</label>
+                <div className="flex flex-wrap gap-2">
+                  {PDF_ACCENT_COLORS.map((c) => (
+                    <button key={c.color} type="button" onClick={() => dp('pdfAccentColor', c.color)} title={c.name}
+                      className={`w-8 h-8 rounded-md border-2 transition-all ${docPrefs.pdfAccentColor === c.color ? 'border-primary-500 ring-2 ring-primary-200' : 'border-gray-200'}`}
+                      style={{ backgroundColor: c.color }} />
+                  ))}
+                </div>
+              </div>
+              <OnboardToggle checked={docPrefs.pdfSpacious} onChange={(v) => dp('pdfSpacious', v)} title="Espaciado amplio en el PDF" />
+              <OnboardToggle checked={docPrefs.pdfA5} onChange={(v) => dp('pdfA5', v)} title="PDF en formato A5" />
             </div>
 
-            {/* Personalizar menú lateral */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-              <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar menú lateral</h3>
-              <p className="text-sm text-gray-500 mb-4">Elige qué módulos mostrar. Desmarca los que no use para simplificar su navegación.</p>
-              <SidebarModulesPicker businessMode={businessMode} hiddenMenuItems={hiddenMenuItems} onChange={setHiddenMenuItems} />
+            {/* Contenido de comprobantes */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Contenido de comprobantes</p>
+              <OnboardToggle checked={docPrefs.showProductCodeInInvoices} onChange={(v) => dp('showProductCodeInInvoices', v)} title="Mostrar códigos de producto en comprobantes" />
+              <OnboardToggle checked={docPrefs.showProductCodeInQuotation} onChange={(v) => dp('showProductCodeInQuotation', v)} title="Mostrar códigos de producto en cotizaciones" />
+              <OnboardToggle checked={docPrefs.showProductDescriptionInQuotation} onChange={(v) => dp('showProductDescriptionInQuotation', v)} title="Mostrar descripción en cotizaciones" />
+              <OnboardToggle checked={docPrefs.showImagesInInvoices} onChange={(v) => dp('showImagesInInvoices', v)} title="Imágenes en comprobantes de venta" />
+              <OnboardToggle checked={docPrefs.showImagesInQuotations} onChange={(v) => dp('showImagesInQuotations', v)} title="Imágenes en cotizaciones" />
+              <OnboardToggle checked={docPrefs.hideBatchAndExpiryInDocuments} onChange={(v) => dp('hideBatchAndExpiryInDocuments', v)} title="Ocultar lote y vencimiento en comprobantes" />
+              <div>
+                <label className={labelClass}>Términos y condiciones (pie del comprobante)</label>
+                <textarea value={docPrefs.invoiceFooterTerms} onChange={(e) => dp('invoiceFooterTerms', e.target.value)} rows={2} maxLength={1000} className={inputClass} placeholder="Opcional" />
+              </div>
             </div>
-          </div>{/* fin columna derecha */}
-        </div>{/* fin grid 2 columnas */}
+
+            {/* Ticket térmico */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ticket térmico</p>
+              <div>
+                <label className={labelClass}>Mensaje al pie del ticket</label>
+                <textarea value={docPrefs.ticketFooterMessage} onChange={(e) => dp('ticketFooterMessage', e.target.value)} rows={2} maxLength={300} className={inputClass} placeholder="Ej: ¡Gracias por su compra!" />
+              </div>
+              <OnboardToggle checked={docPrefs.ticketQrEnabled} onChange={(v) => dp('ticketQrEnabled', v)} title="Imprimir código QR al pie del ticket" />
+              {docPrefs.ticketQrEnabled && (
+                <>
+                  <div>
+                    <label className={labelClass}>¿A dónde lleva el QR? (enlace)</label>
+                    <input type="text" value={docPrefs.ticketQrContent} onChange={(e) => dp('ticketQrContent', e.target.value)} className={inputClass} placeholder="https://..." />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Texto debajo del QR</label>
+                    <input type="text" value={docPrefs.ticketQrCaption} onChange={(e) => dp('ticketQrCaption', e.target.value)} maxLength={60} className={inputClass} placeholder="Opcional" />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Módulos / SUNAT / privacidad */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Documentos y permisos</p>
+              <OnboardToggle checked={docPrefs.dispatchGuidesEnabled} onChange={(v) => dp('dispatchGuidesEnabled', v)} title="Habilitar Guías de Remisión Electrónicas" />
+              <OnboardToggle checked={docPrefs.exitNoteEnabled} onChange={(v) => dp('exitNoteEnabled', v)} title="Habilitar Nota de Salida (Almacén)" />
+              <OnboardToggle checked={docPrefs.autoSendToSunat} onChange={(v) => dp('autoSendToSunat', v)} title="Envío automático a SUNAT desde el POS" />
+              <OnboardToggle checked={docPrefs.allowDeleteInvoices} onChange={(v) => dp('allowDeleteInvoices', v)} title="Permitir eliminar comprobantes" />
+              <OnboardToggle checked={docPrefs.hideDashboardDataFromSecondary} onChange={(v) => dp('hideDashboardDataFromSecondary', v)} title="Ocultar totales y datos sensibles a usuarios secundarios" />
+              <OnboardToggle checked={docPrefs.hideCashExpectedFromCashier} onChange={(v) => dp('hideCashExpectedFromCashier', v)} title="Ocultar 'Efectivo esperado' del cierre de caja a sub-usuarios" />
+            </div>
+          </div>
+        </div>
+
+        {/* Personalizar menú lateral (ancho completo) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar menú lateral</h3>
+          <p className="text-sm text-gray-500 mb-4">Elige qué módulos mostrar. Desmarca los que no use para simplificar su navegación.</p>
+          <SidebarModulesPicker businessMode={businessMode} hiddenMenuItems={hiddenMenuItems} onChange={setHiddenMenuItems} />
+        </div>
 
         <div className="flex justify-end">
           <button
