@@ -1290,7 +1290,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     invoiceTermsLines = doc.splitTextToSize(invoiceTermsText, CONTENT_WIDTH)
   }
   const INVOICE_TERMS_HEIGHT = invoiceTermsText ? (18 + invoiceTermsLines.length * 8) : 0
-  const FOOTER_TEXT_HEIGHT = 25 * S + INVOICE_TERMS_HEIGHT
+  // Buffer fijo de "texto al pie" solo cuando realmente hay términos configurados; sin términos no
+  // se consume espacio extra debajo del QR.
+  const FOOTER_TEXT_HEIGHT = invoiceTermsText ? (25 * S + INVOICE_TERMS_HEIGHT) : 0
   const QR_BOX_HEIGHT = 75 * S
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
@@ -1303,8 +1305,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
 
-  // Posición Y donde termina el área de productos (empieza el pie fijo)
-  const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_TEXT_HEIGHT - Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) - 10 - TOTALS_SECTION_HEIGHT - SON_SECTION_HEIGHT - (spacious ? 22 : 15)
+  // Posición Y donde termina el área de productos (empieza el pie fijo).
+  // Layout vertical real del footer: SON -> max(BANCOS, TOTALES) lado a lado -> QR -> [términos opcionales].
+  // Antes esta fórmula sumaba TOTALS_SECTION_HEIGHT como si fuera apilado encima del bloque bancos,
+  // sobreestimando la altura del footer hasta en ~50pt y forzando saltos de página prematuros
+  // (especialmente con espaciado amplio en facturas con ~12-15 productos).
+  const FOOTER_BLOCK_HEIGHT = SON_SECTION_HEIGHT + (spacious ? 12 : 5) + Math.max(TOTALS_SECTION_HEIGHT, BANK_TABLE_HEIGHT) + QR_BOX_HEIGHT + FOOTER_TEXT_HEIGHT
+  const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_BLOCK_HEIGHT - (spacious ? 15 : 8)
 
   // ========== 3. TABLA DE PRODUCTOS ==========
 
@@ -1833,8 +1840,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   let footerY = dataRowY + (spacious ? 15 : 8)
 
-  // Si el footer no cabe en la página actual, agregar nueva página
-  const footerTotalHeight = SON_SECTION_HEIGHT + TOTALS_SECTION_HEIGHT + Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) + FOOTER_TEXT_HEIGHT + (isA5 ? 20 : 40)
+  // Si el footer no cabe en la página actual, agregar nueva página.
+  // Usa FOOTER_BLOCK_HEIGHT (calculado arriba con el layout real: max(BANCOS, TOTALES) lado a lado,
+  // QR debajo) más un buffer pequeño contra el borde inferior.
+  const footerTotalHeight = FOOTER_BLOCK_HEIGHT + MARGIN_BOTTOM + (isA5 ? 10 : 15)
   if (footerY + footerTotalHeight > PAGE_HEIGHT) {
     doc.addPage()
     footerY = MARGIN_TOP
