@@ -696,10 +696,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   }
 
   const downloadTemplate = async () => {
-    // Crear plantilla de ejemplo según el modo de negocio
+    // Crear plantilla de ejemplo según el modo de negocio.
+    // Farmacia y veterinaria comparten la plantilla "de medicamentos" (con lote,
+    // vencimiento, laboratorio y registro sanitario); el resto de modos (retail,
+    // restaurante, hotel, transporte, logística) usan la plantilla genérica de
+    // productos, ya que su catálogo tiene la misma estructura.
+    const isPharmaLike = businessMode === 'pharmacy' || businessMode === 'veterinary'
     let template = []
 
-    if (businessMode === 'pharmacy') {
+    if (isPharmaLike) {
       // Plantilla para farmacias con campos específicos
       template = [
         {
@@ -1314,10 +1319,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
 
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos')
+    XLSX.utils.book_append_sheet(wb, ws, isPharmaLike ? 'Medicamentos' : 'Productos')
 
     // Ajustar anchos de columna según modo
-    if (businessMode === 'pharmacy') {
+    if (isPharmaLike) {
       ws['!cols'] = [
         { wch: 12 }, // sku
         { wch: 16 }, // codigo_barras
@@ -1383,7 +1388,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       ]
     }
 
-    const fileName = businessMode === 'pharmacy' ? 'plantilla_medicamentos.xlsx' : 'plantilla_productos.xlsx'
+    const fileName = isPharmaLike ? 'plantilla_medicamentos.xlsx' : 'plantilla_productos.xlsx'
 
     // Verificar si estamos en plataforma nativa (iOS/Android)
     if (Capacitor.isNativePlatform()) {
