@@ -595,13 +595,16 @@ export default function AdminCreateAccount() {
           </div>{/* fin columna derecha (datos + config básica) */}
         </div>{/* fin grid superior */}
 
-        {/* Ventas y Punto de Venta (ancho completo) */}
+        {/* Ventas y Documentos en 2 columnas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+        {/* Ventas y Punto de Venta */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-1">Ventas y Punto de Venta</h3>
             <p className="text-sm text-gray-500">Cómo opera el POS, los comprobantes y la caja.</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+          <div className="space-y-5">
               {/* Inventario */}
               <div className="space-y-3">
                 <OnboardToggle checked={salesPrefs.allowNegativeStock} onChange={(v) => sp('allowNegativeStock', v)} title="Permitir vender productos sin stock" description="Vender aunque el stock sea 0 o negativo." />
@@ -730,16 +733,16 @@ export default function AdminCreateAccount() {
                   )}
                 </div>
               )}
-          </div>{/* fin grid interno Ventas */}
+          </div>{/* fin space-y Ventas */}
         </div>{/* fin tarjeta Ventas */}
 
-        {/* Documentos y comprobantes (ancho completo) */}
+        {/* Documentos y comprobantes */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 mb-1">Documentos y comprobantes</h3>
             <p className="text-sm text-gray-500">Apariencia del PDF, contenido de comprobantes, ticket y guías.</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+          <div className="space-y-5">
             {/* Apariencia del PDF */}
             <div className="space-y-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Apariencia del PDF</p>
@@ -806,6 +809,7 @@ export default function AdminCreateAccount() {
             </div>
           </div>
         </div>
+        </div>{/* fin grid 2 columnas: Ventas | Documentos */}
 
         {/* Personalizar menú lateral (ancho completo) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
