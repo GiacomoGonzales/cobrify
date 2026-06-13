@@ -56,6 +56,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
       // Users can create their own subscription (for trial), admins can modify any
       allow create: if isAuthenticated() && isOwner(userId);
+      // Admin: necesario para que el onboarding desde el panel admin
+      // (AdminCreateAccount → registerBusinessAsAdmin) cree la suscripción de
+      // prueba del nuevo negocio sin que el dueño tenga que loguearse primero.
+      allow create: if isAdmin();
       // Resellers pueden crear suscripciones para sus clientes (verificar que el resellerId en los datos coincida)
       allow create: if isAuthenticated() && request.resource.data.resellerId != null && isReseller(request.resource.data.resellerId);
       // Only admins can update/delete subscriptions
@@ -272,9 +276,11 @@ service cloud.firestore {
 
       // Subcollection: Products (Productos)
       match /products/{productId} {
-        // Admins pueden leer todos los productos
-        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
-        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admins pueden leer y escribir todos los productos (necesario para
+        // onboarding masivo desde el panel admin: AdminCreateAccount importa los
+        // productos del Excel al negocio recién creado).
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         // Lectura pública para catálogo - permitir queries cuando el negocio tiene catálogo habilitado
         // La query debe filtrar por catalogVisible==true en el cliente
         allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
@@ -334,8 +340,10 @@ service cloud.firestore {
 
       // Subcollection: Stock Movements (Movimientos de Inventario)
       match /stockMovements/{movementId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admin: necesario para crear movimientos de stock inicial durante el
+        // onboarding masivo de productos desde el panel admin.
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Tables (Mesas - para modo restaurante)
@@ -457,8 +465,10 @@ service cloud.firestore {
 
       // Subcollection: Laboratories (Laboratorios - para modo farmacia)
       match /laboratories/{laboratoryId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admin: necesario durante onboarding (modo farmacia) para crear los
+        // laboratorios derivados del Excel importado.
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Properties (Propiedades - para modo inmobiliaria)
