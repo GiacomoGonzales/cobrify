@@ -504,13 +504,19 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerRowHeight = 18
   const baseRowHeight = 15
 
-  // Detectar modo farmacia — en farmacia se muestran columnas CÓDIGO, LABORATORIO y MARCA
-  // y los detalles (presentación, concentración) se imprimen como sub-línea debajo de la descripción
+  // Detectar modo farmacia — solo farmacia imprime la sub-línea con presentación/concentración.
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
 
-  // Farmacia: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT | IMPORTE
-  // Normal:   CANT | U.M. | DESCRIPCIÓN | P.UNIT | IMPORTE
-  const colWidths = isPharmacy ? {
+  // Mostrar las columnas CÓDIGO, LABORATORIO y MARCA cuando sea farmacia/veterinaria
+  // O cuando algún ítem de la orden traiga laboratorio o marca (negocios de salud que
+  // no están en modo farmacia, como distribuidoras de dispositivos médicos).
+  const showDetailCols = isPharmacy ||
+    companySettings?.businessMode === 'veterinary' ||
+    (order.items || []).some(it => (it.laboratoryName || '').trim() !== '' || (it.marca || '').trim() !== '')
+
+  // Detalle: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT | IMPORTE
+  // Normal:  CANT | U.M. | DESCRIPCIÓN | P.UNIT | IMPORTE
+  const colWidths = showDetailCols ? {
     cant: CONTENT_WIDTH * 0.05,
     um: CONTENT_WIDTH * 0.05,
     code: CONTENT_WIDTH * 0.10,
@@ -553,11 +559,11 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerTextY = tableY + 12
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
-  if (isPharmacy) {
+  if (showDetailCols) {
     doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
   }
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
-  if (isPharmacy) {
+  if (showDetailCols) {
     doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
     doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
   }
@@ -582,7 +588,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const itemName = item.name || ''
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = (isValidCode && !isPharmacy) ? `${rawCode} - ${itemName}` : itemName
+    const itemDesc = (isValidCode && !showDetailCols) ? `${rawCode} - ${itemName}` : itemName
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 8)
 
@@ -621,8 +627,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const unitCode = item.unit || 'UNIDAD'
     doc.text(unitLabels[unitCode] || unitCode, cols.um + colWidths.um / 2, centerY, { align: 'center' })
 
-    // Código (solo farmacia)
-    if (isPharmacy && isValidCode) {
+    // Código (cuando hay columnas de detalle)
+    if (showDetailCols && isValidCode) {
       doc.setFontSize(6.5)
       const codeLines = doc.splitTextToSize(rawCode, colWidths.code - 4)
       doc.text(codeLines[0], cols.code + colWidths.code / 2, centerY, { align: 'center' })
@@ -648,8 +654,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio y Marca en columnas separadas (solo farmacia)
-    if (isPharmacy) {
+    // Laboratorio y Marca en columnas separadas (cuando hay columnas de detalle)
+    if (showDetailCols) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(6)
       const labText = item.laboratoryName || ''
@@ -670,8 +676,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text(precio.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, centerY, { align: 'right' })
-    doc.text(importe.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
+    doc.text(precio.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, centerY, { align: 'right' })
+    doc.text(importe.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
 
     dataRowY += productRowHeight
   }
@@ -697,6 +703,14 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   currentY += sonSectionHeight + 5
 
   // ========== TOTALES ==========
+  // Redondear a 2 decimales y derivar el IGV del total - subtotal, para que
+  // SUBTOTAL + IGV cuadre exacto con el TOTAL (evita restos de 3 decimales como
+  // 33,898.305 / 6,101.695 que descuadraban contra el total redondo).
+  const subtotal2 = Math.round((Number(order.subtotal) || 0) * 100) / 100
+  const total2 = Math.round((Number(order.total) || 0) * 100) / 100
+  const igv2 = Math.round((total2 - subtotal2) * 100) / 100
+  const fmt2 = (n) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
   const totalsWidth = 160
   const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
   const totalsRowHeight = 15
@@ -714,7 +728,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...BLACK)
   doc.text('SUBTOTAL', totalsX + 5, currentY + 10)
-  doc.text(currencySymbol + ' ' + (order.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
+  doc.text(currencySymbol + ' ' + fmt2(subtotal2), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
   currentY += totalsRowHeight
 
   // IGV
@@ -722,7 +736,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'F')
   doc.line(totalsX, currentY + totalsRowHeight, totalsX + totalsWidth, currentY + totalsRowHeight)
   doc.text('IGV (18%)', totalsX + 5, currentY + 10)
-  doc.text(currencySymbol + ' ' + (order.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
+  doc.text(currencySymbol + ' ' + fmt2(igv2), totalsX + totalsWidth - 5, currentY + 10, { align: 'right' })
   currentY += totalsRowHeight
 
   // Total
@@ -732,7 +746,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text('TOTAL', totalsX + 5, currentY + 14)
   doc.setFontSize(11)
-  doc.text(currencySymbol + ' ' + (order.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, currentY + 14, { align: 'right' })
+  doc.text(currencySymbol + ' ' + fmt2(total2), totalsX + totalsWidth - 5, currentY + 14, { align: 'right' })
 
   currentY += totalsRowHeight + 20
 
