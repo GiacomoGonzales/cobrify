@@ -24,6 +24,7 @@ export default function AdminCreateAccount() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [lookingUpRuc, setLookingUpRuc] = useState(false)
+  const [noRuc, setNoRuc] = useState(false)
   const [lastCreated, setLastCreated] = useState(null)
 
   const setField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
@@ -64,8 +65,8 @@ export default function AdminCreateAccount() {
     if (!form.name.trim()) return 'Ingresa el nombre del responsable.'
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return 'Ingresa un correo válido.'
     if (form.password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.'
-    if (!/^\d{11}$/.test(form.ruc.trim())) return 'El RUC debe tener 11 dígitos.'
-    if (!form.businessName.trim()) return 'Ingresa la razón social.'
+    if (!noRuc && !/^\d{11}$/.test(form.ruc.trim())) return 'El RUC debe tener 11 dígitos (o marca "Crear sin RUC").'
+    if (!form.businessName.trim()) return noRuc ? 'Ingresa el nombre del negocio.' : 'Ingresa la razón social.'
     return null
   }
 
@@ -84,7 +85,7 @@ export default function AdminCreateAccount() {
         form.password,
         form.name.trim(),
         {
-          ruc: form.ruc.trim(),
+          ruc: noRuc ? '' : form.ruc.trim(),
           businessName: form.businessName.trim(),
           tradeName: form.tradeName.trim(),
           phone: form.phone.trim(),
@@ -172,35 +173,49 @@ export default function AdminCreateAccount() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <h3 className="text-base font-semibold text-gray-900 mb-1">Datos del negocio</h3>
           <p className="text-sm text-gray-500 mb-4">Información fiscal y de contacto de la empresa.</p>
+
+          {/* Crear sin RUC (para negocios que solo emiten notas de venta) */}
+          <label className="flex items-center gap-2 mb-4 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={noRuc}
+              onChange={(e) => setNoRuc(e.target.checked)}
+              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-700">Crear sin RUC <span className="text-gray-400">(solo notas de venta)</span></span>
+          </label>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>RUC *</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={11}
-                  value={form.ruc}
-                  onChange={setField('ruc')}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLookupRuc() } }}
-                  className={`${inputClass} flex-1`}
-                  placeholder="20123456789"
-                />
-                <button
-                  type="button"
-                  onClick={handleLookupRuc}
-                  disabled={lookingUpRuc}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex-shrink-0"
-                  title="Buscar datos del RUC en SUNAT"
-                >
-                  {lookingUpRuc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                  <span className="hidden sm:inline">Buscar</span>
-                </button>
+            {!noRuc && (
+              <div>
+                <label className={labelClass}>RUC *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={11}
+                    value={form.ruc}
+                    onChange={setField('ruc')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLookupRuc() } }}
+                    className={`${inputClass} flex-1`}
+                    placeholder="20123456789"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLookupRuc}
+                    disabled={lookingUpRuc}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex-shrink-0"
+                    title="Buscar datos del RUC en SUNAT"
+                  >
+                    {lookingUpRuc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    <span className="hidden sm:inline">Buscar</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             <div>
-              <label className={labelClass}>Razón social *</label>
-              <input type="text" value={form.businessName} onChange={setField('businessName')} className={inputClass} placeholder="EMPRESA SAC" />
+              <label className={labelClass}>{noRuc ? 'Nombre del negocio *' : 'Razón social *'}</label>
+              <input type="text" value={form.businessName} onChange={setField('businessName')} className={inputClass} placeholder={noRuc ? 'Mi Negocio' : 'EMPRESA SAC'} />
             </div>
             <div>
               <label className={labelClass}>Nombre comercial</label>
