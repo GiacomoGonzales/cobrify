@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import { QRCodeSVG } from 'qrcode.react'
 import {
   UserCheck, Clock, MapPin, Scan, Loader2, QrCode, RefreshCw,
@@ -1310,6 +1312,7 @@ export default function Attendance() {
 
 // Tarjeta de configuración por sucursal
 function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, onUseCurrentPos, onSaveGracePeriod }) {
+  const toast = useToast()
   const att = branch.attendance || {}
   const enabled = att.enabled !== false && !!att.token
   const [radius, setRadius] = useState(att.gpsRadius ?? '')
@@ -1345,11 +1348,12 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
     if (!qrValue) return
     const svg = document.getElementById(`qr-${branch.id}`)
     if (!svg) return
+    const fileName = `qr-asistencia-${(branch.name || branch.id).replace(/\s+/g, '-')}.png`
     const xml = new XMLSerializer().serializeToString(svg)
     const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(svgBlob)
     const img = new Image()
-    img.onload = () => {
+    img.onload = async () => {
       const canvas = document.createElement('canvas')
       canvas.width = 512
       canvas.height = 512
@@ -1357,14 +1361,48 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
       ctx.fillStyle = '#fff'
       ctx.fillRect(0, 0, 512, 512)
       ctx.drawImage(img, 0, 0, 512, 512)
-      canvas.toBlob(blob => {
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `qr-asistencia-${(branch.name || branch.id).replace(/\s+/g, '-')}.png`
-        a.click()
-        URL.revokeObjectURL(a.href)
-        URL.revokeObjectURL(url)
-      })
+      const isNative = Capacitor.isNativePlatform()
+      if (isNative) {
+        // En la app: `<a download>` no funciona en el WebView de iOS/Android.
+        // Guardamos en Documents y abrimos el sheet de compartir/guardar.
+        try {
+          const dataUrl = canvas.toDataURL('image/png')
+          const base64 = dataUrl.split(',')[1]
+          const qrDir = 'QR'
+          try {
+            await Filesystem.mkdir({ path: qrDir, directory: Directory.Documents, recursive: true })
+          } catch (_) { /* dir ya existe */ }
+          const result = await Filesystem.writeFile({
+            path: `${qrDir}/${fileName}`,
+            data: base64,
+            directory: Directory.Documents,
+            recursive: true,
+          })
+          try {
+            await Share.share({
+              title: fileName,
+              text: `QR de asistencia · ${branch.name || ''}`.trim(),
+              url: result.uri,
+              dialogTitle: 'Guardar o compartir QR',
+            })
+          } catch (_) { /* compartir cancelado por el usuario */ }
+        } catch (e) {
+          console.error('Error guardando QR en móvil:', e)
+          toast.error('No se pudo guardar el QR')
+        } finally {
+          URL.revokeObjectURL(url)
+        }
+      } else {
+        // Web: descarga directa con <a download>.
+        canvas.toBlob(blob => {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(blob)
+          a.download = fileName
+          a.click()
+          URL.revokeObjectURL(a.href)
+          URL.revokeObjectURL(url)
+        })
+      }
     }
     img.src = url
   }
