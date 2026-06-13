@@ -194,7 +194,7 @@ function DayCell({ date, cell, isToday, multiBranch, branchMap }) {
   const isShift = !!(cell?.start && cell?.end) && !isRest && !isRecovery
 
   const branchName = branchMap[cell?.branchId || MAIN_BRANCH_ID]
-  const hours = isShift ? calcShiftHours(cell.start, cell.end, cell.breakMinutes || 0) : 0
+  const hours = isShift ? calcShiftHours(cell.start, cell.end, cell.breakMinutes || 0, cell.recoveryMinutes || 0) : 0
   const accent = isShift && cell.color ? cell.color : null
 
   return (
@@ -209,7 +209,12 @@ function DayCell({ date, cell, isToday, multiBranch, branchMap }) {
           style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
         >
           <div className="font-semibold text-gray-900">{cell.start}–{cell.end}</div>
-          <div className="text-gray-500">{hours.toFixed(1)}h</div>
+          <div className="text-gray-500">
+            {hours.toFixed(1)}h
+            {cell.recoveryMinutes > 0 && (
+              <span className="ml-1 text-orange-600" title={`${cell.recoveryMinutes} min de recuperación`}>↻{cell.recoveryMinutes}m</span>
+            )}
+          </div>
           {multiBranch && branchName && (
             <div className="mt-0.5 flex items-center gap-0.5 text-[9px] text-gray-500">
               <MapPin className="w-2.5 h-2.5 text-primary-500 flex-shrink-0" />

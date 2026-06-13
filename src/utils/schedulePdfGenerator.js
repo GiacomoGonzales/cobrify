@@ -2,7 +2,7 @@ import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { DAY_KEYS, DAY_LABELS, calculateWeekHours } from '@/services/scheduleService'
+import { DAY_KEYS, DAY_LABELS, calculateWeekHours, calculateWeekRecoveryMinutes } from '@/services/scheduleService'
 
 // Celdas viejas sin branchId se asumen como 'main' (sucursal principal),
 // coherente con el comportamiento previo al feature multi-sucursal.
@@ -297,6 +297,20 @@ export const generateSchedulePDF = async ({
     const timeText = `${cell.start || ''} - ${cell.end || ''}`
     doc.text(timeText, cx, contentY, { align: 'center' })
 
+    // Minutos de refrigerio y/o recuperación parcial dentro del turno: se
+    // muestran en una línea pequeña justo debajo del rango horario.
+    const breakMin = cell.breakMinutes || 0
+    const recMin = cell.recoveryMinutes || 0
+    if (breakMin > 0 || recMin > 0) {
+      const parts = []
+      if (breakMin > 0) parts.push(`−${breakMin}m`)
+      if (recMin > 0) parts.push(`↻${recMin}m`)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6)
+      doc.setTextColor(recMin > 0 ? 194 : 107, recMin > 0 ? 65 : 114, recMin > 0 ? 12 : 128)
+      doc.text(parts.join(' · '), cx, contentY + 3.4, { align: 'center' })
+    }
+
     if (branchLabel) {
       drawBranchLine(branchLabel, cx, rowY)
     }
@@ -398,10 +412,21 @@ export const generateSchedulePDF = async ({
     })
 
     // Total horas
+    const recoveryMin = calculateWeekRecoveryMinutes(effectiveDays)
+    const hasRecovery = recoveryMin > 0
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor((effectiveTotal > 0) ? 31 : 156, (effectiveTotal > 0) ? 41 : 163, (effectiveTotal > 0) ? 55 : 175)
-    doc.text(`${Number(effectiveTotal || 0).toFixed(1)}h`, x + totalColWidth - 3, y + rowHeight / 2 + 1, { align: 'right' })
+    // Si hay recuperación, subimos el total un poquito para dejar lugar a la
+    // línea de "+X.Xh recup." abajo. Si no, lo dejamos centrado.
+    const totalY = hasRecovery ? y + rowHeight / 2 - 1 : y + rowHeight / 2 + 1
+    doc.text(`${Number(effectiveTotal || 0).toFixed(1)}h`, x + totalColWidth - 3, totalY, { align: 'right' })
+    if (hasRecovery) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(194, 65, 12) // orange-700
+      doc.text(`+${(recoveryMin / 60).toFixed(1)}h recup.`, x + totalColWidth - 3, y + rowHeight / 2 + 3.6, { align: 'right' })
+    }
     doc.setTextColor(31, 41, 55)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)

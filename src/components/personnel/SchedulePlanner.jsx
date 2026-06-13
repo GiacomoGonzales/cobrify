@@ -268,6 +268,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
         start: template.startTime,
         end: template.endTime,
         breakMinutes: template.breakMinutes || 0,
+        recoveryMinutes: template.recoveryMinutes || 0,
         color: template.color || '#fbbf24',
         branchId: effectiveBranchId,
       })
@@ -283,7 +284,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     setCell(userId, dayKey, null)
     setEditingCell(null)
   }
-  const setCustom = (userId, dayKey, start, end, breakMin = 0, isRecovery = false) => {
+  const setCustom = (userId, dayKey, start, end, breakMin = 0, isRecovery = false, recoveryMin = 0) => {
     setSchedules((prev) => {
       const userSch = prev[userId] || { days: {}, totalHours: 0, publishedAt: null }
       const existing = userSch.days?.[dayKey] || {}
@@ -291,10 +292,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
       // y no preservar nada. Evita sobrescribir datos de otra sucursal por accidente.
       const sameBranch = !existing.branchId || existing.branchId === selectedBranchId
       const base = sameBranch ? existing : {}
-      // Recuperación = turno con horario pero marcado como recuperación: muestra su
-      // duración pero NO suma a las horas productivas de la semana (igual que el
-      // descanso). En ambos casos limpiamos rest/recovery explícitamente para no
-      // arrastrar marcas viejas (la celda se reemplaza por completo al guardar).
+      // Recuperación COMPLETA = turno marcado como recuperación: no suma a las horas
+      // productivas. Distinto a `recoveryMinutes` que son minutos parciales DENTRO de
+      // un turno normal (se descuentan del turno y se contabilizan aparte). En ambos
+      // casos limpiamos rest/recovery explícitamente para no arrastrar marcas viejas
+      // (la celda se reemplaza por completo al guardar).
       const newCell = isRecovery
         ? {
             recovery: true,
@@ -302,6 +304,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             start,
             end,
             breakMinutes: breakMin,
+            recoveryMinutes: 0,
             color: '#fb923c',
             branchId: selectedBranchId,
           }
@@ -312,6 +315,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             start,
             end,
             breakMinutes: breakMin,
+            recoveryMinutes: recoveryMin,
             color: (base.color && !base.rest && !base.recovery) ? base.color : '#94a3b8',
             branchId: selectedBranchId,
           }
@@ -542,16 +546,24 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     return calculateWeekHours(filtered)
   }
 
+  // Horas de recuperación de la sucursal activa: incluye TANTO los turnos enteros
+  // marcados como recuperación COMO los `recoveryMinutes` parciales dentro de turnos
+  // normales. Se totalizan aparte porque NO suman al total semanal de horas
+  // productivas, pero el cliente quiere verlos para saber cuánto recup. se programó.
   const calculateBranchRecoveryHours = (daysObj, branchId) => {
     if (!daysObj) return 0
-    let total = 0
+    let totalMinutes = 0
     for (const key of DAY_KEYS) {
       const c = daysObj[key]
-      if (!c || !c.recovery || !c.start || !c.end) continue
+      if (!c || c.rest) continue
       if (cellBranchId(c) !== branchId) continue
-      total += calcShiftHours(c.start, c.end, 0)
+      if (c.recovery && c.start && c.end) {
+        totalMinutes += Math.round(calcShiftHours(c.start, c.end, c.breakMinutes || 0) * 60)
+      } else if (c.recoveryMinutes && c.start && c.end) {
+        totalMinutes += c.recoveryMinutes
+      }
     }
-    return total
+    return Math.round((totalMinutes / 60) * 100) / 100
   }
 
   // ----- Render -----
@@ -857,6 +869,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                     <Coffee className="w-3 h-3" />{t.breakMinutes}m
                   </span>
                 )}
+                {t.recoveryMinutes > 0 && (
+                  <span className="text-xs text-orange-500 flex items-center gap-0.5" title="Minutos de recuperación dentro del turno">
+                    ↻{t.recoveryMinutes}m
+                  </span>
+                )}
                 {t.defaultBranchId && (
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium"
@@ -1026,7 +1043,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                                 onPickTemplate={(t) => assignTemplate(emp.id, dk, t)}
                                 onRest={() => setRest(emp.id, dk)}
                                 onClear={() => clearCell(emp.id, dk)}
-                                onCustom={(s, e, b, rec) => setCustom(emp.id, dk, s, e, b, rec)}
+                                onCustom={(s, e, b, rec, recMin) => setCustom(emp.id, dk, s, e, b, rec, recMin)}
                                 onClose={() => setEditingCell(null)}
                               />
                             )}
@@ -1114,6 +1131,8 @@ function ScheduleCell({ cell, onClick }) {
       </button>
     )
   }
+  const hasBreak = cell.breakMinutes > 0
+  const hasRecoveryMin = cell.recoveryMinutes > 0
   return (
     <button
       onClick={onClick}
@@ -1125,8 +1144,11 @@ function ScheduleCell({ cell, onClick }) {
       }}
     >
       <span className="leading-tight">{cell.start} - {cell.end}</span>
-      {cell.breakMinutes > 0 && (
-        <span className="text-[10px] text-gray-500 leading-none mt-0.5">−{cell.breakMinutes}m</span>
+      {(hasBreak || hasRecoveryMin) && (
+        <span className="text-[10px] leading-none mt-0.5 flex items-center gap-1">
+          {hasBreak && <span className="text-gray-500">−{cell.breakMinutes}m</span>}
+          {hasRecoveryMin && <span className="text-orange-600">↻{cell.recoveryMinutes}m</span>}
+        </span>
       )}
     </button>
   )
@@ -1144,6 +1166,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
   const [start, setStart] = useState(cell?.start || '08:00')
   const [end, setEnd] = useState(cell?.end || '17:00')
   const [breakMin, setBreakMin] = useState(cell?.breakMinutes || 0)
+  const [recoveryMin, setRecoveryMin] = useState(cell?.recoveryMinutes || 0)
 
   // Atajo: tecla Supr / Delete con el popover abierto → eliminar el turno.
   // Solo si hay celda asignada y el foco NO está en un input (para no interferir
@@ -1168,7 +1191,8 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
   let eMin = timeToMinutes(end)
   const crossesMidnight = eMin <= sMin
   if (crossesMidnight) eMin += 24 * 60
-  const shiftNetHours = Math.max(0, eMin - sMin - (breakMin || 0)) / 60
+  const effectiveRecovery = isRecovery ? 0 : (recoveryMin || 0)
+  const shiftNetHours = Math.max(0, eMin - sMin - (breakMin || 0) - effectiveRecovery) / 60
 
   return (
     <div
@@ -1211,25 +1235,52 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               />
             </div>
           </div>
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase mb-0.5 flex items-center gap-1">
-              <Coffee className="w-3 h-3" /> Refrigerio (min)
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="15"
-              value={breakMin}
-              onChange={(e) => setBreakMin(Math.max(0, Number(e.target.value) || 0))}
-              placeholder="0"
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-            />
+          <div className={isRecovery ? '' : 'grid grid-cols-2 gap-2'}>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase mb-0.5 flex items-center gap-1">
+                <Coffee className="w-3 h-3" /> Refrigerio (min)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="15"
+                value={breakMin}
+                onChange={(e) => setBreakMin(Math.max(0, Number(e.target.value) || 0))}
+                placeholder="0"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+              />
+            </div>
+            {/* Recuperación parcial: solo en turnos normales (no en modo recuperación
+                completa, donde TODO el turno ya cuenta como recup. y este campo no
+                tendría sentido). Sus minutos se descuentan del turno y se totalizan
+                aparte en la columna de horas semanales como "+X.Xh recup." */}
+            {!isRecovery && (
+              <div>
+                <label className="text-[10px] text-orange-700 uppercase mb-0.5 flex items-center gap-1" title="Minutos del turno marcados como recuperación. NO suman a las horas de la semana.">
+                  <Coffee className="w-3 h-3" /> Recup. (min)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="15"
+                  value={recoveryMin}
+                  onChange={(e) => setRecoveryMin(Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0"
+                  className="w-full px-2 py-1.5 text-sm border border-orange-200 rounded bg-orange-50/40 focus:border-orange-400 focus:bg-white"
+                />
+              </div>
+            )}
           </div>
 
           {/* Resumen en vivo: duración + aviso de cruce de medianoche */}
           <div className="flex items-center justify-between text-[11px] pt-0.5">
             <span className="text-gray-500">Duración</span>
-            <span className="font-semibold text-gray-900">{shiftNetHours.toFixed(1)} h</span>
+            <span className="font-semibold text-gray-900">
+              {shiftNetHours.toFixed(1)} h
+              {!isRecovery && recoveryMin > 0 && (
+                <span className="ml-1.5 text-orange-600 font-normal">+ {(recoveryMin / 60).toFixed(1)}h recup.</span>
+              )}
+            </span>
           </div>
           {crossesMidnight && (
             <div className="flex items-center gap-1.5 text-[11px] text-primary-700 bg-primary-50 border border-primary-100 rounded px-2 py-1">
@@ -1246,7 +1297,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               Volver
             </button>
             <button
-              onClick={() => onCustom(start, end, breakMin, isRecovery)}
+              onClick={() => onCustom(start, end, breakMin, isRecovery, recoveryMin)}
               className={`flex-1 px-3 py-1.5 text-xs text-white rounded ${isRecovery ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary-600 hover:bg-primary-700'}`}
             >
               Aplicar
@@ -1314,6 +1365,7 @@ function TemplateForm({ template, branches = [], onSave, onCancel }) {
     startTime: template.startTime || '08:00',
     endTime: template.endTime || '17:00',
     breakMinutes: template.breakMinutes || 0,
+    recoveryMinutes: template.recoveryMinutes || 0,
     color: template.color || PALETTE[0],
     isRest: template.isRest || false,
     // Sucursal por defecto. Si está, se aplica al asignar la plantilla en vez
@@ -1344,7 +1396,7 @@ function TemplateForm({ template, branches = [], onSave, onCancel }) {
           className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
           <label className="block text-xs text-gray-600 mb-1">Inicio</label>
           <input
@@ -1364,13 +1416,25 @@ function TemplateForm({ template, branches = [], onSave, onCancel }) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Descanso (min)</label>
+          <label className="block text-xs text-gray-600 mb-1">Refrigerio (min)</label>
           <input
             type="number"
             min="0"
+            step="15"
             value={data.breakMinutes}
             onChange={(e) => setData((p) => ({ ...p, breakMinutes: Number(e.target.value) || 0 }))}
             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-orange-700 mb-1" title="Minutos del turno marcados como recuperación. Se descuentan del turno y se totalizan aparte.">Recup. (min)</label>
+          <input
+            type="number"
+            min="0"
+            step="15"
+            value={data.recoveryMinutes}
+            onChange={(e) => setData((p) => ({ ...p, recoveryMinutes: Number(e.target.value) || 0 }))}
+            className="w-full px-2 py-1.5 text-sm border border-orange-200 rounded bg-orange-50/40 focus:border-orange-400 focus:bg-white"
           />
         </div>
       </div>
@@ -1851,7 +1915,7 @@ function DailyTimeline({
                         onPickTemplate={(t) => assignTemplate(emp.id, editDk, t)}
                         onRest={() => setRest(emp.id, editDk)}
                         onClear={() => clearCell(emp.id, editDk)}
-                        onCustom={(s, e, b, rec) => setCustom(emp.id, editDk, s, e, b, rec)}
+                        onCustom={(s, e, b, rec, recMin) => setCustom(emp.id, editDk, s, e, b, rec, recMin)}
                         onClose={() => setEditingCell(null)}
                       />
                     </div>

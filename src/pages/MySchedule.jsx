@@ -590,6 +590,9 @@ function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {} }) {
             {cell.breakMinutes > 0 && (
               <p className="text-[11px] text-gray-500">Descanso interno: {cell.breakMinutes} min</p>
             )}
+            {cell.recoveryMinutes > 0 && (
+              <p className="text-[11px] text-orange-600">Recuperación: {cell.recoveryMinutes} min</p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-400 italic">Sin turno asignado</p>
@@ -598,12 +601,13 @@ function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {} }) {
       {isShift && (
         <div className="text-right text-xs text-gray-600 font-semibold">
           {(() => {
-            // Calcular horas de la celda
+            // Calcular horas productivas: turno neto = duración − refrigerio − recuperación.
             const [sh, sm] = (cell.start || '00:00').split(':').map(Number)
             const [eh, em] = (cell.end || '00:00').split(':').map(Number)
             let mins = (eh * 60 + em) - (sh * 60 + sm)
             if (mins <= 0) mins += 24 * 60
             mins -= cell.breakMinutes || 0
+            mins -= cell.recoveryMinutes || 0
             return `${(mins / 60).toFixed(1)}h`
           })()}
         </div>

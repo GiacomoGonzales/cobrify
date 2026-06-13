@@ -90,31 +90,57 @@ export const timeToMinutes = (hhmm) => {
 /**
  * Calcula la duración en horas (decimales) entre dos HH:mm. Soporta turnos
  * que cruzan medianoche (end < start asume +24h).
- * @param {number} breakMinutes  minutos de descanso a descontar
+ * @param {number} breakMinutes     minutos de refrigerio/descanso a descontar
+ * @param {number} recoveryMinutes  minutos de recuperación dentro del turno (se
+ *                                  descuentan igual que el refrigerio, pero se
+ *                                  totalizan aparte en `calculateWeekRecoveryMinutes`).
  */
-export const calcShiftHours = (start, end, breakMinutes = 0) => {
+export const calcShiftHours = (start, end, breakMinutes = 0, recoveryMinutes = 0) => {
   let s = timeToMinutes(start)
   let e = timeToMinutes(end)
   if (e <= s) e += 24 * 60 // cruza medianoche
-  const total = Math.max(0, e - s - (breakMinutes || 0))
+  const total = Math.max(0, e - s - (breakMinutes || 0) - (recoveryMinutes || 0))
   return Math.round((total / 60) * 100) / 100
 }
 
 /**
- * Suma todas las horas de un objeto `days` ({mon: {start,end,breakMinutes}, ...}).
+ * Suma todas las horas productivas de un objeto `days` ({mon: {start,end,breakMinutes,recoveryMinutes}, ...}).
+ * Los `recoveryMinutes` dentro de un turno se descuentan (no son productivos).
  */
 export const calculateWeekHours = (daysObj) => {
   if (!daysObj) return 0
   let total = 0
   for (const key of DAY_KEYS) {
     const d = daysObj[key]
-    // Descansos y recuperaciones no suman horas semanales: solo turnos productivos.
+    // Descansos y turnos marcados como recuperación completa no suman horas semanales.
     if (!d || d.rest || d.recovery) continue
     if (d.start && d.end) {
-      total += calcShiftHours(d.start, d.end, d.breakMinutes || 0)
+      total += calcShiftHours(d.start, d.end, d.breakMinutes || 0, d.recoveryMinutes || 0)
     }
   }
   return Math.round(total * 100) / 100
+}
+
+/**
+ * Suma todos los minutos de recuperación de la semana: incluye los `recoveryMinutes`
+ * marcados dentro de turnos normales + la duración (en minutos) de turnos enteros
+ * marcados como recuperación (`cell.recovery === true`).
+ */
+export const calculateWeekRecoveryMinutes = (daysObj) => {
+  if (!daysObj) return 0
+  let total = 0
+  for (const key of DAY_KEYS) {
+    const d = daysObj[key]
+    if (!d || d.rest) continue
+    if (d.recovery && d.start && d.end) {
+      // Turno completo marcado como recuperación: cuenta toda su duración neta.
+      total += Math.round(calcShiftHours(d.start, d.end, d.breakMinutes || 0) * 60)
+    } else if (d.recoveryMinutes) {
+      // Recuperación parcial dentro de un turno normal.
+      total += d.recoveryMinutes
+    }
+  }
+  return total
 }
 
 // ---------- Plantillas de turno ----------
