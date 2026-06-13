@@ -20,6 +20,58 @@ const EMPTY_FORM = {
   address: '',
 }
 
+const DEFAULT_SALES_PREFS = {
+  // Control de inventario
+  allowNegativeStock: false,
+  // Punto de venta
+  allowCustomProducts: false,
+  allowPriceEdit: false,
+  allowNameEdit: false,
+  posClearSearchOnAdd: true,
+  autoResetPOS: false,
+  autoPrintTicket: false,
+  hideOutOfStockInPOS: false,
+  showDescriptionInPOS: false,
+  defaultDocumentType: 'boleta',
+  defaultPaymentMethod: '',
+  // Campos del cliente (posCustomFields)
+  showStudentField: false,
+  showVehiclePlateField: false,
+  showVehicleModelField: false,
+  showVehicleYearField: false,
+  showSubscriptionFields: false,
+  // Notas de venta
+  hideRucIgvInNotaVenta: false,
+  hideOnlyIgvInNotaVenta: false,
+  allowPartialPayments: false,
+  // Caja
+  requireOpenCashRegister: false,
+  // Comisión tarjeta
+  cardCommissionEnabled: false,
+  cardCommissionRate: 5,
+  // Multi-divisa
+  multiCurrencyEnabled: false,
+  defaultCurrency: 'PEN',
+  // Restaurante
+  recargoConsumoEnabled: false,
+  recargoConsumoRate: 10,
+  itemStatusTracking: false,
+  requirePaymentBeforeKitchen: false,
+}
+
+// Toggle compacto reutilizable (checkbox + título + descripción)
+function OnboardToggle({ checked, onChange, title, description }) {
+  return (
+    <label className="flex items-start gap-2.5 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 flex-shrink-0" />
+      <span className="text-sm text-gray-700">
+        <span className="font-medium block">{title}</span>
+        {description && <span className="text-xs text-gray-500">{description}</span>}
+      </span>
+    </label>
+  )
+}
+
 export default function AdminCreateAccount() {
   const toast = useToast()
   const [form, setForm] = useState(EMPTY_FORM)
@@ -45,6 +97,11 @@ export default function AdminCreateAccount() {
   const [batchControl, setBatchControl] = useState(false)
   const [defaultTaxAffectation, setDefaultTaxAffectation] = useState('10')
   const [hiddenMenuItems, setHiddenMenuItems] = useState([])
+
+  // Opciones de la pestaña Ventas
+  const [salesPrefs, setSalesPrefs] = useState(DEFAULT_SALES_PREFS)
+  const [priceLabels, setPriceLabels] = useState({ price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' })
+  const sp = (k, v) => setSalesPrefs((p) => ({ ...p, [k]: v }))
 
   const handleLogoChange = (e) => {
     const file = e.target.files?.[0]
@@ -169,8 +226,44 @@ export default function AdminCreateAccount() {
           enableProductLocation,
           enableManualStockEdit,
           defaultTaxAffectation,
-          posCustomFields: { showBatchExpiryInPurchase: batchControl },
           hiddenMenuItems,
+          // Ventas / POS (campos de nivel raíz)
+          allowNegativeStock: salesPrefs.allowNegativeStock,
+          allowCustomProducts: salesPrefs.allowCustomProducts,
+          allowPriceEdit: salesPrefs.allowPriceEdit,
+          allowNameEdit: salesPrefs.allowNameEdit,
+          posClearSearchOnAdd: salesPrefs.posClearSearchOnAdd,
+          autoResetPOS: salesPrefs.autoResetPOS,
+          autoPrintTicket: salesPrefs.autoPrintTicket,
+          showDescriptionInPOS: salesPrefs.showDescriptionInPOS,
+          defaultDocumentType: salesPrefs.defaultDocumentType,
+          defaultPaymentMethod: salesPrefs.defaultPaymentMethod,
+          hideRucIgvInNotaVenta: salesPrefs.hideRucIgvInNotaVenta,
+          hideOnlyIgvInNotaVenta: salesPrefs.hideOnlyIgvInNotaVenta,
+          allowPartialPayments: salesPrefs.allowPartialPayments,
+          requireOpenCashRegister: salesPrefs.requireOpenCashRegister,
+          cardCommissionEnabled: salesPrefs.cardCommissionEnabled,
+          cardCommissionRate: Number(salesPrefs.cardCommissionRate) || 0,
+          multiCurrencyEnabled: salesPrefs.multiCurrencyEnabled,
+          defaultCurrency: salesPrefs.defaultCurrency,
+          priceLabels,
+          // Campos del cliente + lotes (posCustomFields)
+          posCustomFields: {
+            showBatchExpiryInPurchase: batchControl,
+            hideOutOfStockInPOS: salesPrefs.hideOutOfStockInPOS,
+            showStudentField: salesPrefs.showStudentField,
+            showVehiclePlateField: salesPrefs.showVehiclePlateField,
+            showVehicleModelField: salesPrefs.showVehicleModelField,
+            showVehicleYearField: salesPrefs.showVehicleYearField,
+            showSubscriptionFields: salesPrefs.showSubscriptionFields,
+          },
+          // Restaurante
+          restaurantConfig: businessMode === 'restaurant' ? {
+            recargoConsumoEnabled: salesPrefs.recargoConsumoEnabled,
+            recargoConsumoRate: Number(salesPrefs.recargoConsumoRate) || 10,
+            itemStatusTracking: salesPrefs.itemStatusTracking,
+            requirePaymentBeforeKitchen: salesPrefs.requirePaymentBeforeKitchen,
+          } : undefined,
         }
       )
 
@@ -198,6 +291,8 @@ export default function AdminCreateAccount() {
         setBatchControl(false)
         setDefaultTaxAffectation('10')
         setHiddenMenuItems([])
+        setSalesPrefs(DEFAULT_SALES_PREFS)
+        setPriceLabels({ price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' })
       } else {
         toast.error(result.error || 'No se pudo crear la cuenta')
       }
@@ -449,6 +544,143 @@ export default function AdminCreateAccount() {
                 </select>
                 <p className="text-xs text-gray-500 mt-1">Afectación con la que nacen los productos nuevos. Se puede cambiar por producto.</p>
               </div>
+            </div>
+
+            {/* Ventas y Punto de Venta */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-5">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Ventas y Punto de Venta</h3>
+                <p className="text-sm text-gray-500">Cómo opera el POS, los comprobantes y la caja.</p>
+              </div>
+
+              {/* Inventario */}
+              <div className="space-y-3">
+                <OnboardToggle checked={salesPrefs.allowNegativeStock} onChange={(v) => sp('allowNegativeStock', v)} title="Permitir vender productos sin stock" description="Vender aunque el stock sea 0 o negativo." />
+              </div>
+
+              {/* Punto de venta */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Punto de venta</p>
+                <OnboardToggle checked={salesPrefs.allowCustomProducts} onChange={(v) => sp('allowCustomProducts', v)} title="Permitir productos personalizados en el POS" description="Agregar items con nombre y precio libres." />
+                <OnboardToggle checked={salesPrefs.allowPriceEdit} onChange={(v) => sp('allowPriceEdit', v)} title="Permitir modificar el precio en el POS" />
+                <OnboardToggle checked={salesPrefs.allowNameEdit} onChange={(v) => sp('allowNameEdit', v)} title="Permitir modificar el nombre en el POS" />
+                <OnboardToggle checked={salesPrefs.hideOutOfStockInPOS} onChange={(v) => sp('hideOutOfStockInPOS', v)} title="Ocultar productos sin stock en el POS" />
+                <OnboardToggle checked={salesPrefs.showDescriptionInPOS} onChange={(v) => sp('showDescriptionInPOS', v)} title="Mostrar descripción del producto en el POS" />
+                <OnboardToggle checked={salesPrefs.posClearSearchOnAdd} onChange={(v) => sp('posClearSearchOnAdd', v)} title="Reiniciar búsqueda al agregar un producto" description="Limpia el buscador tras agregar al carrito (recomendado con lector)." />
+                <OnboardToggle checked={salesPrefs.autoResetPOS} onChange={(v) => sp('autoResetPOS', v)} title="Reiniciar POS automáticamente tras la venta" />
+                <OnboardToggle checked={salesPrefs.autoPrintTicket} onChange={(v) => sp('autoPrintTicket', v)} title="Imprimir ticket automáticamente al completar la venta" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className={labelClass}>Comprobante por defecto</label>
+                    <select value={salesPrefs.defaultDocumentType} onChange={(e) => sp('defaultDocumentType', e.target.value)} className={`${inputClass} bg-white`}>
+                      <option value="boleta">Boleta</option>
+                      <option value="factura">Factura</option>
+                      <option value="nota_venta">Nota de venta</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Pago por defecto</label>
+                    <select value={salesPrefs.defaultPaymentMethod} onChange={(e) => sp('defaultPaymentMethod', e.target.value)} className={`${inputClass} bg-white`}>
+                      <option value="">Ninguno</option>
+                      <option value="CASH">Efectivo</option>
+                      <option value="CARD">Tarjeta</option>
+                      <option value="TRANSFER">Transferencia</option>
+                      <option value="YAPE">Yape</option>
+                      <option value="PLIN">Plin</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campos del cliente (no aplica a restaurante) */}
+              {businessMode !== 'restaurant' && (
+                <div className="space-y-3 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Campos del cliente en el POS</p>
+                  <OnboardToggle checked={salesPrefs.showStudentField} onChange={(v) => sp('showStudentField', v)} title="Campo 'Alumno'" />
+                  <OnboardToggle checked={salesPrefs.showVehiclePlateField} onChange={(v) => sp('showVehiclePlateField', v)} title="Campo 'Placa de vehículo'" />
+                  <OnboardToggle checked={salesPrefs.showVehicleModelField} onChange={(v) => sp('showVehicleModelField', v)} title="Campo 'Modelo de vehículo'" />
+                  <OnboardToggle checked={salesPrefs.showVehicleYearField} onChange={(v) => sp('showVehicleYearField', v)} title="Campo 'Año de vehículo'" />
+                  <OnboardToggle checked={salesPrefs.showSubscriptionFields} onChange={(v) => sp('showSubscriptionFields', v)} title="Gestión de suscripciones" />
+                </div>
+              )}
+
+              {/* Etiquetas de niveles de precio */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nombres de los niveles de precio</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {['price1', 'price2', 'price3', 'price4'].map((k, i) => (
+                    <div key={k}>
+                      <label className={labelClass}>Precio {i + 1}</label>
+                      <input type="text" value={priceLabels[k]} onChange={(e) => setPriceLabels((p) => ({ ...p, [k]: e.target.value }))} className={inputClass} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notas de venta */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Notas de venta</p>
+                <OnboardToggle
+                  checked={salesPrefs.hideRucIgvInNotaVenta}
+                  onChange={(v) => setSalesPrefs((p) => ({ ...p, hideRucIgvInNotaVenta: v, hideOnlyIgvInNotaVenta: v ? false : p.hideOnlyIgvInNotaVenta }))}
+                  title="Ocultar RUC e IGV en notas de venta"
+                />
+                <OnboardToggle
+                  checked={salesPrefs.hideOnlyIgvInNotaVenta}
+                  onChange={(v) => setSalesPrefs((p) => ({ ...p, hideOnlyIgvInNotaVenta: v, hideRucIgvInNotaVenta: v ? false : p.hideRucIgvInNotaVenta }))}
+                  title="Ocultar solo el IGV en notas de venta"
+                />
+                <OnboardToggle checked={salesPrefs.allowPartialPayments} onChange={(v) => sp('allowPartialPayments', v)} title="Permitir pagos parciales en notas de venta" />
+              </div>
+
+              {/* Caja */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Caja</p>
+                <OnboardToggle checked={salesPrefs.requireOpenCashRegister} onChange={(v) => sp('requireOpenCashRegister', v)} title="Requerir caja diaria abierta para vender" />
+              </div>
+
+              {/* Comisión por tarjeta */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Comisión por tarjeta</p>
+                <OnboardToggle checked={salesPrefs.cardCommissionEnabled} onChange={(v) => sp('cardCommissionEnabled', v)} title="Cobrar comisión por pago con tarjeta" />
+                {salesPrefs.cardCommissionEnabled && (
+                  <div className="w-40">
+                    <label className={labelClass}>Porcentaje (%)</label>
+                    <input type="number" min="0" max="20" step="0.1" value={salesPrefs.cardCommissionRate} onChange={(e) => sp('cardCommissionRate', e.target.value)} className={inputClass} />
+                  </div>
+                )}
+              </div>
+
+              {/* Multi-divisa */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Moneda extranjera (USD)</p>
+                <OnboardToggle checked={salesPrefs.multiCurrencyEnabled} onChange={(v) => sp('multiCurrencyEnabled', v)} title="Activar soporte multi-divisa" description="Permite emitir en USD además de soles." />
+                {salesPrefs.multiCurrencyEnabled && (
+                  <div className="w-40">
+                    <label className={labelClass}>Moneda por defecto</label>
+                    <select value={salesPrefs.defaultCurrency} onChange={(e) => sp('defaultCurrency', e.target.value)} className={`${inputClass} bg-white`}>
+                      <option value="PEN">Soles (PEN)</option>
+                      <option value="USD">Dólares (USD)</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Restaurante */}
+              {businessMode === 'restaurant' && (
+                <div className="space-y-3 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Operaciones de restaurante</p>
+                  <OnboardToggle checked={salesPrefs.itemStatusTracking} onChange={(v) => sp('itemStatusTracking', v)} title="Seguimiento de estado por ítem" description="Controlar cada ítem en vez de la orden completa." />
+                  <OnboardToggle checked={salesPrefs.requirePaymentBeforeKitchen} onChange={(v) => sp('requirePaymentBeforeKitchen', v)} title="Requerir pago antes de enviar a cocina" />
+                  <OnboardToggle checked={salesPrefs.recargoConsumoEnabled} onChange={(v) => sp('recargoConsumoEnabled', v)} title="Recargo al consumo" description="Decreto Ley N° 25988." />
+                  {salesPrefs.recargoConsumoEnabled && (
+                    <div className="w-40">
+                      <label className={labelClass}>Porcentaje (%)</label>
+                      <input type="number" min="1" max="13" step="0.5" value={salesPrefs.recargoConsumoRate} onChange={(e) => sp('recargoConsumoRate', e.target.value)} className={inputClass} />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Personalizar menú lateral */}
