@@ -130,6 +130,8 @@ export default function CreateQuotation() {
   // Cliente
   const [customerMode, setCustomerMode] = useState('select') // 'select' o 'manual'
   const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [manualCustomer, setManualCustomer] = useState({
     documentType: 'DNI',
     documentNumber: '',
@@ -1601,25 +1603,79 @@ export default function CreateQuotation() {
                   </button>
                 </div>
 
-                {/* Modo: Seleccionar cliente */}
+                {/* Modo: Seleccionar cliente — buscador con autocomplete (mismo
+                    patrón que el POS). Reemplaza el <select> plano que era
+                    imposible de usar con muchos clientes. */}
                 {customerMode === 'select' && (
                   <>
-                    <Select
-                      label="Cliente *"
-                      value={selectedCustomer?.id || ''}
-                      onChange={e => handleCustomerChange(e.target.value)}
-                    >
-                      <option value="">Seleccionar cliente...</option>
-                      {customers.map(customer => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name} - {customer.documentNumber}
-                        </option>
-                      ))}
-                    </Select>
-
-                    {selectedCustomer && (
-                      <div className="p-4 bg-gray-50 rounded-lg space-y-2">
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
+                    {!selectedCustomer ? (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={customerSearchTerm}
+                          onChange={e => {
+                            setCustomerSearchTerm(e.target.value)
+                            setShowCustomerDropdown(true)
+                          }}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                          placeholder="Buscar por nombre o documento..."
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        {showCustomerDropdown && (
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {(() => {
+                              const term = customerSearchTerm.trim().toLowerCase()
+                              const filtered = !term
+                                ? customers.slice(0, 8)
+                                : customers.filter(c =>
+                                    (c.name || '').toLowerCase().includes(term) ||
+                                    (c.businessName || '').toLowerCase().includes(term) ||
+                                    (c.documentNumber || '').includes(term)
+                                  ).slice(0, 20)
+                              if (filtered.length === 0) {
+                                return (
+                                  <div className="px-3 py-3 text-sm text-gray-500 text-center">
+                                    No se encontraron clientes
+                                  </div>
+                                )
+                              }
+                              return filtered.map(customer => (
+                                <button
+                                  key={customer.id}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    handleCustomerChange(customer.id)
+                                    setCustomerSearchTerm('')
+                                    setShowCustomerDropdown(false)
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                                >
+                                  <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
+                                  <p className="text-xs text-gray-500">{customer.documentNumber || 'Sin documento'}</p>
+                                </button>
+                              ))
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg space-y-2 relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null)
+                            setCustomerSearchTerm('')
+                          }}
+                          className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                          title="Cambiar cliente"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <div className="grid grid-cols-2 gap-2 text-sm pr-6">
                           <div>
                             <span className="text-gray-600">Nombre:</span>
                             <span className="ml-2 font-medium">{selectedCustomer.name}</span>
