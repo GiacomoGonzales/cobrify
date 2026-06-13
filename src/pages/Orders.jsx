@@ -1099,7 +1099,7 @@ export default function Orders() {
   }
 
   return (
-    <div className="space-y-6" style={{ transform: 'scale(0.7)', transformOrigin: 'top left', width: '142.86%' }}>
+    <div className="space-y-6" style={{ zoom: 0.7 }}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
