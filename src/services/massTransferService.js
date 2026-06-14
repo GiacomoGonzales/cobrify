@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  updateDoc,
   getDocs,
   query,
   orderBy,
@@ -82,12 +83,17 @@ export const createMassTransfer = async (businessId, transferData) => {
       notes: transferData.notes || '',
       userId: transferData.userId,
       userName: transferData.userName || '',
-      status: 'completed',
+      // 'processing' hasta que terminen los movimientos; al final se marca completed/partial/
+      // failed según el resultado. Antes se creaba 'completed' ANTES de mover stock → el doc
+      // mentía si algún ítem fallaba.
+      status: 'processing',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
 
-    // Ejecutar transferencias de stock por cada item
+    // Ejecutar transferencias de stock por cada item. Se recolectan los fallos en vez de
+    // saltarlos en silencio.
+    const failedItems = []
     for (const item of transferData.items) {
       // Si es ingrediente, usar flujo específico
       if (item.isIngredient) {
@@ -101,6 +107,7 @@ export const createMassTransfer = async (businessId, transferData) => {
 
         if (!ingredientResult.success) {
           console.error(`Error al transferir ingrediente ${item.productName}:`, ingredientResult.error)
+          failedItems.push({ productId: item.productId, productName: item.productName, error: ingredientResult.error || 'Error al transferir insumo' })
           continue
         }
 
@@ -142,17 +149,23 @@ export const createMassTransfer = async (businessId, transferData) => {
       }
 
       // Flujo normal para productos
-      // Salida del almacén origen
+      // Salida del almacén origen. allowNegative=true: si el origen no tuviera suficiente,
+      // se descuenta igual (puede quedar negativo, visible y corregible) en vez de clampar
+      // a 0 y sumar al destino la cantidad completa → eso CREABA stock fantasma (el total
+      // subía). Con allowNegative el total se preserva.
       const exitResult = await updateProductStockTransaction(
         businessId,
         item.productId,
         transferData.fromWarehouseId,
         -item.quantity,
         {},
-        item.variantSku || null
+        item.variantSku || null,
+        null,
+        true
       )
       if (!exitResult.success) {
         console.error(`Error al descontar stock de ${item.productName}:`, exitResult.error)
+        failedItems.push({ productId: item.productId, productName: item.productName, error: exitResult.error || 'Error al descontar stock' })
         continue
       }
 
@@ -271,7 +284,26 @@ export const createMassTransfer = async (businessId, transferData) => {
       })
     }
 
-    return { success: true, id: docRef.id, number }
+    // Reflejar el resultado real en el documento (antes quedaba 'completed' siempre).
+    const allFailed = transferData.items.length > 0 && failedItems.length === transferData.items.length
+    const finalStatus = failedItems.length === 0
+      ? 'completed'
+      : (allFailed ? 'failed' : 'partial')
+    await updateDoc(docRef, {
+      status: finalStatus,
+      ...(failedItems.length > 0 && { failedItems }),
+      updatedAt: serverTimestamp(),
+    })
+
+    // success=true salvo que TODO haya fallado; el caller muestra un aviso si hay parciales.
+    return {
+      success: !allFailed,
+      id: docRef.id,
+      number,
+      status: finalStatus,
+      failedItems,
+      ...(allFailed && { error: 'No se pudo transferir ningún ítem' }),
+    }
   } catch (error) {
     console.error('Error al crear transferencia masiva:', error)
     return { success: false, error: error.message }

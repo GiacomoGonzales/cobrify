@@ -462,6 +462,9 @@ export const getPurchases = async (businessId, filters = {}) => {
 export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale', allowNegative = false) => {
   try {
     const batch = writeBatch(db)
+    // M4: registrar de qué almacén se descontó cada insumo, para que la reversión
+    // (deleteProduction) lo devuelva al MISMO almacén (deduct hace auto-pick).
+    const deductions = []
 
     // Pre-leer todos los docs en PARALELO (antes era un getDoc EN SERIE por insumo, lento
     // con muchos insumos). El cálculo y el armado del batch se hacen después, sin awaits.
@@ -571,6 +574,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           createdAt: Timestamp.now()
         })
 
+        deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'product', warehouseId: effectiveWarehouseId || null })
         continue
       }
 
@@ -668,10 +672,12 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         afterStock: newStock,
         createdAt: Timestamp.now()
       })
+
+      deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'ingredient', warehouseId: effectiveWarehouseId || null })
     }
 
     await batch.commit()
-    return { success: true }
+    return { success: true, deductions }
   } catch (error) {
     console.error('Error al descontar ingredientes:', error)
     return { success: false, error: error.message }
@@ -953,43 +959,14 @@ export const transferIngredientStock = async (businessId, ingredientId, fromWare
     // El stock total no cambia en una transferencia
     const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
-    // Atómico: actualización del insumo + DOS movimientos (salida y entrada). Antes la
-    // transferencia de insumo no registraba ningún movimiento → era invisible en el
-    // historial (a diferencia de las transferencias de producto).
-    const batch = writeBatch(db)
-    batch.update(ingredientRef, {
+    // NOTA: NO se registran movimientos acá. Los dos callers (Inventory.jsx transferencia
+    // individual y massTransferService) ya crean los movimientos transfer_out/transfer_in
+    // con su contexto (referenceId, etc.). Loguearlos también acá causaría duplicados.
+    await updateDoc(ingredientRef, {
       currentStock: newTotalStock,
       warehouseStocks: updatedWarehouseStocks,
       updatedAt: Timestamp.now()
     })
-    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
-    const movBase = {
-      ingredientId,
-      ingredientName: currentData.name || '',
-      isIngredient: true,
-      unit: currentData.purchaseUnit || null,
-      relatedTransfer: { fromWarehouseId, toWarehouseId },
-      createdAt: Timestamp.now()
-    }
-    batch.set(doc(movementsRef), {
-      ...movBase,
-      type: 'transfer_out',
-      quantity: -quantity,
-      warehouseId: fromWarehouseId,
-      reason: 'Transferencia entre almacenes (salida)',
-      beforeStock: currentFromStock,
-      afterStock: currentFromStock - quantity,
-    })
-    batch.set(doc(movementsRef), {
-      ...movBase,
-      type: 'transfer_in',
-      quantity: quantity,
-      warehouseId: toWarehouseId,
-      reason: 'Transferencia entre almacenes (entrada)',
-      beforeStock: toBefore,
-      afterStock: toBefore + quantity,
-    })
-    await batch.commit()
 
     return { success: true }
   } catch (error) {

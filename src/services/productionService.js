@@ -122,6 +122,9 @@ export const executeRecipeProduction = async (businessId, params) => {
     if (!deductResult.success) {
       return { success: false, error: `Error al descontar insumos: ${deductResult.error}` }
     }
+    // M4: mapa ingredientId → almacén REALMENTE descontado (deduct hace auto-pick), para
+    // guardarlo en la producción y que la reversión devuelva al mismo almacén.
+    const deductedWarehouseById = new Map((deductResult.deductions || []).map(d => [d.ingredientId, d.warehouseId]))
 
     // Pasos 6-8 con COMPENSACIÓN: el descuento de insumos (paso 5) ya hizo su propio
     // commit; si algo falla después, restauramos los insumos para no perderlos (el flujo
@@ -198,6 +201,8 @@ export const executeRecipeProduction = async (businessId, params) => {
         // Guardar el tipo para que la reversión NO tenga que adivinar sondeando Firestore
         // (evita colisión de IDs producto/insumo y una lectura extra por insumo).
         ingredientType: ing.ingredientType || null,
+        // M4: almacén realmente descontado; la reversión devuelve aquí (no al de producción).
+        warehouseId: deductedWarehouseById.has(ing.ingredientId) ? deductedWarehouseById.get(ing.ingredientId) : warehouseId,
       })),
       totalCost,
       notes: notes || '',
@@ -471,6 +476,9 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
     // 2. Para producciones con receta: devolver stock de insumos
     if (mode === 'recipe' && ingredientsDeducted?.length > 0) {
       for (const ing of ingredientsDeducted) {
+        // M4: devolver al almacén realmente descontado (guardado por insumo); fallback al
+        // almacén de producción para producciones legacy sin warehouseId.
+        const ingWh = ing.warehouseId || warehouseId
         // Intentar primero como producto terminado
         const asProductRef = doc(db, 'businesses', businessId, 'products', ing.ingredientId)
         const asProductDoc = await getDoc(asProductRef)
@@ -486,12 +494,12 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
           const pData = asProductDoc.data()
           if (pData.stock !== null && pData.trackStock !== false) {
             const wStocks = [...(pData.warehouseStocks || [])]
-            const wIdx = wStocks.findIndex(ws => ws.warehouseId === warehouseId)
+            const wIdx = wStocks.findIndex(ws => ws.warehouseId === ingWh)
 
             if (wIdx >= 0) {
               wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + ing.quantity }
             } else if (wStocks.length > 0) {
-              wStocks.push({ warehouseId, stock: ing.quantity, minStock: 0 })
+              wStocks.push({ warehouseId: ingWh, stock: ing.quantity, minStock: 0 })
             }
 
             const newStock = wStocks.length > 0
@@ -510,7 +518,7 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
               productName: ing.ingredientName,
               type: 'production_reversal',
               quantity: ing.quantity,
-              warehouseId: warehouseId || null,
+              warehouseId: ingWh || null,
               reason: `Reversión insumo: ${ing.ingredientName} (producción ${production.productName})`,
               createdAt: Timestamp.now()
             })
@@ -527,12 +535,12 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
             // la unidad de la receta → cantidad equivocada si difería de purchaseUnit.
             const revertQty = convertUnit(ing.quantity, ing.unit, iData.purchaseUnit)
             const wStocks = [...(iData.warehouseStocks || [])]
-            const wIdx = wStocks.findIndex(ws => ws.warehouseId === warehouseId)
+            const wIdx = wStocks.findIndex(ws => ws.warehouseId === ingWh)
 
             if (wIdx >= 0) {
               wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + revertQty }
             } else if (wStocks.length > 0) {
-              wStocks.push({ warehouseId, stock: revertQty, minStock: 0 })
+              wStocks.push({ warehouseId: ingWh, stock: revertQty, minStock: 0 })
             }
 
             const newStock = wStocks.length > 0
@@ -552,7 +560,7 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
               type: 'production_reversal',
               quantity: revertQty,
               unit: iData.purchaseUnit || ing.unit || null,
-              warehouseId: warehouseId || null,
+              warehouseId: ingWh || null,
               reason: `Reversión insumo: ${ing.ingredientName} (producción ${production.productName})`,
               createdAt: Timestamp.now()
             })
