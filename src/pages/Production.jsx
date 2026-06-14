@@ -16,6 +16,8 @@ import {
   ChevronRight,
   Folder,
   Tag,
+  ShoppingCart,
+  X,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -25,7 +27,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, cn } from '@/lib/utils'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -72,6 +74,19 @@ export default function Production() {
   const [modalSearchTerm, setModalSearchTerm] = useState('')
   const [modalCategory, setModalCategory] = useState('all')
   const [modalExpandedRoot, setModalExpandedRoot] = useState(null) // raíz cuya rama está expandida
+  // En móvil el panel "A producir" se abre como overlay (en desktop está fijo a la derecha).
+  const [showMobileCart, setShowMobileCart] = useState(false)
+  // Colapso de la sección de categorías (igual que el modal de Mesas). Persiste en localStorage.
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(() => {
+    try { return localStorage.getItem('produccion_categories_collapsed') === 'true' } catch { return false }
+  })
+  const toggleCategoriesCollapsed = () => {
+    setCategoriesCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem('produccion_categories_collapsed', String(next)) } catch { /* noop */ }
+      return next
+    })
+  }
   const [modalWarehouseId, setModalWarehouseId] = useState('')
   const [modalNotes, setModalNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -195,6 +210,7 @@ export default function Production() {
     setModalSearchTerm('')
     setModalCategory('all')
     setModalExpandedRoot(null)
+    setShowMobileCart(false)
     setModalNotes('')
     // Auto-seleccionar almacén por defecto de la sucursal seleccionada en la página
     const branchWarehouses = warehouses.filter(w => {
@@ -212,6 +228,7 @@ export default function Production() {
     setModalSearchTerm('')
     setModalCategory('all')
     setModalExpandedRoot(null)
+    setShowMobileCart(false)
     setModalWarehouseId('')
     setModalNotes('')
   }
@@ -760,20 +777,35 @@ export default function Production() {
         </CardContent>
       </Card>
 
-      {/* Modal de Nueva Producción — layout estilo POS (catálogo izquierda + panel fijo derecha) */}
+      {/* Modal de Nueva Producción — layout estilo Mesas (catálogo izquierda + panel "A producir";
+          en móvil el panel se abre como overlay desde un botón, así los productos SÍ se ven) */}
       <Modal
         isOpen={showModal}
         onClose={closeModal}
         title="Nueva Producción"
-        size="6xl"
+        fullScreen
       >
-        <div className="flex flex-col lg:flex-row h-[70vh] min-h-0 border border-gray-200 rounded-xl overflow-hidden">
-          {/* ===== IZQUIERDA: catálogo (buscador + categorías + grid) ===== */}
-          <div className="flex-1 min-w-0 flex flex-col min-h-0 lg:border-r border-gray-200">
-            {/* Buscador + chips de categoría */}
-            <div className="p-4 border-b border-gray-200 space-y-3 flex-shrink-0">
+        <div className="relative flex flex-col lg:flex-row h-full min-h-0">
+          {/* ===== IZQUIERDA: buscador + categorías colapsables + productos ===== */}
+          <div className="flex-1 flex flex-col min-h-0 lg:border-r border-gray-200">
+            {/* MÓVIL: acceso al panel "A producir" (en celular el panel lateral no cabe).
+                Muestra cuántos llevas; al tocarlo se abre a pantalla completa. */}
+            <button
+              type="button"
+              onClick={() => setShowMobileCart(true)}
+              className="lg:hidden flex-shrink-0 mx-3 mt-3 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-primary-600 text-white shadow-sm active:bg-primary-700"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Cog className="w-4 h-4" />
+                {productionItems.length} {productionItems.length === 1 ? 'producto' : 'productos'} a producir
+              </span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Buscador */}
+            <div className="p-4 pb-2 flex-shrink-0">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
                   placeholder="Buscar producto por nombre o código..."
@@ -783,75 +815,94 @@ export default function Production() {
                   autoFocus
                 />
               </div>
-              {categories.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => { setModalCategory('all'); setModalExpandedRoot(null) }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
-                      modalCategory === 'all' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <Tag className="w-3.5 h-3.5" /> Todas
-                  </button>
-                  {getRootCategories(categories).map((category) => {
-                    const subcats = getSubcategories(categories, category.id)
-                    const hasSubs = subcats.length > 0
-                    const isExpanded = modalExpandedRoot === category.id
-                    return (
-                      <React.Fragment key={category.id}>
-                        <button
-                          onClick={() => {
-                            if (modalCategory === category.id && hasSubs) {
-                              setModalExpandedRoot(prev => prev === category.id ? null : category.id)
-                            } else {
-                              setModalCategory(category.id)
-                              setModalExpandedRoot(hasSubs ? category.id : null)
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
-                            modalCategory === category.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          <Folder className="w-3.5 h-3.5" />
-                          <span>{category.name}</span>
-                          {hasSubs && (isExpanded ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronRight className="w-3.5 h-3.5 opacity-70" />)}
-                        </button>
-                        {isExpanded && subcats.map((subcat) => (
-                          <button
-                            key={subcat.id}
-                            onClick={() => setModalCategory(subcat.id)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                              modalCategory === subcat.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <Folder className="w-3 h-3 inline mr-1" />└─ {subcat.name}
-                          </button>
-                        ))}
-                      </React.Fragment>
-                    )
-                  })}
-                  <button
-                    onClick={() => { setModalCategory('sin-categoria'); setModalExpandedRoot(null) }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      modalCategory === 'sin-categoria' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Sin categoría
-                  </button>
-                </div>
-              )}
             </div>
 
-            {/* Grid de productos */}
-            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            {/* Categorías colapsables (igual que Mesas) */}
+            {categories.length > 0 && (
+              <div className="px-4 flex-shrink-0">
+                <button
+                  onClick={toggleCategoriesCollapsed}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2"
+                  title={categoriesCollapsed ? 'Mostrar categorías' : 'Ocultar categorías'}
+                >
+                  {categoriesCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  Categorías
+                  {categoriesCollapsed && modalCategory !== 'all' && (
+                    <span className="ml-1 normal-case px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 font-medium">
+                      {modalCategory === 'sin-categoria' ? 'Sin categoría' : (categories.find(c => c.id === modalCategory)?.name || modalCategory)}
+                    </span>
+                  )}
+                </button>
+                {!categoriesCollapsed && (
+                  <div className="flex flex-wrap gap-2 pb-3">
+                    <button
+                      onClick={() => { setModalCategory('all'); setModalExpandedRoot(null) }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                        modalCategory === 'all' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Tag className="w-3.5 h-3.5" /> Todas
+                    </button>
+                    {getRootCategories(categories).map((category) => {
+                      const subcats = getSubcategories(categories, category.id)
+                      const hasSubs = subcats.length > 0
+                      const isExpanded = modalExpandedRoot === category.id
+                      return (
+                        <React.Fragment key={category.id}>
+                          <button
+                            onClick={() => {
+                              if (modalCategory === category.id && hasSubs) {
+                                setModalExpandedRoot(prev => prev === category.id ? null : category.id)
+                              } else {
+                                setModalCategory(category.id)
+                                setModalExpandedRoot(hasSubs ? category.id : null)
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                              modalCategory === category.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <Folder className="w-3.5 h-3.5" />
+                            <span>{category.name}</span>
+                            {hasSubs && (isExpanded ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronRight className="w-3.5 h-3.5 opacity-70" />)}
+                          </button>
+                          {isExpanded && subcats.map((subcat) => (
+                            <button
+                              key={subcat.id}
+                              onClick={() => setModalCategory(subcat.id)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                modalCategory === subcat.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              <Folder className="w-3 h-3 inline mr-1" />└─ {subcat.name}
+                            </button>
+                          ))}
+                        </React.Fragment>
+                      )
+                    })}
+                    <button
+                      onClick={() => { setModalCategory('sin-categoria'); setModalExpandedRoot(null) }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        modalCategory === 'sin-categoria' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Sin categoría
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Grid de productos (scroll propio) */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
               {modalFilteredProducts.length === 0 ? (
                 <div className="text-center py-10 text-gray-500">
                   <Package className="w-10 h-10 mx-auto mb-2 text-gray-400" />
                   <p className="text-sm">No se encontraron productos</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
-                  {modalFilteredProducts.slice(0, 60).map(product => {
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2.5">
+                  {modalFilteredProducts.slice(0, 100).map(product => {
                     const alreadyAdded = productionItems.some(item => item.productId === product.id)
                     const totalStock = Object.values(product.warehouseStock || {}).reduce((sum, s) => sum + (s || 0), 0)
                     return (
@@ -889,10 +940,26 @@ export default function Production() {
             </div>
           </div>
 
-          {/* ===== DERECHA: panel fijo (almacén + lista + notas + confirmar) ===== */}
-          <div className="w-full lg:w-[380px] flex flex-col flex-shrink-0 min-h-0 border-t lg:border-t-0 border-gray-200 bg-gray-50/60">
+          {/* ===== DERECHA: panel "A producir" (desktop fijo / móvil overlay) ===== */}
+          <div
+            className={cn(
+              'flex-col min-h-0 bg-white lg:w-96',
+              showMobileCart ? 'flex absolute inset-0 z-20 lg:static lg:z-auto' : 'hidden lg:flex'
+            )}
+          >
+            {/* Header del panel */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+              <h3 className="font-semibold text-gray-900">A producir ({productionItems.length})</h3>
+              <button
+                onClick={() => setShowMobileCart(false)}
+                className="lg:hidden text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
             {/* Almacén destino */}
-            <div className="p-4 border-b border-gray-200 flex-shrink-0 bg-white">
+            <div className="p-4 border-b border-gray-200 flex-shrink-0">
               <Select
                 label="Almacén destino"
                 required
@@ -908,7 +975,7 @@ export default function Production() {
               </Select>
             </div>
 
-            {/* Lista de productos a producir */}
+            {/* Lista de productos a producir (scroll propio) */}
             <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {productionItems.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 py-10">
@@ -916,10 +983,6 @@ export default function Production() {
                   <p className="text-sm px-6">Toca un producto del catálogo para agregarlo a la producción</p>
                 </div>
               ) : (
-                <>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                    A producir ({productionItems.length})
-                  </h3>
                   <div className="space-y-2">
                     {productionItems.map(item => (
                       <div key={item.id} className="p-3 border border-gray-200 rounded-lg bg-white">
@@ -996,12 +1059,14 @@ export default function Production() {
                       </div>
                     ))}
                   </div>
-                </>
               )}
             </div>
 
             {/* Notas + Confirmar (pie fijo) */}
-            <div className="p-4 border-t border-gray-200 space-y-3 flex-shrink-0 bg-white">
+            <div
+              className="p-4 border-t border-gray-200 space-y-3 flex-shrink-0 bg-white"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+            >
               <textarea
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                 rows={2}
