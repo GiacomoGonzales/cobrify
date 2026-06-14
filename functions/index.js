@@ -16,7 +16,7 @@ import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
-import { loginRappi, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
+import { loginRappi, probeLogins, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
 import {
   isCloudinaryUrl,
   isAlreadyOptimized,
@@ -9391,20 +9391,18 @@ export const testRappiConnection = onCall(
         }
       }
 
-      let token
-      try {
-        token = await loginRappi({
-          clientId: cfg.clientId,
-          clientSecret: cfg.clientSecret,
-          env,
-        })
-      } catch (err) {
+      // Probamos varios métodos de login a la vez para descubrir cuál acepta Rappi.
+      const { token, results: loginProbe } = await probeLogins({
+        clientId: cfg.clientId,
+        clientSecret: cfg.clientSecret,
+        env,
+      })
+      if (!token) {
         return {
           ok: false,
           step: 'login',
-          message: err.message || 'Error de autenticación con Rappi',
-          status: err.response?.status,
-          data: err.response?.data,
+          message: 'Ningún método de login fue aceptado por Rappi (revisa "Detalles" para ver cada intento).',
+          data: { loginProbe },
         }
       }
 
@@ -9475,6 +9473,7 @@ export const testRappiConnection = onCall(
         storeId: cfg.storeId,
         clientIdUsed: azp,
         tokenInfo,
+        loginProbe,
         webhookList,
         webhookRegister,
         webhookRegisterAlt,

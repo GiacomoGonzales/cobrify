@@ -94,6 +94,42 @@ export function getClientIdFromToken(token, fallbackClientId) {
 }
 
 /**
+ * DIAGNÓSTICO: prueba varios métodos de login a la vez y reporta cuál funciona.
+ * Útil cuando no sabemos qué endpoint/params espera Rappi para estas credenciales.
+ * Devuelve { token, results: [{ name, url, ok, status, message, data }] }.
+ */
+export async function probeLogins({ clientId, clientSecret, env = 'production_pe' }) {
+  const apiBase = getV1BaseUrl(env)        // api.rappi.pe
+  const servicesBase = getBaseUrl(env)     // services.rappi.pe
+  const auth0 = env === 'sandbox'
+    ? 'https://rests-integrations-dev.auth0.com/oauth/token'
+    : 'https://rests-integrations.auth0.com/oauth/token'
+
+  const creds = { client_id: clientId, client_secret: clientSecret }
+  const audience = 'https://int-public-api-v2/api'
+  const attempts = [
+    { name: 'api.* proxy v1 (solo creds)', url: `${apiBase}/restaurants/auth/v1/token/login/integrations`, body: creds },
+    { name: 'api.* proxy v1 (+grant_type/audience)', url: `${apiBase}/restaurants/auth/v1/token/login/integrations`, body: { ...creds, grant_type: 'client_credentials', audience } },
+    { name: 'services.* proxy v1 (solo creds)', url: `${servicesBase}/restaurants/auth/v1/token/login/integrations`, body: creds },
+    { name: 'Auth0 directo (client_credentials)', url: auth0, body: { grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret, audience } },
+  ]
+
+  const results = []
+  let token = null
+  for (const a of attempts) {
+    try {
+      const res = await axios.post(a.url, a.body, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 })
+      const t = res.data?.access_token
+      results.push({ name: a.name, url: a.url, ok: !!t, status: res.status })
+      if (t && !token) token = t
+    } catch (err) {
+      results.push({ name: a.name, url: a.url, ok: false, status: err.response?.status, message: err.message, data: err.response?.data })
+    }
+  }
+  return { token, results }
+}
+
+/**
  * Obtiene un access_token de Rappi.
  * No cachea — el caller decide la estrategia de caché.
  */
