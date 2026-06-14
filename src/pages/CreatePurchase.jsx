@@ -172,6 +172,9 @@ export default function CreatePurchase() {
   const [productSearches, setProductSearches] = useState({})
   const [showProductDropdowns, setShowProductDropdowns] = useState({})
   const productInputRefs = useRef({})
+  // Detecta tap vs scroll en la lista de resultados (móvil): guarda la posición
+  // inicial del toque para no seleccionar un producto cuando el usuario desliza.
+  const productTouchRef = useRef(null)
 
   // Estados para el modal de crear producto
   const [showCreateProductModal, setShowCreateProductModal] = useState(false)
@@ -2829,15 +2832,31 @@ export default function CreatePurchase() {
                               key={`${searchItem.itemType}-${searchItem.id}`}
                               role="button"
                               tabIndex={0}
-                              onMouseDown={e => {
+                              onTouchStart={e => {
+                                const t = e.touches[0]
+                                productTouchRef.current = { x: t.clientX, y: t.clientY, scrolled: false }
+                              }}
+                              onTouchMove={e => {
+                                if (!productTouchRef.current) return
+                                const t = e.touches[0]
+                                if (
+                                  Math.abs(t.clientX - productTouchRef.current.x) > 10 ||
+                                  Math.abs(t.clientY - productTouchRef.current.y) > 10
+                                ) {
+                                  productTouchRef.current.scrolled = true
+                                }
+                              }}
+                              onTouchEnd={e => {
+                                const info = productTouchRef.current
+                                productTouchRef.current = null
+                                // Si el dedo se movió (scroll), no seleccionar
+                                if (info?.scrolled) return
                                 e.preventDefault()
                                 e.stopPropagation()
                                 selectProduct(index, searchItem)
                               }}
-                              onTouchStart={e => {
-                                e.stopPropagation()
-                              }}
-                              onTouchEnd={e => {
+                              onClick={e => {
+                                // Fallback para mouse (en táctil no se dispara: touchEnd hace preventDefault)
                                 e.preventDefault()
                                 e.stopPropagation()
                                 selectProduct(index, searchItem)
