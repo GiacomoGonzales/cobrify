@@ -320,12 +320,20 @@ export const registerPurchase = async (businessId, purchaseData) => {
     let newStock = currentStock
     let updatedWarehouseStocks = [...warehouseStocks]
 
+    // Almacén efectivo de la compra: el indicado o, si el insumo YA maneja stock por
+    // almacén, el primero. Así currentStock (total) y warehouseStocks[] nunca divergen
+    // (antes: compra sin almacén sumaba solo a currentStock y el siguiente descuento la
+    //  borraba al recalcular desde warehouseStocks).
+    let effPurchaseWarehouse = purchaseData.warehouseId || null
+    if (!effPurchaseWarehouse && updatedWarehouseStocks.length > 0) {
+      effPurchaseWarehouse = updatedWarehouseStocks[0].warehouseId
+    }
+
     // Solo actualizar stock si el ingrediente maneja inventario
     if (tracksStock) {
-      // Actualizar warehouseStocks si se especificó un almacén
-      if (purchaseData.warehouseId) {
+      if (effPurchaseWarehouse) {
         const warehouseIndex = updatedWarehouseStocks.findIndex(
-          ws => ws.warehouseId === purchaseData.warehouseId
+          ws => ws.warehouseId === effPurchaseWarehouse
         )
 
         if (warehouseIndex >= 0) {
@@ -334,17 +342,19 @@ export const registerPurchase = async (businessId, purchaseData) => {
             stock: (updatedWarehouseStocks[warehouseIndex].stock || 0) + quantityToAdd
           }
         } else {
+          // Primer almacén del insumo: si tenía stock "suelto" (currentStock sin almacén),
+          // se asigna a este almacén para no descartarlo al migrar a stock por almacén.
+          const seed = updatedWarehouseStocks.length === 0 ? currentStock : 0
           updatedWarehouseStocks.push({
-            warehouseId: purchaseData.warehouseId,
-            stock: quantityToAdd
+            warehouseId: effPurchaseWarehouse,
+            stock: seed + quantityToAdd
           })
         }
-      }
 
-      // Calcular nuevo stock total
-      newStock = purchaseData.warehouseId
-        ? updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-        : currentStock + quantityToAdd
+        newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      } else {
+        newStock = currentStock + quantityToAdd
+      }
     }
 
     // Calcular nuevo costo promedio (siempre se actualiza, maneje o no stock)
@@ -371,7 +381,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
     // Solo actualizar stock si el ingrediente maneja inventario
     if (tracksStock) {
       updateData.currentStock = newStock
-      if (purchaseData.warehouseId) {
+      if (effPurchaseWarehouse) {
         updateData.warehouseStocks = updatedWarehouseStocks
       }
     }
@@ -389,7 +399,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
         type: 'purchase',
         quantity: quantityToAdd,
         unit: currentData.purchaseUnit,
-        warehouseId: purchaseData.warehouseId || null,
+        warehouseId: effPurchaseWarehouse || null,
         reason: `Compra - ${purchaseData.supplier || 'Sin proveedor'}`,
         relatedPurchaseId: purchaseRef.id,
         beforeStock: currentStock,
@@ -477,8 +487,12 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         let effectiveWarehouseId = warehouseId || ingredient.warehouseId
         const warehouseStocks = productData.warehouseStocks || []
 
-        // Si no hay warehouseId pero el producto tiene warehouseStocks, usar el primer almacén con stock
-        if (!effectiveWarehouseId && warehouseStocks.length > 0) {
+        // Usar el almacén indicado; pero si NO se indicó, o el indicado NO existe en
+        // warehouseStocks[], caer al primer almacén con stock. Antes solo caía cuando
+        // effectiveWarehouseId era falsy → si llegaba un almacén ajeno al producto, el
+        // descuento no ocurría pero igual se registraba un movimiento (stock fantasma).
+        if (warehouseStocks.length > 0 &&
+            !(effectiveWarehouseId && warehouseStocks.some(ws => ws.warehouseId === effectiveWarehouseId))) {
           const warehouseWithStock = warehouseStocks.find(ws => (ws.stock || 0) >= quantityToDeduct)
             || warehouseStocks.find(ws => (ws.stock || 0) > 0)
             || warehouseStocks[0]
@@ -571,8 +585,10 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
       let updatedWarehouseStocks = [...warehouseStocks]
       let effectiveWarehouseId = warehouseId || ingredient.warehouseId
 
-      // Si no hay warehouseId pero el ingrediente tiene warehouseStocks, usar el primer almacén con stock
-      if (!effectiveWarehouseId && warehouseStocks.length > 0) {
+      // Usar el almacén indicado; si NO se indicó o NO existe en warehouseStocks[],
+      // caer al primer almacén con stock (evita el descuento fantasma — ver rama producto).
+      if (warehouseStocks.length > 0 &&
+          !(effectiveWarehouseId && warehouseStocks.some(ws => ws.warehouseId === effectiveWarehouseId))) {
         const warehouseWithStock = warehouseStocks.find(ws => (ws.stock || 0) >= quantityToDeduct)
           || warehouseStocks.find(ws => (ws.stock || 0) > 0)
           || warehouseStocks[0]
@@ -794,10 +810,16 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
           updatedAt: Timestamp.now()
         }
 
-        // Revertir warehouseStocks si aplica
-        if (purchaseData.warehouseId && currentData.warehouseStocks) {
+        // Revertir warehouseStocks. Resolver el almacén igual que en la compra (registerPurchase):
+        // el indicado o, si el insumo maneja stock por almacén, el primero. Así la reversión
+        // espeja exactamente cómo se sumó (evita divergencia total vs warehouseStocks).
+        let effRevertWarehouse = purchaseData.warehouseId || null
+        if (!effRevertWarehouse && currentData.warehouseStocks?.length > 0) {
+          effRevertWarehouse = currentData.warehouseStocks[0].warehouseId
+        }
+        if (effRevertWarehouse && currentData.warehouseStocks) {
           const updatedWarehouseStocks = [...currentData.warehouseStocks]
-          const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === purchaseData.warehouseId)
+          const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === effRevertWarehouse)
           if (idx >= 0) {
             updatedWarehouseStocks[idx] = {
               ...updatedWarehouseStocks[idx],
@@ -819,7 +841,7 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
           type: 'purchase_delete',
           quantity: quantityToRevert,
           unit: currentData.purchaseUnit,
-          warehouseId: purchaseData.warehouseId || null,
+          warehouseId: effRevertWarehouse || null,
           reason: `Eliminación de compra - ${purchaseData.supplier || 'Sin proveedor'}`,
           beforeStock: currentStock,
           afterStock: updateData.currentStock,
