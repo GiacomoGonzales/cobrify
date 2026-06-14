@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
+import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { cn } from '@/lib/utils'
 
 export default function OrderItemsModal({
@@ -32,6 +33,10 @@ export default function OrderItemsModal({
 
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
+  // Productos con receta sin insumos suficientes para 1 unidad. Se calcula lazy
+  // al abrir el modal y sólo si `!businessSettings.allowNegativeStock` y hay
+  // recetas configuradas (cero overhead si el negocio no usa insumos).
+  const [productsWithoutIngredients, setProductsWithoutIngredients] = useState(() => new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [categories, setCategories] = useState(['Todos'])
@@ -75,6 +80,29 @@ export default function OrderItemsModal({
       loadProducts()
     }
   }, [isOpen])
+
+  // Lazy: calcular productos sin insumos en background después de pintar el
+  // modal. Solo si `allowNegativeStock` está DESACTIVADO y hay recetas. En
+  // modo demo no se hace nada (los demos no tienen recetas reales).
+  useEffect(() => {
+    if (!isOpen || isDemoMode) return
+    if (businessSettings?.allowNegativeStock) {
+      setProductsWithoutIngredients(prev => (prev.size === 0 ? prev : new Set()))
+      return
+    }
+    const businessId = getBusinessId()
+    if (!businessId) return
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      if (cancelled) return
+      const has = await hasAnyRecipe(businessId)
+      if (cancelled || !has) return
+      const result = await computeProductsWithoutIngredients(businessId, null)
+      if (cancelled) return
+      setProductsWithoutIngredients(result)
+    }, 0)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [isOpen, isDemoMode, businessSettings?.allowNegativeStock, getBusinessId])
 
   // Helper para obtener el nombre de la categoría
   const getCategoryName = (categoryId) => {
@@ -630,16 +658,30 @@ export default function OrderItemsModal({
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
                 {filteredProducts.map((product) => {
                   const qtyInCart = cart.reduce((s, i) => s + (i.productId === product.id ? i.quantity : 0), 0)
+                  // Plato con receta cuyos insumos no alcanzan para 1 unidad.
+                  // Sólo aplica cuando el negocio NO permite vender en negativo.
+                  const noIngredients = !businessSettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
                   return (
                     <button
                       type="button"
                       key={product.id}
-                      onClick={() => addToCart(product)}
-                      className="relative flex flex-col text-left p-2.5 border rounded-lg hover:border-primary-500 hover:shadow-md hover:bg-primary-50/40 transition-all"
+                      onClick={() => { if (!noIngredients) addToCart(product) }}
+                      disabled={noIngredients}
+                      className={cn(
+                        'relative flex flex-col text-left p-2.5 border rounded-lg transition-all',
+                        noIngredients
+                          ? 'border-orange-200 bg-orange-50/40 opacity-60 cursor-not-allowed'
+                          : 'hover:border-primary-500 hover:shadow-md hover:bg-primary-50/40'
+                      )}
                     >
                       {qtyInCart > 0 && (
                         <div className="absolute top-1 left-1 w-5 h-5 bg-primary-600 text-white rounded-full flex items-center justify-center text-[11px] font-bold shadow z-10">
                           {qtyInCart}
+                        </div>
+                      )}
+                      {noIngredients && (
+                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-orange-500 text-white z-10 shadow-sm">
+                          Sin insumos
                         </div>
                       )}
                       <p className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 text-gray-900 min-h-[2.2em]">

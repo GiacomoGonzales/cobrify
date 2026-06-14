@@ -90,6 +90,7 @@ import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients } from '@/services/recipeService'
+import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
@@ -324,6 +325,10 @@ export default function POS() {
 
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
+  // Set<productId> de platos con receta cuyos insumos no alcanzan para 1 unidad.
+  // Se calcula lazy (después del primer paint) y sólo si `!allowNegativeStock`.
+  // El badge "Sin insumos" se renderiza con base en este set.
+  const [productsWithoutIngredients, setProductsWithoutIngredients] = useState(() => new Set())
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
@@ -2559,6 +2564,36 @@ export default function POS() {
       }
     }
   }, [isLoading]) // Se ejecuta cuando termina de cargar
+
+  // Lazy: calcular en background qué productos con receta no tienen insumos
+  // suficientes para preparar 1 unidad. Sólo cuando: (a) terminó la carga,
+  // (b) `allowNegativeStock` está DESACTIVADO (si está activo, el dueño
+  // aceptó vender sin stock, no hace falta el aviso), y (c) hay al menos
+  // una receta configurada. Si el negocio no usa recetas, este efecto sale
+  // sin hacer nada (cero overhead para el 80% de las cuentas).
+  React.useEffect(() => {
+    if (isLoading) return
+    if (companySettings?.allowNegativeStock) {
+      // Sin avisos cuando se permite vender en negativo.
+      setProductsWithoutIngredients(prev => (prev.size === 0 ? prev : new Set()))
+      return
+    }
+    const businessId = getBusinessId()
+    if (!businessId || isDemoMode) return
+    let cancelled = false
+    // setTimeout(0) garantiza que esto se ejecuta DESPUÉS de pintar la grilla
+    // del POS, no antes — la carga inicial no se ve afectada.
+    const handle = setTimeout(async () => {
+      if (cancelled) return
+      const has = await hasAnyRecipe(businessId)
+      if (cancelled || !has) return
+      const warehouseId = selectedWarehouse?.id || null
+      const result = await computeProductsWithoutIngredients(businessId, warehouseId)
+      if (cancelled) return
+      setProductsWithoutIngredients(result)
+    }, 0)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [isLoading, companySettings?.allowNegativeStock, getBusinessId, isDemoMode, selectedWarehouse?.id, saleCompleted])
 
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {
@@ -4839,10 +4874,10 @@ export default function POS() {
     }
 
     // Validar stock de ingredientes de recetas.
-    // IMPORTANTE: esta validación corre SIEMPRE, incluso con allowNegativeStock=true,
-    // porque allowNegativeStock aplica al stock de productos terminados; una receta
-    // requiere ingredientes reales — sin ellos la venta no se puede preparar.
-    {
+    // Se omite cuando `allowNegativeStock` está activo: si el dueño aceptó vender
+    // sin stock de productos terminados, también aceptamos vender platos con
+    // receta aunque falten insumos (los insumos se descuentan a negativo).
+    if (!companySettings?.allowNegativeStock) {
       const allMissingIngredients = []
 
       // Leer TODAS las recetas en UNA sola consulta (antes era 1 query por ítem → ~N queries
@@ -6322,7 +6357,7 @@ export default function POS() {
                 }
                 for (const pass of _passes) {
                   try {
-                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null)
+                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!companySettings?.allowNegativeStock)
                   } catch (error) {
                     console.warn('⚠️ No se pudo descontar insumos (agregado):', error)
                   }
@@ -7167,7 +7202,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     !companySettings?.allowNegativeStock
                   const expirationStatus = getProductExpirationStatus(product)
                   const isExpired = expirationStatus && !expirationStatus.canSell
-                  const isDisabled = isOutOfStock || isExpired
+                  const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  const isDisabled = isOutOfStock || isExpired || noIngredients
                   const quantityInCart = cart
                     .filter(item => item.id === product.id)
                     .reduce((sum, item) => sum + item.quantity, 0)
@@ -7182,7 +7218,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           ? 'bg-red-50 opacity-60 cursor-not-allowed'
                           : isOutOfStock
                             ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-primary-50 active:bg-primary-100'
+                            : noIngredients
+                              ? 'bg-orange-50/40 opacity-60 cursor-not-allowed'
+                              : 'hover:bg-primary-50 active:bg-primary-100'
                       }`}
                     >
                       {/* Badge cantidad en carrito */}
@@ -7219,6 +7257,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     : 'bg-yellow-500 text-white'
                             }`}>
                               {isExpired ? 'VENC' : `${expirationStatus.days}d`}
+                            </span>
+                          )}
+                          {noIngredients && (
+                            <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-500 text-white">
+                              Sin insumos
                             </span>
                           )}
                         </div>
@@ -7281,7 +7324,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   // FEFO: Verificar estado de vencimiento
                   const expirationStatus = getProductExpirationStatus(product)
                   const isExpired = expirationStatus && !expirationStatus.canSell
-                  const isDisabled = isOutOfStock || isExpired
+                  // Producto con receta cuyos insumos no alcanzan para 1 unidad.
+                  // El badge se muestra ANTES de que el mozo arme el carrito, para
+                  // que no se entere recién al cobrar. Sólo aplica cuando el dueño
+                  // NO permitió vender sin stock (en ese modo no avisamos).
+                  const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  const isDisabled = isOutOfStock || isExpired || noIngredients
 
                   // Calcular cantidad en carrito (suma de todas las variantes/lotes del producto)
                   const quantityInCart = cart
@@ -7303,13 +7351,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
                         ? 'border-gray-200 opacity-50 cursor-not-allowed'
-                        : expirationStatus?.status === 'critical' || expirationStatus?.status === 'today'
-                          ? 'border-red-300 hover:border-red-500 hover:shadow-md'
-                          : expirationStatus?.status === 'warning'
-                            ? 'border-orange-300 hover:border-orange-500 hover:shadow-md'
-                            : expirationStatus?.status === 'caution'
-                              ? 'border-yellow-300 hover:border-yellow-500 hover:shadow-md'
-                              : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
+                        : noIngredients
+                          ? 'border-orange-200 bg-orange-50/40 opacity-60 cursor-not-allowed'
+                          : expirationStatus?.status === 'critical' || expirationStatus?.status === 'today'
+                            ? 'border-red-300 hover:border-red-500 hover:shadow-md'
+                            : expirationStatus?.status === 'warning'
+                              ? 'border-orange-300 hover:border-orange-500 hover:shadow-md'
+                              : expirationStatus?.status === 'caution'
+                                ? 'border-yellow-300 hover:border-yellow-500 hover:shadow-md'
+                                : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
                   {/* Badge de cantidad en carrito.
@@ -7323,8 +7373,17 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
 
+                  {/* Badge "Sin insumos" — plato con receta sin ingredientes
+                      suficientes para 1 unidad. Tiene prioridad visual sobre
+                      el de vencimiento porque también deshabilita la tarjeta. */}
+                  {noIngredients && (
+                    <div className="absolute top-1 right-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500 text-white z-10 shadow-sm">
+                      Sin insumos
+                    </div>
+                  )}
+
                   {/* Badge de vencimiento */}
-                  {expirationStatus && expirationStatus.status !== 'ok' && (
+                  {!noIngredients && expirationStatus && expirationStatus.status !== 'ok' && (
                     <div className={`absolute top-1 right-1 px-2 py-0.5 rounded-full text-xs font-medium z-10 ${
                       isExpired
                         ? 'bg-red-600 text-white'

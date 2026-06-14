@@ -440,7 +440,15 @@ export const getPurchases = async (businessId, filters = {}) => {
  * Descontar ingredientes del stock (cuando se vende un plato)
  * Ahora soporta warehouseId para descuento por almacén
  */
-export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale') => {
+/**
+ * Descuenta insumos del stock. Por defecto el stock no baja de 0 (Math.max).
+ * Con `allowNegative=true` permite que los insumos queden en negativo —
+ * pensado para el flag `companySettings.allowNegativeStock`: si el dueño
+ * acepta vender productos terminados sin stock, también acepta vender platos
+ * con receta aunque falten insumos (consistencia con el comportamiento del
+ * stock de productos).
+ */
+export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale', allowNegative = false) => {
   try {
     const batch = writeBatch(db)
 
@@ -487,15 +495,17 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           )
           if (warehouseIndex >= 0) {
             const currentWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+            const next = currentWarehouseStock - quantityToDeduct
             updatedWarehouseStocks[warehouseIndex] = {
               ...updatedWarehouseStocks[warehouseIndex],
-              stock: Math.max(0, currentWarehouseStock - quantityToDeduct)
+              stock: allowNegative ? next : Math.max(0, next)
             }
           }
           // Recalcular stock total desde almacenes
           newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
         } else {
-          newStock = Math.max(0, currentStock - quantityToDeduct)
+          const next = currentStock - quantityToDeduct
+          newStock = allowNegative ? next : Math.max(0, next)
         }
 
         const updateData = {
@@ -577,9 +587,10 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
 
         if (warehouseIndex >= 0) {
           const currentWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+          const next = currentWarehouseStock - quantityToDeduct
           updatedWarehouseStocks[warehouseIndex] = {
             ...updatedWarehouseStocks[warehouseIndex],
-            stock: Math.max(0, currentWarehouseStock - quantityToDeduct)
+            stock: allowNegative ? next : Math.max(0, next)
           }
         }
 
@@ -587,7 +598,8 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
       } else {
         // Sin almacén específico, descontar del stock general
-        newStock = Math.max(0, currentStock - quantityToDeduct)
+        const next = currentStock - quantityToDeduct
+        newStock = allowNegative ? next : Math.max(0, next)
       }
 
       // Preparar datos de actualización
