@@ -58,7 +58,11 @@ export default function Kitchen() {
     )
 
     return () => unsubscribe()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar categorías para mapeo ID -> nombre (necesario para compatibilidad con estaciones antiguas)
   useEffect(() => {
@@ -80,7 +84,11 @@ export default function Kitchen() {
     }
 
     loadCategories()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar sucursales (sedes) habilitadas para el usuario y fijar la sede por defecto
   useEffect(() => {

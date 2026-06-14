@@ -192,7 +192,11 @@ export default function Tables() {
     )
 
     return () => unsubscribe()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar categorías para mapeo ID → nombre (necesario para matching de estaciones)
   useEffect(() => {
@@ -210,7 +214,11 @@ export default function Tables() {
       }
     }
     loadCategories()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar configuración de la empresa para comanda
   useEffect(() => {
@@ -228,7 +236,9 @@ export default function Tables() {
     }
 
     loadCompanySettings()
-  }, [user, getBusinessId])
+    // Ver nota arriba sobre getBusinessId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   // Configurar react-to-print para comanda web
   const handlePrintWeb = useReactToPrint({

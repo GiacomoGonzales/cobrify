@@ -145,7 +145,11 @@ export default function Orders() {
     )
 
     return () => unsubscribe()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar categorías para mapeo ID → nombre (necesario para matching de estaciones)
   useEffect(() => {
@@ -163,7 +167,11 @@ export default function Orders() {
       }
     }
     loadCategories()
-  }, [user, isDemoMode, getBusinessId])
+    // Nota: getBusinessId NO va en deps — useAppContext la devuelve nueva en cada
+    // render y eso hacia que el listener se resuscribiera en loop (parpadeo visible).
+    // El uid sale de `user`, que sí es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode])
 
   // Cargar configuración de la empresa
   useEffect(() => {
@@ -181,7 +189,9 @@ export default function Orders() {
     }
 
     loadCompanySettings()
-  }, [user, getBusinessId])
+    // Ver nota arriba sobre getBusinessId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   // Configurar react-to-print con la nueva API
   const handlePrint = useReactToPrint({
