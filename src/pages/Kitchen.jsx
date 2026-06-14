@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2, LayoutGrid } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -25,6 +25,10 @@ export default function Kitchen() {
   const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
   const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  // El spinner sólo se ve en la PRIMERA carga. El listener se re-suscribe al
+  // cargar las sedes o cambiar de sede; sin este ref, cada re-suscripción
+  // reseteaba isLoading=true y la página "parpadeaba".
+  const hasLoadedOnceRef = useRef(false)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
   const [updatingItemId, setUpdatingItemId] = useState(null)
   const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
@@ -119,7 +123,9 @@ export default function Kitchen() {
   useEffect(() => {
     if (!user?.uid) return
 
-    setIsLoading(true)
+    // Sólo mostrar el spinner la primera vez. En re-suscripciones (branchesLoaded
+    // o cambio de sede) se conservan los datos actuales y se actualizan en silencio.
+    if (!hasLoadedOnceRef.current) setIsLoading(true)
 
     // Si estamos en modo demo, usar datos de demo
     if (isDemoMode && demoData?.orders) {
@@ -140,6 +146,7 @@ export default function Kitchen() {
 
       setOrders(ordersData)
       setIsLoading(false)
+      hasLoadedOnceRef.current = true
       return
     }
 
@@ -186,11 +193,13 @@ export default function Kitchen() {
 
         setOrders(ordersData)
         setIsLoading(false)
+        hasLoadedOnceRef.current = true
       },
       (error) => {
         console.error('Error en listener de órdenes de cocina:', error)
         toast.error('Error al cargar órdenes en tiempo real')
         setIsLoading(false)
+        hasLoadedOnceRef.current = true
       }
     )
 

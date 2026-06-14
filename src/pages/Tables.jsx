@@ -60,6 +60,10 @@ export default function Tables() {
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
   const [branchesLoaded, setBranchesLoaded] = useState(false)
+  // El spinner de carga sólo debe verse en la PRIMERA carga. El listener se
+  // re-suscribe cuando branchesLoaded pasa a true o cambia la sede; sin este
+  // ref, cada re-suscripción reseteaba isLoading=true y la página "parpadeaba".
+  const hasLoadedOnceRef = useRef(false)
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
@@ -278,7 +282,9 @@ export default function Tables() {
   useEffect(() => {
     if (!user?.uid) return
 
-    setIsLoading(true)
+    // Sólo mostrar el spinner la primera vez. En re-suscripciones (branchesLoaded
+    // o cambio de sede) se conservan los datos actuales y se actualizan en silencio.
+    if (!hasLoadedOnceRef.current) setIsLoading(true)
 
     // Si estamos en modo demo, usar datos de demo
     if (isDemoMode && demoData?.tables) {
@@ -299,6 +305,7 @@ export default function Tables() {
       }
       setStats(newStats)
       setIsLoading(false)
+      hasLoadedOnceRef.current = true
       return
     }
 
@@ -343,11 +350,13 @@ export default function Tables() {
         setStats(newStats)
 
         setIsLoading(false)
+        hasLoadedOnceRef.current = true
       },
       (error) => {
         console.error('Error en listener de mesas:', error)
         toast.error('Error al cargar mesas en tiempo real')
         setIsLoading(false)
+        hasLoadedOnceRef.current = true
       }
     )
 
