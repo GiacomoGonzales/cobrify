@@ -877,9 +877,10 @@ export const transferIngredientStock = async (businessId, ingredientId, fromWare
     let updatedWarehouseStocks = [...(currentData.warehouseStocks || [])]
 
     // Descontar del almacén origen
+    let currentFromStock = 0
     const fromIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === fromWarehouseId)
     if (fromIdx >= 0) {
-      const currentFromStock = updatedWarehouseStocks[fromIdx].stock || 0
+      currentFromStock = updatedWarehouseStocks[fromIdx].stock || 0
       if (currentFromStock < quantity) {
         throw new Error(`Stock insuficiente en almacén origen. Disponible: ${currentFromStock}, Requerido: ${quantity}`)
       }
@@ -893,10 +894,11 @@ export const transferIngredientStock = async (businessId, ingredientId, fromWare
 
     // Agregar al almacén destino
     const toIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === toWarehouseId)
+    const toBefore = toIdx >= 0 ? (updatedWarehouseStocks[toIdx].stock || 0) : 0
     if (toIdx >= 0) {
       updatedWarehouseStocks[toIdx] = {
         ...updatedWarehouseStocks[toIdx],
-        stock: (updatedWarehouseStocks[toIdx].stock || 0) + quantity
+        stock: toBefore + quantity
       }
     } else {
       updatedWarehouseStocks.push({
@@ -908,11 +910,43 @@ export const transferIngredientStock = async (businessId, ingredientId, fromWare
     // El stock total no cambia en una transferencia
     const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
-    await updateDoc(ingredientRef, {
+    // Atómico: actualización del insumo + DOS movimientos (salida y entrada). Antes la
+    // transferencia de insumo no registraba ningún movimiento → era invisible en el
+    // historial (a diferencia de las transferencias de producto).
+    const batch = writeBatch(db)
+    batch.update(ingredientRef, {
       currentStock: newTotalStock,
       warehouseStocks: updatedWarehouseStocks,
       updatedAt: Timestamp.now()
     })
+    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    const movBase = {
+      ingredientId,
+      ingredientName: currentData.name || '',
+      isIngredient: true,
+      unit: currentData.purchaseUnit || null,
+      relatedTransfer: { fromWarehouseId, toWarehouseId },
+      createdAt: Timestamp.now()
+    }
+    batch.set(doc(movementsRef), {
+      ...movBase,
+      type: 'transfer_out',
+      quantity: -quantity,
+      warehouseId: fromWarehouseId,
+      reason: 'Transferencia entre almacenes (salida)',
+      beforeStock: currentFromStock,
+      afterStock: currentFromStock - quantity,
+    })
+    batch.set(doc(movementsRef), {
+      ...movBase,
+      type: 'transfer_in',
+      quantity: quantity,
+      warehouseId: toWarehouseId,
+      reason: 'Transferencia entre almacenes (entrada)',
+      beforeStock: toBefore,
+      afterStock: toBefore + quantity,
+    })
+    await batch.commit()
 
     return { success: true }
   } catch (error) {

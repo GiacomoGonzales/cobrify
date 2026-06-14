@@ -194,7 +194,10 @@ export const executeRecipeProduction = async (businessId, params) => {
         ingredientId: ing.ingredientId,
         ingredientName: ing.ingredientName,
         quantity: ing.quantity,
-        unit: ing.unit
+        unit: ing.unit,
+        // Guardar el tipo para que la reversión NO tenga que adivinar sondeando Firestore
+        // (evita colisión de IDs producto/insumo y una lectura extra por insumo).
+        ingredientType: ing.ingredientType || null,
       })),
       totalCost,
       notes: notes || '',
@@ -472,7 +475,13 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
         const asProductRef = doc(db, 'businesses', businessId, 'products', ing.ingredientId)
         const asProductDoc = await getDoc(asProductRef)
 
-        if (asProductDoc.exists()) {
+        // Preferir el tipo guardado (robusto ante colisión de IDs); si falta (producciones
+        // legacy sin ingredientType), caer al sondeo de existencia del producto.
+        const treatAsProduct = ing.ingredientType
+          ? ing.ingredientType === 'product'
+          : asProductDoc.exists()
+
+        if (treatAsProduct && asProductDoc.exists()) {
           // Es un producto terminado usado como insumo
           const pData = asProductDoc.data()
           if (pData.stock !== null && pData.trackStock !== false) {

@@ -1568,7 +1568,10 @@ export default function CreatePurchase() {
             if (newCost > 0) {
               // En modo edición, recalcular costo promedio considerando la diferencia
               if (isEditMode && !warehouseChangedInEdit) {
-                const diff = stockDifferences[grouped.productId] || 0
+                // La clave de stockDifferences es `${productId}|${variantSku||''}` (makeKey),
+                // no el productId solo. Antes se buscaba por grouped.productId → nunca
+                // coincidía → diff=0 → el costo promedio nunca se recalculaba al editar.
+                const diff = stockDifferences[`${grouped.productId}|${grouped.variantSku || ''}`] || 0
                 if (diff > 0) {
                   // Solo si aumentó la cantidad, recalcular promedio
                   averageCost = ((currentStock * currentCost) + (diff * newCost)) / (currentStock + diff)

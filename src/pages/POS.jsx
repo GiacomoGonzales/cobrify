@@ -6359,12 +6359,21 @@ export default function POS() {
                   }
                   if (!placed) { _passes.push([ing]); _passIds.push(new Set([ing.ingredientId])) }
                 }
+                let _ingFail = false
                 for (const pass of _passes) {
                   try {
                     await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!companySettings?.allowNegativeStock)
                   } catch (error) {
+                    _ingFail = true
                     console.warn('⚠️ No se pudo descontar insumos (agregado):', error)
                   }
+                }
+                if (_ingFail) {
+                  // Antes el fallo era silencioso (solo console.warn) y el inventario de
+                  // insumos quedaba descuadrado sin que el usuario se enterara.
+                  try {
+                    toast.warning('La venta se registró, pero no se pudieron descontar algunos insumos. Revisá el inventario de insumos.', 7000)
+                  } catch (_) { /* noop */ }
                 }
               }
               _recipeMs = Date.now() - _recipeT0
