@@ -196,7 +196,7 @@ export async function rejectOrder({ token, storeId, orderId, cancelType, body, e
  * El merchant será redirigido aquí; tras autenticarse, Rappi llama al `redirect_uri`
  * con `?code=<authorization_code>&state=<state>`.
  */
-export function buildAuthorizeUrl({ env = 'production_pe', clientId, redirectUri, codeChallenge, state, scope = 'openid profile' }) {
+export function buildAuthorizeUrl({ env = 'production_pe', clientId, redirectUri, codeChallenge, state, scope = 'openid profile email' }) {
   if (!clientId) throw new Error('clientId requerido')
   if (!redirectUri) throw new Error('redirectUri requerido')
   if (!codeChallenge) throw new Error('codeChallenge requerido')
