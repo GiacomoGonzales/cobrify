@@ -22,7 +22,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
-import { getProducts } from '@/services/firestoreService'
+import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getRecipeByProductId } from '@/services/recipeService'
@@ -35,6 +35,7 @@ export default function Production() {
   // Estado principal
   const [productions, setProductions] = useState([])
   const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [branches, setBranches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -77,6 +78,7 @@ export default function Production() {
     // En modo demo no hay Firestore: usar los datos de ejemplo.
     if (isDemoMode) {
       setProducts(demoData?.products || [])
+      setCategories(demoData?.categories || [])
       setWarehouses(demoData?.warehouses || [])
       setProductions(demoData?.productions || [])
       setBranches([])
@@ -87,14 +89,16 @@ export default function Production() {
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const [prodsResult, whResult, productionsResult, branchesResult] = await Promise.all([
+      const [prodsResult, whResult, productionsResult, branchesResult, categoriesResult] = await Promise.all([
         getProducts(businessId),
         getWarehouses(businessId),
         getProductions(businessId),
-        getActiveBranches(businessId)
+        getActiveBranches(businessId),
+        getProductCategories(businessId)
       ])
 
       if (prodsResult.success) setProducts(prodsResult.data || [])
+      if (categoriesResult?.success) setCategories(categoriesResult.data || [])
       if (whResult.success) setWarehouses(whResult.data || [])
       if (productionsResult.success) setProductions(productionsResult.data || [])
 
@@ -394,6 +398,8 @@ export default function Production() {
   const availableProducts = products.filter(p => p.type !== 'service')
 
   // Categorías únicas para los chips del catálogo (estilo POS).
+  // El producto guarda el ID de categoría; mapeamos ID→nombre para el chip.
+  const categoryNameById = Object.fromEntries(categories.map(c => [c.id, c.name]))
   const modalCategories = ['all', ...Array.from(new Set(availableProducts.map(p => p.category).filter(Boolean)))]
 
   const modalFilteredProducts = availableProducts.filter(p => {
@@ -738,9 +744,9 @@ export default function Production() {
         isOpen={showModal}
         onClose={closeModal}
         title="Nueva Producción"
-        fullScreen
+        size="6xl"
       >
-        <div className="flex flex-col lg:flex-row h-full min-h-0">
+        <div className="flex flex-col lg:flex-row h-[70vh] min-h-0 border border-gray-200 rounded-xl overflow-hidden">
           {/* ===== IZQUIERDA: catálogo (buscador + categorías + grid) ===== */}
           <div className="flex-1 min-w-0 flex flex-col min-h-0 lg:border-r border-gray-200">
             {/* Buscador + chips de categoría */}
@@ -768,7 +774,7 @@ export default function Production() {
                           : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      {cat === 'all' ? 'Todas' : cat}
+                      {cat === 'all' ? 'Todas' : (categoryNameById[cat] || cat)}
                     </button>
                   ))}
                 </div>
@@ -783,7 +789,7 @@ export default function Production() {
                   <p className="text-sm">No se encontraron productos</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
                   {modalFilteredProducts.slice(0, 60).map(product => {
                     const alreadyAdded = productionItems.some(item => item.productId === product.id)
                     const totalStock = Object.values(product.warehouseStock || {}).reduce((sum, s) => sum + (s || 0), 0)
@@ -792,27 +798,27 @@ export default function Production() {
                         key={product.id}
                         onClick={() => addToProduction(product)}
                         disabled={alreadyAdded}
-                        className={`text-left border rounded-xl overflow-hidden transition-all ${
+                        className={`text-left border rounded-lg overflow-hidden transition-all ${
                           alreadyAdded
                             ? 'opacity-50 cursor-not-allowed border-gray-200'
-                            : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
+                            : 'border-gray-200 hover:border-primary-500 hover:shadow-sm'
                         }`}
                       >
-                        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+                        <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center relative">
                           {product.imageUrl ? (
                             <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                           ) : (
-                            <Package className="w-8 h-8 text-gray-300" />
+                            <Package className="w-6 h-6 text-gray-300" />
                           )}
                           {alreadyAdded && (
                             <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                              <Badge variant="info" className="text-xs">Agregado</Badge>
+                              <Badge variant="info" className="text-[10px]">Agregado</Badge>
                             </div>
                           )}
                         </div>
-                        <div className="p-2">
+                        <div className="p-1.5">
                           <p className="font-medium text-xs text-gray-900 line-clamp-2 leading-tight">{product.name}</p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">Stock: {totalStock} {product.unit || 'und'}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">Stock: {totalStock} {product.unit || 'und'}</p>
                         </div>
                       </button>
                     )
