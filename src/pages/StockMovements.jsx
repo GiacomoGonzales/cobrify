@@ -411,6 +411,35 @@ export default function StockMovements() {
         bgColor: 'bg-orange-50',
         variant: 'warning',
       },
+      // Antes estos tipos no tenían etiqueta y caían al fallback "Ajuste" (engañoso).
+      void_return: {
+        label: 'Devolución por anulación',
+        icon: ArrowUpCircle,
+        color: 'text-green-600',
+        bgColor: 'bg-green-50',
+        variant: 'success',
+      },
+      production_reversal: {
+        label: 'Reversión de producción',
+        icon: Cog,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50',
+        variant: 'warning',
+      },
+      purchase_void: {
+        label: 'Anulación de compra',
+        icon: ArrowDownCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
+      purchase_delete: {
+        label: 'Anulación de compra',
+        icon: ArrowDownCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
     }
 
     return types[type] || types.adjustment

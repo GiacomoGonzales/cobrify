@@ -742,14 +742,17 @@ export const restoreIngredients = async (businessId, ingredients, warehouseId = 
       // Movimiento de stock
       const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
       batch.set(doc(movementsRef), {
+        // Insumo crudo → ingredientId; producto-como-insumo → productId. Antes se fijaba
+        // SIEMPRE productId (incluso a insumos crudos), ensuciando la trazabilidad.
         ...(isProduct ? { productId: ingredient.ingredientId } : { ingredientId: ingredient.ingredientId }),
-        productId: ingredient.ingredientId,
         productName: ingredient.ingredientName,
         type: 'void_return',
         quantity: quantityToRestore,
         unit: isProduct ? 'unidades' : (data.purchaseUnit || ingredient.unit),
         warehouseId: effectiveWarehouseId || null,
         reason: 'Anulación de venta - restauración de insumo',
+        beforeStock: currentStock,
+        afterStock: newStock,
         createdAt: Timestamp.now()
       })
     }
@@ -865,7 +868,9 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
           ingredientId: purchaseData.ingredientId,
           ingredientName: purchaseData.ingredientName,
           type: 'purchase_delete',
-          quantity: quantityToRevert,
+          // Negativo: la reversión RESTA stock (mismo signo que las demás salidas). Antes
+          // era positivo, inconsistente con la convención (quantity = cambio de stock).
+          quantity: -quantityToRevert,
           unit: currentData.purchaseUnit,
           warehouseId: effRevertWarehouse || null,
           reason: `Eliminación de compra - ${purchaseData.supplier || 'Sin proveedor'}`,
@@ -1038,7 +1043,9 @@ export const adjustStock = async (businessId, ingredientId, ingredientName, newS
       ingredientId,
       ingredientName,
       type: 'adjustment',
-      quantity: Math.abs(newStock - beforeStock),
+      // Signo conservado (antes Math.abs perdía si el ajuste subía o bajaba el stock).
+      // NOTA: adjustStock hoy no se llama desde ninguna parte (código muerto reservado).
+      quantity: newStock - beforeStock,
       unit: currentData.purchaseUnit,
       warehouseId: warehouseId || null,
       reason: reason || 'Ajuste manual de inventario',

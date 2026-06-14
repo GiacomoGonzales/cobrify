@@ -5986,6 +5986,8 @@ export default function POS() {
                     invoiceNumber: bgNumberResult?.number || '',
                     documentType: bgDocumentType,
                     allowNegativeStock: !!companySettings?.allowNegativeStock,
+                    // Sin esto el servidor grababa los movimientos de venta con userId vacío.
+                    userId: bgUserUid || '',
                     items: _itemsPayload,
                   })
                   // Actualizar la factura con el desglose de lotes devuelto por el servidor

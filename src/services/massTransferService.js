@@ -75,7 +75,9 @@ export const createMassTransfer = async (businessId, transferData) => {
         batchExpiration: item.batchExpiration || null,
         variantSku: item.variantSku || null,
         variantLabel: item.variantLabel || null,
-        selectedSerials: item.selectedSerials || [],
+        // El modal manda las series en `serialNumbers`; antes se leía `selectedSerials`
+        // (undefined) → el doc guardaba siempre [] (no quedaba qué series se movieron).
+        selectedSerials: item.serialNumbers || item.selectedSerials || [],
         isIngredient: item.isIngredient || false,
       })),
       totalItems,

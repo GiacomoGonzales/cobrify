@@ -219,6 +219,11 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
     }
 
     const recipe = recipeResult.data
+    // Receta sin lista de ingredientes: nada que validar. Antes el for sobre `undefined`
+    // lanzaba excepción y el POS lo interpretaba como "hay stock".
+    if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
+      return { success: true, hasStock: true, missingIngredients: [] }
+    }
     const missingIngredients = []
 
     for (const ingredient of recipe.ingredients) {
