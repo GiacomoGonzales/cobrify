@@ -11,6 +11,7 @@ import {
   provisionStores,
   getIntegrationStatus,
   deprovisionStores,
+  getClientIdFromToken,
 } from '../src/services/rappiApi.js'
 import {
   generateCodeVerifier,
@@ -55,7 +56,8 @@ const SELF_ONBOARDING_SECRETS = [
 const COMMON_OPTS = { region: 'us-central1', cors: true }
 
 function getEnv(input) {
-  return input === 'production_pe' ? 'production_pe' : 'sandbox'
+  // Producción por defecto; solo cae a sandbox si se pide explícitamente.
+  return input === 'sandbox' ? 'sandbox' : 'production_pe'
 }
 
 async function assertBusinessAccess(db, auth, businessId) {
@@ -235,16 +237,9 @@ export const rappiWebhook = onRequest(
     }
 
     const signatureHeader = req.headers['rappi-signature'] || req.headers['Rappi-Signature']
-    const secret = RAPPI_WEBHOOK_SECRET.value()
 
     // req.rawBody es provisto por Firebase Functions cuando hay payload
     const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {})
-
-    const valid = verifyRappiSignature({ rawBody, header: signatureHeader, secret })
-    if (!valid) {
-      console.warn('rappiWebhook: firma HMAC inválida')
-      return res.status(401).json({ error: 'invalid_signature' })
-    }
 
     let body
     try {
@@ -258,24 +253,62 @@ export const rappiWebhook = onRequest(
     try {
       const db = getFirestore()
 
-      // Log de auditoría — cualquier evento queda registrado
+      // PING: health-check de Rappi. Responder OK siempre (sin verificación estricta).
+      if (eventType === 'PING') {
+        await db.collection('rappiWebhookEvents').add({
+          event: 'PING', payload: body, receivedAt: FieldValue.serverTimestamp(),
+        }).catch(() => {})
+        return res.status(200).json({ status: 'OK' })
+      }
+
+      // ── Verificación HMAC multi-tenant ──
+      // El secret puede ser el del negocio (rappiConfig.webhookSecret, ubicado por storeId)
+      // o el secret global RAPPI_WEBHOOK_SECRET (si está configurado). Probamos ambos.
+      const storeId = extractStoreId(body, eventType)
+      const biz = storeId ? await findBusinessByStoreId(db, storeId) : null
+      const candidateSecrets = []
+      if (biz?.data?.rappiConfig?.webhookSecret) candidateSecrets.push(biz.data.rappiConfig.webhookSecret)
+      const envSecret = RAPPI_WEBHOOK_SECRET.value()
+      if (envSecret) candidateSecrets.push(envSecret)
+
+      const signatureValid = candidateSecrets.length > 0 &&
+        candidateSecrets.some(s => verifyRappiSignature({ rawBody, header: signatureHeader, secret: s }))
+
+      // Log de auditoría — TODO evento queda registrado (con el resultado de la firma)
       await db.collection('rappiWebhookEvents').add({
         event: eventType || 'UNKNOWN',
         payload: body,
+        storeId: storeId || null,
+        signatureValid,
+        hadSecret: candidateSecrets.length > 0,
         receivedAt: FieldValue.serverTimestamp(),
       })
 
-      if (eventType === 'PING') {
-        return res.status(200).json({ status: 'OK' })
+      // Si hay secret configurado y la firma NO valida, rechazamos (posible spoofing).
+      if (candidateSecrets.length > 0 && !signatureValid) {
+        console.warn(`rappiWebhook: firma HMAC inválida (event=${eventType}, storeId=${storeId})`)
+        return res.status(401).json({ error: 'invalid_signature' })
       }
+      // Si NO hay secret configurado, no podemos verificar: procesamos igual para no perder
+      // pedidos, pero queda marcado signatureValid=false en el log.
 
       if (eventType === 'STORE_PROVISIONING_STATUS') {
         await handleStoreProvisioningStatus(db, body)
         return res.status(200).json({ ok: true })
       }
 
-      // Otros eventos (NEW_ORDER, ORDER_*, MENU_*, STORE_CONNECTIVITY, ORDER_RT_TRACKING)
-      // se loggean pero no se procesan acá — los maneja el resto del pipeline.
+      if (eventType === 'NEW_ORDER') {
+        const result = await handleNewOrder(db, body)
+        return res.status(200).json({ ok: true, ...result })
+      }
+
+      if (eventType === 'ORDER_EVENT_CANCEL') {
+        const result = await handleOrderCancel(db, body)
+        return res.status(200).json({ ok: true, ...result })
+      }
+
+      // Otros eventos (ORDER_OTHER_EVENT, MENU_*, STORE_CONNECTIVITY, ORDER_RT_TRACKING)
+      // se loggean (arriba) pero aún no se procesan acá.
       return res.status(200).json({ ok: true, ignored: true })
     } catch (err) {
       console.error('rappiWebhook error:', err)
@@ -335,6 +368,151 @@ async function handleStoreProvisioningStatus(db, body) {
   }
 }
 
+// ─── Ingestión de pedidos (NEW_ORDER) ────────────────────────────────────
+
+function firstDefined(...vals) {
+  for (const v of vals) if (v !== undefined && v !== null && v !== '') return v
+  return undefined
+}
+
+/**
+ * Extrae el storeId del payload de un evento de webhook según su tipo.
+ * STORE_PROVISIONING_STATUS lo trae dentro de results[]; los eventos de pedido
+ * a nivel raíz / dentro de order.
+ */
+function extractStoreId(body, eventType) {
+  if (eventType === 'STORE_PROVISIONING_STATUS') {
+    const r = Array.isArray(body?.results) ? body.results[0] : null
+    return r ? String(firstDefined(r.storeId, r.store_id, '') || '') : ''
+  }
+  const order = body?.order || body?.data || body
+  return String(firstDefined(order?.store_id, order?.storeId, body?.store_id, body?.storeId, '') || '')
+}
+
+/**
+ * Encuentra el businessId cuyo rappiConfig.storeId coincide con el storeId del payload.
+ * Devuelve { ref, data } o null.
+ */
+async function findBusinessByStoreId(db, storeId) {
+  if (!storeId) return null
+  const snap = await db.collection('businesses')
+    .where('rappiConfig.storeId', '==', String(storeId))
+    .limit(1)
+    .get()
+  if (snap.empty) return null
+  return { ref: snap.docs[0].ref, id: snap.docs[0].id, data: snap.docs[0].data() }
+}
+
+/**
+ * Mapea un pedido de Rappi (NEW_ORDER) al modelo de orden de Cobrify (modo restaurante).
+ * Es BEST-EFFORT: los nombres exactos de los campos de Rappi pueden variar, por eso
+ * siempre se guarda `rappiRaw` con el payload original para refinar el mapeo con datos reales.
+ */
+function mapRappiOrder(body) {
+  const order = body?.order || body?.data || body
+  const customer = order?.client || order?.customer || order?.user || {}
+  const itemsRaw = Array.isArray(order?.items) ? order.items
+    : Array.isArray(order?.products) ? order.products
+    : Array.isArray(body?.items) ? body.items : []
+
+  const items = itemsRaw.map((it) => ({
+    name: firstDefined(it?.name, it?.product_name, it?.title, 'Producto Rappi') || 'Producto Rappi',
+    sku: String(firstDefined(it?.sku, it?.integration_id, it?.external_id, '') || ''),
+    rappiId: String(firstDefined(it?.id, it?.rappi_id, it?.product_id, '') || ''),
+    productId: '',
+    price: Number(firstDefined(it?.unit_price, it?.price, it?.total, 0)) || 0,
+    quantity: Number(firstDefined(it?.quantity, it?.units, it?.qty, 1)) || 1,
+    notes: firstDefined(it?.comments, it?.notes, '') || '',
+  }))
+
+  const total = Number(firstDefined(order?.total_value, order?.total, order?.amount, body?.total, 0)) || 0
+
+  return {
+    source: 'rappi',
+    status: 'pending',
+    rappiOrderId: String(firstDefined(order?.order_id, order?.id, order?.reference, body?.order_id, body?.id, '') || ''),
+    rappiStoreId: String(firstDefined(order?.store_id, order?.storeId, body?.store_id, '') || ''),
+    customerName: firstDefined(customer?.name, customer?.first_name, order?.customer_name, '') || '',
+    customerPhone: String(firstDefined(customer?.phone, customer?.phone_number, '') || ''),
+    customerEmail: firstDefined(customer?.email, '') || '',
+    customerAddress: firstDefined(order?.address?.address, order?.delivery_address, customer?.address, '') || '',
+    customerDocumentType: firstDefined(customer?.document_type, '') || '',
+    customerDocumentNumber: String(firstDefined(customer?.document, customer?.document_number, '') || ''),
+    items,
+    subtotal: Number(firstDefined(order?.subtotal, 0)) || null,
+    igv: Number(firstDefined(order?.taxes, order?.tax, 0)) || null,
+    total,
+    paymentMethod: 'rappi_pay',
+    notes: firstDefined(order?.comments, order?.notes, '') || '',
+  }
+}
+
+/**
+ * Crea (o actualiza) la orden Rappi en Firestore, idempotente por rappiOrderId.
+ * Si no se encuentra el negocio por storeId, guarda el payload en rappiUnmatchedOrders
+ * para no perder nada.
+ */
+async function handleNewOrder(db, body) {
+  const mapped = mapRappiOrder(body)
+  const storeId = mapped.rappiStoreId
+  const biz = await findBusinessByStoreId(db, storeId)
+
+  if (!biz) {
+    await db.collection('rappiUnmatchedOrders').add({
+      storeId: storeId || null,
+      rappiOrderId: mapped.rappiOrderId || null,
+      payload: body,
+      receivedAt: FieldValue.serverTimestamp(),
+    })
+    console.warn(`rappiWebhook NEW_ORDER: sin businessId para storeId=${storeId}`)
+    return { matched: false }
+  }
+
+  const ordersRef = biz.ref.collection('orders')
+
+  // Idempotencia: si ya existe un pedido con ese rappiOrderId, no duplicar.
+  if (mapped.rappiOrderId) {
+    const existing = await ordersRef.where('rappiOrderId', '==', mapped.rappiOrderId).limit(1).get()
+    if (!existing.empty) {
+      return { matched: true, businessId: biz.id, duplicate: true, orderId: existing.docs[0].id }
+    }
+  }
+
+  const branchId = biz.data?.rappiConfig?.branchId || null
+  const docRef = await ordersRef.add({
+    ...mapped,
+    branchId,
+    rappiRaw: body,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  return { matched: true, businessId: biz.id, orderId: docRef.id }
+}
+
+/**
+ * Marca una orden Rappi como cancelada (evento ORDER_EVENT_CANCEL).
+ */
+async function handleOrderCancel(db, body) {
+  const order = body?.order || body?.data || body
+  const rappiOrderId = String(firstDefined(order?.order_id, order?.id, body?.order_id, body?.id, '') || '')
+  const storeId = String(firstDefined(order?.store_id, body?.store_id, '') || '')
+  if (!rappiOrderId) return { matched: false }
+
+  const biz = await findBusinessByStoreId(db, storeId)
+  if (!biz) return { matched: false }
+
+  const existing = await biz.ref.collection('orders')
+    .where('rappiOrderId', '==', rappiOrderId).limit(1).get()
+  if (existing.empty) return { matched: true, businessId: biz.id, found: false }
+
+  await existing.docs[0].ref.set({
+    status: 'cancelled',
+    cancelledAt: FieldValue.serverTimestamp(),
+    rappiCancelPayload: body,
+  }, { merge: true })
+  return { matched: true, businessId: biz.id, orderId: existing.docs[0].id }
+}
+
 // ─── 4. Registrar webhook (una sola vez por instancia) ────────────────────
 
 /**
@@ -379,7 +557,10 @@ export const rappiRegisterWebhook = onCall(
     if (!webhookUrl) throw new HttpsError('invalid-argument', 'url requerido (endpoint público de rappiWebhook)')
 
     const integratorToken = await getIntegratorToken(env)
-    const clientId = RAPPI_INTEGRATOR_CLIENT_ID.value()
+    // El {clientId} del path es el claim `azp` del JWT (no el client_id credencial
+    // sin más). Con Auth0 suelen coincidir, pero lo derivamos del token para evitar
+    // el 404 "not found by holder" si difieren.
+    const clientId = getClientIdFromToken(integratorToken, RAPPI_INTEGRATOR_CLIENT_ID.value())
     const secret = RAPPI_WEBHOOK_SECRET.value()
 
     try {
@@ -391,7 +572,7 @@ export const rappiRegisterWebhook = onCall(
         url: webhookUrl,
         secret,
       })
-      return { ok: true, data }
+      return { ok: true, data, clientIdUsed: clientId }
     } catch (err) {
       return {
         ok: false,
@@ -420,10 +601,10 @@ export const rappiListWebhooks = onCall(
 
     const env = getEnv(request.data?.env)
     const integratorToken = await getIntegratorToken(env)
-    const clientId = RAPPI_INTEGRATOR_CLIENT_ID.value()
+    const clientId = getClientIdFromToken(integratorToken, RAPPI_INTEGRATOR_CLIENT_ID.value())
     try {
       const data = await listWebhooks({ env, integratorToken, clientId })
-      return { ok: true, data }
+      return { ok: true, data, clientIdUsed: clientId }
     } catch (err) {
       return {
         ok: false,

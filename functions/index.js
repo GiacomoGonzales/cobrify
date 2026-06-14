@@ -8,7 +8,7 @@ import { getMessaging } from 'firebase-admin/messaging'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
 import axios from 'axios'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision, emitirGuiaRemisionTransportista } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
@@ -16,7 +16,7 @@ import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
-import { loginRappi, getStoreOrders, getOrdersV2 } from './src/services/rappiApi.js'
+import { loginRappi, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload } from './src/services/rappiApi.js'
 import {
   isCloudinaryUrl,
   isAlreadyOptimized,
@@ -9351,7 +9351,11 @@ export const testRappiConnection = onCall(
     }
 
     const businessId = request.data?.businessId
-    const env = request.data?.env === 'production_pe' ? 'production_pe' : 'sandbox'
+    // Producción por defecto; solo sandbox si se pide explícitamente.
+    const env = request.data?.env === 'sandbox' ? 'sandbox' : 'production_pe'
+    // La lectura de pedidos consume el estado (READY→SENT) y solo se puede leer
+    // una vez, así que NO se ejecuta salvo que se pida explícitamente.
+    const checkOrders = request.data?.checkOrders === true
     if (!businessId) {
       throw new HttpsError('invalid-argument', 'businessId requerido')
     }
@@ -9402,41 +9406,150 @@ export const testRappiConnection = onCall(
         }
       }
 
-      // Probar ambas versiones de la API en paralelo
-      const [v1Result, v2Result] = await Promise.all([
-        getStoreOrders({ token, storeId: cfg.storeId, env })
-          .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
-          .catch(err => ({
-            ok: false,
-            status: err.response?.status,
-            message: err.message,
-            data: err.response?.data,
-          })),
-        getOrdersV2({ token, env })
-          .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
-          .catch(err => ({
-            ok: false,
-            status: err.response?.status,
-            message: err.message,
-            data: err.response?.data,
-          })),
+      // ── Diagnóstico del JWT: extraer el claim azp (= clientId del path de webhooks) ──
+      const claims = decodeJwtPayload(token) || {}
+      const azp = getClientIdFromToken(token, cfg.clientId)
+      const tokenInfo = {
+        azp: claims.azp || null,
+        aud: claims.aud || null,
+        iss: claims.iss || null,
+        exp: claims.exp || null,
+        matchesConfiguredClientId: !!claims.azp && claims.azp === cfg.clientId,
+      }
+
+      // ── Webhook de integrador (STORE_PROVISIONING_STATUS): GET (listar) + POST (registrar) ──
+      // Es idempotente (upsert) y NO inicia flujo de pedidos. Prueba justo la llamada que fallaba.
+      const webhookUrl = 'https://us-central1-cobrify-395fe.cloudfunctions.net/rappiWebhook'
+      let webhookSecret = cfg.webhookSecret
+      if (!webhookSecret) {
+        webhookSecret = randomBytes(24).toString('hex')
+        await businessDoc.ref.set({
+          rappiConfig: { webhookSecret },
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
+      }
+
+      const safeCall = (p) => p
+        .then(data => ({ ok: true, data }))
+        .catch(err => ({ ok: false, status: err.response?.status, message: err.message, data: err.response?.data }))
+
+      const [webhookList, webhookRegister, newOrderWebhook] = await Promise.all([
+        safeCall(listWebhooks({ env, integratorToken: token, clientId: azp })),
+        safeCall(registerWebhook({ env, integratorToken: token, clientId: azp, event: 'STORE_PROVISIONING_STATUS', url: webhookUrl, secret: webhookSecret })),
+        safeCall(listStoreWebhook({ env, integratorToken: token, event: 'NEW_ORDER' })),
       ])
+
+      // ── Lectura de pedidos: solo si checkOrders=true (consume estado) ──
+      let v1Result = null
+      let v2Result = null
+      if (checkOrders) {
+        ;[v1Result, v2Result] = await Promise.all([
+          getStoreOrders({ token, storeId: cfg.storeId, env })
+            .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+            .catch(err => ({ ok: false, status: err.response?.status, message: err.message, data: err.response?.data })),
+          getOrdersV2({ token, env })
+            .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+            .catch(err => ({ ok: false, status: err.response?.status, message: err.message, data: err.response?.data })),
+        ])
+      }
 
       return {
         ok: true,
         env,
         storeId: cfg.storeId,
+        clientIdUsed: azp,
+        tokenInfo,
+        webhookList,
+        webhookRegister,
+        newOrderWebhook,
+        checkedOrders: checkOrders,
         v1: v1Result,
         v2: v2Result,
-        // Compat: el campo viejo
-        ordersCount: v1Result.ok ? v1Result.count : (v2Result.ok ? v2Result.count : 0),
-        sample: v1Result.ok && v1Result.sample?.length ? v1Result.sample : (v2Result.sample || []),
+        // Compat: campos viejos
+        ordersCount: v1Result?.ok ? v1Result.count : (v2Result?.ok ? v2Result.count : 0),
+        sample: v1Result?.ok && v1Result.sample?.length ? v1Result.sample : (v2Result?.sample || []),
       }
     } catch (err) {
       if (err instanceof HttpsError) throw err
       console.error('testRappiConnection error:', err)
       return { ok: false, step: 'unknown', message: err.message || String(err) }
     }
+  }
+)
+
+/**
+ * Activa la RECEPCIÓN DE PEDIDOS de Rappi: registra el webhook de nivel tienda
+ * para NEW_ORDER (y ORDER_EVENT_CANCEL) apuntando a `rappiWebhook`, usando las
+ * credenciales guardadas en `businesses/{id}.rappiConfig` (no requiere secrets).
+ *
+ * A partir de aquí, Rappi empieza a enviar los pedidos reales a nuestro endpoint.
+ */
+export const rappiEnableOrderReception = onCall(
+  { region: 'us-central1', cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Debes estar autenticado')
+    const businessId = request.data?.businessId
+    const env = request.data?.env === 'sandbox' ? 'sandbox' : 'production_pe'
+    if (!businessId) throw new HttpsError('invalid-argument', 'businessId requerido')
+
+    const db = getFirestore()
+    const businessDoc = await db.collection('businesses').doc(businessId).get()
+    if (!businessDoc.exists) return { ok: false, message: 'Business no existe' }
+
+    // Permiso: dueño o sub-usuario del negocio
+    const isOwner = request.auth.uid === businessId
+    if (!isOwner) {
+      const userDoc = await db.collection('users').doc(request.auth.uid).get()
+      if (!(userDoc.exists && userDoc.data()?.ownerId === businessId)) {
+        throw new HttpsError('permission-denied', 'Sin acceso a este negocio')
+      }
+    }
+
+    const cfg = businessDoc.data().rappiConfig
+    if (!cfg?.clientId || !cfg?.clientSecret || !cfg?.storeId) {
+      return { ok: false, message: 'Faltan credenciales (Client ID, Secret o Store ID).' }
+    }
+
+    let token
+    try {
+      token = await loginRappi({ clientId: cfg.clientId, clientSecret: cfg.clientSecret, env })
+    } catch (err) {
+      return { ok: false, step: 'login', message: err.message, data: err.response?.data }
+    }
+
+    // Secret por-negocio (lo usa el handler para verificar la firma de cada pedido)
+    let webhookSecret = cfg.webhookSecret
+    if (!webhookSecret) {
+      webhookSecret = randomBytes(24).toString('hex')
+      await businessDoc.ref.set({
+        rappiConfig: { webhookSecret }, updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+
+    const webhookUrl = 'https://us-central1-cobrify-395fe.cloudfunctions.net/rappiWebhook'
+    const stores = [String(cfg.storeId)]
+    const results = {}
+    for (const event of ['NEW_ORDER', 'ORDER_EVENT_CANCEL']) {
+      try {
+        const data = await registerStoreWebhook({ env, integratorToken: token, event, url: webhookUrl, stores, secret: webhookSecret })
+        results[event] = { ok: true, data }
+      } catch (err) {
+        results[event] = { ok: false, status: err.response?.status, message: err.message, data: err.response?.data }
+      }
+    }
+
+    const newOrderOk = results.NEW_ORDER?.ok === true
+    if (newOrderOk) {
+      await businessDoc.ref.set({
+        rappiConfig: {
+          orderWebhookEnabled: true,
+          orderWebhookEnabledAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+
+    return { ok: newOrderOk, env, storeId: cfg.storeId, webhookUrl, results }
   }
 )
 

@@ -18,11 +18,23 @@
  */
 import axios from 'axios'
 
-const env = (process.argv[2] === 'production') ? 'production' : 'sandbox'
+// Producción por defecto; pasa "sandbox" como argumento para usar dev.
+const env = (process.argv[2] === 'sandbox') ? 'sandbox' : 'production'
 
 const BASE_URLS = {
   sandbox: 'https://microservices.dev.rappi.com',
   production: 'https://services.rappi.pe',
+}
+
+// Prefijo OBLIGATORIO de la Public API v2 (faltaba en la versión anterior → 404).
+const PUBLIC_API = '/api/v2/restaurants-integrations-public-api'
+
+// Lee el claim `azp` del JWT (= clientId que Rappi espera en el path del webhook).
+function azpFromToken(token, fallback) {
+  try {
+    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'))
+    return payload?.azp || payload?.client_id || fallback
+  } catch { return fallback }
 }
 
 const CLIENT_ID = process.env.RAPPI_INTEGRATOR_CLIENT_ID
@@ -65,11 +77,15 @@ async function main() {
     process.exit(1)
   }
 
+  // El clientId del path es el claim `azp` del JWT (no necesariamente el credencial).
+  const clientId = azpFromToken(token, CLIENT_ID)
+  console.log(`   azp (clientId del path): ${clientId.slice(0, 6)}…${clientId.slice(-4)}`)
+
   // 2. Registrar webhook
   console.log(`\n2️⃣  Registrando webhook ${EVENT}…`)
   try {
     const res = await axios.post(
-      `${base}/clients/${CLIENT_ID}/webhooks`,
+      `${base}${PUBLIC_API}/clients/${clientId}/webhooks`,
       { event: EVENT, url: WEBHOOK_URL, secret: WEBHOOK_SECRET },
       {
         headers: {
@@ -94,7 +110,7 @@ async function main() {
   console.log('\n3️⃣  Listando webhooks registrados…')
   try {
     const res = await axios.get(
-      `${base}/clients/${CLIENT_ID}/webhooks`,
+      `${base}${PUBLIC_API}/clients/${clientId}/webhooks`,
       { headers: { 'x-authorization': `Bearer ${token}` }, timeout: 15000 }
     )
     console.log('   ', JSON.stringify(res.data, null, 2))

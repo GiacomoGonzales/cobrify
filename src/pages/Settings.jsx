@@ -347,6 +347,7 @@ export default function Settings() {
   const [isSavingRappi, setIsSavingRappi] = useState(false)
   const [isTestingRappi, setIsTestingRappi] = useState(false)
   const [rappiTestResult, setRappiTestResult] = useState(null)
+  const [isEnablingRappiOrders, setIsEnablingRappiOrders] = useState(false)
   // Self-Onboarding (OAuth merchant + provisioning)
   const [isConnectingRappiOAuth, setIsConnectingRappiOAuth] = useState(false)
   const [isProvisioningRappiStore, setIsProvisioningRappiStore] = useState(false)
@@ -9393,7 +9394,7 @@ export default function Settings() {
                       setIsConnectingRappiOAuth(true)
                       try {
                         const startFn = httpsCallable(functions, 'rappiOAuthStart')
-                        const result = await startFn({ businessId: getBusinessId(), env: 'sandbox' })
+                        const result = await startFn({ businessId: getBusinessId(), env: 'production_pe' })
                         const oauthUrl = result.data?.url
                         if (!oauthUrl) throw new Error('No se recibió URL de OAuth')
 
@@ -9685,6 +9686,52 @@ export default function Settings() {
                         <CheckCircle className="w-4 h-4" />
                         Conexión exitosa con Rappi {rappiTestResult.env === 'production_pe' ? '(Producción)' : '(Sandbox)'} · Store <strong>{rappiTestResult.storeId}</strong>
                       </div>
+
+                      {/* azp del token */}
+                      {rappiTestResult.tokenInfo && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">Identidad del token (azp)</div>
+                          <p>azp: <code>{rappiTestResult.clientIdUsed || '—'}</code></p>
+                          <p>{rappiTestResult.tokenInfo.matchesConfiguredClientId
+                            ? '✓ Coincide con el Client ID configurado'
+                            : '⚠ El azp del token NO coincide con el Client ID que pegaste (se usa el azp para el webhook)'}</p>
+                        </div>
+                      )}
+
+                      {/* Registro del webhook de integrador (la llamada que daba 404) */}
+                      {rappiTestResult.webhookRegister && (
+                        <div className={`text-xs border rounded p-2 ${rappiTestResult.webhookRegister.ok ? 'border-emerald-300/50 bg-white/40' : 'border-red-300 bg-red-50/60 text-red-900'}`}>
+                          <div className="font-medium mb-0.5">Webhook STORE_PROVISIONING_STATUS (registro)</div>
+                          {rappiTestResult.webhookRegister.ok ? (
+                            <p>✓ Registrado/actualizado correctamente (el 404 "not found by holder" quedó resuelto)</p>
+                          ) : (
+                            <>
+                              <p>✗ HTTP {rappiTestResult.webhookRegister.status || '?'} · {rappiTestResult.webhookRegister.message}</p>
+                              {rappiTestResult.webhookRegister.data && (
+                                <details className="mt-1">
+                                  <summary className="cursor-pointer">Cuerpo del error de Rappi</summary>
+                                  <pre className="mt-1 bg-white/60 p-2 rounded overflow-auto max-h-48">
+{JSON.stringify(rappiTestResult.webhookRegister.data, null, 2)}
+                                  </pre>
+                                </details>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Webhook de pedidos (NEW_ORDER) */}
+                      {rappiTestResult.newOrderWebhook && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">Webhook de pedidos (NEW_ORDER)</div>
+                          {rappiTestResult.newOrderWebhook.ok ? (
+                            <p>✓ Configurado — Rappi enviará los pedidos a Cobrify</p>
+                          ) : (
+                            <p>Aún no configurado (HTTP {rappiTestResult.newOrderWebhook.status || '?'}). Usa el botón "Activar recepción de pedidos".</p>
+                          )}
+                        </div>
+                      )}
+
                       {rappiTestResult.v1 && (
                         <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
                           <div className="font-medium mb-0.5">
@@ -9765,7 +9812,7 @@ export default function Settings() {
                       }, { merge: true })
 
                       const testFn = httpsCallable(functions, 'testRappiConnection')
-                      const result = await testFn({ businessId: getBusinessId(), env: 'sandbox' })
+                      const result = await testFn({ businessId: getBusinessId(), env: 'production_pe' })
                       setRappiTestResult(result.data)
                       if (result.data?.ok) {
                         toast.success('Conexión con Rappi OK')
@@ -9792,6 +9839,48 @@ export default function Settings() {
                       <Wifi className="w-4 h-4 mr-2" />
                       Probar conexión
                     </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setIsEnablingRappiOrders(true)
+                    try {
+                      // Guardar primero para asegurar credenciales actuales
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+
+                      const fn = httpsCallable(functions, 'rappiEnableOrderReception')
+                      const result = await fn({ businessId: getBusinessId(), env: 'production_pe' })
+                      if (result.data?.ok) {
+                        toast.success('Recepción de pedidos activada — Rappi enviará los pedidos a Cobrify')
+                        if (refreshBusinessSettings) refreshBusinessSettings()
+                      } else {
+                        const ne = result.data?.results?.NEW_ORDER
+                        toast.error('No se pudo activar: ' + (ne?.message || result.data?.message || 'ver consola'))
+                        console.log('rappiEnableOrderReception:', result.data)
+                      }
+                    } catch (err) {
+                      console.error('Error activando recepción Rappi:', err)
+                      toast.error('Error: ' + err.message)
+                    } finally {
+                      setIsEnablingRappiOrders(false)
+                    }
+                  }}
+                  disabled={isEnablingRappiOrders || !rappiClientId || !rappiClientSecret || !rappiStoreId}
+                >
+                  {isEnablingRappiOrders ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Activando...</>
+                  ) : (
+                    <><Bike className="w-4 h-4 mr-2" />Activar recepción de pedidos</>
                   )}
                 </Button>
                 <Button
