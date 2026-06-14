@@ -1843,6 +1843,9 @@ export default function CreatePurchase() {
             invoiceDocType: invoiceDocType || 'factura',
             purchaseDate: parseLocalDate(invoiceDate),
             warehouseId: selectedWarehouse?.id || null,
+            // Vincular a la compra principal para poder revertir el stock del insumo si
+            // se elimina la compra (compra mixta productos+insumos).
+            relatedPurchaseId: resultId || null,
           })
         })
 

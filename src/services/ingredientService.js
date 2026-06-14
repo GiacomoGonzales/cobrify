@@ -13,6 +13,7 @@ import {
   increment
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 
 /**
  * Helper: Actualizar stock de ingrediente en un almacén específico
@@ -482,6 +483,8 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         }
 
         const productData = productDoc.data()
+        // Respetar productos que no controlan stock (simétrico con la rama de ingrediente crudo).
+        if (productData.trackStock === false) continue
         const currentStock = productData.stock ?? productData.currentStock ?? 0
         const quantityToDeduct = ingredient.quantity
         let effectiveWarehouseId = warehouseId || ingredient.warehouseId
@@ -530,6 +533,22 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           updateData.warehouseStocks = updatedWarehouseStocks
         }
 
+        // Producto-como-insumo con LOTES: descontar también de batches[] (FEFO) para no
+        // descuadrar el detalle por lote respecto al total (igual que la venta directa del
+        // producto). Series: no se marcan vendidas acá (un insumo no selecciona serie) —
+        // limitación conocida para productos serializados usados como insumo.
+        let consumedLot = null
+        if (productData.trackExpiration && Array.isArray(productData.batches) && productData.batches.length > 0) {
+          const result = computeBatchDeduction(productData, {}, effectiveWarehouseId, quantityToDeduct)
+          if (result) {
+            updateData.batches = result.updatedBatches
+            const meta = computeProductBatchMetadata(result.updatedBatches)
+            updateData.batchNumber = meta.batchNumber
+            updateData.expirationDate = meta.expirationDate
+            consumedLot = result.batchBreakdown?.[0]?.lotNumber || null
+          }
+        }
+
         batch.update(productRef, updateData)
 
         // Crear movimiento de stock para el producto
@@ -546,6 +565,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           warehouseId: effectiveWarehouseId || null,
           reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
           relatedSaleId: relatedSaleId,
+          ...(consumedLot && { batchNumber: consumedLot }),
           beforeStock: currentStock,
           afterStock: newStock,
           createdAt: Timestamp.now()
@@ -857,6 +877,29 @@ export const deleteIngredientPurchase = async (businessId, purchaseId) => {
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar compra de ingrediente:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Revierte todas las compras de insumo asociadas a una compra principal (mixta).
+ * Una compra de CreatePurchase con ítems de insumo crea ingredientPurchases vinculadas
+ * por `relatedPurchaseId`; al eliminar la compra principal hay que revertir su stock.
+ */
+export const deleteIngredientPurchasesByRelated = async (businessId, relatedPurchaseId) => {
+  try {
+    if (!relatedPurchaseId) return { success: true, count: 0 }
+    const purchasesRef = collection(db, 'businesses', businessId, 'ingredientPurchases')
+    const q = query(purchasesRef, where('relatedPurchaseId', '==', relatedPurchaseId))
+    const snap = await getDocs(q)
+    let count = 0
+    for (const d of snap.docs) {
+      const res = await deleteIngredientPurchase(businessId, d.id)
+      if (res.success) count++
+    }
+    return { success: true, count }
+  } catch (error) {
+    console.error('Error revirtiendo compras de insumo relacionadas:', error)
     return { success: false, error: error.message }
   }
 }

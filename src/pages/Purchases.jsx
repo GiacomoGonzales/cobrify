@@ -43,7 +43,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction, getCompanySettings } from '@/services/firestoreService'
-import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
+import { getPurchases as getIngredientPurchases, deleteIngredientPurchase, deleteIngredientPurchasesByRelated } from '@/services/ingredientService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 /**
@@ -548,6 +548,15 @@ export default function Purchases() {
             console.warn(`No se pudo revertir stock para producto ${item.productId}:`, stockError)
           }
         }
+      }
+
+      // 1b. Compra MIXTA: revertir también el stock de los insumos (compras de insumo
+      // vinculadas por relatedPurchaseId). Antes los ítems de insumo se ignoraban al
+      // eliminar → su stock quedaba inflado.
+      try {
+        await deleteIngredientPurchasesByRelated(businessId, deletingPurchase.id)
+      } catch (ingErr) {
+        console.warn('No se pudo revertir compras de insumo vinculadas:', ingErr)
       }
 
       // 2. Eliminar la compra
