@@ -1626,7 +1626,14 @@ export default function CreatePurchase() {
           // un nuevo registro en vez de reusar el slot.
           const itemsWithBatch = grouped.items.filter(item => item.batchNumber || item.expirationDate)
           if (itemsWithBatch.length > 0) {
-            const updatedBatches = [...(product.batches || [])]
+            // #6: en EDICIÓN, quitar primero los lotes que esta MISMA compra había aportado
+            // antes de re-mergear las cantidades actuales (revert-then-apply). Antes se
+            // re-sumaban completas mientras el stock se ajustaba por diferencia → batches[]
+            // quedaba inflado vs warehouseStocks. En creación no cambia (no hay lotes previos
+            // de esta compra). El stock se ajusta por diferencia arriba, consistente con esto.
+            const updatedBatches = isEditMode
+              ? (product.batches || []).filter(b => b.purchaseId !== purchaseId)
+              : [...(product.batches || [])]
             const targetWarehouseId = selectedWarehouse?.id || null
             const normalizeBn = (s) => String(s || '').trim().toLowerCase()
             const expDateEqual = (a, b) => {

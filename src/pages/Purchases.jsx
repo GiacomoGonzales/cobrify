@@ -354,6 +354,9 @@ export default function Purchases() {
         // Se aplica por productId aunque tenga múltiples líneas — el filtro por
         // purchaseId es idempotente así que pasarlo múltiples veces no rompe nada.
         const productCleanups = new Map() // productId -> { batches, serials, expirationDate, batchNumber, trackExpiration }
+        // #7: cuánto stock total revertir por producto cuando esta compra aportó lotes
+        // (se guarda APARTE de productCleanups para no contaminar los extraUpdates del producto).
+        const lotRevertByProduct = new Map() // productId -> { purchaseAddedLots, removedLotQty }
         for (const item of deletingPurchase.items) {
           if (item.itemType === 'ingredient' || !item.productId) continue
           if (productCleanups.has(item.productId)) continue
@@ -380,6 +383,15 @@ export default function Purchases() {
           })
 
           const cleanup = { batches: remainingBatches, serials: remainingSerials }
+
+          // #7: si esta compra aportó lotes al producto, el stock total debe bajar por la
+          // cantidad REMANENTE de esos lotes (no por la cantidad de compra completa, que
+          // doble-contaría lo ya vendido). Si no aportó lotes, se usa el flujo normal.
+          const removedLots = allBatches.filter(b => b.purchaseId === deletingPurchase.id)
+          lotRevertByProduct.set(item.productId, {
+            purchaseAddedLots: removedLots.length > 0,
+            removedLotQty: removedLots.reduce((s, b) => s + (parseFloat(b.quantity) || 0), 0),
+          })
 
           // Recalcular el vencimiento/lote más próximo del producto
           const batchesWithExpiry = remainingBatches.filter(b => (b.quantity || 0) > 0 && (b.expirationDate || b.expiryDate))
@@ -424,6 +436,7 @@ export default function Purchases() {
           productCleanups.set(item.productId, cleanup)
         }
 
+        const lotProductsDone = new Set() // #7: productos cuyos lotes ya se revirtieron
         for (const item of deletingPurchase.items) {
           // Solo procesar productos (no ingredientes)
           if (item.itemType === 'ingredient') continue
@@ -440,6 +453,38 @@ export default function Purchases() {
             // Si el producto no controla stock, omitir
             if (productData.trackStock === false) {
               console.log(`Producto ${item.productName} no controla stock, omitiendo...`)
+              continue
+            }
+
+            // #7: producto con lotes de esta compra → revertir la cantidad REMANENTE de esos
+            // lotes UNA sola vez (no la cantidad de compra por ítem, que doble-contaría las
+            // ventas parciales). Mantiene total y batches[] consistentes.
+            const lotInfo = lotRevertByProduct.get(item.productId)
+            if (lotInfo?.purchaseAddedLots) {
+              if (lotProductsDone.has(item.productId)) continue
+              lotProductsDone.add(item.productId)
+              const variantSkuLot = item.variantSku || null
+              const extraUpdatesLot = productCleanups.get(item.productId) || {}
+              const qtyRevert = lotInfo.removedLotQty || 0
+              // Aplica la limpieza de lotes (extraUpdatesLot.batches) y baja el total por qtyRevert.
+              await updateProductStockTransaction(
+                businessId, item.productId, warehouseId, -qtyRevert, extraUpdatesLot, variantSkuLot
+              )
+              if (qtyRevert > 0) {
+                await createStockMovement(businessId, {
+                  productId: item.productId,
+                  warehouseId,
+                  type: 'purchase_void',
+                  quantity: -qtyRevert,
+                  reason: 'Anulación de compra',
+                  referenceType: 'purchase_void',
+                  referenceId: deletingPurchase.id,
+                  referenceNumber: deletingPurchase.invoiceNumber || 'S/N',
+                  userId: user.uid,
+                  ...(variantSkuLot && { variantSku: variantSkuLot }),
+                  notes: `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'} (lotes remanentes)`
+                })
+              }
               continue
             }
 
