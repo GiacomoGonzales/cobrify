@@ -12,6 +12,10 @@ import {
   Wrench,
   Trash2,
   Store,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  Tag,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -27,6 +31,18 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getRecipeByProductId } from '@/services/recipeService'
 import { getProductions, executeRecipeProduction, executeManualProduction, checkProductionReadiness, deleteProduction } from '@/services/productionService'
+
+// Helpers de jerarquía de categorías (mismo criterio que el POS).
+const getRootCategories = (categories) =>
+  categories.filter(cat => cat.parentId === null).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+const getSubcategories = (categories, parentId) =>
+  categories.filter(cat => cat.parentId === parentId).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+const getAllSubcategoryIds = (categories, parentId) => {
+  const direct = getSubcategories(categories, parentId)
+  let ids = direct.map(c => c.id)
+  direct.forEach(sub => { ids = [...ids, ...getAllSubcategoryIds(categories, sub.id)] })
+  return ids
+}
 
 export default function Production() {
   const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData } = useAppContext()
@@ -55,6 +71,7 @@ export default function Production() {
   const [productionItems, setProductionItems] = useState([]) // Array de { id, productId, name, code, quantity, mode, hasRecipe, recipeInfo, isCheckingRecipe }
   const [modalSearchTerm, setModalSearchTerm] = useState('')
   const [modalCategory, setModalCategory] = useState('all')
+  const [modalExpandedRoot, setModalExpandedRoot] = useState(null) // raíz cuya rama está expandida
   const [modalWarehouseId, setModalWarehouseId] = useState('')
   const [modalNotes, setModalNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -177,6 +194,7 @@ export default function Production() {
     setProductionItems([])
     setModalSearchTerm('')
     setModalCategory('all')
+    setModalExpandedRoot(null)
     setModalNotes('')
     // Auto-seleccionar almacén por defecto de la sucursal seleccionada en la página
     const branchWarehouses = warehouses.filter(w => {
@@ -192,6 +210,8 @@ export default function Production() {
     setShowModal(false)
     setProductionItems([])
     setModalSearchTerm('')
+    setModalCategory('all')
+    setModalExpandedRoot(null)
     setModalWarehouseId('')
     setModalNotes('')
   }
@@ -397,13 +417,14 @@ export default function Production() {
   // Productos filtrados para el grid de búsqueda en el modal
   const availableProducts = products.filter(p => p.type !== 'service')
 
-  // Categorías únicas para los chips del catálogo (estilo POS).
-  // El producto guarda el ID de categoría; mapeamos ID→nombre para el chip.
-  const categoryNameById = Object.fromEntries(categories.map(c => [c.id, c.name]))
-  const modalCategories = ['all', ...Array.from(new Set(availableProducts.map(p => p.category).filter(Boolean)))]
-
   const modalFilteredProducts = availableProducts.filter(p => {
-    if (modalCategory !== 'all' && p.category !== modalCategory) return false
+    // Filtro por categoría (incluye subcategorías cuando se elige una categoría padre).
+    if (modalCategory === 'sin-categoria') {
+      if (p.category) return false
+    } else if (modalCategory !== 'all') {
+      const subIds = getAllSubcategoryIds(categories, modalCategory)
+      if (p.category !== modalCategory && !subIds.includes(p.category)) return false
+    }
     if (!modalSearchTerm) return true
     const term = modalSearchTerm.toLowerCase()
     return p.name?.toLowerCase().includes(term) || p.code?.toLowerCase().includes(term)
@@ -762,21 +783,61 @@ export default function Production() {
                   autoFocus
                 />
               </div>
-              {modalCategories.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
-                  {modalCategories.map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setModalCategory(cat)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors ${
-                        modalCategory === cat
-                          ? 'bg-primary-600 text-white border-primary-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {cat === 'all' ? 'Todas' : (categoryNameById[cat] || cat)}
-                    </button>
-                  ))}
+              {categories.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setModalCategory('all'); setModalExpandedRoot(null) }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                      modalCategory === 'all' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" /> Todas
+                  </button>
+                  {getRootCategories(categories).map((category) => {
+                    const subcats = getSubcategories(categories, category.id)
+                    const hasSubs = subcats.length > 0
+                    const isExpanded = modalExpandedRoot === category.id
+                    return (
+                      <React.Fragment key={category.id}>
+                        <button
+                          onClick={() => {
+                            if (modalCategory === category.id && hasSubs) {
+                              setModalExpandedRoot(prev => prev === category.id ? null : category.id)
+                            } else {
+                              setModalCategory(category.id)
+                              setModalExpandedRoot(hasSubs ? category.id : null)
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                            modalCategory === category.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          <Folder className="w-3.5 h-3.5" />
+                          <span>{category.name}</span>
+                          {hasSubs && (isExpanded ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronRight className="w-3.5 h-3.5 opacity-70" />)}
+                        </button>
+                        {isExpanded && subcats.map((subcat) => (
+                          <button
+                            key={subcat.id}
+                            onClick={() => setModalCategory(subcat.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                              modalCategory === subcat.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <Folder className="w-3 h-3 inline mr-1" />└─ {subcat.name}
+                          </button>
+                        ))}
+                      </React.Fragment>
+                    )
+                  })}
+                  <button
+                    onClick={() => { setModalCategory('sin-categoria'); setModalExpandedRoot(null) }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      modalCategory === 'sin-categoria' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Sin categoría
+                  </button>
                 </div>
               )}
             </div>
@@ -804,7 +865,7 @@ export default function Production() {
                             : 'border-gray-200 hover:border-primary-500 hover:shadow-sm'
                         }`}
                       >
-                        <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center relative">
+                        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                           {product.imageUrl ? (
                             <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                           ) : (
