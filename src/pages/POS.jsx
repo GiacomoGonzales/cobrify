@@ -6334,7 +6334,11 @@ export default function POS() {
                 if (!recipe || !shouldDeductIngredients(recipe, businessMode)) continue
                 for (const ing of (recipe.ingredients || [])) {
                   const k = `${ing.ingredientId}|${ing.unit || ''}`
-                  const addQty = (ing.quantity || 0) * (item.quantity || 0)
+                  // Multiplicar por presentationFactor igual que el stock del producto y la
+                  // restauración al anular (InvoiceList): vender 1 "caja de 6" consume la
+                  // receta ×6. Antes el descuento omitía el factor → subdescontaba insumos
+                  // y al anular se restauraba de más (asimetría).
+                  const addQty = (ing.quantity || 0) * (item.quantity || 0) * (item.presentationFactor || 1)
                   const ex = _ingAgg.get(k)
                   if (ex) ex.quantity += addQty
                   else _ingAgg.set(k, { ...ing, quantity: addQty })

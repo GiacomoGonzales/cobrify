@@ -694,7 +694,7 @@ Gracias por tu preferencia.`
         // Devolver el stock de los productos
         if (voidingInvoice.items && voidingInvoice.items.length > 0) {
           // Importar funciones de manejo de stock
-          const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
+          const { updateWarehouseStock, createStockMovement, getStockMovements } = await import('@/services/warehouseService')
           const { getProducts, updateProduct } = await import('@/services/firestoreService')
 
           // Obtener productos actuales
@@ -704,7 +704,21 @@ Gracias por tu preferencia.`
           // Obtener warehouseId de la factura (si existe)
           const warehouseId = voidingInvoice.warehouseId || ''
 
-          for (const item of voidingInvoice.items) {
+          // Idempotencia: solo devolver stock/insumos si la venta original registró
+          // movimientos (mismo criterio que la anulación SUNAT). Evita doble restauración.
+          const movementsResult = await getStockMovements(businessId)
+          const allMovements = movementsResult.success ? movementsResult.data : []
+          const hasSaleMovements = allMovements.some(m =>
+            m.referenceId === voidingInvoice.id && m.type === 'sale'
+          )
+          if (!hasSaleMovements) {
+            toast.warning(
+              'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
+              8000
+            )
+          }
+
+          for (const item of hasSaleMovements ? voidingInvoice.items : []) {
             if (item.productId) {
               try {
                 // Buscar el producto actual
@@ -725,14 +739,27 @@ Gracias por tu preferencia.`
 
                 // Restaurar cantidad del lote si el item tenía lote
                 const batchExtraUpdates = {}
-                if (item.batchNumber && productData.batches?.length > 0) {
-                  const updatedBatches = productData.batches.map(b => {
+                if (item.batchNumber && (productData.batches?.length > 0 || productData.trackExpiration)) {
+                  let found = false
+                  const updatedBatches = (productData.batches || []).map(b => {
                     const bId = b.lotNumber || b.batchNumber || b.id
                     if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
+                      found = true
                       return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
                     }
                     return b
                   })
+                  if (!found) {
+                    // El lote se agotó y fue removido de batches[]: recrearlo para no
+                    // descuadrar el total vs el detalle por lote al anular.
+                    updatedBatches.push({
+                      batchNumber: item.batchNumber,
+                      lotNumber: item.batchNumber,
+                      quantity: quantityToRestore,
+                      warehouseId: warehouseId || null,
+                      ...(item.expirationDate ? { expirationDate: item.expirationDate } : {}),
+                    })
+                  }
                   batchExtraUpdates.batches = updatedBatches
 
                   // Actualizar fecha de vencimiento más próxima
@@ -796,7 +823,8 @@ Gracias por tu preferencia.`
             const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
             const { restoreIngredients } = await import('@/services/ingredientService')
 
-            for (const item of voidingInvoice.items) {
+            // Mismo guard de idempotencia que el stock de producto.
+            for (const item of hasSaleMovements ? voidingInvoice.items : []) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
@@ -977,14 +1005,27 @@ Gracias por tu preferencia.`
 
                 // Restaurar cantidad del lote si el item tenía lote
                 const batchExtraUpdates = {}
-                if (item.batchNumber && productData.batches?.length > 0) {
-                  const updatedBatches = productData.batches.map(b => {
+                if (item.batchNumber && (productData.batches?.length > 0 || productData.trackExpiration)) {
+                  let found = false
+                  const updatedBatches = (productData.batches || []).map(b => {
                     const bId = b.lotNumber || b.batchNumber || b.id
                     if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
+                      found = true
                       return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
                     }
                     return b
                   })
+                  if (!found) {
+                    // El lote se agotó y fue removido de batches[]: recrearlo para no
+                    // descuadrar el total vs el detalle por lote al anular.
+                    updatedBatches.push({
+                      batchNumber: item.batchNumber,
+                      lotNumber: item.batchNumber,
+                      quantity: quantityToRestore,
+                      warehouseId: warehouseId || null,
+                      ...(item.expirationDate ? { expirationDate: item.expirationDate } : {}),
+                    })
+                  }
                   batchExtraUpdates.batches = updatedBatches
 
                   const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
@@ -1043,7 +1084,9 @@ Gracias por tu preferencia.`
             const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
             const { restoreIngredients } = await import('@/services/ingredientService')
 
-            for (const item of voidingSunatInvoice.items) {
+            // Mismo guard de idempotencia que el stock de producto: si la venta original no
+            // registró movimientos, NO restaurar insumos (evita doble restauración / inflado).
+            for (const item of hasSaleMovements ? voidingSunatInvoice.items : []) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
