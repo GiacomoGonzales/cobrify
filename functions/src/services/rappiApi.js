@@ -23,9 +23,23 @@ import axios from 'axios'
  *   - Header `Authorization-Partners: Bearer <merchantToken>` (en self-onboarding)
  */
 
+// Rappi tiene DOS familias de dominio según el PREFIJO de la ruta:
+//
+// (1) Public API v2 (services.* / microservices.dev): rutas /api/v2/restaurants-
+//     integrations-public-api/... → webhooks, stores, orders v2.
+// (2) NEW v1 (api.* / api.dev): rutas /restaurants/{auth|orders|menu}/v1/... →
+//     LOGIN del integrador y orders v1 (take/reject/ready).
+//
+// El token se obtiene en la familia NEW (api.rappi.pe) y se usa en la Public API
+// v2 (services.rappi.pe) — su `audience` es la Public API.
 const BASE_URLS = {
   sandbox: 'https://microservices.dev.rappi.com',
   production_pe: 'https://services.rappi.pe',
+}
+
+const V1_BASE_URLS = {
+  sandbox: 'https://api.dev.rappi.com',
+  production_pe: 'https://api.rappi.pe',
 }
 
 const PARTNERS_LOGIN_URLS = {
@@ -41,8 +55,14 @@ const PARTNERS_LOGIN_URLS = {
  */
 const PUBLIC_API = '/api/v2/restaurants-integrations-public-api'
 
+/** Base de la Public API v2 (webhooks, stores, orders v2). */
 export function getBaseUrl(env = 'production_pe') {
   return BASE_URLS[env] || BASE_URLS.production_pe
+}
+
+/** Base de la familia NEW v1 (login del integrador + orders v1). */
+export function getV1BaseUrl(env = 'production_pe') {
+  return V1_BASE_URLS[env] || V1_BASE_URLS.production_pe
 }
 
 export function getPartnersLoginUrl(env = 'production_pe') {
@@ -81,7 +101,7 @@ export async function loginRappi({ clientId, clientSecret, env = 'production_pe'
   if (!clientId || !clientSecret) {
     throw new Error('clientId y clientSecret son requeridos')
   }
-  const url = `${getBaseUrl(env)}/restaurants/auth/v1/token/login/integrations`
+  const url = `${getV1BaseUrl(env)}/restaurants/auth/v1/token/login/integrations`
   const response = await axios.post(
     url,
     { client_id: clientId, client_secret: clientSecret },
@@ -101,7 +121,7 @@ export async function loginRappi({ clientId, clientSecret, env = 'production_pe'
 export async function getStoreOrders({ token, storeId, env = 'production_pe' }) {
   if (!token) throw new Error('token requerido')
   if (!storeId) throw new Error('storeId requerido')
-  const url = `${getBaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders`
+  const url = `${getV1BaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders`
   const response = await axios.get(url, {
     headers: { 'x-authorization': `Bearer ${token}` },
     timeout: 15000,
@@ -130,7 +150,7 @@ export async function acceptOrder({ token, storeId, orderId, cookingTime, env = 
   const path = cookingTime
     ? `/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/cooking_time/${cookingTime}/take`
     : `/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/take`
-  const url = `${getBaseUrl(env)}${path}`
+  const url = `${getV1BaseUrl(env)}${path}`
   const response = await axios.put(url, {}, {
     headers: { 'x-authorization': `Bearer ${token}` },
     timeout: 15000,
@@ -142,7 +162,7 @@ export async function acceptOrder({ token, storeId, orderId, cookingTime, env = 
  * Marca el pedido como listo para recoger.
  */
 export async function markReadyForPickup({ token, storeId, orderId, env = 'production_pe' }) {
-  const url = `${getBaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/ready-for-pickup`
+  const url = `${getV1BaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/ready-for-pickup`
   const response = await axios.post(url, {}, {
     headers: { 'x-authorization': `Bearer ${token}` },
     timeout: 15000,
@@ -158,7 +178,7 @@ export async function markReadyForPickup({ token, storeId, orderId, env = 'produ
  * ITEM_PRICE_INCORRECT, ITEM_NOT_FOUND, CUSTOMER_INFO_INCORRECT, OTHER
  */
 export async function rejectOrder({ token, storeId, orderId, cancelType, body, env = 'production_pe' }) {
-  const url = `${getBaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/cancel_type/${cancelType}/reject`
+  const url = `${getV1BaseUrl(env)}/restaurants/orders/v1/stores/${storeId}/orders/${orderId}/cancel_type/${cancelType}/reject`
   const response = await axios.put(url, body || {}, {
     headers: {
       'x-authorization': `Bearer ${token}`,
@@ -246,13 +266,13 @@ export async function refreshMerchantToken({ env = 'production_pe', clientId, cl
  *   STORE_PROVISIONING_STATUS, NEW_ORDER, ORDER_EVENT_CANCEL, ORDER_OTHER_EVENT,
  *   MENU_APPROVED, MENU_REJECTED, PING, STORE_CONNECTIVITY, ORDER_RT_TRACKING
  */
-export async function registerWebhook({ env = 'production_pe', integratorToken, clientId, event, url, secret }) {
+export async function registerWebhook({ env = 'production_pe', integratorToken, clientId, event, url, secret, baseUrl }) {
   if (!integratorToken) throw new Error('integratorToken requerido')
   if (!clientId) throw new Error('clientId requerido')
   if (!event) throw new Error('event requerido')
   if (!url) throw new Error('url requerido')
   if (!secret) throw new Error('secret requerido')
-  const endpoint = `${getBaseUrl(env)}${PUBLIC_API}/clients/${clientId}/webhooks`
+  const endpoint = `${baseUrl || getBaseUrl(env)}${PUBLIC_API}/clients/${clientId}/webhooks`
   const response = await axios.post(endpoint, { event, url, secret }, {
     headers: {
       'x-authorization': `Bearer ${integratorToken}`,
@@ -266,8 +286,8 @@ export async function registerWebhook({ env = 'production_pe', integratorToken, 
 /**
  * Lista los webhooks registrados para un clientId.
  */
-export async function listWebhooks({ env = 'production_pe', integratorToken, clientId }) {
-  const endpoint = `${getBaseUrl(env)}${PUBLIC_API}/clients/${clientId}/webhooks`
+export async function listWebhooks({ env = 'production_pe', integratorToken, clientId, baseUrl }) {
+  const endpoint = `${baseUrl || getBaseUrl(env)}${PUBLIC_API}/clients/${clientId}/webhooks`
   const response = await axios.get(endpoint, {
     headers: { 'x-authorization': `Bearer ${integratorToken}` },
     timeout: 15000,
@@ -293,12 +313,12 @@ export async function listWebhooks({ env = 'production_pe', integratorToken, cli
  * Registra (o actualiza) un webhook de nivel tienda para un evento dado,
  * asociándolo a una o varias tiendas.
  */
-export async function registerStoreWebhook({ env = 'production_pe', integratorToken, event, url, stores, secret }) {
+export async function registerStoreWebhook({ env = 'production_pe', integratorToken, event, url, stores, secret, baseUrl }) {
   if (!integratorToken) throw new Error('integratorToken requerido')
   if (!event) throw new Error('event requerido')
   if (!url) throw new Error('url requerido')
   if (!Array.isArray(stores) || stores.length === 0) throw new Error('stores requerido (array no vacío)')
-  const endpoint = `${getBaseUrl(env)}${PUBLIC_API}/webhook`
+  const endpoint = `${baseUrl || getBaseUrl(env)}${PUBLIC_API}/webhook`
   const body = { event, data: [{ url, stores: stores.map(String) }] }
   if (secret) body.data[0].secret = secret
   const response = await axios.post(endpoint, body, {
@@ -314,8 +334,8 @@ export async function registerStoreWebhook({ env = 'production_pe', integratorTo
 /**
  * Lista la configuración del webhook de nivel tienda para un evento.
  */
-export async function listStoreWebhook({ env = 'production_pe', integratorToken, event }) {
-  const endpoint = `${getBaseUrl(env)}${PUBLIC_API}/webhook/${event}`
+export async function listStoreWebhook({ env = 'production_pe', integratorToken, event, baseUrl }) {
+  const endpoint = `${baseUrl || getBaseUrl(env)}${PUBLIC_API}/webhook/${event}`
   const response = await axios.get(endpoint, {
     headers: { 'x-authorization': `Bearer ${integratorToken}` },
     timeout: 15000,

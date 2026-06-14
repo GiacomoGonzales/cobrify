@@ -16,7 +16,7 @@ import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
-import { loginRappi, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload } from './src/services/rappiApi.js'
+import { loginRappi, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
 import {
   isCloudinaryUrl,
   isAlreadyOptimized,
@@ -9435,11 +9435,23 @@ export const testRappiConnection = onCall(
         .then(data => ({ ok: true, data }))
         .catch(err => ({ ok: false, status: err.response?.status, message: err.message, data: err.response?.data }))
 
-      const [webhookList, webhookRegister, newOrderWebhook] = await Promise.all([
-        safeCall(listWebhooks({ env, integratorToken: token, clientId: azp })),
-        safeCall(registerWebhook({ env, integratorToken: token, clientId: azp, event: 'STORE_PROVISIONING_STATUS', url: webhookUrl, secret: webhookSecret })),
+      // Probamos el registro del webhook en AMBOS dominios para saber cuál sirve la
+      // Public API v2 en producción (la doc se contradice entre services.* y api.*).
+      const servicesBase = getBaseUrl(env)   // services.rappi.pe
+      const apiBase = getV1BaseUrl(env)      // api.rappi.pe
+      const [webhookList, webhookRegister, webhookRegisterAlt, newOrderWebhook] = await Promise.all([
+        safeCall(listWebhooks({ env, integratorToken: token, clientId: azp, baseUrl: servicesBase })),
+        safeCall(registerWebhook({ env, integratorToken: token, clientId: azp, event: 'STORE_PROVISIONING_STATUS', url: webhookUrl, secret: webhookSecret, baseUrl: servicesBase })),
+        safeCall(registerWebhook({ env, integratorToken: token, clientId: azp, event: 'STORE_PROVISIONING_STATUS', url: webhookUrl, secret: webhookSecret, baseUrl: apiBase })),
         safeCall(listStoreWebhook({ env, integratorToken: token, event: 'NEW_ORDER' })),
       ])
+      // El dominio bueno: el que aceptó el registro (200/201). Se guarda para usarlo después.
+      const webhookDomain = webhookRegister.ok ? servicesBase : (webhookRegisterAlt.ok ? apiBase : null)
+      if (webhookDomain) {
+        await businessDoc.ref.set({
+          rappiConfig: { webhookDomain }, updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => {})
+      }
 
       // ── Lectura de pedidos: solo si checkOrders=true (consume estado) ──
       let v1Result = null
@@ -9465,6 +9477,8 @@ export const testRappiConnection = onCall(
         tokenInfo,
         webhookList,
         webhookRegister,
+        webhookRegisterAlt,
+        webhookDomain,
         newOrderWebhook,
         checkedOrders: checkOrders,
         v1: v1Result,
@@ -9531,11 +9545,13 @@ export const rappiEnableOrderReception = onCall(
     }
 
     const webhookUrl = 'https://us-central1-cobrify-395fe.cloudfunctions.net/rappiWebhook'
+    // Usa el dominio que el diagnóstico confirmó que sirve la Public API (si existe).
+    const baseUrl = cfg.webhookDomain || undefined
     const stores = [String(cfg.storeId)]
     const results = {}
     for (const event of ['NEW_ORDER', 'ORDER_EVENT_CANCEL']) {
       try {
-        const data = await registerStoreWebhook({ env, integratorToken: token, event, url: webhookUrl, stores, secret: webhookSecret })
+        const data = await registerStoreWebhook({ env, integratorToken: token, event, url: webhookUrl, stores, secret: webhookSecret, baseUrl })
         results[event] = { ok: true, data }
       } catch (err) {
         results[event] = { ok: false, status: err.response?.status, message: err.message, data: err.response?.data }

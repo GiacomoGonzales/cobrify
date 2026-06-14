@@ -9700,18 +9700,20 @@ export default function Settings() {
 
                       {/* Registro del webhook de integrador (la llamada que daba 404) */}
                       {rappiTestResult.webhookRegister && (
-                        <div className={`text-xs border rounded p-2 ${rappiTestResult.webhookRegister.ok ? 'border-emerald-300/50 bg-white/40' : 'border-red-300 bg-red-50/60 text-red-900'}`}>
+                        <div className={`text-xs border rounded p-2 ${rappiTestResult.webhookDomain ? 'border-emerald-300/50 bg-white/40' : 'border-red-300 bg-red-50/60 text-red-900'}`}>
                           <div className="font-medium mb-0.5">Webhook STORE_PROVISIONING_STATUS (registro)</div>
-                          {rappiTestResult.webhookRegister.ok ? (
-                            <p>✓ Registrado/actualizado correctamente (el 404 "not found by holder" quedó resuelto)</p>
+                          {rappiTestResult.webhookDomain ? (
+                            <p>✓ Registrado correctamente en <code>{rappiTestResult.webhookDomain}</code> — el 404 "not found by holder" quedó resuelto 🎉</p>
                           ) : (
                             <>
-                              <p>✗ HTTP {rappiTestResult.webhookRegister.status || '?'} · {rappiTestResult.webhookRegister.message}</p>
-                              {rappiTestResult.webhookRegister.data && (
+                              <p>✗ Falló en ambos dominios:</p>
+                              <p className="mt-1">services.rappi.pe → HTTP {rappiTestResult.webhookRegister.status || '?'} · {rappiTestResult.webhookRegister.message}</p>
+                              <p>api.rappi.pe → HTTP {rappiTestResult.webhookRegisterAlt?.status || '?'} · {rappiTestResult.webhookRegisterAlt?.message}</p>
+                              {(rappiTestResult.webhookRegister.data || rappiTestResult.webhookRegisterAlt?.data) && (
                                 <details className="mt-1">
                                   <summary className="cursor-pointer">Cuerpo del error de Rappi</summary>
                                   <pre className="mt-1 bg-white/60 p-2 rounded overflow-auto max-h-48">
-{JSON.stringify(rappiTestResult.webhookRegister.data, null, 2)}
+{JSON.stringify({ services: rappiTestResult.webhookRegister.data, api: rappiTestResult.webhookRegisterAlt?.data }, null, 2)}
                                   </pre>
                                 </details>
                               )}
