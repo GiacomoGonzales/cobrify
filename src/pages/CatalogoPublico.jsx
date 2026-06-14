@@ -193,6 +193,20 @@ const isProductOutOfStock = (product, ignoreStock = false) => {
   return false
 }
 
+// Helper: stock disponible total (suma de warehouseStocks o stock directo).
+// Devuelve `null` si el producto/variante no trackea stock (sin tope).
+// Soporta opcionalmente una variante específica.
+const getAvailableStock = (product, variant = null) => {
+  if (!product) return null
+  if (product.trackStock === false) return null
+  const source = variant || product
+  if (source.warehouseStocks?.length > 0) {
+    return source.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+  }
+  if (typeof source.stock === 'number') return source.stock
+  return null
+}
+
 // Helper: obtener precios disponibles de un producto (mayorista, VIP, etc.)
 const getProductPrices = (product, business) => {
   if (!business?.multiplePricesEnabled) return []
@@ -1055,8 +1069,18 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             const minQty = allowsDecimals ? 0.01 : 1
             const unitLabel = getShortUnitLabel(product.unit)
 
+            // Stock disponible para limitar el selector. Si `catalogIgnoreStock` está
+            // activo (trabajan bajo pedido) o el producto no trackea stock, queda null
+            // y no se aplica tope. Para productos con variantes, usa el stock de la
+            // variante actualmente seleccionada (cae a null si aún no eligió).
+            const ignoreStock = !!business?.catalogIgnoreStock
+            const showStock = !!business?.catalogShowStock && !ignoreStock
+            const availableStock = ignoreStock ? null : getAvailableStock(product, hasVariants ? selectedVariant : null)
+            const hasStockCap = availableStock !== null && Number.isFinite(availableStock) && availableStock > 0
+
             const applyQty = (newQty) => {
-              const clamped = Math.max(minQty, Number(newQty.toFixed(3)))
+              let clamped = Math.max(minQty, Number(newQty.toFixed(3)))
+              if (hasStockCap && clamped > availableStock) clamped = availableStock
               if (hasMultiplePrices) {
                 setSelectedPriceLevel(computeBestPriceLevelFor(clamped))
               }
@@ -1114,6 +1138,20 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
                     <span className="text-sm font-medium text-gray-500 ml-1">{unitLabel}</span>
                   )}
                 </div>
+                {showStock && hasStockCap && (
+                  <span
+                    className={`text-xs font-medium ml-auto ${
+                      quantity >= availableStock
+                        ? 'text-orange-600'
+                        : availableStock <= 5
+                          ? 'text-amber-600'
+                          : 'text-gray-500'
+                    }`}
+                    title={quantity >= availableStock ? 'Has alcanzado el stock disponible' : `${availableStock} ${unitLabel || 'unidades'} disponibles`}
+                  >
+                    {availableStock} {unitLabel || 'disponibles'}
+                  </span>
+                )}
               </div>
             )
           })()}
@@ -2244,6 +2282,7 @@ const DEMO_CATALOG_DATA = {
     catalogWhatsapp: '51987654321',
     catalogShowPrices: true,
     catalogAllowOrders: true,
+    catalogShowStock: true,
     catalogObservations: 'Pagos: BCP Cta. Ahorros 123-456789-0-12\nYape / Plin: 987 654 321\nWhatsApp ventas: 987 654 321',
   },
   products: [

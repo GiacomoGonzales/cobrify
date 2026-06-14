@@ -489,6 +489,7 @@ export default function Settings() {
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogHideOutOfStock, setCatalogHideOutOfStock] = useState(false)
+  const [catalogShowStock, setCatalogShowStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
@@ -1281,6 +1282,7 @@ export default function Settings() {
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
         setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
         setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
+        setCatalogShowStock(businessData.catalogShowStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
@@ -6870,6 +6872,19 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
+                        <label className={`flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors ${catalogIgnoreStock ? 'opacity-50' : ''}`}>
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Mostrar stock disponible</span>
+                            <span className="text-xs text-gray-500">Muestra las unidades disponibles de cada producto en el catálogo y limita la cantidad que el cliente puede pedir a lo que hay en stock. {catalogIgnoreStock && '(Se ignora cuando "Ignorar stock en catálogo" está activo)'}</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogShowStock}
+                            onChange={(e) => setCatalogShowStock(e.target.checked)}
+                            disabled={catalogIgnoreStock}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                           <div className="flex-1">
                             <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
@@ -7095,6 +7110,7 @@ export default function Settings() {
                         catalogShowPrices,
                         catalogIgnoreStock,
                         catalogHideOutOfStock,
+                        catalogShowStock,
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
                         catalogLogoUrl: catalogLogoUrl || null,
