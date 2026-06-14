@@ -53,6 +53,7 @@ export default function Production() {
   const [showModal, setShowModal] = useState(false)
   const [productionItems, setProductionItems] = useState([]) // Array de { id, productId, name, code, quantity, mode, hasRecipe, recipeInfo, isCheckingRecipe }
   const [modalSearchTerm, setModalSearchTerm] = useState('')
+  const [modalCategory, setModalCategory] = useState('all')
   const [modalWarehouseId, setModalWarehouseId] = useState('')
   const [modalNotes, setModalNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -171,6 +172,7 @@ export default function Production() {
     setShowModal(true)
     setProductionItems([])
     setModalSearchTerm('')
+    setModalCategory('all')
     setModalNotes('')
     // Auto-seleccionar almacén por defecto de la sucursal seleccionada en la página
     const branchWarehouses = warehouses.filter(w => {
@@ -391,7 +393,11 @@ export default function Production() {
   // Productos filtrados para el grid de búsqueda en el modal
   const availableProducts = products.filter(p => p.type !== 'service')
 
+  // Categorías únicas para los chips del catálogo (estilo POS).
+  const modalCategories = ['all', ...Array.from(new Set(availableProducts.map(p => p.category).filter(Boolean)))]
+
   const modalFilteredProducts = availableProducts.filter(p => {
+    if (modalCategory !== 'all' && p.category !== modalCategory) return false
     if (!modalSearchTerm) return true
     const term = modalSearchTerm.toLowerCase()
     return p.name?.toLowerCase().includes(term) || p.code?.toLowerCase().includes(term)
@@ -727,53 +733,58 @@ export default function Production() {
         </CardContent>
       </Card>
 
-      {/* Modal de Nueva Producción */}
+      {/* Modal de Nueva Producción — layout estilo POS (catálogo izquierda + panel fijo derecha) */}
       <Modal
         isOpen={showModal}
         onClose={closeModal}
         title="Nueva Producción"
-        size="xl"
+        fullScreen
       >
-        <div className="space-y-4">
-          {/* Selector de almacén destino (filtrado por la sucursal de la página) */}
-          <Select
-            label="Almacén destino"
-            required
-            value={modalWarehouseId}
-            onChange={(e) => setModalWarehouseId(e.target.value)}
-          >
-            <option value="">Seleccionar almacén</option>
-            {modalFilteredWarehouses.map(warehouse => (
-              <option key={warehouse.id} value={warehouse.id}>
-                {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-              </option>
-            ))}
-          </Select>
+        <div className="flex flex-col lg:flex-row h-full min-h-0">
+          {/* ===== IZQUIERDA: catálogo (buscador + categorías + grid) ===== */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0 lg:border-r border-gray-200">
+            {/* Buscador + chips de categoría */}
+            <div className="p-4 border-b border-gray-200 space-y-3 flex-shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar producto por nombre o código..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  value={modalSearchTerm}
+                  onChange={(e) => setModalSearchTerm(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              {modalCategories.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
+                  {modalCategories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setModalCategory(cat)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors ${
+                        modalCategory === cat
+                          ? 'bg-primary-600 text-white border-primary-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {cat === 'all' ? 'Todas' : cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* Barra de búsqueda */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar producto por nombre o código..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              value={modalSearchTerm}
-              onChange={(e) => setModalSearchTerm(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          {/* Grid de productos */}
-          {modalSearchTerm && (
-            <div>
+            {/* Grid de productos */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {modalFilteredProducts.length === 0 ? (
-                <div className="text-center py-6 text-gray-500">
+                <div className="text-center py-10 text-gray-500">
                   <Package className="w-10 h-10 mx-auto mb-2 text-gray-400" />
                   <p className="text-sm">No se encontraron productos</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto">
-                  {modalFilteredProducts.slice(0, 20).map(product => {
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {modalFilteredProducts.slice(0, 60).map(product => {
                     const alreadyAdded = productionItems.some(item => item.productId === product.id)
                     const totalStock = Object.values(product.warehouseStock || {}).reduce((sum, s) => sum + (s || 0), 0)
                     return (
@@ -781,32 +792,27 @@ export default function Production() {
                         key={product.id}
                         onClick={() => addToProduction(product)}
                         disabled={alreadyAdded}
-                        className={`p-3 text-left border rounded-lg transition-colors ${
+                        className={`text-left border rounded-xl overflow-hidden transition-all ${
                           alreadyAdded
-                            ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
-                            : 'hover:bg-primary-50 hover:border-primary-500'
+                            ? 'opacity-50 cursor-not-allowed border-gray-200'
+                            : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                            {product.imageUrl ? (
-                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Package className="w-5 h-5 text-gray-400" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate">{product.name}</p>
-                            {product.code && (
-                              <p className="text-xs text-gray-400 truncate">{product.code}</p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Stock: {totalStock} {product.unit || 'und'}
-                            </p>
-                            {alreadyAdded && (
-                              <span className="text-xs text-primary-600">Ya agregado</span>
-                            )}
-                          </div>
+                        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-8 h-8 text-gray-300" />
+                          )}
+                          {alreadyAdded && (
+                            <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                              <Badge variant="info" className="text-xs">Agregado</Badge>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-2">
+                          <p className="font-medium text-xs text-gray-900 line-clamp-2 leading-tight">{product.name}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">Stock: {totalStock} {product.unit || 'und'}</p>
                         </div>
                       </button>
                     )
@@ -814,143 +820,157 @@ export default function Production() {
                 </div>
               )}
             </div>
-          )}
-
-          {/* Lista de productos a producir */}
-          {productionItems.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-sm font-semibold text-gray-700">
-                  Productos a producir ({productionItems.length})
-                </h3>
-                <div className="flex-1 border-t border-gray-200" />
-              </div>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {productionItems.map(item => (
-                  <div key={item.id} className="p-3 border rounded-lg bg-white">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <Package className="w-4 h-4 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm truncate">{item.name}</span>
-                          {item.isCheckingRecipe ? (
-                            <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
-                          ) : item.hasRecipe ? (
-                            <Badge variant="info" className="text-xs"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
-                          ) : (
-                            <Badge variant="default" className="text-xs"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => decrementQty(item.id)}
-                          disabled={item.quantity <= 1 || isProcessing}
-                          className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value)
-                            if (val > 0) updateItemQuantity(item.id, val)
-                          }}
-                          className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:ring-1 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={() => incrementQty(item.id)}
-                          disabled={isProcessing}
-                          className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => removeFromProduction(item.id)}
-                          disabled={isProcessing}
-                          className="p-1 rounded text-red-500 hover:bg-red-50 disabled:opacity-40"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    {/* Estado de insumos para items con receta */}
-                    {item.hasRecipe && !item.isCheckingRecipe && item.recipeInfo && (
-                      <div className={`mt-2 flex items-center gap-1.5 text-xs ${
-                        item.recipeInfo.hasStock ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {item.recipeInfo.hasStock ? (
-                          <><CheckCircle className="w-3 h-3" /> Insumos disponibles</>
-                        ) : (
-                          <><AlertTriangle className="w-3 h-3" /> Stock insuficiente
-                            {item.recipeInfo.missingIngredients?.length > 0 && (
-                              <span className="text-gray-500 ml-1">
-                                ({item.recipeInfo.missingIngredients.map(m => m.name).join(', ')})
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Notas */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notas (opcional)
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              rows={2}
-              value={modalNotes}
-              onChange={(e) => setModalNotes(e.target.value)}
-              placeholder="Notas adicionales sobre esta producción..."
-            />
           </div>
 
-          {/* Botones */}
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={closeModal}
-              disabled={isProcessing}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleConfirmProduction}
-              disabled={
-                isProcessing ||
-                productionItems.length === 0 ||
-                !modalWarehouseId ||
-                productionItems.some(item => item.isCheckingRecipe) ||
-                productionItems.some(item => item.hasRecipe && item.recipeInfo && !item.recipeInfo.hasStock)
-              }
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Produciendo...
-                </>
+          {/* ===== DERECHA: panel fijo (almacén + lista + notas + confirmar) ===== */}
+          <div className="w-full lg:w-[380px] flex flex-col flex-shrink-0 min-h-0 border-t lg:border-t-0 border-gray-200 bg-gray-50/60">
+            {/* Almacén destino */}
+            <div className="p-4 border-b border-gray-200 flex-shrink-0 bg-white">
+              <Select
+                label="Almacén destino"
+                required
+                value={modalWarehouseId}
+                onChange={(e) => setModalWarehouseId(e.target.value)}
+              >
+                <option value="">Seleccionar almacén</option>
+                {modalFilteredWarehouses.map(warehouse => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {/* Lista de productos a producir */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {productionItems.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 py-10">
+                  <Cog className="w-10 h-10 mb-2 text-gray-300" />
+                  <p className="text-sm px-6">Toca un producto del catálogo para agregarlo a la producción</p>
+                </div>
               ) : (
                 <>
-                  <Cog className="w-4 h-4 mr-2" />
-                  Confirmar Producción ({productionItems.length})
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    A producir ({productionItems.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {productionItems.map(item => (
+                      <div key={item.id} className="p-3 border border-gray-200 rounded-lg bg-white">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm truncate">{item.name}</span>
+                              {item.isCheckingRecipe ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                              ) : item.hasRecipe ? (
+                                <Badge variant="info" className="text-xs"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+                              ) : (
+                                <Badge variant="default" className="text-xs"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeFromProduction(item.id)}
+                            disabled={isProcessing}
+                            className="p-1 rounded text-red-500 hover:bg-red-50 disabled:opacity-40 flex-shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-2">
+                          {/* Estado de insumos para items con receta */}
+                          <div className="min-w-0">
+                            {item.hasRecipe && !item.isCheckingRecipe && item.recipeInfo && (
+                              <div className={`flex items-center gap-1.5 text-xs ${
+                                item.recipeInfo.hasStock ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {item.recipeInfo.hasStock ? (
+                                  <><CheckCircle className="w-3 h-3 flex-shrink-0" /> Insumos OK</>
+                                ) : (
+                                  <><AlertTriangle className="w-3 h-3 flex-shrink-0" /> Stock insuficiente</>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              onClick={() => decrementQty(item.id)}
+                              disabled={item.quantity <= 1 || isProcessing}
+                              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value)
+                                if (val > 0) updateItemQuantity(item.id, val)
+                              }}
+                              className="w-12 text-center text-sm border border-gray-300 rounded py-1 focus:ring-1 focus:ring-primary-500"
+                            />
+                            <button
+                              onClick={() => incrementQty(item.id)}
+                              disabled={isProcessing}
+                              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </>
               )}
-            </Button>
+            </div>
+
+            {/* Notas + Confirmar (pie fijo) */}
+            <div className="p-4 border-t border-gray-200 space-y-3 flex-shrink-0 bg-white">
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                rows={2}
+                value={modalNotes}
+                onChange={(e) => setModalNotes(e.target.value)}
+                placeholder="Notas (opcional)..."
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={closeModal} disabled={isProcessing} className="flex-1">
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirmProduction}
+                  className="flex-1"
+                  disabled={
+                    isProcessing ||
+                    productionItems.length === 0 ||
+                    !modalWarehouseId ||
+                    productionItems.some(item => item.isCheckingRecipe) ||
+                    productionItems.some(item => item.hasRecipe && item.recipeInfo && !item.recipeInfo.hasStock)
+                  }
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Produciendo...
+                    </>
+                  ) : (
+                    <>
+                      <Cog className="w-4 h-4 mr-2" />
+                      Producir ({productionItems.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </Modal>
