@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getRecipeByProductId, checkRecipeStock, calculateRecipeCost } from './recipeService'
-import { deductIngredients } from './ingredientService'
+import { deductIngredients, restoreIngredients, convertUnit } from './ingredientService'
 import { updateWarehouseStock, updateVariantWarehouseStock, createStockMovement } from './warehouseService'
 import { computeProductBatchMetadata } from '@/utils/batchStock'
 // updateProduct ya no se usa - producción usa transacciones para evitar datos stale
@@ -123,6 +123,10 @@ export const executeRecipeProduction = async (businessId, params) => {
       return { success: false, error: `Error al descontar insumos: ${deductResult.error}` }
     }
 
+    // Pasos 6-8 con COMPENSACIÓN: el descuento de insumos (paso 5) ya hizo su propio
+    // commit; si algo falla después, restauramos los insumos para no perderlos (el flujo
+    // no es transaccional entre los dos sistemas de stock).
+    try {
     // 6. Aumentar stock del producto usando transacción (leer datos frescos)
     const productRef = doc(db, 'businesses', businessId, 'products', productId)
     await runTransaction(db, async (transaction) => {
@@ -202,6 +206,16 @@ export const executeRecipeProduction = async (businessId, params) => {
     const docRef = await addDoc(productionsRef, productionData)
 
     return { success: true, id: docRef.id, totalCost }
+    } catch (innerErr) {
+      // Compensar: devolver los insumos descontados en el paso 5.
+      try {
+        await restoreIngredients(businessId, ingredientsToDeduct, warehouseId)
+        console.warn('Producción fallida tras descontar insumos: insumos restaurados (compensación).')
+      } catch (restoreErr) {
+        console.error('Error restaurando insumos tras fallo de producción:', restoreErr)
+      }
+      throw innerErr
+    }
   } catch (error) {
     console.error('Error en producción con receta:', error)
     return { success: false, error: error.message }
@@ -499,18 +513,22 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
 
           if (ingDoc.exists()) {
             const iData = ingDoc.data()
+            // Convertir la cantidad de la receta a la unidad de almacenamiento, IGUAL que
+            // el descuento (deductIngredients). Antes la reversión devolvía ing.quantity en
+            // la unidad de la receta → cantidad equivocada si difería de purchaseUnit.
+            const revertQty = convertUnit(ing.quantity, ing.unit, iData.purchaseUnit)
             const wStocks = [...(iData.warehouseStocks || [])]
             const wIdx = wStocks.findIndex(ws => ws.warehouseId === warehouseId)
 
             if (wIdx >= 0) {
-              wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + ing.quantity }
+              wStocks[wIdx] = { ...wStocks[wIdx], stock: (wStocks[wIdx].stock || 0) + revertQty }
             } else if (wStocks.length > 0) {
-              wStocks.push({ warehouseId, stock: ing.quantity, minStock: 0 })
+              wStocks.push({ warehouseId, stock: revertQty, minStock: 0 })
             }
 
             const newStock = wStocks.length > 0
               ? wStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-              : (iData.currentStock || 0) + ing.quantity
+              : (iData.currentStock || 0) + revertQty
 
             batch.update(ingRef, {
               currentStock: newStock,
@@ -523,7 +541,8 @@ export const deleteProduction = async (businessId, productionId, reverseStock = 
               ingredientId: ing.ingredientId,
               ingredientName: ing.ingredientName,
               type: 'production_reversal',
-              quantity: ing.quantity,
+              quantity: revertQty,
+              unit: iData.purchaseUnit || ing.unit || null,
               warehouseId: warehouseId || null,
               reason: `Reversión insumo: ${ing.ingredientName} (producción ${production.productName})`,
               createdAt: Timestamp.now()
