@@ -13,6 +13,14 @@ import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
 
+// Referencia de array vacío ESTABLE. Los permisos (allowedPages/Warehouses/
+// Branches/...) vacíos significan "sin restricción". Reusar SIEMPRE esta misma
+// referencia (en vez de crear `[]` nuevos) evita que, al iniciar sesión, los
+// `setAllowedX([])` disparen efectos que dependen de esos arrays — eso causaba
+// que el Dashboard (y otras páginas) recargara sus datos justo después de
+// mostrarlos ("parpadeo/recarga al iniciar sesión").
+const EMPTY_PERMS = Object.freeze([])
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -25,11 +33,11 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [isInGracePeriod, setIsInGracePeriod] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
-  const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
-  const [allowedWarehouses, setAllowedWarehouses] = useState([]) // Almacenes permitidos (vacío = todos)
-  const [allowedBranches, setAllowedBranches] = useState([]) // Sucursales permitidas (vacío = todas)
-  const [allowedDocumentTypes, setAllowedDocumentTypes] = useState([]) // Tipos de comprobante POS (vacío = todos)
-  const [allowedPaymentMethods, setAllowedPaymentMethods] = useState([]) // Métodos de pago POS (vacío = todos)
+  const [allowedPages, setAllowedPages] = useState(EMPTY_PERMS) // Páginas permitidas
+  const [allowedWarehouses, setAllowedWarehouses] = useState(EMPTY_PERMS) // Almacenes permitidos (vacío = todos)
+  const [allowedBranches, setAllowedBranches] = useState(EMPTY_PERMS) // Sucursales permitidas (vacío = todas)
+  const [allowedDocumentTypes, setAllowedDocumentTypes] = useState(EMPTY_PERMS) // Tipos de comprobante POS (vacío = todos)
+  const [allowedPaymentMethods, setAllowedPaymentMethods] = useState(EMPTY_PERMS) // Métodos de pago POS (vacío = todos)
   const [assignedSellerId, setAssignedSellerId] = useState(null) // Vendedor asignado al sub-usuario
   const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
@@ -149,11 +157,11 @@ export const AuthProvider = ({ children }) => {
                 const userData = userDataResult.data
                 subUserOwnerId = userData.ownerId || null
                 setUserPermissions(userData)
-                setAllowedPages(userData.allowedPages || [])
-                setAllowedWarehouses(userData.allowedWarehouses || [])
-                setAllowedBranches(userData.allowedBranches || [])
-                setAllowedDocumentTypes(userData.allowedDocumentTypes || [])
-                setAllowedPaymentMethods(userData.allowedPaymentMethods || [])
+                setAllowedPages(userData.allowedPages || EMPTY_PERMS)
+                setAllowedWarehouses(userData.allowedWarehouses || EMPTY_PERMS)
+                setAllowedBranches(userData.allowedBranches || EMPTY_PERMS)
+                setAllowedDocumentTypes(userData.allowedDocumentTypes || EMPTY_PERMS)
+                setAllowedPaymentMethods(userData.allowedPaymentMethods || EMPTY_PERMS)
                 setAssignedSellerId(userData.assignedSellerId || null)
                 setAssignedSellerName(userData.assignedSellerName || null)
                 setIndependentCashRegister(userData.independentCashRegister || false)
@@ -172,30 +180,30 @@ export const AuthProvider = ({ children }) => {
               } else {
                 console.warn('⚠️ No se encontraron datos de usuario en Firestore')
                 // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
-                setAllowedPages([])
-                setAllowedWarehouses([])
-                setAllowedDocumentTypes([])
-                setAllowedPaymentMethods([])
+                setAllowedPages(EMPTY_PERMS)
+                setAllowedWarehouses(EMPTY_PERMS)
+                setAllowedDocumentTypes(EMPTY_PERMS)
+                setAllowedPaymentMethods(EMPTY_PERMS)
                 setAssignedSellerId(null)
                 setAssignedSellerName(null)
                 setIndependentCashRegister(false)
               }
             } catch (error) {
               console.error('Error al cargar permisos:', error)
-              setAllowedPages([])
-              setAllowedWarehouses([])
-              setAllowedDocumentTypes([])
-              setAllowedPaymentMethods([])
+              setAllowedPages(EMPTY_PERMS)
+              setAllowedWarehouses(EMPTY_PERMS)
+              setAllowedDocumentTypes(EMPTY_PERMS)
+              setAllowedPaymentMethods(EMPTY_PERMS)
               setAssignedSellerId(null)
               setAssignedSellerName(null)
               setIndependentCashRegister(false)
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
-            setAllowedPages([])
-            setAllowedWarehouses([])
-            setAllowedDocumentTypes([])
-            setAllowedPaymentMethods([])
+            setAllowedPages(EMPTY_PERMS)
+            setAllowedWarehouses(EMPTY_PERMS)
+            setAllowedDocumentTypes(EMPTY_PERMS)
+            setAllowedPaymentMethods(EMPTY_PERMS)
             setAssignedSellerId(null)
             setAssignedSellerName(null)
             setIndependentCashRegister(false)
@@ -367,10 +375,10 @@ export const AuthProvider = ({ children }) => {
           setHasAccess(false)
           setIsInGracePeriod(false)
           setUserPermissions(null)
-          setAllowedPages([])
-          setAllowedWarehouses([])
-          setAllowedDocumentTypes([])
-          setAllowedPaymentMethods([])
+          setAllowedPages(EMPTY_PERMS)
+          setAllowedWarehouses(EMPTY_PERMS)
+          setAllowedDocumentTypes(EMPTY_PERMS)
+          setAllowedPaymentMethods(EMPTY_PERMS)
           setAssignedSellerId(null)
           setAssignedSellerName(null)
           setIndependentCashRegister(false)
@@ -551,10 +559,10 @@ export const AuthProvider = ({ children }) => {
       setHasAccess(false)
       setIsInGracePeriod(false)
       setUserPermissions(null)
-      setAllowedPages([])
-      setAllowedWarehouses([])
-      setAllowedDocumentTypes([])
-      setAllowedPaymentMethods([])
+      setAllowedPages(EMPTY_PERMS)
+      setAllowedWarehouses(EMPTY_PERMS)
+      setAllowedDocumentTypes(EMPTY_PERMS)
+      setAllowedPaymentMethods(EMPTY_PERMS)
       setAssignedSellerId(null)
       setAssignedSellerName(null)
       setIndependentCashRegister(false)
