@@ -4427,18 +4427,31 @@ export default function Inventory() {
       >
         <div className="space-y-4">
           {productionProduct && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <p className="text-sm text-gray-600">Producto</p>
-              <p className="font-semibold text-gray-900">{productionProduct.name}</p>
-              {productionProduct.code && (
-                <p className="text-sm text-gray-500">Código: {productionProduct.code}</p>
-              )}
-              <div className="mt-2">
-                {productionMode === 'recipe' ? (
-                  <Badge variant="info"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+            <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 rounded-xl">
+              <div className="w-14 h-14 rounded-lg overflow-hidden bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0">
+                {productionProduct.imageUrl ? (
+                  <img src={productionProduct.imageUrl} alt={productionProduct.name} className="w-full h-full object-cover" />
                 ) : (
-                  <Badge variant="default"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
+                  <Package className="w-6 h-6 text-emerald-400" />
                 )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-gray-500">Producto a producir</p>
+                <p className="font-semibold text-gray-900 truncate">{productionProduct.name}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {productionMode === 'recipe' ? (
+                    <Badge variant="info"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+                  ) : productionMode === 'manual' ? (
+                    <Badge variant="default"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />Detectando…
+                    </span>
+                  )}
+                  {productionProduct.code && (
+                    <span className="text-xs text-gray-400">Cód: {productionProduct.code}</span>
+                  )}
+                </div>
               </div>
             </div>
           )}
