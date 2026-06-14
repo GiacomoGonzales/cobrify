@@ -9381,11 +9381,13 @@ export const testRappiConnection = onCall(
       }
 
       const cfg = businessData.rappiConfig
-      if (!cfg?.clientId || !cfg?.clientSecret || !cfg?.storeId) {
+      // El Store ID NO es necesario para probar login + webhook de integrador;
+      // solo se requiere para leer pedidos / webhook NEW_ORDER.
+      if (!cfg?.clientId || !cfg?.clientSecret) {
         return {
           ok: false,
           step: 'config',
-          message: 'Faltan credenciales en la configuración (Client ID, Secret o Store ID).',
+          message: 'Faltan credenciales en la configuración (Client ID o Secret).',
         }
       }
 
@@ -9444,8 +9446,10 @@ export const testRappiConnection = onCall(
       let v2Result = null
       if (checkOrders) {
         ;[v1Result, v2Result] = await Promise.all([
-          getStoreOrders({ token, storeId: cfg.storeId, env })
-            .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+          (cfg.storeId
+            ? getStoreOrders({ token, storeId: cfg.storeId, env })
+                .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))
+            : Promise.resolve({ ok: false, message: 'Sin Store ID configurado' }))
             .catch(err => ({ ok: false, status: err.response?.status, message: err.message, data: err.response?.data })),
           getOrdersV2({ token, env })
             .then(orders => ({ ok: true, count: orders.length, sample: orders.slice(0, 2) }))

@@ -9827,7 +9827,7 @@ export default function Settings() {
                       setIsTestingRappi(false)
                     }
                   }}
-                  disabled={isTestingRappi || !rappiClientId || !rappiClientSecret || !rappiStoreId}
+                  disabled={isTestingRappi || !rappiClientId || !rappiClientSecret}
                 >
                   {isTestingRappi ? (
                     <>
