@@ -2985,7 +2985,7 @@ export default function Settings() {
                       type="button"
                       onClick={handleLookupRuc}
                       disabled={isLookingUpRuc}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                      className="px-4 py-2 bg-white border border-gray-300 text-gray-500 rounded-lg hover:bg-gray-50 hover:text-primary-600 hover:border-primary-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
                       title="Buscar datos del RUC"
                     >
                       {isLookingUpRuc ? (
