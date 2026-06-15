@@ -1016,25 +1016,10 @@ export default function POS() {
     setCurrency(newCurrency)
   }
 
-  // SUNAT: boletas siempre PEN. Si el usuario tiene moneda USD y elige
-  // boleta, lo forzamos a factura con aviso.
-  useEffect(() => {
-    if (!posMultiCurrencyOn) return
-    if (currency === 'USD' && documentType === 'boleta') {
-      // Si está permitido factura, cambiamos a factura.
-      if (!allowedDocumentTypes || allowedDocumentTypes.includes('factura')) {
-        setDocumentType('factura')
-        toast.info('Las boletas solo se emiten en Soles (SUNAT). Cambiamos a factura.')
-      } else {
-        // Si NO se permite factura, volvemos a PEN.
-        setCurrency('PEN')
-        setExchangeRate(1)
-        setExchangeRateSource(null)
-        toast.info('Las boletas solo se emiten en Soles (SUNAT). Moneda cambiada a PEN.')
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currency, documentType])
+  // Nota: las boletas SÍ pueden emitirse en USD (SUNAT lo permite — el sistema SEE-SOL
+  // deja elegir la moneda). Antes había un useEffect que forzaba factura/PEN al elegir
+  // USD+boleta; se quitó porque era un supuesto incorrecto. El umbral de S/700 para
+  // boletas se valida sobre el total en SOLES (amounts.totalInBase).
 
   // Auto-seleccionar primer tipo de comprobante permitido si el actual no está permitido
   useEffect(() => {
@@ -5014,8 +4999,9 @@ export default function POS() {
       }
     }
 
-    // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT)
-    if (documentType === 'boleta' && amounts.total > 700) {
+    // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT).
+    // Se compara el total en SOLES (totalInBase) para que aplique también a boletas en USD.
+    if (documentType === 'boleta' && amounts.totalInBase > 700) {
       if (!customerData.documentNumber) {
         abortCheckout('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren documento del cliente')
         return
