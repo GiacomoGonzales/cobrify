@@ -191,6 +191,26 @@ async function verifyAdminFromRequest(req) {
 }
 
 /**
+ * SEGURIDAD: comprueba si `userId` (uid del token) puede acceder a los datos del
+ * negocio `businessId`. Mismo criterio que las reglas de Firestore (canAccessBusiness):
+ * es el dueño (uid == businessId) o un sub-usuario ACTIVO de ese negocio (su doc
+ * /users tiene ownerId == businessId && isActive == true). Evita IDOR: que un usuario
+ * autenticado opere sobre el negocio de OTRO pasando un businessId ajeno en el body.
+ */
+async function userCanAccessBusiness(userId, businessId) {
+  if (!userId || !businessId) return false
+  if (userId === businessId) return true
+  try {
+    const userDoc = await db.collection('users').doc(userId).get()
+    return userDoc.exists &&
+           userDoc.data().ownerId === businessId &&
+           userDoc.data().isActive === true
+  } catch (e) {
+    return false
+  }
+}
+
+/**
  * Filtra valores undefined de un objeto (Firestore no acepta undefined)
  */
 function removeUndefined(obj) {
@@ -3304,6 +3324,14 @@ export const sendDispatchGuideToSunatFn = onRequest(
         return
       }
 
+      // SEGURIDAD: el usuario solo puede emitir guías de SU negocio. Sin esto, cualquier
+      // usuario autenticado emitía una GRE bajo el RUC y las credenciales/firmas de otro
+      // negocio (IDOR).
+      if (!(await userCanAccessBusiness(userId, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' })
+        return
+      }
+
       console.log(`🚛 [GRE] Procesando guía ${guideId} del negocio ${businessId}`)
 
       // 1. Obtener datos del negocio
@@ -3625,6 +3653,13 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
 
       if (!businessId || !guideId) {
         res.status(400).json({ error: 'businessId y guideId son requeridos' })
+        return
+      }
+
+      // SEGURIDAD: el usuario solo puede emitir guías de SU negocio (evita IDOR:
+      // emitir GRE de transportista bajo el RUC/credenciales de otro negocio).
+      if (!(await userCanAccessBusiness(userId, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' })
         return
       }
 
@@ -5359,12 +5394,20 @@ export const checkVoidStatus = onRequest(
       }
 
       const idToken = authHeader.split('Bearer ')[1]
-      await auth.verifyIdToken(idToken)
+      const decodedToken = await auth.verifyIdToken(idToken)
 
       const { userId, voidedDocumentId } = req.body
 
       if (!userId || !voidedDocumentId) {
         res.status(400).json({ error: 'userId y voidedDocumentId son requeridos' })
+        return
+      }
+
+      // SEGURIDAD: el `userId` del body es el businessId cuyos documentos de baja se
+      // consultan. Verificar que el caller (uid del token) pueda acceder a ese negocio
+      // (antes se confiaba ciegamente en el body → fuga cross-tenant / IDOR).
+      if (!(await userCanAccessBusiness(decodedToken.uid, userId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' })
         return
       }
 
