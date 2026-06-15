@@ -639,10 +639,9 @@ export default function Settings() {
   const [manualAddress, setManualAddress] = useState('')
   const [manualName, setManualName] = useState('')
 
-  // Establecimientos (anexos) del emisor en SUNAT. Se sincronizan una vez y se guardan
-  // para poder elegirlos como punto de partida al emitir guías de remisión.
+  // Establecimientos (locales anexos) del emisor en SUNAT. Se llenan al buscar el RUC
+  // con la lupa y se usan como punto de partida al emitir guías de remisión.
   const [establishments, setEstablishments] = useState([])
-  const [isSyncingEstablishments, setIsSyncingEstablishments] = useState(false)
 
   // Estado para cuentas bancarias estructuradas
   const [bankAccounts, setBankAccounts] = useState([])
@@ -1693,7 +1692,7 @@ export default function Settings() {
 
   // Buscar datos de RUC automáticamente
   const handleLookupRuc = async () => {
-    const rucNumber = watch('ruc')
+    const rucNumber = (watch('ruc') || '').replace(/\D/g, '')
 
     if (!rucNumber) {
       toast.error('Ingrese un número de RUC para buscar')
@@ -1717,6 +1716,18 @@ export default function Settings() {
         setValue('address', result.data.direccion || '')
 
         toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+
+        // Además, traer los locales/establecimientos del RUC (si tiene más de uno)
+        // para poder elegirlos como punto de partida en las guías de remisión.
+        // Es complementario al domicilio fiscal; no bloquea ni avisa si falla.
+        try {
+          const estResult = await consultarEstablecimientos(rucNumber)
+          if (estResult.success) {
+            setEstablishments(estResult.data || [])
+          }
+        } catch (estError) {
+          console.error('Error al traer establecimientos:', estError)
+        }
       } else {
         toast.error(result.error || 'No se encontraron datos para este RUC', 5000)
       }
@@ -1725,50 +1736,6 @@ export default function Settings() {
       toast.error('Error al consultar el RUC. Verifique su conexión.', 5000)
     } finally {
       setIsLookingUpRuc(false)
-    }
-  }
-
-  // Sincronizar los establecimientos (locales anexos) del propio RUC desde SUNAT.
-  // Consume 1 crédito de apiperu, por eso es un botón explícito. Se guardan en el doc
-  // del negocio para luego elegirlos como punto de partida en las guías de remisión.
-  const handleSyncEstablishments = async () => {
-    if (isDemoMode) {
-      toast.error('No disponible en modo demo')
-      return
-    }
-    const rucNumber = (watch('ruc') || '').replace(/\D/g, '')
-    if (rucNumber.length !== 11) {
-      toast.error('Ingrese un RUC válido (11 dígitos) primero')
-      return
-    }
-
-    setIsSyncingEstablishments(true)
-    try {
-      const result = await consultarEstablecimientos(rucNumber)
-      if (!result.success) {
-        toast.error(result.error || 'No se pudieron consultar los establecimientos', 5000)
-        return
-      }
-
-      const list = result.data || []
-      // Guardar en el doc del negocio (merge, sin tocar el resto de la configuración)
-      const businessRef = doc(db, 'businesses', getBusinessId())
-      await setDoc(businessRef, {
-        establishments: list,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-
-      setEstablishments(list)
-      if (list.length === 0) {
-        toast.info('Tu RUC solo tiene domicilio fiscal en SUNAT (sin locales anexos)')
-      } else {
-        toast.success(`${list.length} establecimiento(s) sincronizado(s) desde SUNAT`)
-      }
-    } catch (error) {
-      console.error('Error al sincronizar establecimientos:', error)
-      toast.error('Error al consultar los establecimientos. Verifique su conexión.', 5000)
-    } finally {
-      setIsSyncingEstablishments(false)
     }
   }
 
@@ -3189,35 +3156,13 @@ export default function Settings() {
                 <input type="hidden" {...register('ubigeo')} />
               </div>
 
-              {/* Establecimientos / locales anexos (SUNAT) */}
-              <div className="md:col-span-2 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* Establecimientos / locales anexos (SUNAT) — se llenan al buscar el RUC con la lupa */}
+              {establishments.length > 0 && (
+                <div className="md:col-span-2 space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <Store className="w-4 h-4" />
-                    <span>Mis establecimientos (SUNAT)</span>
+                    <span>Establecimientos (SUNAT)</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleSyncEstablishments}
-                    disabled={isSyncingEstablishments}
-                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-                    title="Consultar los locales anexos de tu RUC en SUNAT"
-                  >
-                    {isSyncingEstablishments ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    {isSyncingEstablishments ? 'Sincronizando…' : 'Sincronizar desde SUNAT'}
-                  </button>
-                </div>
-
-                <p className="text-xs text-gray-500">
-                  Carga tus locales registrados en SUNAT para poder elegirlos como <strong>punto de partida</strong> al emitir guías de remisión.
-                  La consulta usa 1 crédito; solo necesitas hacerla cuando cambien tus locales.
-                </p>
-
-                {establishments.length > 0 ? (
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
@@ -3238,12 +3183,8 @@ export default function Settings() {
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">
-                    Aún no has sincronizado tus establecimientos. Ingresa tu RUC arriba y pulsa "Sincronizar desde SUNAT".
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
               </div>
 
               {/* Divider */}
