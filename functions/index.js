@@ -266,9 +266,22 @@ export const migrateEmissionSecrets = onRequest(
       return
     }
 
-    const { businessId, dryRun = false, deleteTopLevel = false } = req.body || {}
+    const { businessId: businessIdInput, email, dryRun = false, deleteTopLevel = false } = req.body || {}
 
     try {
+      // Permitir pasar un email en vez del businessId: se resuelve el uid (búsqueda
+      // puntual con Admin SDK, no un dump). Útil para probar un solo negocio.
+      let businessId = businessIdInput
+      if (!businessId && email) {
+        try {
+          const u = await auth.getUserByEmail(email)
+          businessId = u.uid
+        } catch (e) {
+          res.status(404).json({ success: false, error: `No se encontró un usuario con el email ${email}` })
+          return
+        }
+      }
+
       const docs = businessId
         ? [await db.collection('businesses').doc(businessId).get()].filter((d) => d.exists)
         : (await db.collection('businesses').get()).docs

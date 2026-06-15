@@ -1294,7 +1294,8 @@ function EmissionSecretsMigrationCard() {
     try {
       const idToken = await auth.currentUser.getIdToken()
       const body = {}
-      if (businessId.trim()) body.businessId = businessId.trim()
+      const v = businessId.trim()
+      if (v) { if (v.includes('@')) body.email = v; else body.businessId = v }
       if (mode === 'dryRun') body.dryRun = true
       if (mode === 'delete') body.deleteTopLevel = true
       const res = await fetch(MIGRATE_URL, {
@@ -1325,7 +1326,7 @@ function EmissionSecretsMigrationCard() {
             type="text"
             value={businessId}
             onChange={(e) => setBusinessId(e.target.value)}
-            placeholder="businessId (opcional: para probar un solo negocio)"
+            placeholder="businessId o email (opcional: para probar un solo negocio)"
             className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
           <div className="mt-3 flex flex-wrap gap-2">
