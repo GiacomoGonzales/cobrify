@@ -16,11 +16,12 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
-    // Permitir lectura pública de imágenes de productos
-    // Escritura permitida a cualquier usuario autenticado (sub-usuarios necesitan subir imágenes)
+    // Imágenes de productos (legacy: las nuevas van a Cloudflare). Lectura pública
+    // para el catálogo; escritura SOLO del dueño (antes cualquier autenticado podía
+    // sobrescribir/subir imágenes en el folder de OTRO negocio).
     match /businesses/{businessId}/products/{allImages=**} {
       allow read: if true; // Acceso público de lectura
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
     // Permitir lectura pública de imágenes de categorías
@@ -43,7 +44,7 @@ service firebase.storage {
 
     match /{businessId}/products/{allImages=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
     match /{businessId}/categories/{allImages=**} {
@@ -56,16 +57,27 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
-    // Path para imágenes de productos (nuevo formato: products/{businessId}/{filename})
-    // Escritura permitida a cualquier usuario autenticado (sub-usuarios necesitan subir imágenes)
+    // Imágenes de productos, formato products/{businessId}/{filename} (legacy: las
+    // nuevas van a Cloudflare). Lectura pública para el catálogo; escritura SOLO del dueño.
     match /products/{businessId}/{allImages=**} {
       allow read: if true; // Lectura pública
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
-    // Path para comprobantes PDF (WhatsApp sharing)
+    // Comprobantes: PDF (compartido al cliente por WhatsApp) + XML firmado y CDR
+    // (guardados server-side). TODOS se descargan vía URLs CON TOKEN de descarga
+    // (getDownloadURL / firebaseStorageDownloadTokens), que NO dependen de estas reglas.
+    // Por eso restringir la LECTURA no rompe ni el WhatsApp del cliente ni la descarga
+    // del dueño/sub-usuario, pero SÍ corta la enumeración pública del XML/CDR (que
+    // contienen datos fiscales: DNI/RUC del comprador, ítems, montos).
     match /comprobantes/{businessId}/{allFiles=**} {
-      allow read: if true; // Lectura pública para que clientes descarguen
+      // Dueño del negocio
+      allow read: if request.auth != null && request.auth.uid == businessId;
+      // Sub-usuario activo del negocio
+      allow read: if request.auth != null
+                  && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.ownerId == businessId;
+      // Escritura: solo el dueño (el PDF lo sube el cliente; XML/CDR los escribe el
+      // Admin SDK del servidor, que omite estas reglas).
       allow write: if request.auth != null && request.auth.uid == businessId;
     }
   }
