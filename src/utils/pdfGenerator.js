@@ -1301,9 +1301,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const HAS_RETENCION = invoice.hasRetencion && invoice.retencionAmount > 0
   // Altura de la sección de información de detracción (leyenda SPOT + datos)
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
-  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT
+  const RETENCION_INFO_HEIGHT = HAS_RETENCION ? 58 : 0 // header + 3 filas (base/porcentaje/monto)
+  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
-  const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0) + (HAS_RETENCION ? 36 : 0)) * S
+  const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
 
   // Posición Y donde termina el área de productos (empieza el pie fijo).
@@ -1984,8 +1985,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       footerY += totalsRowHeight
     }
 
-    // Fila: TOTAL (fondo oscuro) - Si hay detracción o retención, no es la última fila
-    const hasNetRow = HAS_DETRACTION || HAS_RETENCION
+    // Fila: TOTAL (fondo oscuro) - Si hay detracción, no es la última fila
+    const hasNetRow = HAS_DETRACTION
     const totalRowHeight = hasNetRow ? totalsRowHeight : totalsRowHeight + 6
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
@@ -2021,32 +2022,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text('NETO A PAGAR', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
     doc.text(CCY + ' ' + (invoice.netPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
-    footerY += totalsRowHeight + 6
-  }
-
-  // Filas de RETENCIÓN del IGV (si aplica) - solo leyenda + cálculo; el total NO cambia.
-  if (HAS_RETENCION && !shouldHideIgv) {
-    // Fila: RETENCIÓN (estilo neutro)
-    doc.setFillColor(250, 250, 250)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setTextColor(...DARK_GRAY)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.text(`RETENCIÓN IGV (${invoice.retencionRate || 3}%)`, totalsX + 5, footerY + 10)
-    doc.text('- ' + CCY + ' ' + (invoice.retencionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-    footerY += totalsRowHeight
-
-    // Fila: IMPORTE NETO A PAGAR (mismo estilo que TOTAL)
-    doc.setFillColor(...ACCENT_COLOR)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.text('IMPORTE NETO A PAGAR', totalsX + 5, footerY + 14)
-    doc.setFontSize(11)
-    doc.text(CCY + ' ' + (invoice.retencionNetPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
     footerY += totalsRowHeight + 6
   }
 
@@ -2254,6 +2229,60 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     // Guardar donde termina la sección de detracción
     detractionSectionEndY = detractionInfoY + detractionTotalHeight + 5
+  }
+
+  // --- SECCIÓN INFORMACIÓN DE LA RETENCIÓN (si aplica) - estilo SUNAT ---
+  // Cuadro aparte (no fila en totales): Base imponible / Porcentaje / Monto. El total
+  // queda completo; la retención es informativa.
+  if (HAS_RETENCION) {
+    const retInfoX = MARGIN_LEFT
+    const retInfoWidth = bankSectionWidth
+    let retInfoY = bankAccountsArray.length > 0 ? detractionSectionEndY + 5 : totalsStartY
+
+    const retHeaderHeight = 16
+    const retRowHeight = 12
+    const retTotalHeight = retHeaderHeight + (3 * retRowHeight)
+
+    // Recuadro exterior
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(retInfoX, retInfoY, retInfoWidth, retTotalHeight)
+
+    // Header
+    doc.setFillColor(235, 235, 235)
+    doc.rect(retInfoX, retInfoY, retInfoWidth, retHeaderHeight, 'F')
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text('Información de la retención', retInfoX + 5, retInfoY + 11)
+    doc.setDrawColor(180, 180, 180)
+    doc.line(retInfoX, retInfoY + retHeaderHeight, retInfoX + retInfoWidth, retInfoY + retHeaderHeight)
+
+    const retValX = retInfoX + retInfoWidth - 5
+    let retDataY = retInfoY + retHeaderHeight + 9
+    doc.setFontSize(7)
+
+    // Base imponible de la Retención (= total del comprobante)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Base imponible de la Retención:', retInfoX + 5, retDataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${CCY} ${(invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, retValX, retDataY, { align: 'right' })
+    retDataY += retRowHeight
+
+    // Porcentaje de retención
+    doc.setFont('helvetica', 'normal')
+    doc.text('Porcentaje de retención:', retInfoX + 5, retDataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${(invoice.retencionRate || 3).toFixed(2)}%`, retValX, retDataY, { align: 'right' })
+    retDataY += retRowHeight
+
+    // Monto de la retención
+    doc.setFont('helvetica', 'normal')
+    doc.text('Monto de la retención:', retInfoX + 5, retDataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${CCY} ${(invoice.retencionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, retValX, retDataY, { align: 'right' })
+
+    detractionSectionEndY = retInfoY + retTotalHeight + 5
   }
 
   // ========== QR Y VALIDACIÓN SUNAT ==========
