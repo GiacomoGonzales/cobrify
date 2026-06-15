@@ -47,6 +47,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
+import { recalculateProductCostsFromPurchases } from '@/services/inventoryCostService'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -151,6 +152,27 @@ export default function Inventory() {
   const hidePrivateData = useHidePrivateData()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
+
+  // Recálculo opcional del costo de inventario desde el historial de compras (corrige
+  // el descuadre por costos guardados a 2 decimales en compras anteriores).
+  const [recalcCosts, setRecalcCosts] = useState(false)
+  const handleRecalcCosts = async () => {
+    if (recalcCosts || isDemoMode) return
+    setRecalcCosts(true)
+    try {
+      const result = await recalculateProductCostsFromPurchases(getBusinessId())
+      if (result.success) {
+        await loadProducts()
+        toast.success(result.updated > 0 ? `Costo recalculado en ${result.updated} productos` : 'Los costos ya estaban al día')
+      } else {
+        toast.error(result.error || 'No se pudo recalcular el costo')
+      }
+    } catch (e) {
+      toast.error(e.message || 'Error al recalcular el costo')
+    } finally {
+      setRecalcCosts(false)
+    }
+  }
   const appNavigate = useAppNavigate()
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
@@ -2125,8 +2147,17 @@ export default function Inventory() {
                   <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
                     {formatCurrency(totalValue)}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
                     Costo: {formatCurrency(totalCostValue)}
+                    <button
+                      type="button"
+                      onClick={handleRecalcCosts}
+                      disabled={recalcCosts}
+                      title="Recalcular el costo desde el historial de compras"
+                      className="text-gray-300 hover:text-primary-600 disabled:opacity-60 transition-colors"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${recalcCosts ? 'animate-spin' : ''}`} />
+                    </button>
                   </p>
                 </div>
                 <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
