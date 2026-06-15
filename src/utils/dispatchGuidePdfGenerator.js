@@ -895,7 +895,17 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const looksLikeFirestoreId = /^[a-zA-Z0-9]{15,25}$/.test(rawCode) && /[a-z]/.test(rawCode) && /[A-Z]/.test(rawCode)
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM' && !looksLikeFirestoreId
     const itemCode = isValidCode ? rawCode : '-'
-    doc.text(itemCode.substring(0, 12), itemColX + 5, centerYRow)
+    // Mostrar el código COMPLETO; si es largo, reducir la fuente para que entre en la
+    // columna (antes se truncaba a 12 caracteres, recortando códigos largos).
+    const codeMaxWidth = colWidths.code - 7
+    let codeFontSize = 8
+    doc.setFontSize(codeFontSize)
+    while (codeFontSize > 5 && doc.getTextWidth(itemCode) > codeMaxWidth) {
+      codeFontSize -= 0.5
+      doc.setFontSize(codeFontSize)
+    }
+    doc.text(itemCode, itemColX + 5, centerYRow)
+    doc.setFontSize(8) // restaurar para las siguientes celdas
 
     // Línea vertical Código
     doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
