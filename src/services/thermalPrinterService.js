@@ -4030,6 +4030,7 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
 
 const GUIDE_TRANSFER_REASONS = {
   '01': 'Venta', '02': 'Compra', '04': 'Traslado entre establec.',
+  '05': 'Consignacion',
   '08': 'Importacion', '09': 'Exportacion', '13': 'Otros',
   '14': 'Venta suj. confirmacion', '17': 'Transformacion',
   '18': 'Emisor itinerante', '19': 'Zona primaria',
