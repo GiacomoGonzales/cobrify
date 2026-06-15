@@ -63,6 +63,9 @@ import {
   deleteAllDispatchGuides,
   deleteAllQuotations,
   resetAllStock,
+  resetAllIngredientStock,
+  deleteIngredientStockMovements,
+  deleteAllProductions,
   countDocuments
 } from '@/services/bulkDeleteService'
 
@@ -646,7 +649,7 @@ export default function Settings() {
   const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
-  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0, stockMovements: 0, dispatchGuides: 0, quotations: 0 })
+  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0, stockMovements: 0, dispatchGuides: 0, quotations: 0, ingredients: 0, productions: 0 })
 
   const {
     register,
@@ -2582,12 +2585,13 @@ export default function Settings() {
     dispatchGuides: { name: 'Guías de Remisión', collection: 'dispatchGuides' },
     quotations: { name: 'Cotizaciones', collection: 'quotations' },
     resetStock: { name: 'Stock e Inventario', collection: 'products', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} productos y movimientos eliminados' },
+    resetIngredientStock: { name: 'Stock de Insumos', collection: 'ingredients', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} insumos; movimientos y producciones eliminados' },
   }
 
   const loadBulkDeleteCounts = async () => {
     if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
     const businessId = getBusinessId()
-    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
+    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions] = await Promise.all([
       countDocuments(businessId, 'products'),
       countDocuments(businessId, 'customers'),
       countDocuments(businessId, 'suppliers'),
@@ -2596,8 +2600,10 @@ export default function Settings() {
       countDocuments(businessId, 'stockMovements'),
       countDocuments(businessId, 'dispatchGuides'),
       countDocuments(businessId, 'quotations'),
+      countDocuments(businessId, 'ingredients'),
+      countDocuments(businessId, 'productions'),
     ])
-    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations })
+    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions })
   }
 
   const openBulkDeleteModal = (type) => {
@@ -2659,6 +2665,26 @@ export default function Settings() {
             deleted: resetResult.deleted,
             error: movementsResult.error,
             movementsDeleted: movementsResult.deleted,
+          }
+          break
+        }
+        case 'resetIngredientStock': {
+          // Paso 1: Resetear stock de todos los insumos (sin eliminarlos)
+          const resetResult = await resetAllIngredientStock(businessId, onProgress)
+          if (!resetResult.success) {
+            result = resetResult
+            break
+          }
+          // Paso 2: Eliminar SOLO los movimientos de insumos (isIngredient == true)
+          const movementsResult = await deleteIngredientStockMovements(businessId, onProgress)
+          // Paso 3: Eliminar todas las producciones
+          const productionsResult = await deleteAllProductions(businessId, onProgress)
+          result = {
+            success: movementsResult.success && productionsResult.success,
+            deleted: resetResult.deleted,
+            error: movementsResult.error || productionsResult.error,
+            movementsDeleted: movementsResult.deleted,
+            productionsDeleted: productionsResult.deleted,
           }
           break
         }
@@ -10899,6 +10925,37 @@ export default function Settings() {
                     Limpiar
                   </Button>
                 </div>
+
+                {/* Limpiar Stock de Insumos (sin eliminar insumos) + producciones */}
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="pr-3">
+                    <h4 className="font-medium text-gray-900">Limpiar Stock de Insumos</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Resetea a <strong>cero</strong> el stock de todos los insumos, elimina sus movimientos y borra el listado de producción.
+                      <span className="block text-amber-700 font-medium mt-1">
+                        Los insumos NO se eliminan. Ideal antes de rehacer el inventario de insumos.
+                      </span>
+                      {bulkDeleteCounts.ingredients > 0 && (
+                        <span className="block mt-1 text-gray-700">
+                          Afectará a <strong>{bulkDeleteCounts.ingredients}</strong> insumos
+                          {bulkDeleteCounts.productions > 0 && (
+                            <> y eliminará <strong>{bulkDeleteCounts.productions}</strong> producciones</>
+                          )}.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('resetIngredientStock')}
+                    disabled={bulkDeleteCounts.ingredients === 0}
+                    className="bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -10940,6 +10997,13 @@ export default function Settings() {
                     <br /><br />
                     <strong>Los productos NO se eliminarán</strong> — solo se limpia su inventario.
                     Úsalo antes de re-importar stock desde Excel.
+                  </p>
+                ) : bulkDeleteType === 'resetIngredientStock' ? (
+                  <p className="text-sm text-red-800 mt-1">
+                    Vas a <strong>RESETEAR a CERO</strong> el stock de <strong>TODOS</strong> los insumos,
+                    <strong>ELIMINAR</strong> sus movimientos de stock y <strong>BORRAR</strong> todo el listado de producción.
+                    <br /><br />
+                    <strong>Los insumos NO se eliminarán</strong> — solo se limpia su inventario.
                   </p>
                 ) : (
                   <p className="text-sm text-red-800 mt-1">

@@ -255,6 +255,146 @@ export async function deleteAllQuotations(businessId, onProgress = null) {
 }
 
 /**
+ * Resetear el stock de todos los INSUMOS a cero (sin eliminar los insumos).
+ * Equivalente a resetAllStock pero para la colección 'ingredients':
+ * - currentStock = 0 (y stock = 0 por compatibilidad)
+ * - warehouseStocks[].stock = 0 (mantiene warehouseId/minStock)
+ * - batches = [], batchNumber = null, expirationDate = null
+ *
+ * Útil para reinicializar el inventario de insumos antes de re-cargarlo.
+ */
+export async function resetAllIngredientStock(businessId, onProgress = null) {
+  try {
+    const ingredientsRef = collection(db, 'businesses', businessId, 'ingredients')
+    const snapshot = await getDocs(ingredientsRef)
+
+    if (snapshot.empty) {
+      return { success: true, deleted: 0 }
+    }
+
+    const total = snapshot.docs.length
+    let updated = 0
+
+    const batchSize = 400
+    let currentBatch = writeBatch(db)
+    let operationsInBatch = 0
+    const batches = []
+
+    for (const docSnapshot of snapshot.docs) {
+      const data = docSnapshot.data()
+
+      const resetWarehouseStocks = Array.isArray(data.warehouseStocks)
+        ? data.warehouseStocks.map(ws => ({ ...ws, stock: 0 }))
+        : []
+
+      currentBatch.update(
+        doc(db, 'businesses', businessId, 'ingredients', docSnapshot.id),
+        {
+          currentStock: 0,
+          stock: 0,
+          warehouseStocks: resetWarehouseStocks,
+          batches: [],
+          batchNumber: null,
+          expirationDate: null,
+          updatedAt: new Date(),
+        }
+      )
+      operationsInBatch++
+
+      if (operationsInBatch >= batchSize) {
+        batches.push({ batch: currentBatch, ops: operationsInBatch })
+        currentBatch = writeBatch(db)
+        operationsInBatch = 0
+      }
+    }
+
+    if (operationsInBatch > 0) {
+      batches.push({ batch: currentBatch, ops: operationsInBatch })
+    }
+
+    for (let i = 0; i < batches.length; i++) {
+      await batches[i].batch.commit()
+      updated += batches[i].ops
+      if (onProgress) {
+        onProgress({ deleted: updated, total, percentage: Math.round((updated / total) * 100) })
+      }
+    }
+
+    return { success: true, deleted: updated }
+  } catch (error) {
+    console.error('Error resetting ingredient stock:', error)
+    return { success: false, deleted: 0, error: error.message }
+  }
+}
+
+/**
+ * Eliminar SOLO los movimientos de stock de insumos (isIngredient == true),
+ * sin tocar los movimientos de productos (comparten la colección stockMovements).
+ */
+export async function deleteIngredientStockMovements(businessId, onProgress = null) {
+  try {
+    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    const snapshot = await getDocs(movementsRef)
+
+    // Filtrar SOLO movimientos de insumos: TODOS tienen `ingredientId` (compra,
+    // deducción, producción, transferencia, stock inicial). Algunos además llevan el
+    // flag `isIngredient`, pero no todos, por eso el campo confiable es ingredientId.
+    // Los movimientos de PRODUCTOS llevan `productId` y se dejan intactos.
+    const ingredientDocs = snapshot.docs.filter(d => {
+      const m = d.data()
+      return !!m.ingredientId || m.isIngredient === true
+    })
+
+    if (ingredientDocs.length === 0) {
+      return { success: true, deleted: 0 }
+    }
+
+    const total = ingredientDocs.length
+    let deleted = 0
+
+    const batchSize = 400
+    let currentBatch = writeBatch(db)
+    let operationsInBatch = 0
+    const batches = []
+
+    for (const docSnapshot of ingredientDocs) {
+      currentBatch.delete(doc(db, 'businesses', businessId, 'stockMovements', docSnapshot.id))
+      operationsInBatch++
+
+      if (operationsInBatch >= batchSize) {
+        batches.push({ batch: currentBatch, ops: operationsInBatch })
+        currentBatch = writeBatch(db)
+        operationsInBatch = 0
+      }
+    }
+
+    if (operationsInBatch > 0) {
+      batches.push({ batch: currentBatch, ops: operationsInBatch })
+    }
+
+    for (let i = 0; i < batches.length; i++) {
+      await batches[i].batch.commit()
+      deleted += batches[i].ops
+      if (onProgress) {
+        onProgress({ deleted, total, percentage: Math.round((deleted / total) * 100) })
+      }
+    }
+
+    return { success: true, deleted: total }
+  } catch (error) {
+    console.error('Error deleting ingredient stock movements:', error)
+    return { success: false, deleted: 0, error: error.message }
+  }
+}
+
+/**
+ * Eliminar todas las producciones
+ */
+export async function deleteAllProductions(businessId, onProgress = null) {
+  return deleteCollection(businessId, 'productions', onProgress)
+}
+
+/**
  * Contar documentos en una colección
  */
 export async function countDocuments(businessId, collectionName) {
