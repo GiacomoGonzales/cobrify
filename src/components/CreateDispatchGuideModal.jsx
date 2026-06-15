@@ -135,6 +135,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [originProvince, setOriginProvince] = useState('')
   const [originDistrict, setOriginDistrict] = useState('')
 
+  // Establecimientos (anexos) del PROPIO emisor, guardados en "Mi Empresa".
+  // Permiten elegir la dirección de partida sin re-consultar a SUNAT (no gasta créditos).
+  const [myEstablishments, setMyEstablishments] = useState([])
+  const [selectedOriginEstablishment, setSelectedOriginEstablishment] = useState('')
+
   // Punto de llegada
   const [destinationAddress, setDestinationAddress] = useState('')
   const [destinationDepartment, setDestinationDepartment] = useState('')
@@ -808,6 +813,24 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [selectedWarehouseId, warehouses, selectedBranchId, branches, isOpen, getBusinessId, isPurchase])
 
+  // Cargar los establecimientos (anexos) del propio emisor guardados en "Mi Empresa"
+  // para ofrecerlos como punto de partida (sin re-consultar a SUNAT en cada guía).
+  useEffect(() => {
+    const loadMyEstablishments = async () => {
+      try {
+        const businessId = getBusinessId()
+        if (!businessId) return
+        const companyResult = await getCompanySettings(businessId)
+        if (companyResult.success && Array.isArray(companyResult.data?.establishments)) {
+          setMyEstablishments(companyResult.data.establishments)
+        }
+      } catch (error) {
+        console.error('Error al cargar establecimientos del emisor:', error)
+      }
+    }
+    if (isOpen) loadMyEstablishments()
+  }, [isOpen, getBusinessId])
+
   // Sincronizar ubigeo y dirección del destinatario con el punto correspondiente
   // En ventas: destinatario (cliente) → punto de LLEGADA
   // En compras: destinatario (proveedor) → punto de PARTIDA
@@ -1156,6 +1179,22 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (dir) setRecipientAddress(dir)
     setShowRecipientEstablishmentsModal(false)
     toast.success('Dirección del establecimiento aplicada')
+  }
+
+  // Elegir uno de MIS establecimientos (anexos SUNAT del emisor) como punto de partida.
+  // Setea la dirección y deriva departamento/provincia/distrito desde el ubigeo (6 díg).
+  const applyOriginEstablishment = (codigo) => {
+    setSelectedOriginEstablishment(codigo)
+    if (!codigo) return
+    const est = myEstablishments.find(e => e.codigo === codigo)
+    if (!est) return
+    setOriginAddress(est.direccionCompleta || est.direccion || '')
+    const ubigeo = (est.ubigeo || '').trim()
+    if (ubigeo.length === 6) {
+      setOriginDepartment(ubigeo.substring(0, 2))
+      setOriginProvince(ubigeo.substring(2, 4))
+      setOriginDistrict(ubigeo.substring(4, 6))
+    }
   }
 
   const handleSubmit = async (e, { skipSunat = false } = {}) => {
@@ -2281,6 +2320,26 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
             {activeLocationTab === 'origin' && (
               <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                {!isPurchase && myEstablishments.length > 0 && (
+                  <div>
+                    <Select
+                      label="Mi establecimiento (SUNAT)"
+                      value={selectedOriginEstablishment}
+                      onChange={(e) => applyOriginEstablishment(e.target.value)}
+                    >
+                      <option value="">Seleccionar local…</option>
+                      {myEstablishments.map((est) => (
+                        <option key={est.codigo} value={est.codigo}>
+                          {est.codigo} — {est.direccionCompleta || est.direccion}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Elige uno de tus locales registrados en SUNAT para autocompletar la dirección de partida. Puedes editarla luego.
+                    </p>
+                  </div>
+                )}
+
                 <Input
                   label="Dirección"
                   placeholder="Av. Principal 123"

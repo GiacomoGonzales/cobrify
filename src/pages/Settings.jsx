@@ -31,7 +31,7 @@ import {
   compressForCoverDesktop,
   compressForCoverMobile,
 } from '@/services/productImageService'
-import { consultarRUC } from '@/services/documentLookupService'
+import { consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import {
   scanPrinters,
   connectPrinter,
@@ -639,6 +639,11 @@ export default function Settings() {
   const [manualAddress, setManualAddress] = useState('')
   const [manualName, setManualName] = useState('')
 
+  // Establecimientos (anexos) del emisor en SUNAT. Se sincronizan una vez y se guardan
+  // para poder elegirlos como punto de partida al emitir guías de remisión.
+  const [establishments, setEstablishments] = useState([])
+  const [isSyncingEstablishments, setIsSyncingEstablishments] = useState(false)
+
   // Estado para cuentas bancarias estructuradas
   const [bankAccounts, setBankAccounts] = useState([])
   // Estructura: [{ bank: 'BCP', currency: 'PEN', accountNumber: '123-456789-0-12', cci: '00212345678901234567' }]
@@ -1041,6 +1046,9 @@ export default function Settings() {
           setLocationProvCode(businessData.ubigeo.substring(2, 4))
           setLocationDistCode(businessData.ubigeo.substring(4, 6))
         }
+
+        // Establecimientos (anexos) guardados del emisor
+        setEstablishments(Array.isArray(businessData.establishments) ? businessData.establishments : [])
 
         // Cargar series de documentos
         if (businessData.series) {
@@ -1720,6 +1728,50 @@ export default function Settings() {
     }
   }
 
+  // Sincronizar los establecimientos (locales anexos) del propio RUC desde SUNAT.
+  // Consume 1 crédito de apiperu, por eso es un botón explícito. Se guardan en el doc
+  // del negocio para luego elegirlos como punto de partida en las guías de remisión.
+  const handleSyncEstablishments = async () => {
+    if (isDemoMode) {
+      toast.error('No disponible en modo demo')
+      return
+    }
+    const rucNumber = (watch('ruc') || '').replace(/\D/g, '')
+    if (rucNumber.length !== 11) {
+      toast.error('Ingrese un RUC válido (11 dígitos) primero')
+      return
+    }
+
+    setIsSyncingEstablishments(true)
+    try {
+      const result = await consultarEstablecimientos(rucNumber)
+      if (!result.success) {
+        toast.error(result.error || 'No se pudieron consultar los establecimientos', 5000)
+        return
+      }
+
+      const list = result.data || []
+      // Guardar en el doc del negocio (merge, sin tocar el resto de la configuración)
+      const businessRef = doc(db, 'businesses', getBusinessId())
+      await setDoc(businessRef, {
+        establishments: list,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      setEstablishments(list)
+      if (list.length === 0) {
+        toast.info('Tu RUC solo tiene domicilio fiscal en SUNAT (sin locales anexos)')
+      } else {
+        toast.success(`${list.length} establecimiento(s) sincronizado(s) desde SUNAT`)
+      }
+    } catch (error) {
+      console.error('Error al sincronizar establecimientos:', error)
+      toast.error('Error al consultar los establecimientos. Verifique su conexión.', 5000)
+    } finally {
+      setIsSyncingEstablishments(false)
+    }
+  }
+
   const onSubmit = async data => {
     if (!user?.uid) return
 
@@ -1816,6 +1868,7 @@ export default function Settings() {
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
         mtcRegistration: data.mtcRegistration || '',
+        establishments: establishments,
         updatedAt: serverTimestamp(),
       }, { merge: true })
 
@@ -3134,6 +3187,62 @@ export default function Settings() {
                 <input type="hidden" {...register('province')} />
                 <input type="hidden" {...register('department')} />
                 <input type="hidden" {...register('ubigeo')} />
+              </div>
+
+              {/* Establecimientos / locales anexos (SUNAT) */}
+              <div className="md:col-span-2 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Store className="w-4 h-4" />
+                    <span>Mis establecimientos (SUNAT)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSyncEstablishments}
+                    disabled={isSyncingEstablishments}
+                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                    title="Consultar los locales anexos de tu RUC en SUNAT"
+                  >
+                    {isSyncingEstablishments ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {isSyncingEstablishments ? 'Sincronizando…' : 'Sincronizar desde SUNAT'}
+                  </button>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  Carga tus locales registrados en SUNAT para poder elegirlos como <strong>punto de partida</strong> al emitir guías de remisión.
+                  La consulta usa 1 crédito; solo necesitas hacerla cuando cambien tus locales.
+                </p>
+
+                {establishments.length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600 w-16">Código</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Dirección</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600 w-24">Ubigeo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {establishments.map((est, index) => (
+                          <tr key={est.codigo || index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-mono text-xs">{est.codigo || '-'}</td>
+                            <td className="px-3 py-2">{est.direccionCompleta || est.direccion || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{est.ubigeo || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">
+                    Aún no has sincronizado tus establecimientos. Ingresa tu RUC arriba y pulsa "Sincronizar desde SUNAT".
+                  </p>
+                )}
               </div>
               </div>
 
