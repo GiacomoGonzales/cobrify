@@ -2025,6 +2025,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += totalsRowHeight + 6
   }
 
+  // Re-dibujar el borde exterior de la caja de totales POR ENCIMA de los rellenos de las
+  // filas (que tapaban los lados al pintarse a todo el ancho), para que el contorno negro
+  // quede visible y consistente con las demás cajas (retención, QR, bancos, etc.).
+  if (!shouldHideIgv) {
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalsSectionRows + 6)
+  }
+
   // Fila: PAGO CON (monto entregado por el cliente, si hay vuelto)
   if (Number(invoice.change) > 0 && Number(invoice.amountReceived) > 0) {
     doc.setFillColor(250, 250, 250)
