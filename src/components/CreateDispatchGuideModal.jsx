@@ -17,6 +17,7 @@ const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
   { value: '02', label: 'Compra' },
   { value: '04', label: 'Traslado entre establecimientos de la misma empresa' },
+  { value: '05', label: 'Consignación' },
   { value: '08', label: 'Importación' },
   { value: '09', label: 'Exportación' },
   { value: '13', label: 'Otros' },

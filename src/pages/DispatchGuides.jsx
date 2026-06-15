@@ -22,6 +22,7 @@ const TRANSFER_REASONS = {
   '01': 'Venta',
   '02': 'Compra',
   '04': 'Traslado entre establecimientos',
+  '05': 'Consignación',
   '08': 'Importación',
   '09': 'Exportación',
   '13': 'Otros',

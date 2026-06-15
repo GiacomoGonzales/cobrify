@@ -28,6 +28,7 @@ const TRANSFER_REASONS_FULL = [
   { code: '03', label: 'Venta sujeta a confirmación del comprador' },
   { code: '02', label: 'Compra' },
   { code: '04', label: 'Traslado entre establecimientos de la misma' },
+  { code: '05', label: 'Consignación' },
   { code: '08', label: 'Importación' },
   { code: '17', label: 'Traslado emisor itinerante CP' },
   { code: '09', label: 'Exportación' },
