@@ -169,6 +169,28 @@ function setCorsHeaders(res) {
 }
 
 /**
+ * SEGURIDAD: verifica que una petición HTTP (onRequest) provenga de un ADMIN real.
+ * Requiere el header `Authorization: Bearer <idToken>`, valida el token con Firebase
+ * Auth y comprueba que el uid esté en /admins. Devuelve el uid del admin o null.
+ *
+ * Antes varios endpoints confiaban en un `adminUid` enviado en el body sin verificar
+ * el token del caller → cualquiera que conociera (o adivinara) un UID de admin podía
+ * invocarlos. NUNCA confiar en el body para autorización; usar el uid del token.
+ */
+async function verifyAdminFromRequest(req) {
+  const authHeader = req.headers.authorization || req.headers.Authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return null
+  const idToken = authHeader.split('Bearer ')[1]
+  try {
+    const decoded = await auth.verifyIdToken(idToken)
+    const adminDoc = await db.collection('admins').doc(decoded.uid).get()
+    return adminDoc.exists ? decoded.uid : null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
  * Filtra valores undefined de un objeto (Firestore no acepta undefined)
  */
 function removeUndefined(obj) {
@@ -2890,20 +2912,19 @@ export const getUserByEmail = onRequest(
     }
 
     try {
-      const { email, adminUid } = req.body
+      const { email } = req.body
+
+      // SEGURIDAD: requiere token de admin verificado (antes el check de admin era
+      // opcional — si no se enviaba adminUid, se saltaba por completo).
+      const callerAdminUid = await verifyAdminFromRequest(req)
+      if (!callerAdminUid) {
+        res.status(403).json({ success: false, error: 'No autorizado' })
+        return
+      }
 
       if (!email) {
         res.status(400).json({ success: false, error: 'Email es requerido' })
         return
-      }
-
-      // Verificar que quien llama es admin
-      if (adminUid) {
-        const adminDoc = await db.collection('admins').doc(adminUid).get()
-        if (!adminDoc.exists) {
-          res.status(403).json({ success: false, error: 'No autorizado' })
-          return
-        }
       }
 
       // Buscar usuario por email
@@ -2984,20 +3005,20 @@ export const createReseller = onRequest(
     }
 
     try {
-      const { adminUid, resellerData } = req.body
+      const { resellerData } = req.body
+
+      // SEGURIDAD: requiere token de admin verificado (antes el check de admin era
+      // opcional — quien llamara sin adminUid creaba/actualizaba resellers libremente,
+      // incluyendo autopromoverse a reseller).
+      const callerAdminUid = await verifyAdminFromRequest(req)
+      if (!callerAdminUid) {
+        res.status(403).json({ success: false, error: 'No autorizado' })
+        return
+      }
 
       if (!resellerData || !resellerData.uid) {
         res.status(400).json({ success: false, error: 'Datos del reseller incompletos' })
         return
-      }
-
-      // Verificar que quien llama es admin
-      if (adminUid) {
-        const adminDoc = await db.collection('admins').doc(adminUid).get()
-        if (!adminDoc.exists) {
-          res.status(403).json({ success: false, error: 'No autorizado' })
-          return
-        }
       }
 
       const { uid, ...data } = resellerData
@@ -3073,17 +3094,19 @@ export const deleteUser = onRequest(
     }
 
     try {
-      const { adminUid, userIdToDelete, deleteData } = req.body
+      const { userIdToDelete, deleteData } = req.body
 
-      if (!adminUid || !userIdToDelete) {
-        res.status(400).json({ success: false, error: 'Faltan parámetros requeridos' })
+      // SEGURIDAD: el admin se determina por el TOKEN del caller, no por un adminUid
+      // del body. Antes cualquiera que conociera un UID de admin (legible en /admins)
+      // podía borrar cualquier usuario y todos sus datos.
+      const adminUid = await verifyAdminFromRequest(req)
+      if (!adminUid) {
+        res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
         return
       }
 
-      // Verificar que quien llama es admin
-      const adminDoc = await db.collection('admins').doc(adminUid).get()
-      if (!adminDoc.exists) {
-        res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+      if (!userIdToDelete) {
+        res.status(400).json({ success: false, error: 'Faltan parámetros requeridos' })
         return
       }
 

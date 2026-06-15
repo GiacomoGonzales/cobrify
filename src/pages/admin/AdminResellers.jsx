@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { db } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   collection,
@@ -169,9 +169,13 @@ export default function AdminResellers() {
     setFoundUser(null)
 
     try {
+      const idToken = await auth.currentUser.getIdToken()
       const response = await fetch(GET_USER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({
           email: formData.email,
           adminUid: user?.uid
@@ -273,9 +277,13 @@ export default function AdminResellers() {
         loadResellers()
       } else {
         // Crear nuevo usando Cloud Function (con UID real)
+        const idToken = await auth.currentUser.getIdToken()
         const response = await fetch(CREATE_RESELLER_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
           body: JSON.stringify({
             adminUid: user?.uid,
             resellerData: {

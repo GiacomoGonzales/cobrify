@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { db } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
@@ -781,9 +781,13 @@ export default function AdminUsers() {
 
     setDeletingUser(true)
     try {
+      const idToken = await auth.currentUser.getIdToken()
       const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/deleteUser', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({
           adminUid: currentUser.uid,
           userIdToDelete: userToDelete.id,
