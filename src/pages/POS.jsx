@@ -402,6 +402,13 @@ export default function POS() {
     }
     return 'boleta'
   })
+  // ¿El negocio puede emitir comprobantes FISCALES (boleta/factura)?
+  // Requiere conexión SUNAT (método 'qpse' o 'sunat_direct') O que el admin lo haya
+  // habilitado manualmente (allowInvoicingWithoutSunat). Sin eso, solo Nota de Venta.
+  // Mientras companySettings carga (null) asumimos true (optimista) para no parpadear el
+  // selector ni forzar Nota de Venta antes de tiempo; al cargar queda el valor real.
+  const hasSunatConnection = ['qpse', 'sunat_direct'].includes(companySettings?.emissionMethod)
+  const canEmitFiscal = isDemoMode || !companySettings || hasSunatConnection || companySettings.allowInvoicingWithoutSunat === true
   // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -4460,6 +4467,14 @@ export default function POS() {
     }
   }, [documentType])
 
+  // Sin conexión SUNAT (y sin override del admin): forzar Nota de Venta. Boleta y
+  // factura quedan ocultas del selector; esto corrige el default si era 'boleta'.
+  useEffect(() => {
+    if (!canEmitFiscal && (documentType === 'boleta' || documentType === 'factura')) {
+      setDocumentType('nota_venta')
+    }
+  }, [canEmitFiscal, documentType])
+
   // Handlers para descuento
   const handleDiscountAmountChange = (value) => {
     setDiscountAmount(value)
@@ -4848,6 +4863,12 @@ export default function POS() {
     }
     if (!documentType) {
       toast.error('Selecciona el tipo de comprobante antes de emitir')
+      return
+    }
+
+    // Sin conexión SUNAT (ni override del admin): no se permiten comprobantes fiscales.
+    if ((documentType === 'boleta' || documentType === 'factura') && !canEmitFiscal) {
+      toast.error('Este negocio no tiene conexión con SUNAT. Solo puede emitir Nota de Venta. Contacta al administrador para habilitar comprobantes.')
       return
     }
 
@@ -7701,10 +7722,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     }}
                     className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                   >
-                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
+                    {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
-                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('factura')) && (
+                    {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('factura')) && (
                       <option value="factura">Factura Electrónica</option>
                     )}
                     {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('nota_venta')) && (
@@ -7717,6 +7738,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </span>
                   )}
                 </div>
+                {!canEmitFiscal && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Sin conexión SUNAT: solo Nota de Venta. Contactá al administrador para habilitar comprobantes.
+                  </p>
+                )}
               </div>
 
               {/* 4b. Moneda (solo retail con flag multi-divisa activa) ===== */}

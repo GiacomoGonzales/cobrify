@@ -134,7 +134,9 @@ export default function AdminUsers() {
     // Configuración tributaria
     igvExempt: false,
     igvRate: 18,
-    taxType: 'standard' // 'standard' (18%), 'reduced' (8% Ley 31556), 'exempt' (0% Ley 27037)
+    taxType: 'standard', // 'standard' (18%), 'reduced' (8% Ley 31556), 'exempt' (0% Ley 27037)
+    // Override admin: permitir boleta/factura en el POS aunque NO haya conexión SUNAT.
+    allowInvoicingWithoutSunat: false
   })
   const [showPasswords, setShowPasswords] = useState({
     qpse: false,
@@ -1115,7 +1117,8 @@ export default function AdminUsers() {
           igvRate: taxConfig.igvRate || 18,
           // Determinar taxType basado en configuración existente
           // Ley 31556: aceptar 10, 10.5 y 8 como 'reduced' por compatibilidad con configs antiguas
-          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')
+          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard'),
+          allowInvoicingWithoutSunat: businessData.allowInvoicingWithoutSunat === true
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
@@ -1289,6 +1292,7 @@ export default function AdminUsers() {
       // Top-level: solo lo NO secreto (method/taxConfig) + indicador de método para la lista admin.
       updateData.emissionConfig = { method: emissionConfig.method, taxConfig: emissionConfig.taxConfig }
       updateData.emissionMethod = sunatForm.emissionMethod
+      updateData.allowInvoicingWithoutSunat = !!sunatForm.allowInvoicingWithoutSunat
 
       await updateDoc(businessRef, updateData)
 
@@ -2989,6 +2993,23 @@ export default function AdminUsers() {
                 </div>
               ) : (
               <>
+              {/* Override: permitir comprobantes fiscales sin conexión SUNAT */}
+              <label className="flex items-start gap-3 bg-amber-50 rounded-lg p-4 border border-amber-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!sunatForm.allowInvoicingWithoutSunat}
+                  onChange={e => setSunatForm({ ...sunatForm, allowInvoicingWithoutSunat: e.target.checked })}
+                  className="mt-0.5 w-4 h-4 text-amber-600 rounded flex-shrink-0"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">Permitir boletas/facturas sin conexión SUNAT</span>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Por defecto, un negocio sin método de emisión configurado solo puede emitir Notas de Venta en el POS.
+                    Activá esto para permitirle igualmente Boletas y Facturas.
+                  </p>
+                </div>
+              </label>
+
               {/* Configuración Tributaria */}
               <div className="bg-green-50 rounded-lg p-4 border border-green-200 space-y-4">
                 <div className="flex items-center gap-2 text-green-700">
