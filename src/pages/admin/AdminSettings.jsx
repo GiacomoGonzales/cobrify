@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { db } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
 import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan, getHiddenPlans, hidePlan, unhidePlan } from '@/services/customPlanService'
@@ -1251,6 +1251,9 @@ function MaintenanceSection() {
           {/* Migración Cloudinary → Cloudflare R2, un negocio a la vez (piloto) */}
           <R2MigrationCard />
 
+          {/* Migración de credenciales SUNAT a subcolección protegida (cierre de exposición pública) */}
+          <EmissionSecretsMigrationCard />
+
           {/* Info */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <div className="flex items-center gap-2 text-blue-800">
@@ -1272,6 +1275,88 @@ function formatBytes(b) {
   let i = 0; let n = b
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
   return `${n.toFixed(n < 10 ? 2 : 1)} ${u[i]}`
+}
+
+// Dispara la Cloud Function migrateEmissionSecrets (admin-only) que mueve el
+// certificado/claves SUNAT/QPse del doc público a /businesses/{id}/secrets/emission.
+// Orden: Probar (dry-run) → Copiar → (deploy del cliente) → Borrar del doc público.
+function EmissionSecretsMigrationCard() {
+  const [busy, setBusy] = useState('')
+  const [result, setResult] = useState(null)
+  const [businessId, setBusinessId] = useState('')
+
+  const MIGRATE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/migrateEmissionSecrets'
+
+  async function run(mode) {
+    if (mode === 'delete' && !window.confirm('¿Borrar las credenciales del doc público? Hacelo SOLO después de desplegar el cliente que lee del subcolección.')) return
+    setBusy(mode)
+    setResult(null)
+    try {
+      const idToken = await auth.currentUser.getIdToken()
+      const body = {}
+      if (businessId.trim()) body.businessId = businessId.trim()
+      if (mode === 'dryRun') body.dryRun = true
+      if (mode === 'delete') body.deleteTopLevel = true
+      const res = await fetch(MIGRATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify(body),
+      })
+      setResult(await res.json())
+    } catch (e) {
+      setResult({ success: false, error: e.message })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="bg-red-50 rounded-xl p-5 border border-red-200">
+      <div className="flex items-start gap-3">
+        <Shield className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Migrar credenciales SUNAT a subcolección protegida</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Mueve el certificado .p12, claves SOL y credenciales QPse del doc público del negocio a la
+            subcolección protegida <code>secrets/emission</code>. Orden: <b>Probar</b> → <b>Copiar</b> →
+            (tras el deploy del cliente) <b>Borrar del doc público</b>.
+          </p>
+          <input
+            type="text"
+            value={businessId}
+            onChange={(e) => setBusinessId(e.target.value)}
+            placeholder="businessId (opcional: para probar un solo negocio)"
+            className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => run('dryRun')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
+              {busy === 'dryRun' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Probar (dry-run)
+            </button>
+            <button onClick={() => run('copy')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {busy === 'copy' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Copiar al subcolección
+            </button>
+            <button onClick={() => run('delete')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+              {busy === 'delete' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Borrar del doc público
+            </button>
+          </div>
+          {result && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              <p className="font-medium">{result.success ? `OK (${result.mode})` : `Error: ${result.error}`}</p>
+              {result.stats && (
+                <p className="mt-1">Total: {result.stats.total} · con secretos: {result.stats.withSecrets} · copiados: {result.stats.copied} · borrados: {result.stats.deleted} · sin secretos: {result.stats.skipped}</p>
+              )}
+              {result.details && (
+                <pre className="mt-2 text-xs overflow-auto max-h-40">{JSON.stringify(result.details, null, 2)}</pre>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function CloudinaryCleanupCard() {
