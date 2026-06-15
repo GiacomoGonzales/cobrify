@@ -211,6 +211,121 @@ async function userCanAccessBusiness(userId, businessId) {
 }
 
 /**
+ * SEGURIDAD (cert SUNAT): los secretos de emisión (sunat, qpse, y las credenciales
+ * anidadas emissionConfig.{qpse,sunat}) se están moviendo del doc top-level
+ * /businesses/{id} —que es de lectura pública cuando el catálogo/libro está activo—
+ * a la subcolección protegida /businesses/{id}/secrets/emission (rules: solo dueño/admin).
+ * Este helper los re-fusiona en businessData (que se carga del doc top-level) antes de
+ * emitir/anular. El Admin SDK omite las reglas, así que el servidor sí puede leerlos.
+ *
+ * Dual-read durante la migración: si la subcolección no existe (negocio aún no migrado),
+ * se usan los campos que todavía vienen en el doc top-level (fallback) → comportamiento
+ * idéntico al anterior. emissionConfig se fusiona en profundidad para preservar
+ * method/taxConfig (no secretos) que se mantienen en el doc top-level.
+ */
+async function attachEmissionSecrets(businessId, businessData) {
+  if (!businessId || !businessData) return businessData
+  try {
+    const secretSnap = await db.collection('businesses').doc(businessId).collection('secrets').doc('emission').get()
+    if (secretSnap.exists) {
+      const s = secretSnap.data() || {}
+      if (s.sunat !== undefined) businessData.sunat = s.sunat
+      if (s.qpse !== undefined) businessData.qpse = s.qpse
+      if (s.emissionConfig !== undefined) {
+        businessData.emissionConfig = { ...(businessData.emissionConfig || {}), ...s.emissionConfig }
+      }
+    }
+    // else: fallback -> los campos siguen en el doc top-level, no hacer nada.
+  } catch (e) {
+    console.error(`⚠️ attachEmissionSecrets(${businessId}):`, e.message)
+  }
+  return businessData
+}
+
+/**
+ * MIGRACIÓN (cert SUNAT): mueve los secretos de emisión (sunat, qpse y las
+ * credenciales anidadas emissionConfig.{qpse,sunat}) del doc top-level
+ * /businesses/{id} a la subcolección protegida /businesses/{id}/secrets/emission.
+ * Admin-only. Conserva emissionConfig.method/taxConfig (no secretos) en el top-level.
+ *
+ * Modos (body JSON):
+ *   { dryRun: true }          -> solo reporta qué movería, no escribe.
+ *   { }                       -> COPIA al subcolección (NO borra del top-level). [Stage 2]
+ *   { deleteTopLevel: true }  -> re-copia y BORRA los campos secretos del top-level. [Stage 4]
+ *   { businessId: "..." }     -> opcional: procesa un solo negocio (para pruebas).
+ */
+export const migrateEmissionSecrets = onRequest(
+  { region: 'us-central1', timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    const callerAdminUid = await verifyAdminFromRequest(req)
+    if (!callerAdminUid) {
+      res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+      return
+    }
+
+    const { businessId, dryRun = false, deleteTopLevel = false } = req.body || {}
+
+    try {
+      const docs = businessId
+        ? [await db.collection('businesses').doc(businessId).get()].filter((d) => d.exists)
+        : (await db.collection('businesses').get()).docs
+
+      let withSecrets = 0, copied = 0, deleted = 0, skipped = 0
+      const details = []
+
+      for (const doc of docs) {
+        const data = doc.data() || {}
+        const secret = {}
+        if (data.sunat !== undefined) secret.sunat = data.sunat
+        if (data.qpse !== undefined) secret.qpse = data.qpse
+        if (data.emissionConfig && (data.emissionConfig.qpse !== undefined || data.emissionConfig.sunat !== undefined)) {
+          secret.emissionConfig = {}
+          if (data.emissionConfig.qpse !== undefined) secret.emissionConfig.qpse = data.emissionConfig.qpse
+          if (data.emissionConfig.sunat !== undefined) secret.emissionConfig.sunat = data.emissionConfig.sunat
+        }
+
+        if (Object.keys(secret).length === 0) { skipped++; continue }
+        withSecrets++
+
+        if (dryRun) {
+          details.push({ businessId: doc.id, would: Object.keys(secret) })
+          continue
+        }
+
+        // Copiar al subcolección (idempotente)
+        await doc.ref.collection('secrets').doc('emission').set(secret, { merge: true })
+        copied++
+
+        if (deleteTopLevel) {
+          const updates = {}
+          if (data.sunat !== undefined) updates.sunat = FieldValue.delete()
+          if (data.qpse !== undefined) updates.qpse = FieldValue.delete()
+          if (secret.emissionConfig?.qpse !== undefined) updates['emissionConfig.qpse'] = FieldValue.delete()
+          if (secret.emissionConfig?.sunat !== undefined) updates['emissionConfig.sunat'] = FieldValue.delete()
+          if (Object.keys(updates).length) {
+            await doc.ref.update(updates)
+            deleted++
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        mode: dryRun ? 'dryRun' : (deleteTopLevel ? 'copy+delete' : 'copy'),
+        stats: { total: docs.length, withSecrets, copied, deleted, skipped },
+        details: dryRun ? details : undefined,
+      })
+    } catch (e) {
+      console.error('❌ migrateEmissionSecrets:', e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+)
+
+/**
  * Filtra valores undefined de un objeto (Firestore no acepta undefined)
  */
 function removeUndefined(obj) {
@@ -567,6 +682,7 @@ export const sendInvoiceToSunat = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -1343,6 +1459,7 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -2004,6 +2121,7 @@ export const sendDebitNoteToSunat = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -3344,6 +3462,7 @@ export const sendDispatchGuideToSunatFn = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
       console.log(`🏢 [GRE] Negocio: ${businessData.businessName} (RUC: ${businessData.ruc})`)
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
@@ -3675,6 +3794,7 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
       console.log(`🏢 [GRE-T] Negocio: ${businessData.businessName} (RUC: ${businessData.ruc})`)
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
@@ -4057,6 +4177,7 @@ export const retryPendingInvoices = onSchedule(
       for (const businessDoc of businessesSnapshot.docs) {
         const businessId = businessDoc.id
         const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
         // Verificar que el negocio tenga configuración de emisión
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
@@ -4367,6 +4488,7 @@ export const resendPendingBoletas = onRequest(
       for (const businessDoc of businessDocs) {
         const businessId = businessDoc.id
         const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
         // Verificar que tenga configuración de emisión
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
@@ -4593,6 +4715,7 @@ export const testRetryPendingInvoices = onRequest(
       for (const businessDoc of businessDocs) {
         const businessId = businessDoc.id
         const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
           continue
@@ -4905,6 +5028,7 @@ export const voidInvoice = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Obtener configuración de emisión (puede estar en emissionConfig o sunat)
       const emissionConfig = businessData.emissionConfig || {}
@@ -5436,6 +5560,7 @@ export const checkVoidStatus = onRequest(
       // Consultar estado en SUNAT
       const businessDoc = await db.collection('businesses').doc(userId).get()
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
       const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(voidedData.invoiceId)
 
       // Detectar si fue enviado por QPSe o SUNAT directo
@@ -5676,6 +5801,7 @@ export const voidBoleta = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Obtener configuración de emisión
       const emissionConfig = businessData.emissionConfig || {}
@@ -6192,6 +6318,7 @@ export const voidBoletaQPse = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Obtener configuración de QPse
       const emissionConfig = businessData.emissionConfig || {}
@@ -6634,6 +6761,7 @@ export const voidInvoiceQPse = onRequest(
       }
 
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
 
       // Obtener configuración de QPse
       const emissionConfig = businessData.emissionConfig || {}
@@ -9122,6 +9250,7 @@ export const migrateProductsIgvRate = onRequest(
 
       for (const businessDoc of businessesSnapshot.docs) {
         const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
         const taxConfig = businessData.emissionConfig?.taxConfig
         const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
         if (!isReducedIgv) continue
@@ -9473,6 +9602,7 @@ export const testRappiConnection = onCall(
         return { ok: false, step: 'config', message: 'Business no existe' }
       }
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
       // El businessId es el uid del owner. Si el caller es ese uid, es el dueño.
       // Si no, debe ser un sub-usuario con users/{uid}.ownerId === businessId.
       const isOwner = request.auth.uid === businessId
@@ -10618,6 +10748,7 @@ export const resyncShopifreeProducts = onCall(
       throw new HttpsError('not-found', 'Negocio no existe')
     }
     const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
     const apiKey = businessData?.shopifreeConfig?.apiKey
     if (!apiKey) {
       throw new HttpsError('failed-precondition', 'Shopifree no está conectado')
@@ -10843,6 +10974,7 @@ export const pollShopifreeOrders = onSchedule(
     for (const businessDoc of businessesSnap.docs) {
       const businessId = businessDoc.id
       const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
       const cfg = businessData?.shopifreeConfig
 
       // Skip si no hay apiKey o polling deshabilitado
@@ -10946,6 +11078,7 @@ export const pollShopifreeOrdersNow = onCall(
       throw new HttpsError('not-found', 'Negocio no existe')
     }
     const businessData = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, businessData)
     if (!businessData?.shopifreeConfig?.apiKey) {
       throw new HttpsError('failed-precondition', 'Shopifree no está conectado')
     }

@@ -448,6 +448,16 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // Subcollection: Secrets (credenciales de emisión SUNAT/QPse: certificado .p12,
+      // contraseñas, claves SOL). Se mueven aquí desde el doc top-level (que es de
+      // lectura PÚBLICA cuando el catálogo/libro está activo). NUNCA público ni
+      // sub-usuarios: solo el dueño (Settings) y el admin (panel) las leen/escriben;
+      // el servidor las lee con Admin SDK (que omite estas reglas).
+      match /secrets/{secretId} {
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+
       // Subcollection: Ingredients (Ingredientes - para modo restaurante)
       match /ingredients/{ingredientId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
