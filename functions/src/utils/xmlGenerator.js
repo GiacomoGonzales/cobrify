@@ -362,6 +362,14 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
   }
 
+  // Leyenda informativa de RETENCIÓN del IGV (cliente agente de retención). Texto libre
+  // SIN languageLocaleID: no existe código de Catálogo 52 para esto y un código inválido
+  // hace que SUNAT rechace (error 3289). El total NO cambia (la retención la efectúa el comprador).
+  if (invoiceData.hasRetencion && invoiceData.retencionAmount > 0) {
+    const retLine = `Operacion sujeta a retencion del IGV - Retencion (${invoiceData.retencionRate || 3}%): ${Number(invoiceData.retencionAmount || 0).toFixed(2)}`
+    root.ele('cbc:Note').dat(retLine.slice(0, 100))
+  }
+
   // Observaciones libres del usuario (campo "Observaciones" del POS).
   // SUNAT muestra el cbc:Note en su visualizador (Consulta SOL / PSE) siempre que:
   //   1. Esté envuelto en CDATA (.dat() en xmlbuilder2)

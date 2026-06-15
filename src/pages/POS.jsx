@@ -756,6 +756,7 @@ export default function POS() {
   // Estados para detracción (solo facturas)
   const [hasDetraction, setHasDetraction] = useState(false)
   const [detractionType, setDetractionType] = useState('') // Código SUNAT del tipo de bien/servicio
+  const [hasRetencion, setHasRetencion] = useState(false) // Régimen de Retención IGV (cliente agente de retención)
   const [detractionBankAccount, setDetractionBankAccount] = useState('') // Cuenta del Banco de la Nación
 
   // Mostrar campos de transporte de carga solo para códigos 021 y 027
@@ -2060,7 +2061,8 @@ export default function POS() {
       }))
       setCart(cartItems)
 
-      // Cargar detracción si existe
+      // Cargar retención (si existe) y detracción
+      setHasRetencion(!!invoice.hasRetencion)
       if (invoice.hasDetraction) {
         setHasDetraction(true)
         setDetractionType(invoice.detractionType || '')
@@ -2213,7 +2215,8 @@ export default function POS() {
       }))
       setCart(cartItems)
 
-      // Cargar detracción si existe
+      // Cargar retención (si existe) y detracción
+      setHasRetencion(!!invoice.hasRetencion)
       if (invoice.hasDetraction) {
         setHasDetraction(true)
         setDetractionType(invoice.detractionType || '')
@@ -4444,11 +4447,12 @@ export default function POS() {
       }))
     }
 
-    // Resetear detracción cuando no es factura
+    // Resetear detracción/retención cuando no es factura (ambas son factura-only)
     if (documentType !== 'factura') {
       setHasDetraction(false)
       setDetractionType('')
       setDetractionBankAccount('')
+      setHasRetencion(false)
     }
   }, [documentType])
 
@@ -5586,6 +5590,14 @@ export default function POS() {
             detractionAmount: Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100),
             detractionBankAccount: detractionBankAccount || null,
             netPayable: Number((amounts.total - Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)).toFixed(2)),
+          }),
+          // Datos de retención (Régimen de Retención del IGV — cliente agente de retención).
+          // Solo leyenda + cálculo informativo: el total NO cambia (el comprador retiene el 3%).
+          hasRetencion: hasRetencion,
+          ...(hasRetencion && {
+            retencionRate: 3,
+            retencionAmount: Number((amounts.total * 0.03).toFixed(2)),
+            retencionNetPayable: Number((amounts.total - amounts.total * 0.03).toFixed(2)),
           }),
         }),
         // Si viene de nota(s) de venta, marcar para no descontar stock de nuevo
@@ -8499,6 +8511,31 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 </div>
                               </>
                             )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sección de Retención (cliente agente de retención) */}
+                      <div className="mt-3 pt-2 border-t border-gray-100">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={hasRetencion}
+                            onChange={e => setHasRetencion(e.target.checked)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Operación sujeta a retención (cliente agente de retención)</span>
+                        </label>
+                        {hasRetencion && (
+                          <div className="mt-2 text-xs bg-gray-50 rounded p-2 space-y-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>Retención IGV (3%):</span>
+                              <span>- {formatCurrency(amounts.total * 0.03)}</span>
+                            </div>
+                            <div className="flex justify-between font-bold text-green-700 border-t pt-1">
+                              <span>Importe neto a pagar:</span>
+                              <span>{formatCurrency(amounts.total - amounts.total * 0.03)}</span>
+                            </div>
                           </div>
                         )}
                       </div>
