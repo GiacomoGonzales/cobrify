@@ -2530,6 +2530,19 @@ export const initializeUsageCounters = onRequest(
   async (req, res) => {
     setCorsHeaders(res)
 
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    // SEGURIDAD: solo admin (antes era público e inicializaba los contadores de
+    // TODAS las suscripciones sin autenticación).
+    const callerAdminUid = await verifyAdminFromRequest(req)
+    if (!callerAdminUid) {
+      res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+      return
+    }
+
     try {
       console.log('🔧 Inicializando contadores de uso...')
 
@@ -2615,6 +2628,14 @@ export const syncUsageCounters = onRequest(
 
     if (req.method === 'OPTIONS') {
       res.status(204).send('')
+      return
+    }
+
+    // SEGURIDAD: solo admin (antes era público; operación costosa que recuenta todas
+    // las facturas de todos los negocios — vector de DoS/costo).
+    const callerAdminUid = await verifyAdminFromRequest(req)
+    if (!callerAdminUid) {
+      res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
       return
     }
 
@@ -4283,6 +4304,14 @@ export const resendPendingBoletas = onRequest(
   async (req, res) => {
     console.log('🔄 [RESEND-BOLETAS] Iniciando reenvío de boletas pendientes...')
 
+    // SEGURIDAD: solo admin (antes era público; cualquiera podía disparar el reenvío
+    // masivo de boletas a SUNAT de todos los negocios).
+    const callerAdminUid = await verifyAdminFromRequest(req)
+    if (!callerAdminUid) {
+      res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+      return
+    }
+
     const filterBusinessId = req.body?.businessId || req.query?.businessId
     const BATCH_SIZE = 200
 
@@ -4475,6 +4504,14 @@ export const testRetryPendingInvoices = onRequest(
   },
   async (req, res) => {
     console.log('🔄 [RETRY-TEST] Iniciando reenvío MANUAL de documentos pendientes...')
+
+    // SEGURIDAD: solo admin (antes era público; cualquiera podía disparar reintentos
+    // masivos de comprobantes a SUNAT de todos los negocios).
+    const callerAdminUid = await verifyAdminFromRequest(req)
+    if (!callerAdminUid) {
+      res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+      return
+    }
 
     const MAX_RETRIES = 50
     const MIN_AGE_MINUTES = 5
@@ -7650,9 +7687,11 @@ export const exportInvoicesForAudit = onRequest(
  * 2. Agrega los campos faltantes (opGravadas, opExoneradas, opInafectas, taxConfig)
  * 3. Cambia el status a "pending" para permitir reenvío
  *
- * Uso: curl -X POST https://us-central1-cobrify-395fe.cloudfunctions.net/fixRejectedInvoices \
+ * Uso (requiere token de ADMIN; obtenerlo logueado como admin en la web):
+ *   curl -X POST https://us-central1-cobrify-395fe.cloudfunctions.net/fixRejectedInvoices \
  *      -H "Content-Type: application/json" \
- *      -d '{"businessId": "xxx", "secretKey": "fix-ley-selva-2024"}'
+ *      -H "Authorization: Bearer <idToken-de-admin>" \
+ *      -d '{"businessId": "xxx"}'
  */
 export const fixRejectedInvoices = onRequest(
   {
@@ -7664,7 +7703,7 @@ export const fixRejectedInvoices = onRequest(
     // CORS
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
     if (req.method === 'OPTIONS') {
       res.status(204).send('')
@@ -7677,13 +7716,15 @@ export const fixRejectedInvoices = onRequest(
     }
 
     try {
-      const { businessId, secretKey } = req.body
-
-      // Validar clave secreta simple (para evitar uso no autorizado)
-      if (secretKey !== 'fix-ley-selva-2024') {
-        res.status(403).json({ error: 'Clave secreta inválida' })
+      // SEGURIDAD: token de admin verificado (antes: clave secreta 'fix-ley-selva-2024'
+      // hardcodeada en el código y visible en el repositorio).
+      const callerAdminUid = await verifyAdminFromRequest(req)
+      if (!callerAdminUid) {
+        res.status(403).json({ error: 'No autorizado - Solo administradores' })
         return
       }
+
+      const { businessId } = req.body
 
       if (!businessId) {
         res.status(400).json({ error: 'businessId es requerido' })
