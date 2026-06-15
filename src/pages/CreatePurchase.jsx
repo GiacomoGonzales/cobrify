@@ -1547,8 +1547,11 @@ export default function CreatePurchase() {
           if (product.trackStock === false) return
 
           const newQuantity = grouped.totalQuantity
-          // Costo promedio ponderado de todas las líneas del mismo producto (redondeado a 2 decimales)
-          const newCost = newQuantity > 0 ? Math.round((grouped.totalCost / newQuantity) * 100) / 100 : 0
+          // Costo unitario base = totalCost / cantidad. Se guarda con 6 decimales (no 2)
+          // para que `stock × cost` (valuación de inventario) cuadre con el dinero real
+          // de la compra. Con 2 decimales, el redondeo del unitario × cantidad acumulaba
+          // un descuadre (peor en compras por presentación con factores no exactos).
+          const newCost = newQuantity > 0 ? Math.round((grouped.totalCost / newQuantity) * 1e6) / 1e6 : 0
 
           // En modo edición:
           // - Si NO cambió el almacén: el stock ya fue ajustado por diferencia arriba, no sumar de nuevo
@@ -1591,8 +1594,9 @@ export default function CreatePurchase() {
             averageCost = currentCost
           }
 
-          // Redondear costo promedio a 2 decimales antes de guardar
-          const roundedAverageCost = Math.round(averageCost * 100) / 100
+          // Redondear costo promedio a 6 decimales antes de guardar (ver nota en newCost:
+          // evita el descuadre de valuación de inventario por redondear el unitario a 2).
+          const roundedAverageCost = Math.round(averageCost * 1e6) / 1e6
 
           // Preparar datos extra (costo, proveedor, lotes)
           const extraUpdates = {
@@ -1830,7 +1834,8 @@ export default function CreatePurchase() {
       if (!isEditMode) {
         // Modo creación: registrar compra de ingredientes (crea registro + actualiza stock)
         const ingredientUpdates = Object.values(groupedIngredients).map(async grouped => {
-          const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
+          // 6 decimales (no 2) para que la valuación de inventario de insumos cuadre.
+          const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 1e6) / 1e6 : 0
           return registerIngredientPurchase(businessId, {
             ingredientId: grouped.ingredientId,
             ingredientName: grouped.ingredientName,
@@ -1932,7 +1937,7 @@ export default function CreatePurchase() {
           // Recalcular costo promedio
           if (newQty > 0 && groupedIngredients[ingredientId]) {
             const grouped = groupedIngredients[ingredientId]
-            const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
+            const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 1e6) / 1e6 : 0
             if (avgUnitPrice > 0) {
               const currentAvgCost = ingredient.averageCost || 0
               const revertedStock = Math.max(0, newStock - convertedNewQty)
