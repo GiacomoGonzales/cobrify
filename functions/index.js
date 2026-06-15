@@ -312,6 +312,19 @@ export const migrateEmissionSecrets = onRequest(
         await doc.ref.collection('secrets').doc('emission').set(secret, { merge: true })
         copied++
 
+        // Indicador NO secreto del método de emisión, en el top-level: la lista del
+        // panel admin ya no puede derivarlo de las credenciales una vez borradas.
+        const m =
+          (data.qpse && data.qpse.enabled) ? 'qpse' :
+          (data.sunat && data.sunat.enabled) ? 'sunat_direct' :
+          (data.emissionConfig && data.emissionConfig.method) ? data.emissionConfig.method :
+          (data.emissionConfig && data.emissionConfig.qpse && data.emissionConfig.qpse.enabled) ? 'qpse' :
+          (data.emissionConfig && data.emissionConfig.sunat && data.emissionConfig.sunat.enabled) ? 'sunat_direct' :
+          (data.emissionMethod || null)
+        if (m && data.emissionMethod !== m) {
+          await doc.ref.set({ emissionMethod: m }, { merge: true })
+        }
+
         if (deleteTopLevel) {
           const updates = {}
           if (data.sunat !== undefined) updates.sunat = FieldValue.delete()

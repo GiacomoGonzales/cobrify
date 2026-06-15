@@ -23,6 +23,7 @@ import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
 import { doc, updateDoc, setDoc, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService';
 
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast, onUserUpdated, customPlans = {} }) {
   const [stats, setStats] = useState(null);
@@ -118,68 +119,46 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const loadEmissionConfig = async () => {
     try {
       const businessDoc = await getDoc(doc(db, 'businesses', user.userId));
-      const data = businessDoc.data();
+      const data = businessDoc.data() || {};
 
-      console.log('📋 Cargando configuración para:', user.email);
-      console.log('📋 Datos de Firestore:', data);
+      // Credenciales desde la subcolección PROTEGIDA (fallback al top-level durante
+      // la migración del certificado).
+      const em = await getEmissionSecrets(user.userId, data);
+      const ec = em.emissionConfig || {};
+      const qpse = em.qpse || ec.qpse || {};
+      const sunat = em.sunat || ec.sunat || {};
 
-      if (data?.emissionConfig) {
-        // Si ya existe emissionConfig del admin, usarlo
-        console.log('✅ Cargando desde emissionConfig');
-        // Asegurar que taxConfig exista, si no, usar valores por defecto
-        setEmissionConfig({
-          ...data.emissionConfig,
-          taxConfig: data.emissionConfig.taxConfig || {
-            igvExempt: false,
-            igvRate: 18,
-            exemptionReason: '',
-            exemptionCode: '10'
-          }
-        });
-      } else {
-        // Si no existe, cargar desde la configuración antigua (Settings)
-        console.log('✅ Cargando desde configuración antigua (qpse/sunat)');
+      let method = ec.method || 'qpse';
+      if (qpse.enabled) method = 'qpse';
+      else if (sunat.enabled) method = 'sunat_direct';
 
-        const qpseEnabled = data?.qpse?.enabled || false;
-        const sunatEnabled = data?.sunat?.enabled || false;
-
-        // Determinar el método activo
-        let method = 'qpse';
-        if (qpseEnabled) method = 'qpse';
-        else if (sunatEnabled) method = 'sunat_direct';
-
-        console.log('📋 Método detectado:', method);
-        console.log('📋 QPse data:', data?.qpse);
-        console.log('📋 SUNAT data:', data?.sunat);
-
-        setEmissionConfig({
-          method: method,
-          qpse: {
-            enabled: data?.qpse?.enabled || false,
-            usuario: data?.qpse?.usuario || '',
-            password: data?.qpse?.password || '',
-            environment: data?.qpse?.environment || 'demo',
-          },
-          sunat: {
-            enabled: data?.sunat?.enabled || false,
-            environment: data?.sunat?.environment || 'beta',
-            solUser: data?.sunat?.solUser || '',
-            solPassword: data?.sunat?.solPassword || '',
-            clientId: data?.sunat?.clientId || '',
-            clientSecret: data?.sunat?.clientSecret || '',
-            certificateName: data?.sunat?.certificateName || '',
-            certificatePassword: data?.sunat?.certificatePassword || '',
-            certificateData: data?.sunat?.certificateData || '',
-            homologated: data?.sunat?.homologated || false
-          },
-          taxConfig: data?.taxConfig || {
-            igvExempt: false,
-            igvRate: 18,
-            exemptionReason: '',
-            exemptionCode: '10'
-          }
-        });
-      }
+      setEmissionConfig({
+        method,
+        qpse: {
+          enabled: qpse.enabled || false,
+          usuario: qpse.usuario || '',
+          password: qpse.password || '',
+          environment: qpse.environment || 'demo',
+        },
+        sunat: {
+          enabled: sunat.enabled || false,
+          environment: sunat.environment || 'beta',
+          solUser: sunat.solUser || '',
+          solPassword: sunat.solPassword || '',
+          clientId: sunat.clientId || '',
+          clientSecret: sunat.clientSecret || '',
+          certificateName: sunat.certificateName || '',
+          certificatePassword: sunat.certificatePassword || '',
+          certificateData: sunat.certificateData || '',
+          homologated: sunat.homologated || false,
+        },
+        taxConfig: ec.taxConfig || data.taxConfig || {
+          igvExempt: false,
+          igvRate: 18,
+          exemptionReason: '',
+          exemptionCode: '10',
+        },
+      });
     } catch (error) {
       console.error('Error al cargar configuración:', error);
     }
@@ -203,8 +182,16 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
         }
       };
 
+      // Credenciales (qpse/sunat) -> subcolección PROTEGIDA (ya NO al doc público).
+      await saveEmissionSecrets(user.userId, {
+        qpse: configToSave.qpse,
+        sunat: configToSave.sunat,
+        emissionConfig: { qpse: configToSave.qpse, sunat: configToSave.sunat },
+      });
+      // Top-level: solo lo NO secreto (method/taxConfig) + indicador de método para la lista.
       await setDoc(businessRef, {
-        emissionConfig: configToSave,
+        emissionConfig: { method: configToSave.method, taxConfig: configToSave.taxConfig },
+        emissionMethod: configToSave.method,
         updatedAt: new Date()
       }, { merge: true });
 

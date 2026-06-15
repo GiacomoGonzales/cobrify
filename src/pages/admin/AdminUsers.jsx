@@ -5,6 +5,7 @@ import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscri
 import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
+import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import PeruUsersMap from '@/components/admin/PeruUsersMap'
 import { useToast } from '@/contexts/ToastContext'
@@ -1052,27 +1053,31 @@ export default function AdminUsers() {
         const businessData = businessSnap.data()
         console.log('📋 Datos del negocio cargados:', businessData)
 
+        // Credenciales de emisión desde la subcolección PROTEGIDA (fallback al top-level
+        // durante la migración del certificado).
+        const em = await getEmissionSecrets(user.id, businessData)
+
         // Determinar método de emisión
         // Prioridad: qpse/sunat raíz > emissionConfig.method > emissionConfig.qpse/sunat
         let method = 'none'
-        if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
+        if (em.qpse?.enabled || em.qpse?.usuario) {
           method = 'qpse'
-        } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
+        } else if (em.sunat?.enabled || em.sunat?.solUser) {
           method = 'sunat_direct'
-        } else if (businessData.emissionConfig?.method) {
-          method = businessData.emissionConfig.method
-        } else if (businessData.emissionConfig?.qpse?.enabled || businessData.emissionConfig?.qpse?.usuario) {
+        } else if (em.emissionConfig?.method) {
+          method = em.emissionConfig.method
+        } else if (em.emissionConfig?.qpse?.enabled || em.emissionConfig?.qpse?.usuario) {
           method = 'qpse'
-        } else if (businessData.emissionConfig?.sunat?.enabled || businessData.emissionConfig?.sunat?.solUser) {
+        } else if (em.emissionConfig?.sunat?.enabled || em.emissionConfig?.sunat?.solUser) {
           method = 'sunat_direct'
         } else if (businessData.emissionMethod) {
           method = businessData.emissionMethod
         }
 
         // Obtener datos de qpse/sunat (prioridad: raíz > emissionConfig)
-        const qpseData = businessData.qpse || businessData.emissionConfig?.qpse || {}
-        const sunatData = businessData.sunat || businessData.emissionConfig?.sunat || {}
-        const taxConfig = businessData.emissionConfig?.taxConfig || businessData.taxConfig || {}
+        const qpseData = em.qpse || em.emissionConfig?.qpse || {}
+        const sunatData = em.sunat || em.emissionConfig?.sunat || {}
+        const taxConfig = em.emissionConfig?.taxConfig || businessData.taxConfig || {}
 
         console.log('📋 Método detectado:', method)
         console.log('📋 emissionConfig:', businessData.emissionConfig)
@@ -1190,6 +1195,8 @@ export default function AdminUsers() {
       const currentDoc = await getDoc(businessRef)
       const currentData = currentDoc.exists() ? currentDoc.data() : {}
       const currentEmissionConfig = currentData.emissionConfig || {}
+      // Config actual desde la subcolección PROTEGIDA (para preservar cert/firmas al re-guardar).
+      const currentSecrets = await getEmissionSecrets(sunatUserToEdit.id, currentData)
 
       const updateData = {
         updatedAt: Timestamp.now()
@@ -1221,14 +1228,11 @@ export default function AdminUsers() {
           usuario: sunatForm.qpseUsuario,
           password: sunatForm.qpsePassword,
           environment: sunatForm.qpseEnvironment,
-          firmasDisponibles: currentEmissionConfig.qpse?.firmasDisponibles || currentData.qpse?.firmasDisponibles || 500,
-          firmasUsadas: currentEmissionConfig.qpse?.firmasUsadas || currentData.qpse?.firmasUsadas || 0
+          firmasDisponibles: currentSecrets.qpse?.firmasDisponibles ?? currentSecrets.emissionConfig?.qpse?.firmasDisponibles ?? 500,
+          firmasUsadas: currentSecrets.qpse?.firmasUsadas ?? currentSecrets.emissionConfig?.qpse?.firmasUsadas ?? 0
         }
         emissionConfig.qpse = qpseData
         emissionConfig.sunat = { enabled: false }
-        // También guardar en raíz para compatibilidad
-        updateData.qpse = qpseData
-        updateData.sunat = { enabled: false }
       } else if (sunatForm.emissionMethod === 'sunat_direct') {
         // Preparar datos de SUNAT
         const sunatData = {
@@ -1240,8 +1244,8 @@ export default function AdminUsers() {
           certificatePassword: sunatForm.certificatePassword,
           environment: sunatForm.sunatEnvironment,
           homologated: sunatForm.sunatEnvironment === 'production',
-          certificateName: sunatForm.certificateName || currentEmissionConfig.sunat?.certificateName || '',
-          certificateData: currentEmissionConfig.sunat?.certificateData || null
+          certificateName: sunatForm.certificateName || currentSecrets.sunat?.certificateName || currentSecrets.emissionConfig?.sunat?.certificateName || '',
+          certificateData: currentSecrets.sunat?.certificateData || currentSecrets.emissionConfig?.sunat?.certificateData || null
         }
 
         // Si hay un nuevo archivo de certificado, convertirlo a base64
@@ -1271,17 +1275,20 @@ export default function AdminUsers() {
 
         emissionConfig.sunat = sunatData
         emissionConfig.qpse = { enabled: false }
-        // También guardar en raíz para compatibilidad
-        updateData.sunat = sunatData
-        updateData.qpse = { enabled: false }
       } else {
         emissionConfig.qpse = { enabled: false }
         emissionConfig.sunat = { enabled: false }
-        updateData.qpse = { enabled: false }
-        updateData.sunat = { enabled: false }
       }
 
-      updateData.emissionConfig = emissionConfig
+      // Credenciales (sunat/qpse) -> subcolección PROTEGIDA (ya NO al doc público).
+      await saveEmissionSecrets(sunatUserToEdit.id, {
+        sunat: emissionConfig.sunat,
+        qpse: emissionConfig.qpse,
+        emissionConfig: { qpse: emissionConfig.qpse, sunat: emissionConfig.sunat },
+      })
+      // Top-level: solo lo NO secreto (method/taxConfig) + indicador de método para la lista admin.
+      updateData.emissionConfig = { method: emissionConfig.method, taxConfig: emissionConfig.taxConfig }
+      updateData.emissionMethod = sunatForm.emissionMethod
 
       await updateDoc(businessRef, updateData)
 

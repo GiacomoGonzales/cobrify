@@ -47,6 +47,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
+import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import { getTables } from '@/services/tableService'
 import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
@@ -1054,31 +1055,31 @@ export default function Settings() {
           })
         }
 
-        // Cargar configuración SUNAT
-        if (businessData.sunat) {
+        // Cargar configuración SUNAT/QPse desde la subcolección PROTEGIDA de secretos
+        // (con fallback al doc top-level durante la migración del certificado).
+        const { sunat: sunatSecret, qpse: qpseSecret } = await getEmissionSecrets(getBusinessId(), businessData)
+        if (sunatSecret) {
           setSunatConfig({
-            enabled: businessData.sunat.enabled || false,
-            environment: businessData.sunat.environment || 'beta',
-            solUser: businessData.sunat.solUser || '',
-            solPassword: businessData.sunat.solPassword || '',
-            clientId: businessData.sunat.clientId || '',
-            clientSecret: businessData.sunat.clientSecret || '',
-            certificateName: businessData.sunat.certificateName || '',
-            certificatePassword: businessData.sunat.certificatePassword || '',
-            homologated: businessData.sunat.homologated || false,
+            enabled: sunatSecret.enabled || false,
+            environment: sunatSecret.environment || 'beta',
+            solUser: sunatSecret.solUser || '',
+            solPassword: sunatSecret.solPassword || '',
+            clientId: sunatSecret.clientId || '',
+            clientSecret: sunatSecret.clientSecret || '',
+            certificateName: sunatSecret.certificateName || '',
+            certificatePassword: sunatSecret.certificatePassword || '',
+            homologated: sunatSecret.homologated || false,
           })
         }
 
-        // Cargar configuración QPse (global para todos los negocios)
-        // TODO: Mover a colección settings/qpse en producción
-        if (businessData.qpse) {
+        if (qpseSecret) {
           setQpseConfig({
-            enabled: businessData.qpse.enabled || false,
-            environment: businessData.qpse.environment || 'demo',
-            usuario: businessData.qpse.usuario || '',
-            password: businessData.qpse.password || '',
-            firmasDisponibles: businessData.qpse.firmasDisponibles || 0,
-            firmasUsadas: businessData.qpse.firmasUsadas || 0,
+            enabled: qpseSecret.enabled || false,
+            environment: qpseSecret.environment || 'demo',
+            usuario: qpseSecret.usuario || '',
+            password: qpseSecret.password || '',
+            firmasDisponibles: qpseSecret.firmasDisponibles || 0,
+            firmasUsadas: qpseSecret.firmasUsadas || 0,
           })
         }
 
@@ -1955,10 +1956,13 @@ export default function Settings() {
         sunatData.certificateData = null
       }
 
-      // Guardar configuración en Firestore
+      // Guardar el certificado/credenciales SUNAT en la subcolección PROTEGIDA
+      // (ya NO en el doc top-level, que es de lectura pública cuando el catálogo/libro
+      // está activo). El servidor las lee con Admin SDK.
+      await saveEmissionSecrets(getBusinessId(), { sunat: sunatData })
       await setDoc(businessRef, {
-        sunat: sunatData,
         updatedAt: serverTimestamp(),
+        ...(sunatConfig.enabled ? { emissionMethod: 'sunat_direct' } : {}),
       }, { merge: true })
 
       toast.success('Configuración SUNAT guardada exitosamente')
@@ -2013,10 +2017,11 @@ export default function Settings() {
         updatedAt: new Date().toISOString(),
       }
 
-      // Guardar configuración en Firestore
+      // Guardar QPse en la subcolección PROTEGIDA (ya no en el doc top-level público).
+      await saveEmissionSecrets(getBusinessId(), { qpse: qpseData })
       await setDoc(businessRef, {
-        qpse: qpseData,
         updatedAt: serverTimestamp(),
+        ...(qpseConfig.enabled ? { emissionMethod: 'qpse' } : {}),
       }, { merge: true })
 
       toast.success('Configuración de QPse guardada exitosamente')
