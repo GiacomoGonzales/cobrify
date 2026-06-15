@@ -1838,6 +1838,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     dataRowY += rowHeight
   }
 
+  // Borde negro exterior de la tabla de ítems (por ENCIMA de los rellenos), para unificar
+  // con las demás cajas (SON, totales, retención, QR). Solo si la tabla cabe en una página
+  // (dataRowY > tableY); si paginó, el inicio quedó en otra página y se omite.
+  if (dataRowY > tableY) {
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, dataRowY - tableY)
+  }
+
   // ========== 4. PIE DE PÁGINA FIJO ==========
 
   let footerY = dataRowY + (spacious ? 15 : 8)
