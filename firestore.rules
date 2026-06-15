@@ -155,15 +155,30 @@ service cloud.firestore {
       allow read: if isAdmin();
 
       // Permitir crear documentos en dos casos:
-      // 1. Usuario creando su propio documento de Business Owner (userId == auth.uid)
-      // 2. Business Owner creando sub-usuario (ownerId == auth.uid)
+      // 1. Usuario creando su propio documento de Business Owner (userId == auth.uid).
+      //    SEGURIDAD: el ownerId del self-create debe ser uno mismo o estar ausente, para
+      //    que nadie se cree como sub-usuario de OTRO negocio (escalación de tenant vía create,
+      //    p.ej. un sub-usuario eliminado recreando su doc con ownerId ajeno).
+      // 2. Business Owner creando sub-usuario de SU negocio (ownerId == auth.uid).
       allow create: if isAuthenticated() && (
-        isOwner(userId) ||
+        (isOwner(userId) && request.resource.data.get('ownerId', request.auth.uid) == request.auth.uid) ||
         request.resource.data.ownerId == request.auth.uid
       );
 
-      // Los usuarios pueden actualizar su propio documento
-      allow update: if isAuthenticated() && isOwner(userId);
+      // Los usuarios pueden actualizar su propio documento, PERO NO los campos de
+      // seguridad: no pueden cambiar de tenant (ownerId), reactivarse (isActive), ni
+      // auto-otorgarse rol/permisos. Sin esto, un sub-usuario (cajero/mozo) escalaba a
+      // dueño de cualquier otro negocio editando su propio doc. (El owner SÍ gestiona a
+      // sus sub-usuarios por la regla de abajo, que valida resource.data.ownerId == auth.uid.)
+      allow update: if isAuthenticated() && isOwner(userId)
+        && request.resource.data.get('ownerId', null) == resource.data.get('ownerId', null)
+        && request.resource.data.get('isActive', null) == resource.data.get('isActive', null)
+        && request.resource.data.get('role', null) == resource.data.get('role', null)
+        && request.resource.data.get('allowedPages', null) == resource.data.get('allowedPages', null)
+        && request.resource.data.get('allowedWarehouses', null) == resource.data.get('allowedWarehouses', null)
+        && request.resource.data.get('allowedDocumentTypes', null) == resource.data.get('allowedDocumentTypes', null)
+        && request.resource.data.get('allowedPaymentMethods', null) == resource.data.get('allowedPaymentMethods', null)
+        && request.resource.data.get('isPlatformAdmin', false) == resource.data.get('isPlatformAdmin', false);
 
       // Business Owners pueden actualizar usuarios que crearon
       allow update: if isAuthenticated() &&
