@@ -47,7 +47,9 @@ export const AuthProvider = ({ children }) => {
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [branches, setBranches] = useState([]) // Sucursales activas del negocio (modo por sucursal + selector global)
-  const [activeBranchId, setActiveBranchIdState] = useState(null) // Sucursal activa (null = Sucursal Principal → modo del doc)
+  // Selección del selector global de sucursal (Navbar). 'all' = Todas | 'main' = Principal | <branchId>.
+  // `activeBranchId` (operativo, deriva del scope) se calcula más abajo y conserva su semántica anterior.
+  const [branchScope, setBranchScopeState] = useState('all')
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
   const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
   const navigate = useNavigate()
@@ -360,21 +362,28 @@ export const AuthProvider = ({ children }) => {
               const branchList = branchesResult.success ? (branchesResult.data || []) : []
               setBranches(branchList)
 
-              // Sucursal activa inicial: localStorage > sucursal del sub-usuario restringido > Principal (null)
-              let initialBranchId = null
+              // Selección inicial del selector global: localStorage > sucursal del sub-usuario restringido > Todas.
+              let initialScope = 'all'
               try {
-                const stored = localStorage.getItem(`factuya_active_branch_${businessId}`)
-                if (stored && branchList.some(b => b.id === stored)) initialBranchId = stored
+                const stored = localStorage.getItem(`factuya_branch_scope_${businessId}`)
+                if (stored === 'all' || stored === 'main' || branchList.some(b => b.id === stored)) {
+                  initialScope = stored
+                } else {
+                  // Back-compat: clave antigua que guardaba solo el branchId activo.
+                  const legacy = localStorage.getItem(`factuya_active_branch_${businessId}`)
+                  if (legacy && branchList.some(b => b.id === legacy)) initialScope = legacy
+                }
               } catch (e) { /* localStorage no disponible */ }
-              if (!initialBranchId && subUserAllowedBranches.length > 0 && !subUserAllowedBranches.includes('main')) {
+              // Sub-usuario restringido sin acceso a Principal → su primera sucursal permitida.
+              if (initialScope === 'all' && subUserAllowedBranches.length > 0 && !subUserAllowedBranches.includes('main')) {
                 const firstAllowed = branchList.find(b => subUserAllowedBranches.includes(b.id))
-                if (firstAllowed) initialBranchId = firstAllowed.id
+                if (firstAllowed) initialScope = firstAllowed.id
               }
-              setActiveBranchIdState(initialBranchId)
+              setBranchScopeState(initialScope)
             } catch (branchError) {
               console.error('Error al cargar sucursales:', branchError)
               setBranches([])
-              setActiveBranchIdState(null)
+              setBranchScopeState('all')
             }
           } catch (error) {
             console.error('❌ Error al cargar configuración del negocio:', error)
@@ -415,7 +424,7 @@ export const AuthProvider = ({ children }) => {
           setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
           setBranches([])
-          setActiveBranchIdState(null)
+          setBranchScopeState('all')
           setUserFeatures({ productImages: false })
           setSubscriptionOwnerId(null)
         }
@@ -601,7 +610,7 @@ export const AuthProvider = ({ children }) => {
       setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
       setBranches([])
-      setActiveBranchIdState(null)
+      setBranchScopeState('all')
       setUserFeatures({ productImages: false })
       navigate('/')
     } catch (error) {
@@ -764,16 +773,17 @@ export const AuthProvider = ({ children }) => {
 
   // Cambiar la sucursal activa (selector global). Persiste por negocio en localStorage.
   // El modo de negocio efectivo deriva de la sucursal activa (ver effectiveBusinessMode).
-  const setActiveBranch = (branchId) => {
-    setActiveBranchIdState(branchId || null)
+  // Cambiar la selección global de sucursal. scope: 'all' | 'main' | <branchId>. Persiste por negocio.
+  const setBranchScope = (scope) => {
+    const s = scope || 'all'
+    setBranchScopeState(s)
     try {
       const bid = getBusinessId()
-      if (bid) {
-        if (branchId) localStorage.setItem(`factuya_active_branch_${bid}`, branchId)
-        else localStorage.removeItem(`factuya_active_branch_${bid}`)
-      }
+      if (bid) localStorage.setItem(`factuya_branch_scope_${bid}`, s)
     } catch (e) { /* localStorage no disponible */ }
   }
+  // Compat: callers antiguos (p. ej. POS) pasan un branchId|null. null/'' → Principal ('main').
+  const setActiveBranch = (branchId) => setBranchScope(branchId ? branchId : 'main')
 
   // Función helper para verificar si un feature está habilitado
   const hasFeature = (featureName) => {
@@ -799,6 +809,9 @@ export const AuthProvider = ({ children }) => {
   // Sucursal activa + modo de negocio EFECTIVO: si la sucursal activa define su
   // propio businessMode, ese manda; si no, se hereda el modo del doc del negocio.
   // Así un mismo RUC puede operar locales con plantillas distintas (restaurante/hotel).
+  // Sucursal activa OPERATIVA (deriva del scope): un branchId real, o null para Principal/Todas.
+  // Mantiene la semántica previa de `activeBranchId` para POS y derivación del modo.
+  const activeBranchId = (branchScope && branchScope !== 'all' && branchScope !== 'main') ? branchScope : null
   const activeBranch = activeBranchId ? (branches.find(b => b.id === activeBranchId) || null) : null
   const effectiveBusinessMode = activeBranch?.businessMode || businessMode
 
@@ -834,9 +847,11 @@ export const AuthProvider = ({ children }) => {
     businessMode: effectiveBusinessMode, // Modo EFECTIVO (sucursal activa o, si no define, el del negocio)
     baseBusinessMode: businessMode, // Modo configurado en el doc del negocio (sin override de sucursal)
     branches, // Sucursales activas del negocio
-    activeBranchId, // ID de la sucursal activa (null = Sucursal Principal)
+    activeBranchId, // ID de la sucursal activa operativa (null = Principal/Todas → modo del doc)
     activeBranch, // Objeto de la sucursal activa (null = Sucursal Principal)
-    setActiveBranch, // Cambiar la sucursal activa (persiste en localStorage)
+    setActiveBranch, // Compat: cambiar sucursal activa por id|null (mapea al scope)
+    branchScope, // Selección global del selector del Navbar: 'all' | 'main' | <branchId>
+    setBranchScope, // Cambiar la selección global (persiste en localStorage)
     businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)
     userFeatures, // Features especiales habilitadas
     hasFeature, // Función helper para verificar features

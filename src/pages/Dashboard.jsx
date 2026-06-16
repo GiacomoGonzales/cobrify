@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   TrendingUp,
   Loader2,
-  Store,
   Eye,
   EyeOff,
   Receipt,
@@ -32,13 +31,12 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
 import { getRecentInvoices, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
-import { getActiveBranches } from '@/services/branchService'
 import { getTables } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess, businessMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, businessMode, businessSettings, allowedBranches, allowedWarehouses, branchScope } = useAppContext()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Mismo helper compartido que usa Ventas/InvoiceList — usa allowedBranches/allowedWarehouses.
   const canAccess = useLocationAccess()
@@ -51,8 +49,9 @@ export default function Dashboard() {
   const [invoices, setInvoices] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // El filtro de sucursal del Dashboard usa el selector GLOBAL del Navbar (branchScope):
+  // 'all' = Todas | 'main' = Principal | <branchId>. Ya no hay selector propio aquí.
+  const filterBranch = branchScope || 'all'
   const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
   const [openTablesAmount, setOpenTablesAmount] = useState(0) // Suma de mesas ocupadas (modo restaurante)
   // Aggregates mensuales del gráfico de 12 meses (Fase B: server-side, no descarga
@@ -86,26 +85,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
-    loadBranches()
     loadMonthlyAggregates()
     // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario
     // secundario, recargamos para re-saturar facturas y recomputar el gráfico de 12 meses.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isDemoMode, allowedBranches, allowedWarehouses])
-
-  // Cargar sucursales para filtro
-  const loadBranches = async () => {
-    if (!user?.uid || isDemoMode) return
-    try {
-      const result = await getActiveBranches(getBusinessId())
-      if (result.success) {
-        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
-        setBranches(branchList)
-      }
-    } catch (error) {
-      console.error('Error al cargar sucursales:', error)
-    }
-  }
 
   // Cargar aggregates mensuales para el gráfico de 12 meses.
   // Server-side: 12 queries paralelas de sum('total'), no descarga los invoices.
@@ -825,23 +809,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          {/* Selector de Sucursal */}
-          {branches.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-              <Store className="w-4 h-4 text-gray-500" />
-              <select
-                value={filterBranch}
-                onChange={e => setFilterBranch(e.target.value)}
-                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-              >
-                <option value="all">Todas las sucursales</option>
-                {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                {branches.map(branch => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* El selector de sucursal vive ahora en el Navbar (selector global único). */}
           <Link to={`${routePrefix}/pos`} className="w-full sm:w-auto">
             <Button className="w-full sm:w-auto">
               <Package className="w-4 h-4 mr-2" />

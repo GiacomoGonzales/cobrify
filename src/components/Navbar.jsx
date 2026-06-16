@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home } from 'lucide-react'
+import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -21,7 +21,7 @@ const MODE_META = {
 }
 
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, activeBranchId, setActiveBranch, baseBusinessMode } = useAppContext()
+  const { user, logout, subscription, isDemoMode, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const { isInstallable, promptInstall } = usePWAInstall()
@@ -75,26 +75,28 @@ function Navbar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showBranchMenu])
 
-  // Opciones del selector de local (modo por sucursal). Cada opción = un local con su
-  // modo: Principal usa el modo del doc; cada sucursal el suyo (o hereda el del doc).
+  // Locales accesibles (Principal + sucursales según permisos). Cada uno con su modo:
+  // Principal usa el modo del doc; cada sucursal el suyo (o hereda el del doc).
   const accessibleBranches = filterBranchesByAccess ? filterBranchesByAccess(branches || []) : (branches || [])
-  const branchOptions = [
-    ...(hasMainBranchAccess ? [{ id: null, name: businessSettings?.mainBranchName || 'Sucursal Principal', mode: baseBusinessMode }] : []),
-    ...accessibleBranches.map(b => ({ id: b.id, name: b.name, mode: b.businessMode || baseBusinessMode })),
+  const localOptions = [
+    ...(hasMainBranchAccess ? [{ scope: 'main', name: businessSettings?.mainBranchName || 'Sucursal Principal', mode: baseBusinessMode }] : []),
+    ...accessibleBranches.map(b => ({ scope: b.id, name: b.name, mode: b.businessMode || baseBusinessMode })),
   ]
-  const activeOption = branchOptions.find(o => (o.id || null) === (activeBranchId || null)) || branchOptions[0] || null
-  // Mostrar el selector solo si hay ≥2 locales accesibles con modos DISTINTOS (evita que
-  // cuentas con una sola plantilla vean un selector innecesario).
-  const distinctModes = new Set(branchOptions.map(o => o.mode))
-  const showBranchSwitcher = !isDemoMode && !!baseBusinessMode && branchOptions.length >= 2 && distinctModes.size >= 2
+  // El selector es el ÚNICO selector global de sucursal: se muestra siempre que haya ≥2
+  // locales accesibles (aunque compartan el mismo modo), para alternar cómodamente.
+  const showBranchSwitcher = !isDemoMode && !!baseBusinessMode && localOptions.length >= 2
+  // Opción "Todas las sucursales" (vista consolidada) al tope. Su modo = el del doc.
+  const allOption = { scope: 'all', name: 'Todas las sucursales', mode: baseBusinessMode, isAll: true }
+  const branchOptions = [allOption, ...localOptions]
+  const activeOption = branchOptions.find(o => o.scope === (branchScope || 'all')) || branchOptions[0] || null
 
   const handleSelectBranch = (opt) => {
     setShowBranchMenu(false)
-    if ((opt.id || null) !== (activeBranchId || null)) {
-      setActiveBranch(opt.id)
-      // Ir al Dashboard (existe en todos los modos) para no quedar en una página del modo anterior
-      navigate('/app/dashboard')
-    }
+    if (opt.scope === (branchScope || 'all')) return
+    setBranchScope(opt.scope)
+    // Solo navegar al Dashboard si CAMBIA el modo/plantilla (evita sacar al usuario de la
+    // página actual cuando solo alterna entre locales del mismo modo).
+    if (opt.mode !== businessMode) navigate('/app/dashboard')
   }
 
   // Etiqueta sutil del modo demo (el badge vive DENTRO del header, no como
@@ -129,16 +131,16 @@ function Navbar() {
           </span>
         )}
 
-        {/* Selector de local / modo (solo si hay ≥2 locales accesibles con modos distintos) */}
+        {/* Selector global de sucursal (único): visible siempre que haya ≥2 locales accesibles */}
         {showBranchSwitcher && activeOption && (() => {
-          const ActiveIcon = (MODE_META[activeOption.mode] || MODE_META.retail).icon
-          const activeLabel = (MODE_META[activeOption.mode] || MODE_META.retail).label
+          const ActiveIcon = activeOption.isAll ? LayoutGrid : (MODE_META[activeOption.mode] || MODE_META.retail).icon
+          const activeLabel = activeOption.isAll ? 'Vista consolidada' : (MODE_META[activeOption.mode] || MODE_META.retail).label
           return (
             <div className="relative" ref={branchMenuRef}>
               <button
                 onClick={() => setShowBranchMenu(v => !v)}
                 className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                title="Cambiar de local"
+                title="Cambiar de sucursal"
               >
                 <span className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: `${branding.primaryColor}15`, color: branding.primaryColor }}>
                   <ActiveIcon className="w-4 h-4" />
@@ -152,24 +154,28 @@ function Navbar() {
 
               {showBranchMenu && (
                 <div className="absolute left-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-50">
-                  <p className="text-xs text-gray-400 px-2.5 pt-1.5 pb-1">Cambiar de local</p>
-                  {branchOptions.map(opt => {
-                    const Icon = (MODE_META[opt.mode] || MODE_META.retail).icon
-                    const isActive = (opt.id || null) === (activeBranchId || null)
+                  <p className="text-xs text-gray-400 px-2.5 pt-1.5 pb-1">Cambiar de sucursal</p>
+                  {branchOptions.map((opt, idx) => {
+                    const Icon = opt.isAll ? LayoutGrid : (MODE_META[opt.mode] || MODE_META.retail).icon
+                    const subLabel = opt.isAll ? 'Vista consolidada' : (MODE_META[opt.mode] || MODE_META.retail).label
+                    const isActive = opt.scope === (branchScope || 'all')
                     return (
-                      <button
-                        key={opt.id || 'main'}
-                        onClick={() => handleSelectBranch(opt)}
-                        className={`flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-left transition-colors ${isActive ? '' : 'hover:bg-gray-50'}`}
-                        style={isActive ? { backgroundColor: `${branding.primaryColor}12` } : {}}
-                      >
-                        <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? branding.primaryColor : '#6B7280' }} />
-                        <span className="flex-1 flex flex-col leading-tight min-w-0">
-                          <span className="text-sm font-medium text-gray-900 truncate">{opt.name}</span>
-                          <span className="text-xs text-gray-500">{(MODE_META[opt.mode] || MODE_META.retail).label}</span>
-                        </span>
-                        {isActive && <Check className="w-4 h-4 flex-shrink-0" style={{ color: branding.primaryColor }} />}
-                      </button>
+                      <div key={opt.scope}>
+                        {/* Separador entre "Todas" y los locales concretos */}
+                        {idx === 1 && <div className="my-1 border-t border-gray-100" />}
+                        <button
+                          onClick={() => handleSelectBranch(opt)}
+                          className={`flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-left transition-colors ${isActive ? '' : 'hover:bg-gray-50'}`}
+                          style={isActive ? { backgroundColor: `${branding.primaryColor}12` } : {}}
+                        >
+                          <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? branding.primaryColor : '#6B7280' }} />
+                          <span className="flex-1 flex flex-col leading-tight min-w-0">
+                            <span className="text-sm font-medium text-gray-900 truncate">{opt.name}</span>
+                            <span className="text-xs text-gray-500">{subLabel}</span>
+                          </span>
+                          {isActive && <Check className="w-4 h-4 flex-shrink-0" style={{ color: branding.primaryColor }} />}
+                        </button>
+                      </div>
                     )
                   })}
                 </div>
