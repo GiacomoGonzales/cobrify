@@ -101,6 +101,7 @@ export default function DispatchGuides() {
 
   const [guides, setGuides] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de guía siendo enviada
   const [downloadingPdf, setDownloadingPdf] = useState(null) // ID de guía descargándose
@@ -574,6 +575,34 @@ export default function DispatchGuides() {
     }).length,
   }
 
+  // Exportar las guías (filtradas) a Excel: listado detallado + resumen Mes × Estado.
+  const handleExportExcel = async () => {
+    if (filteredGuides.length === 0) {
+      toast.error('No hay guías para exportar')
+      return
+    }
+    setIsExporting(true)
+    try {
+      const { generateDispatchGuidesExcel } = await import('@/services/dispatchGuideExportService')
+      const businessData = {
+        name: companySettings?.razonSocial || companySettings?.businessName || companySettings?.name || 'N/A',
+        ruc: companySettings?.ruc || 'N/A',
+      }
+      const branchLabel = filterBranch === 'all'
+        ? 'Todas'
+        : filterBranch === 'main'
+          ? (businessSettings?.mainBranchName || 'Sucursal Principal')
+          : (branches.find(b => b.id === filterBranch)?.name || 'Sucursal')
+      await generateDispatchGuidesExcel(filteredGuides, businessData, branchLabel)
+      toast.success('Excel generado correctamente')
+    } catch (error) {
+      console.error('Error al exportar guías a Excel:', error)
+      toast.error('Error al generar el Excel')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const getStatusBadge = (status, sunatStatus) => {
     if (sunatStatus === 'voided') {
       return (
@@ -623,10 +652,21 @@ export default function DispatchGuides() {
             Gestiona las guías de remisión para el transporte de mercancías
           </p>
         </div>
-        <Button className="w-full sm:w-auto" onClick={handleCreateGuide}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Guía de Remisión
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={handleExportExcel}
+            disabled={isExporting || filteredGuides.length === 0}
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Exportar Excel
+          </Button>
+          <Button className="w-full sm:w-auto" onClick={handleCreateGuide}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Guía de Remisión
+          </Button>
+        </div>
       </div>
 
       {/* Info Banner */}
