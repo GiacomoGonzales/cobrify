@@ -7,6 +7,7 @@ import { loginWithEmail, logout as logoutService, onAuthChange } from '@/service
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
 import { setBusinessInfo, clearBusinessInfo } from '@/plugins/businessStorage'
 import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
@@ -45,6 +46,8 @@ export const AuthProvider = ({ children }) => {
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false) // Ocultar descuentos en POS
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
+  const [branches, setBranches] = useState([]) // Sucursales activas del negocio (modo por sucursal + selector global)
+  const [activeBranchId, setActiveBranchIdState] = useState(null) // Sucursal activa (null = Sucursal Principal → modo del doc)
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
   const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
   const navigate = useNavigate()
@@ -149,6 +152,7 @@ export const AuthProvider = ({ children }) => {
 
           // Cargar permisos del usuario (si no es super admin ni business owner)
           let subUserOwnerId = null
+          let subUserAllowedBranches = []
           if (!superAdminStatus && !businessOwnerStatus) {
             try {
               const userDataResult = await getUserData(firebaseUser.uid)
@@ -160,6 +164,7 @@ export const AuthProvider = ({ children }) => {
                 setAllowedPages(userData.allowedPages || EMPTY_PERMS)
                 setAllowedWarehouses(userData.allowedWarehouses || EMPTY_PERMS)
                 setAllowedBranches(userData.allowedBranches || EMPTY_PERMS)
+                subUserAllowedBranches = userData.allowedBranches || []
                 setAllowedDocumentTypes(userData.allowedDocumentTypes || EMPTY_PERMS)
                 setAllowedPaymentMethods(userData.allowedPaymentMethods || EMPTY_PERMS)
                 setAssignedSellerId(userData.assignedSellerId || null)
@@ -346,6 +351,31 @@ export const AuthProvider = ({ children }) => {
               setBusinessMode('retail')
               setBusinessSettings(null)
             }
+
+            // Cargar sucursales activas + inicializar la sucursal activa (modo por sucursal).
+            // El modo efectivo deriva de la sucursal activa; si no hay/ no define modo,
+            // se hereda el del doc del negocio → cuentas existentes no cambian.
+            try {
+              const branchesResult = await getActiveBranches(businessId)
+              const branchList = branchesResult.success ? (branchesResult.data || []) : []
+              setBranches(branchList)
+
+              // Sucursal activa inicial: localStorage > sucursal del sub-usuario restringido > Principal (null)
+              let initialBranchId = null
+              try {
+                const stored = localStorage.getItem(`factuya_active_branch_${businessId}`)
+                if (stored && branchList.some(b => b.id === stored)) initialBranchId = stored
+              } catch (e) { /* localStorage no disponible */ }
+              if (!initialBranchId && subUserAllowedBranches.length > 0 && !subUserAllowedBranches.includes('main')) {
+                const firstAllowed = branchList.find(b => subUserAllowedBranches.includes(b.id))
+                if (firstAllowed) initialBranchId = firstAllowed.id
+              }
+              setActiveBranchIdState(initialBranchId)
+            } catch (branchError) {
+              console.error('Error al cargar sucursales:', branchError)
+              setBranches([])
+              setActiveBranchIdState(null)
+            }
           } catch (error) {
             console.error('❌ Error al cargar configuración del negocio:', error)
             console.error('❌ Stack trace:', error.stack)
@@ -384,6 +414,8 @@ export const AuthProvider = ({ children }) => {
           setIndependentCashRegister(false)
           setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
+          setBranches([])
+          setActiveBranchIdState(null)
           setUserFeatures({ productImages: false })
           setSubscriptionOwnerId(null)
         }
@@ -568,6 +600,8 @@ export const AuthProvider = ({ children }) => {
       setIndependentCashRegister(false)
       setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
+      setBranches([])
+      setActiveBranchIdState(null)
       setUserFeatures({ productImages: false })
       navigate('/')
     } catch (error) {
@@ -728,6 +762,19 @@ export const AuthProvider = ({ children }) => {
     return user.uid
   }
 
+  // Cambiar la sucursal activa (selector global). Persiste por negocio en localStorage.
+  // El modo de negocio efectivo deriva de la sucursal activa (ver effectiveBusinessMode).
+  const setActiveBranch = (branchId) => {
+    setActiveBranchIdState(branchId || null)
+    try {
+      const bid = getBusinessId()
+      if (bid) {
+        if (branchId) localStorage.setItem(`factuya_active_branch_${bid}`, branchId)
+        else localStorage.removeItem(`factuya_active_branch_${bid}`)
+      }
+    } catch (e) { /* localStorage no disponible */ }
+  }
+
   // Función helper para verificar si un feature está habilitado
   const hasFeature = (featureName) => {
     return userFeatures?.[featureName] === true
@@ -748,6 +795,12 @@ export const AuthProvider = ({ children }) => {
       return { success: false, error: error?.message || 'Error al actualizar el nombre' }
     }
   }
+
+  // Sucursal activa + modo de negocio EFECTIVO: si la sucursal activa define su
+  // propio businessMode, ese manda; si no, se hereda el modo del doc del negocio.
+  // Así un mismo RUC puede operar locales con plantillas distintas (restaurante/hotel).
+  const activeBranch = activeBranchId ? (branches.find(b => b.id === activeBranchId) || null) : null
+  const effectiveBusinessMode = activeBranch?.businessMode || businessMode
 
   const value = {
     user,
@@ -778,7 +831,12 @@ export const AuthProvider = ({ children }) => {
     hasBranchAccess, // Función para verificar acceso a una sucursal
     filterBranchesByAccess, // Función para filtrar sucursales según permisos
     getBusinessId, // Función para obtener el ID del negocio (owner)
-    businessMode, // Modo de negocio: 'retail' | 'restaurant'
+    businessMode: effectiveBusinessMode, // Modo EFECTIVO (sucursal activa o, si no define, el del negocio)
+    baseBusinessMode: businessMode, // Modo configurado en el doc del negocio (sin override de sucursal)
+    branches, // Sucursales activas del negocio
+    activeBranchId, // ID de la sucursal activa (null = Sucursal Principal)
+    activeBranch, // Objeto de la sucursal activa (null = Sucursal Principal)
+    setActiveBranch, // Cambiar la sucursal activa (persiste en localStorage)
     businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)
     userFeatures, // Features especiales habilitadas
     hasFeature, // Función helper para verificar features

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, LogOut, Menu, Download } from 'lucide-react'
+import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useStore } from '@/stores/useStore'
@@ -7,16 +8,31 @@ import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
 import NotificationPanel from './NotificationPanel'
 
+// Modo de negocio → etiqueta + ícono (para el selector de local del Navbar)
+const MODE_META = {
+  retail: { label: 'Comercio', icon: Store },
+  restaurant: { label: 'Restaurante', icon: UtensilsCrossed },
+  pharmacy: { label: 'Farmacia', icon: Pill },
+  hotel: { label: 'Hotel', icon: BedDouble },
+  veterinary: { label: 'Veterinaria', icon: PawPrint },
+  transport: { label: 'Transporte', icon: Truck },
+  logistics: { label: 'Logística', icon: HardHat },
+  real_estate: { label: 'Inmobiliaria', icon: Home },
+}
+
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, businessMode, businessSettings } = useAppContext()
+  const { user, logout, subscription, isDemoMode, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, activeBranchId, setActiveBranch, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const { isInstallable, promptInstall } = usePWAInstall()
+  const navigate = useNavigate()
 
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [showBranchMenu, setShowBranchMenu] = useState(false)
 
   const notificationRef = useRef(null)
+  const branchMenuRef = useRef(null)
 
   // Cargar notificaciones no leídas
   useEffect(() => {
@@ -49,6 +65,38 @@ function Navbar() {
     return () => clearInterval(interval);
   }, [user?.uid, subscription, isDemoMode]);
 
+  // Cerrar el menú de locales al hacer click fuera
+  useEffect(() => {
+    if (!showBranchMenu) return
+    const handler = (e) => {
+      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target)) setShowBranchMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showBranchMenu])
+
+  // Opciones del selector de local (modo por sucursal). Cada opción = un local con su
+  // modo: Principal usa el modo del doc; cada sucursal el suyo (o hereda el del doc).
+  const accessibleBranches = filterBranchesByAccess ? filterBranchesByAccess(branches || []) : (branches || [])
+  const branchOptions = [
+    ...(hasMainBranchAccess ? [{ id: null, name: 'Sucursal Principal', mode: baseBusinessMode }] : []),
+    ...accessibleBranches.map(b => ({ id: b.id, name: b.name, mode: b.businessMode || baseBusinessMode })),
+  ]
+  const activeOption = branchOptions.find(o => (o.id || null) === (activeBranchId || null)) || branchOptions[0] || null
+  // Mostrar el selector solo si hay ≥2 locales accesibles con modos DISTINTOS (evita que
+  // cuentas con una sola plantilla vean un selector innecesario).
+  const distinctModes = new Set(branchOptions.map(o => o.mode))
+  const showBranchSwitcher = !isDemoMode && !!baseBusinessMode && branchOptions.length >= 2 && distinctModes.size >= 2
+
+  const handleSelectBranch = (opt) => {
+    setShowBranchMenu(false)
+    if ((opt.id || null) !== (activeBranchId || null)) {
+      setActiveBranch(opt.id)
+      // Ir al Dashboard (existe en todos los modos) para no quedar en una página del modo anterior
+      navigate('/app/dashboard')
+    }
+  }
+
   // Etiqueta sutil del modo demo (el badge vive DENTRO del header, no como
   // una cinta aparte que descuadra el layout). El modo se anexa en pantallas sm+.
   const demoModeLabel = {
@@ -80,6 +128,55 @@ function Navbar() {
             {demoModeLabel && <span className="hidden sm:inline font-normal text-gray-400">· {demoModeLabel}</span>}
           </span>
         )}
+
+        {/* Selector de local / modo (solo si hay ≥2 locales accesibles con modos distintos) */}
+        {showBranchSwitcher && activeOption && (() => {
+          const ActiveIcon = (MODE_META[activeOption.mode] || MODE_META.retail).icon
+          const activeLabel = (MODE_META[activeOption.mode] || MODE_META.retail).label
+          return (
+            <div className="relative" ref={branchMenuRef}>
+              <button
+                onClick={() => setShowBranchMenu(v => !v)}
+                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                title="Cambiar de local"
+              >
+                <span className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: `${branding.primaryColor}15`, color: branding.primaryColor }}>
+                  <ActiveIcon className="w-4 h-4" />
+                </span>
+                <span className="hidden sm:flex flex-col items-start leading-tight min-w-0">
+                  <span className="text-sm font-medium text-gray-900 max-w-[140px] truncate">{activeOption.name}</span>
+                  <span className="text-xs text-gray-500">{activeLabel}</span>
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </button>
+
+              {showBranchMenu && (
+                <div className="absolute left-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-50">
+                  <p className="text-xs text-gray-400 px-2.5 pt-1.5 pb-1">Cambiar de local</p>
+                  {branchOptions.map(opt => {
+                    const Icon = (MODE_META[opt.mode] || MODE_META.retail).icon
+                    const isActive = (opt.id || null) === (activeBranchId || null)
+                    return (
+                      <button
+                        key={opt.id || 'main'}
+                        onClick={() => handleSelectBranch(opt)}
+                        className={`flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-left transition-colors ${isActive ? '' : 'hover:bg-gray-50'}`}
+                        style={isActive ? { backgroundColor: `${branding.primaryColor}12` } : {}}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? branding.primaryColor : '#6B7280' }} />
+                        <span className="flex-1 flex flex-col leading-tight min-w-0">
+                          <span className="text-sm font-medium text-gray-900 truncate">{opt.name}</span>
+                          <span className="text-xs text-gray-500">{(MODE_META[opt.mode] || MODE_META.retail).label}</span>
+                        </span>
+                        {isActive && <Check className="w-4 h-4 flex-shrink-0" style={{ color: branding.primaryColor }} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Right Side */}

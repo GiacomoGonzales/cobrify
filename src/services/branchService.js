@@ -158,6 +158,11 @@ export const createBranch = async (businessId, branchData) => {
       province: branchData.province || '',
       district: branchData.district || '',
       ubigeo: branchData.ubigeo || '',
+      // Modo de negocio (plantilla) de esta sucursal. null = hereda el modo del
+      // doc del negocio (businesses/{id}.businessMode). Permite que un mismo RUC
+      // maneje p.ej. un local restaurante y otro hotel. updateBranch lo persiste
+      // vía spread de branchData.
+      businessMode: branchData.businessMode || null,
       isDefault: isFirst ? true : (branchData.isDefault || false),
       isActive: true,
       createdAt: serverTimestamp(),

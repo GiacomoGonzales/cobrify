@@ -298,7 +298,7 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -2450,7 +2450,18 @@ export default function POS() {
 
         const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
 
-        if (hasMainAccess) {
+        // Sembrar la sucursal del POS desde el LOCAL ACTIVO global (selector del navbar),
+        // para que una venta DIRECTA emita con la serie/almacén de esa sede. El cobro desde
+        // mesa/orden la sobreescribe luego vía pendingBranchSelection (esa sede manda).
+        const activeBranchObj = activeBranchId ? branchList.find(b => b.id === activeBranchId) : null
+
+        if (activeBranchObj) {
+          setSelectedBranch(activeBranchObj)
+          const branchWarehouses = warehouseList.filter(w => w.isActive && w.branchId === activeBranchObj.id)
+          if (branchWarehouses.length > 0) {
+            setSelectedWarehouse(branchWarehouses.find(w => w.isDefault) || branchWarehouses[0])
+          }
+        } else if (hasMainAccess) {
           setSelectedBranch(null)
           const mainWarehouses = warehouseList.filter(w => w.isActive && !w.branchId)
           if (mainWarehouses.length > 0) {
@@ -7587,6 +7598,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <select
                       value={selectedBranch?.id || ''}
                       onChange={e => {
+                        // Sincronizar el local activo global (navbar + menú lateral) con el selector del POS
+                        if (setActiveBranch) setActiveBranch(e.target.value || null)
                         if (e.target.value === '') {
                           setSelectedBranch(null)
                           // Seleccionar primer almacén de sucursal principal

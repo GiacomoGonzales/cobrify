@@ -186,6 +186,7 @@ export default function AdminUsers() {
     phone: '',
     email: '',
     location: '',
+    businessMode: '', // '' = hereda el modo del negocio
     isDefault: false,
     department: '',
     province: '',
@@ -1377,6 +1378,7 @@ export default function AdminUsers() {
       phone: '',
       email: '',
       location: '',
+      businessMode: '',
       isDefault: false,
       department: '',
       province: '',
@@ -1497,6 +1499,7 @@ export default function AdminUsers() {
         phone: '',
         email: '',
         location: '',
+        businessMode: '',
         isDefault: false,
         department: '',
         province: '',
@@ -1520,6 +1523,7 @@ export default function AdminUsers() {
       phone: branch.phone || '',
       email: branch.email || '',
       location: branch.location || '',
+      businessMode: branch.businessMode || '',
       isDefault: branch.isDefault || false,
       department: branch.department || '',
       province: branch.province || '',
@@ -1567,6 +1571,7 @@ export default function AdminUsers() {
       phone: '',
       email: '',
       location: '',
+      businessMode: '',
       isDefault: false,
       department: '',
       province: '',
@@ -3944,6 +3949,33 @@ export default function AdminUsers() {
                         Ubigeo: {branchForm.ubigeo}
                       </p>
                     )}
+                  </div>
+
+                  {/* Modo de negocio (plantilla) de la sucursal. '' = hereda el del negocio.
+                      Permite que un mismo RUC maneje locales con plantillas distintas
+                      (ej. un local restaurante y otro hotel). */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Modo de negocio (plantilla)
+                    </label>
+                    <select
+                      value={branchForm.businessMode || ''}
+                      onChange={e => setBranchForm({ ...branchForm, businessMode: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">Heredar del negocio (por defecto)</option>
+                      <option value="retail">Comercio / Retail</option>
+                      <option value="restaurant">Restaurante</option>
+                      <option value="pharmacy">Farmacia</option>
+                      <option value="hotel">Hotel</option>
+                      <option value="veterinary">Veterinaria</option>
+                      <option value="transport">Transporte</option>
+                      <option value="logistics">Logística / Construcción</option>
+                      <option value="real_estate">Inmobiliaria</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Define la plantilla (menú lateral y pantallas) cuando esta sucursal está activa. Déjalo en «Heredar» para usar el modo general del negocio.
+                    </p>
                   </div>
 
                   {!editingBranch && branches.length > 0 && (
