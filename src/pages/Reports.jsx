@@ -5,8 +5,6 @@ import {
   ShoppingCart,
   Users,
   Package,
-  Calendar,
-  FileText,
   Loader2,
   Download,
   BarChart3,
@@ -17,8 +15,6 @@ import {
   TrendingDown,
   Zap,
   Truck,
-  Wrench,
-  Building,
   Store,
   MapPin,
   BedDouble,
@@ -33,7 +29,6 @@ import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import RealEstateReports from './RealEstateReports'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'

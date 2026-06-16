@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor, HardHat, Trash2, ChevronDown, DollarSign } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, DollarSign } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -12,7 +12,7 @@ import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
 import { uploadImage } from '@/services/imageUploadService'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
@@ -38,7 +38,6 @@ import {
   savePrinterConfig,
   getPrinterConfig,
   testPrinter,
-  getConnectionType,
   isIminDevice,
   saveDocumentPrinterConfig,
   getDocumentPrinterConfig
@@ -46,12 +45,11 @@ import {
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
-import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
+import { getYapeConfig } from '@/services/yapeService'
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import { getTables } from '@/services/tableService'
 import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
-import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import {
   deleteAllProducts,
