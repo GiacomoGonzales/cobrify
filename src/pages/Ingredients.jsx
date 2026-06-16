@@ -1083,6 +1083,23 @@ export default function Ingredients() {
             ))}
           </Select>
 
+          <div>
+            <Input
+              label={`Costo por ${formData.purchaseUnit}`}
+              type="text"
+              inputMode="decimal"
+              placeholder="Ej: 0.05"
+              value={formData.averageCost ?? ''}
+              onChange={e => {
+                const value = e.target.value.replace(',', '.')
+                setFormData({ ...formData, averageCost: value })
+              }}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Costo de 1 {formData.purchaseUnit}. Se usa para calcular el costo de tus recetas y valorizar el inventario. Al registrar compras se recalcula como promedio.
+            </p>
+          </div>
+
           {formData.trackStock && (
             <div className="grid grid-cols-2 gap-4">
               <Input
