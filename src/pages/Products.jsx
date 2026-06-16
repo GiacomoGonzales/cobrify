@@ -37,6 +37,7 @@ import { getActiveBranches } from '@/services/branchService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
+import PriceUpdateTable from '@/components/product/PriceUpdateTable'
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
@@ -346,6 +347,9 @@ export default function Products() {
   // Import modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
+
+  // Modo "Actualizar precios": vista enfocada para editar precios de venta en lote
+  const [priceUpdateMode, setPriceUpdateMode] = useState(false)
 
   // Bulk actions state
   const [selectedProducts, setSelectedProducts] = useState(new Set())
@@ -3970,6 +3974,16 @@ export default function Products() {
                       Exportar para Rappi
                     </button>
                   )}
+                  {/* Precios */}
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setPriceUpdateMode(true) }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    title="Ver costo vs precio y editar precios de venta rápidamente"
+                  >
+                    <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Actualizar precios
+                  </button>
                   {/* Catálogo */}
                   <div className="border-t border-gray-100 my-1" />
                   <button
@@ -4245,7 +4259,7 @@ export default function Products() {
       </Card>
 
       {/* Bulk Actions Bar */}
-      {selectedProducts.size > 0 && (
+      {!priceUpdateMode && selectedProducts.size > 0 && (
         <Card>
           <CardContent className="p-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -4372,7 +4386,20 @@ export default function Products() {
         </Card>
       </div>
 
-      {/* Products Table */}
+      {/* Vista de actualización de precios (modo enfocado) */}
+      {priceUpdateMode ? (
+        <PriceUpdateTable
+          products={filteredProducts}
+          businessId={getBusinessId()}
+          hidePrivateData={hidePrivateData}
+          marginFormula={businessSettings?.marginFormula === 'margin' ? 'margin' : 'markup'}
+          baseCurrency={businessSettings?.currency || 'PEN'}
+          onClose={() => setPriceUpdateMode(false)}
+          onEditProduct={(p) => openEditModal(p)}
+          onSaved={loadProducts}
+        />
+      ) : (
+      /* Products Table */
       <Card>
         {filteredProducts.length === 0 ? (
           <CardContent className="p-12 text-center">
@@ -5414,6 +5441,7 @@ export default function Products() {
           </>
         )}
       </Card>
+      )}
 
       {/* Modal Crear/Editar */}
       <Modal
