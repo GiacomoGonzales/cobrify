@@ -392,7 +392,6 @@ export default function Settings() {
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
   const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
-  const [allowPartialPayments, setAllowPartialPayments] = useState(false)
   const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
   // Comisión por pago con tarjeta (solo notas de venta): activación + porcentaje.
   const [cardCommissionEnabled, setCardCommissionEnabled] = useState(false)
@@ -1222,7 +1221,6 @@ export default function Settings() {
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
         setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
-        setAllowPartialPayments(businessData.allowPartialPayments || false)
         setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
         setCardCommissionEnabled(businessData.cardCommissionEnabled || false)
         setCardCommissionRate(Number(businessData.cardCommissionRate) || 5)
@@ -4999,24 +4997,6 @@ export default function Settings() {
                   />
 
                   <SettingToggle
-                    checked={allowPartialPayments}
-                    onChange={(e) => setAllowPartialPayments(e.target.checked)}
-                    title="Permitir pagos parciales en Notas de Venta"
-                    description={allowPartialPayments
-                      ? '✓ Habilitado: Podrás registrar pagos parciales en las notas de venta. El sistema mostrará el monto pagado y el saldo pendiente. Útil para adelantos o pagos en cuotas.'
-                      : '✗ Deshabilitado: Las notas de venta solo se pueden emitir con pago completo. No se mostrarán opciones de pago parcial en el punto de venta.'}
-                  >
-                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
-                      <Info className="w-4 h-4 text-amber-600" />
-                      <span className="text-xs text-amber-700 font-medium">
-                        {allowPartialPayments
-                          ? 'Los clientes pueden adelantar o pagar en cuotas'
-                          : 'Solo pagos completos'}
-                      </span>
-                    </div>
-                  </SettingToggle>
-
-                  <SettingToggle
                     checked={requireOpenCashRegister}
                     onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
                     title="Requerir caja diaria abierta para vender"
@@ -5191,7 +5171,6 @@ export default function Settings() {
                       defaultPaymentMethod: defaultPaymentMethod || '',
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
-                      allowPartialPayments: allowPartialPayments,
                       requireOpenCashRegister: requireOpenCashRegister,
                       cardCommissionEnabled: cardCommissionEnabled,
                       cardCommissionRate: Number(cardCommissionRate) || 0,

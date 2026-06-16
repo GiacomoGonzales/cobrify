@@ -9501,8 +9501,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </div>
 
-              {/* Opción de Pago Parcial - Solo para Notas de Venta */}
-              {cart.length > 0 && businessSettings?.allowPartialPayments && documentType === 'nota_venta' && (
+              {/* Opción de Pago Parcial / Venta al Crédito - Disponible para TODAS las
+                  notas de venta (antes estaba detrás del flag businessSettings.allowPartialPayments,
+                  que se eliminó: ahora es universal). */}
+              {cart.length > 0 && documentType === 'nota_venta' && (
                 <div className="border-t pt-4 mt-4">
                   <div className="space-y-3">
                     <label className="flex items-center space-x-2 cursor-pointer">

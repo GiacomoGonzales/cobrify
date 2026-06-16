@@ -46,7 +46,6 @@ const DEFAULT_SALES_PREFS = {
   // Notas de venta
   hideRucIgvInNotaVenta: false,
   hideOnlyIgvInNotaVenta: false,
-  allowPartialPayments: false,
   // Caja
   requireOpenCashRegister: false,
   // Comisión tarjeta
@@ -291,7 +290,6 @@ export default function AdminCreateAccount() {
           defaultPaymentMethod: salesPrefs.defaultPaymentMethod,
           hideRucIgvInNotaVenta: salesPrefs.hideRucIgvInNotaVenta,
           hideOnlyIgvInNotaVenta: salesPrefs.hideOnlyIgvInNotaVenta,
-          allowPartialPayments: salesPrefs.allowPartialPayments,
           requireOpenCashRegister: salesPrefs.requireOpenCashRegister,
           cardCommissionEnabled: salesPrefs.cardCommissionEnabled,
           cardCommissionRate: Number(salesPrefs.cardCommissionRate) || 0,
@@ -706,7 +704,6 @@ export default function AdminCreateAccount() {
                   onChange={(v) => setSalesPrefs((p) => ({ ...p, hideOnlyIgvInNotaVenta: v, hideRucIgvInNotaVenta: v ? false : p.hideRucIgvInNotaVenta }))}
                   title="Ocultar solo el IGV en notas de venta"
                 />
-                <OnboardToggle checked={salesPrefs.allowPartialPayments} onChange={(v) => sp('allowPartialPayments', v)} title="Permitir pagos parciales en notas de venta" />
               </div>
 
               {/* Caja */}
