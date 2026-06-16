@@ -37,7 +37,7 @@ import {
   getEmploymentTypeLabel,
   HR_STATUSES,
 } from '@/services/personnelService'
-import SchedulePlanner from '@/components/personnel/SchedulePlanner'
+import SchedulePlanner, { ALL_BRANCHES } from '@/components/personnel/SchedulePlanner'
 import VacationManager from '@/components/personnel/VacationManager'
 
 const formatDateTime = (ts) => {
@@ -203,7 +203,7 @@ export default function Attendance() {
   // Si la sucursal guardada deja de ser accesible, caemos a la primera disponible.
   useEffect(() => {
     if (accessibleScheduleBranches.length === 0) return
-    if (!accessibleScheduleBranches.some(b => b.id === selectedScheduleBranch)) {
+    if (selectedScheduleBranch !== ALL_BRANCHES && !accessibleScheduleBranches.some(b => b.id === selectedScheduleBranch)) {
       setSelectedScheduleBranch(accessibleScheduleBranches[0].id)
     }
   }, [accessibleScheduleBranches, selectedScheduleBranch])
@@ -727,6 +727,8 @@ export default function Attendance() {
               onChange={(e) => setSelectedScheduleBranch(e.target.value)}
               className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
             >
+              {/* Vista consolidada: todos los turnos de cada empleado, de todas las sedes. */}
+              <option value={ALL_BRANCHES}>Todas las sucursales</option>
               {accessibleScheduleBranches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.isMain ? (businessSettings?.mainBranchName || 'Sucursal Principal') : b.name}
@@ -1194,7 +1196,9 @@ export default function Attendance() {
                     businessInfo={{ businessName: branches?.[0]?.name || '' }}
                     selectedBranchId={selectedScheduleBranch}
                     selectedBranchName={
-                      accessibleScheduleBranches.find(b => b.id === selectedScheduleBranch)?.name || ''
+                      selectedScheduleBranch === ALL_BRANCHES
+                        ? 'Todas las sucursales'
+                        : (accessibleScheduleBranches.find(b => b.id === selectedScheduleBranch)?.name || '')
                     }
                     branches={accessibleScheduleBranches}
                   />

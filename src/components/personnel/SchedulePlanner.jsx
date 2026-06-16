@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import {
   Calendar, ChevronLeft, ChevronRight, ChevronDown, Plus, Loader2, Save,
-  Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown, MoveHorizontal,
+  Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown, MoveHorizontal, Store,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { generateSchedulePDF } from '@/utils/schedulePdfGenerator'
@@ -29,6 +29,10 @@ import {
 
 // id sentinel para la sucursal "Principal" (mismo string que usa el resto del sistema).
 const MAIN_BRANCH_ID = 'main'
+// Valor del selector cuando se ve la grilla consolidada de TODAS las sucursales
+// (vista por empleado: muestra todos los turnos sin importar la sede). Lo importa
+// Attendance.jsx para la opción del selector.
+export const ALL_BRANCHES = '__all__'
 // Resuelve el branchId efectivo de una celda. Celdas viejas (sin branchId)
 // se asumen como Principal — coherente con el comportamiento previo al feature.
 const cellBranchId = (cell) => cell?.branchId || MAIN_BRANCH_ID
@@ -92,6 +96,21 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   // overview mensual navegable · 'daily' = detalle de un día (es el "zoom" al
   // que se entra tocando un día, no un toggle suelto).
   const [viewMode, setViewMode] = useState('weekly')
+
+  // Vista consolidada "Todas las sucursales": muestra los turnos de cada empleado
+  // de TODAS las sedes a la vez (con la sucursal etiquetada en cada celda) para
+  // poder comparar y contar horas sin cambiar de sede.
+  const isAllBranches = selectedBranchId === ALL_BRANCHES
+  const branchNameById = useMemo(() => {
+    const m = { [MAIN_BRANCH_ID]: 'Principal' }
+    for (const b of (branches || [])) m[b.id] = b.isMain ? (b.name || 'Principal') : (b.name || 'Sucursal')
+    return m
+  }, [branches])
+  // En "Todas" solo tiene sentido la vista semanal consolidada (la diaria/mensual
+  // siguen siendo por sede). Si estaba en otra vista, volvemos a semanal.
+  useEffect(() => {
+    if (isAllBranches && viewMode !== 'weekly') setViewMode('weekly')
+  }, [isAllBranches, viewMode])
   // Vista desde la que se entró al detalle diario ('weekly' | 'month'), para que
   // el botón de volver regrese al lugar correcto.
   const [dailyOrigin, setDailyOrigin] = useState('weekly')
@@ -210,6 +229,9 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
   // "Zoom" a un día: ajusta la semana ISO y el día seleccionado, y entra al
   // detalle diario. Es el gesto principal de la vista mensual.
   const zoomToDay = (date, from = 'month') => {
+    // En la vista consolidada "Todas las sucursales" no entramos al detalle diario
+    // (la grilla diaria es por sede); nos quedamos en la semanal consolidada.
+    if (isAllBranches) return
     const iso = getIsoWeek(date)
     setIsoYear(iso.isoYear)
     setIsoWeek(iso.isoWeek)
@@ -246,11 +268,16 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     setDirtyUsers((prev) => new Set(prev).add(userId))
   }
 
-  const assignTemplate = (userId, dayKey, template) => {
+  // Sucursal efectiva al asignar: normalmente la del filtro activo; en la vista
+  // "Todas" se usa la elegida en el selector de la celda (branchOverride).
+  const resolveAssignBranch = (branchOverride) =>
+    isAllBranches ? (branchOverride || branches[0]?.id || MAIN_BRANCH_ID) : selectedBranchId
+
+  const assignTemplate = (userId, dayKey, template, branchOverride) => {
     // Si la plantilla tiene una sucursal por defecto (defaultBranchId),
     // priorizarla sobre el filtro activo del planner. Permite plantillas
     // tipo "Mañana Mall" que siempre quedan vinculadas a esa sucursal.
-    const effectiveBranchId = template.defaultBranchId || selectedBranchId
+    const effectiveBranchId = template.defaultBranchId || resolveAssignBranch(branchOverride)
     if (template.isRest) {
       setCell(userId, dayKey, { rest: true, branchId: effectiveBranchId })
     } else if (template.isRecovery) {
@@ -276,21 +303,22 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     setEditingCell(null)
   }
 
-  const setRest = (userId, dayKey) => {
-    setCell(userId, dayKey, { rest: true, branchId: selectedBranchId })
+  const setRest = (userId, dayKey, branchOverride) => {
+    setCell(userId, dayKey, { rest: true, branchId: resolveAssignBranch(branchOverride) })
     setEditingCell(null)
   }
   const clearCell = (userId, dayKey) => {
     setCell(userId, dayKey, null)
     setEditingCell(null)
   }
-  const setCustom = (userId, dayKey, start, end, breakMin = 0, isRecovery = false, recoveryMin = 0) => {
+  const setCustom = (userId, dayKey, start, end, breakMin = 0, isRecovery = false, recoveryMin = 0, branchOverride) => {
+    const targetBranch = resolveAssignBranch(branchOverride)
     setSchedules((prev) => {
       const userSch = prev[userId] || { days: {}, totalHours: 0, publishedAt: null }
       const existing = userSch.days?.[dayKey] || {}
-      // Si la celda existente está en OTRA sucursal (filtrada/oculta), tratarla como nueva
-      // y no preservar nada. Evita sobrescribir datos de otra sucursal por accidente.
-      const sameBranch = !existing.branchId || existing.branchId === selectedBranchId
+      // Si la celda existente está en OTRA sucursal (filtrada/oculta o reasignada),
+      // tratarla como nueva y no preservar nada. Evita arrastrar datos de otra sucursal.
+      const sameBranch = !existing.branchId || existing.branchId === targetBranch
       const base = sameBranch ? existing : {}
       // Recuperación COMPLETA = turno marcado como recuperación: no suma a las horas
       // productivas. Distinto a `recoveryMinutes` que son minutos parciales DENTRO de
@@ -306,7 +334,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             breakMinutes: breakMin,
             recoveryMinutes: 0,
             color: '#fb923c',
-            branchId: selectedBranchId,
+            branchId: targetBranch,
           }
         : {
             ...base,
@@ -317,7 +345,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             breakMinutes: breakMin,
             recoveryMinutes: recoveryMin,
             color: (base.color && !base.rest && !base.recovery) ? base.color : '#94a3b8',
-            branchId: selectedBranchId,
+            branchId: targetBranch,
           }
       const newDays = { ...userSch.days, [dayKey]: newCell }
       return {
@@ -390,6 +418,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     if (employees.length === 0) {
       toast.error('No hay empleados para imprimir')
       return
+    }
+    // En la vista "Todas las sucursales", el PDF directo usa el modo integrado
+    // (una sola tabla con todas las sedes etiquetadas), no un filtro por sede.
+    if (isAllBranches) {
+      return handlePrintIntegrated()
     }
     setPrinting(true)
     try {
@@ -541,7 +574,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     const filtered = {}
     for (const key of DAY_KEYS) {
       const d = daysObj[key]
-      if (d && cellBranchId(d) === branchId) filtered[key] = d
+      if (d && (branchId === ALL_BRANCHES || cellBranchId(d) === branchId)) filtered[key] = d
     }
     return calculateWeekHours(filtered)
   }
@@ -556,7 +589,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
     for (const key of DAY_KEYS) {
       const c = daysObj[key]
       if (!c || c.rest) continue
-      if (cellBranchId(c) !== branchId) continue
+      if (branchId !== ALL_BRANCHES && cellBranchId(c) !== branchId) continue
       if (c.recovery && c.start && c.end) {
         totalMinutes += Math.round(calcShiftHours(c.start, c.end, c.breakMinutes || 0) * 60)
       } else if (c.recoveryMinutes && c.start && c.end) {
@@ -694,8 +727,9 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             </>
           )}
 
-          {/* Toggle Mes / Semana — oculto en el detalle diario (es un zoom, se sale con "Mes") */}
-          {viewMode !== 'daily' && (
+          {/* Toggle Mes / Semana — oculto en el detalle diario (es un zoom, se sale con "Mes")
+              y en "Todas las sucursales" (esa vista consolidada es solo semanal). */}
+          {viewMode !== 'daily' && !isAllBranches && (
             <div className="ml-2 flex bg-gray-100 rounded-lg p-0.5">
               <button
                 onClick={() => setViewMode('month')}
@@ -1024,14 +1058,17 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                       </td>
                       {DAY_KEYS.map((dk) => {
                         const rawCell = sch.days?.[dk]
-                        // Solo se considera "asignada" si pertenece a la sucursal activa.
-                        // Si no coincide, la celda se renderiza como vacía (pero la data
-                        // sigue ahí — al cambiar de sucursal vuelve a aparecer).
-                        const cell = (rawCell && cellBranchId(rawCell) === selectedBranchId) ? rawCell : null
+                        // En "Todas las sucursales" mostramos la celda sin importar la sede
+                        // (con su etiqueta de sucursal). En vista por sede, solo si coincide
+                        // con la sucursal activa (la data de otras sedes sigue ahí, oculta).
+                        const cell = isAllBranches
+                          ? (rawCell || null)
+                          : ((rawCell && cellBranchId(rawCell) === selectedBranchId) ? rawCell : null)
                         return (
                           <td key={dk} className="px-1.5 py-1.5 text-center align-middle relative">
                             <ScheduleCell
                               cell={cell}
+                              branchLabel={isAllBranches && cell ? branchNameById[cellBranchId(cell)] : ''}
                               onClick={(e) => setEditingCell({ userId: emp.id, dayKey: dk })}
                               isEditing={editingCell?.userId === emp.id && editingCell?.dayKey === dk}
                             />
@@ -1040,10 +1077,12 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
                                 ref={popoverRef}
                                 templates={templates}
                                 cell={cell}
-                                onPickTemplate={(t) => assignTemplate(emp.id, dk, t)}
-                                onRest={() => setRest(emp.id, dk)}
+                                isAllBranches={isAllBranches}
+                                branches={branches}
+                                onPickTemplate={(t, br) => assignTemplate(emp.id, dk, t, br)}
+                                onRest={(br) => setRest(emp.id, dk, br)}
                                 onClear={() => clearCell(emp.id, dk)}
-                                onCustom={(s, e, b, rec, recMin) => setCustom(emp.id, dk, s, e, b, rec, recMin)}
+                                onCustom={(s, e, b, rec, recMin, br) => setCustom(emp.id, dk, s, e, b, rec, recMin, br)}
                                 onClose={() => setEditingCell(null)}
                               />
                             )}
@@ -1094,7 +1133,11 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
 
 // -------- Sub-componentes --------
 
-function ScheduleCell({ cell, onClick }) {
+function ScheduleCell({ cell, branchLabel, onClick }) {
+  // Etiqueta de sucursal (solo en la vista consolidada "Todas las sucursales").
+  const BranchTag = branchLabel
+    ? <span className="text-[9px] font-normal text-gray-500 leading-none mt-0.5 truncate max-w-full" title={branchLabel}>{branchLabel}</span>
+    : null
   if (!cell) {
     return (
       <button
@@ -1109,9 +1152,10 @@ function ScheduleCell({ cell, onClick }) {
     return (
       <button
         onClick={onClick}
-        className="w-full h-12 rounded-md border border-gray-200 bg-gray-100 text-gray-500 text-xs font-medium hover:bg-gray-200"
+        className="w-full h-12 rounded-md border border-gray-200 bg-gray-100 text-gray-500 text-xs font-medium hover:bg-gray-200 flex flex-col items-center justify-center px-1 leading-tight"
       >
-        Descanso
+        <span>Descanso</span>
+        {BranchTag}
       </button>
     )
   }
@@ -1128,6 +1172,7 @@ function ScheduleCell({ cell, onClick }) {
         {hasTimes && (
           <span className="text-[10px] font-normal">{cell.start}–{cell.end} · {recHours}h</span>
         )}
+        {BranchTag}
       </button>
     )
   }
@@ -1150,11 +1195,12 @@ function ScheduleCell({ cell, onClick }) {
           {hasRecoveryMin && <span className="text-orange-600">↻{cell.recoveryMinutes}m</span>}
         </span>
       )}
+      {BranchTag}
     </button>
   )
 }
 
-const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onClear, onCustom, onClose }, ref) => {
+const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onClear, onCustom, onClose, isAllBranches = false, branches = [] }, ref) => {
   // Si ya hay un turno (o una recuperación con horario) asignado, abrimos directo
   // en modo edición personalizado para ajustar tiempos y refrigerio en un click.
   const hasExistingShift = !!(cell && cell.start && cell.end && !cell.rest && !cell.recovery)
@@ -1167,6 +1213,9 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
   const [end, setEnd] = useState(cell?.end || '17:00')
   const [breakMin, setBreakMin] = useState(cell?.breakMinutes || 0)
   const [recoveryMin, setRecoveryMin] = useState(cell?.recoveryMinutes || 0)
+  // Sucursal del turno — solo se elige en la vista consolidada "Todas las sucursales".
+  // En vista por sede el planner ignora este valor y usa el filtro activo.
+  const [branchId, setBranchId] = useState(cell?.branchId || (branches[0]?.id) || 'main')
 
   // Atajo: tecla Supr / Delete con el popover abierto → eliminar el turno.
   // Solo si hay celda asignada y el foco NO está en un input (para no interferir
@@ -1206,6 +1255,28 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Selector de sucursal: solo en la vista consolidada "Todas las sucursales".
+          Define a qué sede va el turno que se asigne, sin sacar al usuario de la
+          vista consolidada. */}
+      {isAllBranches && branches.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-100">
+          <label className="block text-[10px] text-gray-500 uppercase mb-0.5 flex items-center gap-1">
+            <Store className="w-3 h-3" /> Sucursal
+          </label>
+          <select
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white"
+          >
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.isMain ? (b.name || 'Principal') : (b.name || 'Sucursal')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {customMode ? (
         <div className="p-3 space-y-2">
@@ -1297,7 +1368,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               Volver
             </button>
             <button
-              onClick={() => onCustom(start, end, breakMin, isRecovery, recoveryMin)}
+              onClick={() => onCustom(start, end, breakMin, isRecovery, recoveryMin, branchId)}
               className={`flex-1 px-3 py-1.5 text-xs text-white rounded ${isRecovery ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary-600 hover:bg-primary-700'}`}
             >
               Aplicar
@@ -1311,7 +1382,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               {templates.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => onPickTemplate(t)}
+                  onClick={() => onPickTemplate(t, branchId)}
                   className="w-full px-3 py-1.5 hover:bg-gray-50 flex items-center gap-2 text-sm"
                 >
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: t.color || '#fbbf24' }} />
@@ -1329,7 +1400,7 @@ const CellPopover = forwardRef(({ templates, cell, onPickTemplate, onRest, onCle
               <Edit2 className="w-3.5 h-3.5" /> Turno personalizado
             </button>
             <button
-              onClick={onRest}
+              onClick={() => onRest(branchId)}
               className="w-full px-3 py-1.5 hover:bg-gray-50 text-sm text-left flex items-center gap-2 text-gray-700"
             >
               <Coffee className="w-3.5 h-3.5" /> Descanso
