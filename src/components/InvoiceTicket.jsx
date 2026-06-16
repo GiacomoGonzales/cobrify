@@ -669,10 +669,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
       {/* HEADER - Datos del Emisor */}
       <div className="ticket-header">
-        {/* Logo de la empresa (si existe) */}
-        {companySettings?.logoUrl && (
+        {/* Logo de la empresa/sucursal (si existe). Prefiere el logo de la sucursal emisora. */}
+        {(invoice.branchLogoUrl || companySettings?.logoUrl) && (
           <img
-            src={companySettings.logoUrl}
+            src={invoice.branchLogoUrl || companySettings.logoUrl}
             alt="Logo"
             className={`company-logo ${isSquareLogo ? 'square-logo' : ''}`}
             onLoad={handleLogoLoad}
@@ -680,7 +680,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           />
         )}
 
-        <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
+        <div className="company-name">{invoice.branchTradeName || invoice.branchName || companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
         {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && (
           <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
         )}

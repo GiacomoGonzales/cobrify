@@ -881,10 +881,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     // Centrar todo el header en 58mm para mejor presentación
     printer = printer.align('center');
 
-    if (business.logoUrl) {
+    // Logo: prefiere el de la sucursal emisora (snapshot en la factura) sobre el global.
+    const headerLogoUrl = invoice.branchLogoUrl || business.logoUrl;
+    if (headerLogoUrl) {
       console.log('📷 Preparando logo del negocio...');
       try {
-        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
+        const logoConfig = await prepareLogoForPrinting(headerLogoUrl, paperWidth, business.logoPrintScale);
 
         // Determinar ancho en milímetros según papel (30% más pequeño)
         const logoWidthMm = paperWidth === 58 ? 32 : 46;
@@ -912,8 +914,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       console.log('ℹ️ No hay logo configurado');
     }
 
-    // Nombre del negocio (company-name) - Formato elegante con bold - CENTRADO
-    const businessName = convertSpanishText(business.tradeName || business.name || 'MI EMPRESA');
+    // Nombre del negocio (company-name) - Formato elegante con bold - CENTRADO.
+    // Prefiere el nombre comercial de la sucursal emisora (snapshot en la factura).
+    const businessName = convertSpanishText(invoice.branchTradeName || invoice.branchName || business.tradeName || business.name || 'MI EMPRESA');
     printer = printer
       .align('center')
       .bold()

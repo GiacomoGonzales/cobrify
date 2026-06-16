@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
 import { uploadImage } from '@/services/imageUploadService'
+import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
@@ -123,7 +124,7 @@ function PdfImageSizeSlider({ value, onChange }) {
 }
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName, isBusinessOwner, isAdmin } = useAppContext()
   // Preview de tema del catálogo
   const [previewThemeId, setPreviewThemeId] = useState(null)
   const toast = useToast()
@@ -2852,6 +2853,7 @@ export default function Settings() {
 
       {/* Tab Content - Información */}
       {activeTab === 'informacion' && (
+        <>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Nombre de la cuenta (el que se ve en la cabecera) — discreto */}
         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 px-1">
@@ -3337,6 +3339,16 @@ export default function Settings() {
           </Button>
         </div>
         </form>
+        {/* Datos personalizables por sucursal (logo, nombre comercial, dirección, teléfono).
+            Solo el dueño/admin puede editar sucursales (las reglas de Firestore restringen
+            la escritura al owner). Los sub-usuarios no ven esta sección. */}
+        {!isDemoMode && (isBusinessOwner || isAdmin) && (
+          <BranchInfoSettings
+            businessId={getBusinessId()}
+            mainBranchName={businessSettings?.mainBranchName || 'Sucursal Principal'}
+          />
+        )}
+        </>
       )}
 
       {/* Tab Content - Preferencias (Tipo de negocio + Personalización) */}

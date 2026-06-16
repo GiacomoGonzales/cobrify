@@ -5574,9 +5574,13 @@ export default function POS() {
         warehouseName: selectedWarehouse?.name || null,
         warehouseAddress: selectedWarehouse?.address || null,
         warehousePhone: selectedWarehouse?.phone || null,
-        // Información de la sucursal (para series de documentos y datos del comprobante)
+        // Información de la sucursal (para series de documentos y datos del comprobante).
+        // Snapshot de los datos personalizables por sucursal (logo + nombre comercial)
+        // para que el comprobante conserve los datos de la sede al momento de emitir.
         branchId: selectedBranch?.id || null,
         branchName: selectedBranch?.name || null,
+        branchTradeName: selectedBranch?.tradeName || null,
+        branchLogoUrl: selectedBranch?.logoUrl || null,
         branchAddress: selectedBranch?.address || null,
         branchPhone: selectedBranch?.phone || null,
         // Forma de pago (solo para facturas) - Contado/Crédito con cuotas

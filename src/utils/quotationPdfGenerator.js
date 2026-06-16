@@ -4,6 +4,7 @@ import { ref, getBlob, getDownloadURL } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 
 // Sistema de caché compartido con pdfGenerator
 const LOGO_CACHE_KEY = 'cobrify_logo_cache'
@@ -417,14 +418,18 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
   let actualLogoWidth = defaultLogoWidth // Ancho real del logo (se actualiza dinámicamente)
 
+  // Datos efectivos de la sede emisora (logo/nombre/dirección/teléfono de la
+  // sucursal o, si no define, los globales del negocio).
+  const branchInfo = resolveBranchCompanyInfo(companySettings, quotation)
+
   // ===== COLUMNA 1: LOGO =====
-  if (companySettings?.logoUrl) {
+  if (branchInfo.logoUrl) {
     try {
-      const imgData = await loadImageWithRetry(companySettings.logoUrl, 3, 30000)
+      const imgData = await loadImageWithRetry(branchInfo.logoUrl, 3, 30000)
 
       let format = 'PNG'
-      if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
-          companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+      if (branchInfo.logoUrl.toLowerCase().includes('.jpg') ||
+          branchInfo.logoUrl.toLowerCase().includes('.jpeg')) {
         format = 'JPEG'
       }
 
@@ -537,7 +542,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   }
 
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
-  const companyName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
+  const companyName = (branchInfo.name || 'EMPRESA SAC').toUpperCase()
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
   const showBusinessName = businessName && businessName !== companyName
 
@@ -560,7 +565,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     }
   }
 
-  const phone = companySettings?.phone || ''
+  const phone = quotation.branchPhone || companySettings?.phone || ''
   const email = companySettings?.email || ''
   const website = companySettings?.website || ''
 

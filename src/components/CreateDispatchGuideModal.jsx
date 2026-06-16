@@ -1388,9 +1388,13 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         additionalInfo,
 
-        // Sucursal y almacén seleccionados
+        // Sucursal y almacén seleccionados (+ snapshot de datos de la sede para el PDF)
         branchId: selectedBranchId || null,
         branchName: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name || null : null,
+        branchTradeName: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.tradeName || null : null,
+        branchLogoUrl: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.logoUrl || null : null,
+        branchAddress: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.address || null : null,
+        branchPhone: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.phone || null : null,
         warehouseId: selectedWarehouseId || null,
         warehouseName: selectedWarehouseId ? warehouses.find(w => w.id === selectedWarehouseId)?.name || null : null,
         stockDeducted: false,

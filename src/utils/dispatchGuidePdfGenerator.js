@@ -6,6 +6,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getUbigeoName } from '@/data/peruUbigeos'
+import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -312,21 +313,25 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const logoWidth = 70
   const docBoxWidth = 150
 
+  // Datos efectivos de la sede emisora (logo/nombre/dirección/teléfono de la
+  // sucursal que emitió la guía o, si no define, los globales del negocio).
+  const branchInfo = resolveBranchCompanyInfo(companySettings, guide)
+
   // Logo (placeholder si no hay)
   const logoX = MARGIN_LEFT
   const logoY = currentY
   let renderedLogoWidth = logoWidth // Ancho real del logo renderizado
 
-  if (companySettings?.logoUrl) {
+  if (branchInfo.logoUrl) {
     try {
       const imgData = await Promise.race([
-        loadImageAsBase64(companySettings.logoUrl),
+        loadImageAsBase64(branchInfo.logoUrl),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
       ])
 
       let format = 'PNG'
-      if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
-          companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+      if (branchInfo.logoUrl.toLowerCase().includes('.jpg') ||
+          branchInfo.logoUrl.toLowerCase().includes('.jpeg')) {
         format = 'JPEG'
       }
 
@@ -434,14 +439,18 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const centerX = logoX + renderedLogoWidth + 8
   const centerWidth = PAGE_WIDTH - MARGIN_RIGHT - docBoxWidth - centerX - 5
 
-  const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
+  const commercialName = (branchInfo.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
-  const phone = companySettings?.phone || ''
+  const phone = branchInfo.phone || ''
   const email = companySettings?.email || ''
 
-  // Dirección y ubicación (departamento, provincia, distrito) en líneas separadas
-  const fullAddress = companySettings?.address || ''
-  const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+  // Dirección y ubicación (departamento, provincia, distrito) en líneas separadas.
+  // Si la guía se emitió desde una sucursal, usamos su dirección (sin mezclar el
+  // ubigeo global del negocio); si no, los datos globales.
+  const fullAddress = branchInfo.address || ''
+  const locationParts = guide.branchAddress
+    ? []
+    : [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
   const locationLine = locationParts.length > 0 ? locationParts.join(', ') : ''
 
   // Calcular altura total del texto para centrarlo verticalmente

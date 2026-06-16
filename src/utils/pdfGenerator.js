@@ -2,6 +2,7 @@ import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { UNITS } from '@/components/product/ProductFormModal'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
@@ -600,6 +601,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   let currentY = MARGIN_TOP
 
+  // Datos de empresa EFECTIVOS: prefiere el snapshot de la sucursal emisora
+  // (branchLogoUrl/branchTradeName/branchAddress/branchPhone) y cae a lo global.
+  const branchInfo = resolveBranchCompanyInfo(companySettings, invoice)
+
   // ========== 1. ENCABEZADO - 3 COLUMNAS CON LOGO DINÁMICO ==========
 
   const headerHeight = 100 * S
@@ -612,17 +617,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   let actualLogoWidth = defaultLogoWidth // Ancho real del logo (se actualiza dinámicamente)
 
   // ===== COLUMNA 1: LOGO (izquierda) =====
-  if (companySettings?.logoUrl) {
+  if (branchInfo.logoUrl) {
     try {
-      const imgData = await loadImageWithRetry(companySettings.logoUrl)
+      const imgData = await loadImageWithRetry(branchInfo.logoUrl)
 
       // Si no se pudo cargar el logo, continuar sin él
       if (!imgData) {
         console.warn('⚠️ Logo no disponible, continuando sin logo')
       } else {
         let format = 'PNG'
-        if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
-            companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+        if (branchInfo.logoUrl.toLowerCase().includes('.jpg') ||
+            branchInfo.logoUrl.toLowerCase().includes('.jpeg')) {
           format = 'JPEG'
         }
 
@@ -718,7 +723,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
   // Recopilar todos los datos disponibles
-  const companyName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
+  const companyName = (branchInfo.name || 'EMPRESA SAC').toUpperCase()
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
   const showBusinessName = businessName && businessName !== companyName
 
@@ -727,7 +732,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   let branchLocations = []
   const activeBranches = branches.filter(b => b.isActive !== false)
 
-  if (activeBranches.length > 0) {
+  if (invoice.branchId && (invoice.branchAddress || invoice.branchPhone)) {
+    // Comprobante emitido desde una SUCURSAL concreta → mostrar SOLO esa sede
+    // (datos congelados al emitir), no el directorio de todas las sucursales.
+    branchLocations.push({
+      address: (invoice.branchAddress || '').toUpperCase(),
+      phone: invoice.branchPhone || ''
+    })
+  } else if (activeBranches.length > 0) {
     // Agregar dirección principal (datos de la empresa)
     if (companySettings?.address) {
       let mainAddress = companySettings.address
@@ -2926,16 +2938,19 @@ export const generateExitNotePDF = async (invoice, companySettings) => {
 
   let currentY = 30
 
+  // Datos efectivos de la sede emisora (logo/nombre de la sucursal o, si no, global).
+  const branchInfo = resolveBranchCompanyInfo(companySettings, invoice)
+
   // ========== ENCABEZADO ==========
 
   // Logo (si existe)
-  if (companySettings?.logoUrl) {
+  if (branchInfo.logoUrl) {
     try {
-      const imgData = await loadImageWithRetry(companySettings.logoUrl)
+      const imgData = await loadImageWithRetry(branchInfo.logoUrl)
       if (imgData) {
         let format = 'PNG'
-        if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
-            companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+        if (branchInfo.logoUrl.toLowerCase().includes('.jpg') ||
+            branchInfo.logoUrl.toLowerCase().includes('.jpeg')) {
           format = 'JPEG'
         }
         const img = new Image()
@@ -2963,7 +2978,7 @@ export const generateExitNotePDF = async (invoice, companySettings) => {
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
-  const companyName = companySettings?.businessName || companySettings?.name || ''
+  const companyName = branchInfo.name || companySettings?.businessName || ''
   if (companyName) {
     doc.text(companyName.toUpperCase(), PAGE_WIDTH - MARGIN_RIGHT, currentY + 35, { align: 'right' })
   }

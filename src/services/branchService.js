@@ -150,6 +150,11 @@ export const createBranch = async (businessId, branchData) => {
 
     const newBranch = {
       name: branchData.name || 'Sucursal Principal',
+      // Datos comerciales personalizables por sucursal (independientes del negocio).
+      // `tradeName` = nombre comercial que se muestra en comprobantes/tickets/catálogo
+      // (si vacío, cae al nombre comercial global). `logoUrl` = logo propio de la sede.
+      tradeName: branchData.tradeName || '',
+      logoUrl: branchData.logoUrl || '',
       address: branchData.address || '',
       phone: branchData.phone || '',
       email: branchData.email || '',
