@@ -947,15 +947,14 @@ Gracias por tu preferencia.`
       const isBoleta = series.toUpperCase().startsWith('B')
       const docTypeName = isBoleta ? 'Boleta' : 'Factura'
 
-      // Obtener método de emisión desde businessSettings (lógica similar a emissionRouter)
-      let emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
-      // Solo usar qpse si realmente tiene credenciales configuradas
-      if (emissionMethod === 'qpse') {
-        const qpseConfig = businessSettings?.emissionConfig?.qpse || businessSettings?.qpse
-        if (!qpseConfig?.usuario || !qpseConfig?.password) {
-          emissionMethod = null // Fallback a SUNAT directo
-        }
-      }
+      // Método de emisión para enrutar la anulación (QPSe vs SUNAT directo).
+      // OJO: NO verificar las credenciales QPSE en el cliente. Desde la migración de
+      // seguridad, las credenciales (qpse.usuario/password) viven en la subcolección
+      // protegida `secrets/emission` y el cliente YA NO LAS VE. El server (voidBoletaQPse)
+      // las lee de ahí, igual que la emisión. Antes se hacía fallback a SUNAT directo al
+      // no "ver" las creds → las cuentas QPSE caían al void directo y fallaban con
+      // "Faltan credenciales SOL". Confiamos en emissionMethod (top-level, no secreto).
+      const emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
 
       // Llamar al servicio de anulación unificado (detecta automáticamente factura o boleta)
       // Pasa el método de emisión para usar QPSe si corresponde
@@ -1275,11 +1274,9 @@ Gracias por tu preferencia.`
       // PASO 2: Si no se resolvió con checkVoidStatus, reenviar la baja
       toast.info('Reenviando anulación a SUNAT...')
 
-      let emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
-      if (emissionMethod === 'qpse') {
-        const qpseConfig = businessSettings?.emissionConfig?.qpse || businessSettings?.qpse
-        if (!qpseConfig?.usuario || !qpseConfig?.password) emissionMethod = null
-      }
+      // No verificar credenciales QPSE en el cliente: viven en secrets/emission tras la
+      // migración de seguridad (el server las lee). Enrutar solo por emissionMethod.
+      const emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
 
       const result = await voidDocument(
         invoice,
