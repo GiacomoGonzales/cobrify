@@ -34,7 +34,7 @@ import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function StockMovements() {
-  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses, businessSettings } = useAppContext()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Los movimientos llevan warehouseId y, en transferencias, fromWarehouse/toWarehouse.
   const canAccess = useLocationAccess()
@@ -130,7 +130,7 @@ export default function StockMovements() {
       if (movementsResult.success) {
         // Helper para obtener nombre de sucursal
         const getBranchName = (branchId) => {
-          if (!branchId) return 'Sucursal Principal'
+          if (!branchId) return businessSettings?.mainBranchName || 'Sucursal Principal'
           const branch = branchesData.find(b => b.id === branchId)
           return branch?.name || 'Sucursal desconocida'
         }
@@ -221,7 +221,7 @@ export default function StockMovements() {
           const fromWarehouse = warehouses.find(w => w.id === mov.fromWarehouse)
           const toWarehouse = warehouses.find(w => w.id === mov.toWarehouse)
           const getBranchName = (branchId) => {
-            if (!branchId) return 'Sucursal Principal'
+            if (!branchId) return businessSettings?.mainBranchName || 'Sucursal Principal'
             return branches.find(b => b.id === branchId)?.name || 'Sucursal desconocida'
           }
           const isCrossBranchTransfer = fromWarehouse && toWarehouse &&
@@ -855,7 +855,7 @@ export default function StockMovements() {
                     className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                    {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

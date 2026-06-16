@@ -63,7 +63,7 @@ const fmtRange = (s, e) => {
 }
 
 export default function MySchedule() {
-  const { user, getBusinessId, isBusinessOwner, isAdmin } = useAppContext()
+  const { user, getBusinessId, isBusinessOwner, isAdmin, businessSettings } = useAppContext()
   const toast = useToast()
 
   const businessId = getBusinessId?.()
@@ -113,7 +113,7 @@ export default function MySchedule() {
       if (branchesRes?.success) {
         // Construir mapa id → nombre para resolver branchId de cada celda.
         // 'main' representa la sucursal principal (heredado del modelo).
-        const map = { main: 'Sucursal Principal' }
+        const map = { main: businessSettings?.mainBranchName || 'Sucursal Principal' }
         for (const b of (branchesRes.data || [])) {
           if (b.id) map[b.id] = b.name || 'Sucursal'
         }
@@ -328,6 +328,7 @@ export default function MySchedule() {
                     approved={approved}
                     isToday={isHoy}
                     branchMap={branchMap}
+                    mainBranchName={businessSettings?.mainBranchName || 'Sucursal Principal'}
                   />
                 )
               })}
@@ -530,7 +531,7 @@ export default function MySchedule() {
   )
 }
 
-function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {} }) {
+function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {}, mainBranchName = 'Sucursal Principal' }) {
   // Prioridad visual: vacación aprobada > descanso > turno > sin asignar
   const isVacation = !!approved
   const isRest = cell?.rest && !isVacation
@@ -540,7 +541,7 @@ function DayRow({ dayLabel, date, cell, approved, isToday, branchMap = {} }) {
   // Principal". Si el branchId no se encuentra en el mapa (sucursal eliminada
   // o sin permiso de lectura), se omite la línea.
   const branchKey = cell?.branchId || 'main'
-  const branchName = branchMap[branchKey] || (cell?.branchId ? 'Otra sucursal' : 'Sucursal Principal')
+  const branchName = branchMap[branchKey] || (cell?.branchId ? 'Otra sucursal' : mainBranchName)
 
   let leftBorder = 'border-l-4 '
   if (isVacation) leftBorder += 'border-blue-400'

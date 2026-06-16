@@ -47,7 +47,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function Production() {
-  const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData, businessSettings } = useAppContext()
   const toast = useToast()
 
   // Estado principal
@@ -532,7 +532,7 @@ export default function Production() {
                 }}
                 className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
               >
-                {hasMainAccess && <option value="">Sucursal Principal</option>}
+                {hasMainAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}

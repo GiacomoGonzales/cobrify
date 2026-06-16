@@ -22,7 +22,7 @@ const UNITS = [
 ]
 
 export default function RegisterPurchase() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -353,7 +353,7 @@ export default function RegisterPurchase() {
                     <option value="">Sin almacén específico</option>
                     {/* Almacenes de Sucursal Principal */}
                     {warehouses.filter(w => !w.branchId).length > 0 && (
-                      <optgroup label="Sucursal Principal">
+                      <optgroup label={`${businessSettings?.mainBranchName || 'Sucursal Principal'}`}>
                         {warehouses.filter(w => !w.branchId).map(warehouse => (
                           <option key={warehouse.id} value={warehouse.id}>
                             {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}

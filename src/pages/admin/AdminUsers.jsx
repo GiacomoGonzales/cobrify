@@ -410,6 +410,10 @@ export default function AdminUsers() {
             (data.email ? data.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null),
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
+          // Nombre personalizado de la Sucursal Principal (editable desde Gestionar Sucursales).
+          // Se persiste en businesses/{id} y users/{id}; sin esto el admin no lo leía de vuelta
+          // y siempre mostraba "Sucursal Principal".
+          mainBranchName: business.mainBranchName || usersMap[doc.id]?.mainBranchName || null,
           igvRate: business.emissionConfig?.taxConfig?.igvRate ?? 18,
           taxType: business.emissionConfig?.taxConfig?.taxType || 'standard',
           plan: data.plan || 'unknown',
@@ -1430,6 +1434,11 @@ export default function AdminUsers() {
           : u
       ))
       setBranchesUserToEdit(prev => ({ ...prev, mainBranchName: trimmedName }))
+      // Mantener selectedUser sincronizado: el modal de sucursales se reabre con
+      // selectedUser, así que sin esto revertiría al nombre viejo hasta recargar.
+      setSelectedUser(prev => (prev && prev.id === branchesUserToEdit.id)
+        ? { ...prev, mainBranchName: trimmedName }
+        : prev)
 
       toast.success('Nombre de sucursal actualizado')
       setEditingMainBranch(false)

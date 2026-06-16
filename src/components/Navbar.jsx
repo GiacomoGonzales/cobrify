@@ -79,7 +79,7 @@ function Navbar() {
   // modo: Principal usa el modo del doc; cada sucursal el suyo (o hereda el del doc).
   const accessibleBranches = filterBranchesByAccess ? filterBranchesByAccess(branches || []) : (branches || [])
   const branchOptions = [
-    ...(hasMainBranchAccess ? [{ id: null, name: 'Sucursal Principal', mode: baseBusinessMode }] : []),
+    ...(hasMainBranchAccess ? [{ id: null, name: businessSettings?.mainBranchName || 'Sucursal Principal', mode: baseBusinessMode }] : []),
     ...accessibleBranches.map(b => ({ id: b.id, name: b.name, mode: b.businessMode || baseBusinessMode })),
   ]
   const activeOption = branchOptions.find(o => (o.id || null) === (activeBranchId || null)) || branchOptions[0] || null

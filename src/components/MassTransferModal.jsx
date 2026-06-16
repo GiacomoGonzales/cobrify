@@ -42,12 +42,12 @@ export default function MassTransferModal({
     warehouseList.forEach(w => {
       const branchName = w.branchId
         ? (branches || []).find(b => b.id === w.branchId)?.name || 'Otra Sucursal'
-        : 'Sucursal Principal'
+        : (companySettings?.mainBranchName || 'Sucursal Principal')
       if (!groups[branchName]) groups[branchName] = []
       groups[branchName].push(w)
     })
     return groups
-  }, [warehouseList, branches])
+  }, [warehouseList, branches, companySettings])
 
   // Productos e ingredientes con stock en almacén origen (incluye variantes)
   const availableProducts = useMemo(() => {

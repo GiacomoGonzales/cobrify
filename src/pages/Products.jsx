@@ -5110,7 +5110,7 @@ export default function Products() {
                                       <div className="border border-gray-200 rounded-lg overflow-hidden">
                                         <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-4 h-4 text-primary-600" />
-                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="font-medium text-primary-700">{businessSettings?.mainBranchName || 'Sucursal Principal'}</span>
                                         </div>
                                         {mainWarehouses.map(wh => {
                                           const variants = warehouseVariantMap[wh.id] || []
@@ -5190,7 +5190,7 @@ export default function Products() {
                                       <div className="border border-gray-200 rounded-lg overflow-hidden">
                                         <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-4 h-4 text-primary-600" />
-                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="font-medium text-primary-700">{businessSettings?.mainBranchName || 'Sucursal Principal'}</span>
                                           <Badge variant="default" className="text-xs ml-2">
                                             {mainBranchWarehouses.reduce((sum, w) => {
                                               const ws = product.warehouseStocks?.find(ws => ws.warehouseId === w.id)
@@ -6865,7 +6865,7 @@ export default function Products() {
                       return (
                         <>
                           {mainWarehouses.length > 0 && (
-                            <optgroup label="Sucursal Principal">
+                            <optgroup label={`${businessSettings?.mainBranchName || 'Sucursal Principal'}`}>
                               {mainWarehouses.map(w => (
                                 <option key={w.id} value={w.id}>{w.name}{w.isDefault ? ' (Principal)' : ''}</option>
                               ))}

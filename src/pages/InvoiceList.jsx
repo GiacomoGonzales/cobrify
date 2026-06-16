@@ -1816,7 +1816,7 @@ Gracias por tu preferencia.`
       // Determinar nombre de sucursal para el Excel
       let branchLabel = null
       if (filterBranch === 'main') {
-        branchLabel = 'Sucursal Principal'
+        branchLabel = companySettings?.mainBranchName || 'Sucursal Principal'
       } else if (filterBranch !== 'all') {
         const branch = branches.find(b => b.id === filterBranch)
         branchLabel = branch ? branch.name : null
@@ -2508,7 +2508,7 @@ Gracias por tu preferencia.`
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
               >
                 <option value="all">Todas las sucursales</option>
-                {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}

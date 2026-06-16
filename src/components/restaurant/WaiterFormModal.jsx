@@ -10,7 +10,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) {
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -241,7 +241,7 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
                 setFormData((prev) => ({ ...prev, branchId: e.target.value || null }))
               }
             >
-              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {hasMainBranchAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}

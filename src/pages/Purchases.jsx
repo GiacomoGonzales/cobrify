@@ -1055,14 +1055,14 @@ export default function Purchases() {
   // Obtener nombre de sucursal para una compra
   const getBranchName = (purchase) => {
     const purchaseWarehouseId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
-    if (!purchaseWarehouseId) return 'Sucursal Principal'
+    if (!purchaseWarehouseId) return companySettings?.mainBranchName || 'Sucursal Principal'
 
     const warehouse = warehouses.find(w => w.id === purchaseWarehouseId)
-    if (!warehouse) return 'Sucursal Principal'
-    if (!warehouse.branchId) return 'Sucursal Principal'
+    if (!warehouse) return companySettings?.mainBranchName || 'Sucursal Principal'
+    if (!warehouse.branchId) return companySettings?.mainBranchName || 'Sucursal Principal'
 
     const branch = branches.find(b => b.id === warehouse.branchId)
-    return branch?.name || 'Sucursal Principal'
+    return branch?.name || companySettings?.mainBranchName || 'Sucursal Principal'
   }
 
   const filteredPurchases = purchases
@@ -1305,7 +1305,7 @@ export default function Purchases() {
                     className="flex-1 text-sm bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                    {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                     {branches.map((branch) => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name}

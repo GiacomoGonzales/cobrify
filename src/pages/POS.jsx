@@ -7620,7 +7620,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                     >
                       {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
-                      {hasMainAccess && <option value="">Sucursal Principal</option>}
+                      {hasMainAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                       {branches.map(branch => (
                         <option key={branch.id} value={branch.id}>
                           {branch.name}

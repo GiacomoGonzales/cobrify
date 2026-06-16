@@ -835,7 +835,7 @@ export default function Dashboard() {
                 className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
               >
                 <option value="all">Todas las sucursales</option>
-                {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}

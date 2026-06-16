@@ -14,7 +14,7 @@ import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc 
 import { db } from '@/lib/firebase'
 
 export default function Kitchen() {
-  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings } = useAppContext()
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccess = useLocationAccess()
   const toast = useToast()
@@ -614,7 +614,7 @@ export default function Kitchen() {
           {/* Selector de sede: solo si el negocio tiene sucursales */}
           {branches.length > 0 && (
             <Select value={selectedBranchId || ''} onChange={(e) => setSelectedBranchId(e.target.value || null)}>
-              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {hasMainBranchAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
               {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
             </Select>
           )}

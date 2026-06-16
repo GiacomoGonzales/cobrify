@@ -1574,7 +1574,7 @@ export default function Tables() {
               onChange={(e) => setSelectedBranchId(e.target.value || null)}
               className="w-full md:w-56"
             >
-              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {hasMainBranchAccess && <option value="">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
@@ -1933,7 +1933,7 @@ export default function Tables() {
                 value={formData.branchId || ''}
                 onChange={(e) => setFormData({ ...formData, branchId: e.target.value || null })}
               >
-                {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+                {hasMainBranchAccess && <option value="">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}

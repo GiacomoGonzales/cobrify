@@ -126,7 +126,7 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
   const toast = useToast()
 
@@ -729,7 +729,7 @@ export default function Attendance() {
             >
               {accessibleScheduleBranches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.isMain ? 'Sucursal Principal' : b.name}
+                  {b.isMain ? (businessSettings?.mainBranchName || 'Sucursal Principal') : b.name}
                 </option>
               ))}
             </select>

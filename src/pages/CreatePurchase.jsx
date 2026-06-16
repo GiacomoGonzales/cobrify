@@ -2249,7 +2249,7 @@ export default function CreatePurchase() {
                 >
                   {/* Almacenes de Sucursal Principal */}
                   {warehouses.filter(w => !w.branchId).length > 0 && (
-                    <optgroup label="Sucursal Principal">
+                    <optgroup label={`${businessSettings?.mainBranchName || 'Sucursal Principal'}`}>
                       {warehouses.filter(w => !w.branchId).map(warehouse => (
                         <option key={warehouse.id} value={warehouse.id}>
                           {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}

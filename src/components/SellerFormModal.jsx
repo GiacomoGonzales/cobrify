@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -203,7 +203,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Sucursal Principal</option>
+              <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
               {branches.map(branch => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}

@@ -7250,7 +7250,7 @@ export default function Settings() {
               <div>
                 <p className="text-sm text-blue-800 font-medium">Series por Sucursal</p>
                 <p className="text-sm text-blue-700 mt-1">
-                  La <strong>Sucursal Principal</strong> usa las series globales configuradas aquí.
+                  La <strong>{businessSettings?.mainBranchName || 'Sucursal Principal'}</strong> usa las series globales configuradas aquí.
                   Las sucursales adicionales tienen sus propias series independientes.
                 </p>
               </div>
@@ -7277,7 +7277,7 @@ export default function Settings() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <CardTitle className="text-lg">Sucursal Principal</CardTitle>
+                        <CardTitle className="text-lg">{businessSettings?.mainBranchName || 'Sucursal Principal'}</CardTitle>
                         <span className="px-2 py-0.5 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">
                           Principal
                         </span>

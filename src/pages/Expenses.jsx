@@ -360,9 +360,9 @@ export default function Expenses() {
 
   // Helper para obtener nombre de sucursal
   const getBranchName = (branchId) => {
-    if (!branchId || branchId === '' || branchId === 'main') return 'Sucursal Principal'
+    if (!branchId || branchId === '' || branchId === 'main') return businessSettings?.mainBranchName || 'Sucursal Principal'
     const branch = branches.find(b => b.id === branchId)
-    return branch?.name || 'Sucursal Principal'
+    return branch?.name || businessSettings?.mainBranchName || 'Sucursal Principal'
   }
 
   // Tab activo: 'list' (lista de gastos) o 'summary' (resumen con gráficos)
@@ -929,7 +929,7 @@ export default function Expenses() {
                   className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer flex-1"
                 >
                   <option value="all">Todas las sucursales</option>
-                  {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                  {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}
@@ -1451,7 +1451,7 @@ export default function Expenses() {
                     onChange={e => setForm({ ...form, branchId: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   >
-                    {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+                    {hasMainBranchAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

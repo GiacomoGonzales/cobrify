@@ -1136,7 +1136,7 @@ export default function Orders() {
               onChange={(e) => setSelectedBranchId(e.target.value || null)}
               className="w-full sm:w-auto"
             >
-              {hasMainBranchAccess && <option value="">Sucursal Principal</option>}
+              {hasMainBranchAccess && <option value="">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}

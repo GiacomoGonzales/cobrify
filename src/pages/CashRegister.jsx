@@ -1817,7 +1817,7 @@ export default function CashRegister() {
                   }}
                   className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer pr-1"
                 >
-                  {hasMainAccess && <option value="">Sucursal Principal</option>}
+                  {hasMainAccess && <option value="">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}

@@ -2523,7 +2523,7 @@ export default function Inventory() {
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                    {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}
@@ -2786,7 +2786,7 @@ export default function Inventory() {
                                       {filterBranch === 'all' && (
                                         <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-3 h-3 text-primary-600" />
-                                          <span className="text-xs font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
                                         </div>
                                       )}
                                       <div className="p-2 space-y-1">
@@ -2837,7 +2837,7 @@ export default function Inventory() {
                                       {filterBranch === 'all' && (
                                         <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-3 h-3 text-primary-600" />
-                                          <span className="text-xs font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
                                           <span className="text-xs text-primary-600 ml-auto">
                                             {mainBranchWarehouses.reduce((sum, w) => {
                                               const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
@@ -3321,7 +3321,7 @@ export default function Inventory() {
                                       <div className="border border-gray-200 rounded-lg overflow-hidden">
                                         <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-4 h-4 text-primary-600" />
-                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
                                         </div>
                                         {mainWhs.map(renderWarehouse)}
                                       </div>
@@ -3382,7 +3382,7 @@ export default function Inventory() {
                                         {filterBranch === 'all' && (
                                           <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
                                             <Store className="w-4 h-4 text-primary-600" />
-                                            <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                            <span className="font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
                                             <Badge variant="default" className="text-xs ml-2">
                                               {mainBranchWarehouses.reduce((sum, w) => {
                                                 const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
@@ -3898,10 +3898,10 @@ export default function Inventory() {
             if (isCrossBranch) {
               const fromBranch = fromWarehouse.branchId
                 ? branches.find(b => b.id === fromWarehouse.branchId)?.name
-                : 'Sucursal Principal'
+                : (companySettings?.mainBranchName || 'Sucursal Principal')
               const toBranch = toWarehouse.branchId
                 ? branches.find(b => b.id === toWarehouse.branchId)?.name
-                : 'Sucursal Principal'
+                : (companySettings?.mainBranchName || 'Sucursal Principal')
 
               return (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
@@ -3927,7 +3927,7 @@ export default function Inventory() {
             >
               <option value="">Selecciona almacén origen</option>
               {allWarehouses.filter(w => w.isActive && !w.branchId).length > 0 && (
-                <optgroup label="📍 Sucursal Principal">
+                <optgroup label={`📍 ${companySettings?.mainBranchName || 'Sucursal Principal'}`}>
                   {allWarehouses.filter(w => w.isActive && !w.branchId).map(warehouse => {
                     // Para variantes: sumar stock de todas las variantes en este almacén
                     let stock = 0
@@ -4013,7 +4013,7 @@ export default function Inventory() {
               <option value="">Selecciona almacén destino</option>
               {/* Almacenes de Sucursal Principal */}
               {allWarehouses.filter(w => w.isActive && !w.branchId && w.id !== transferData.fromWarehouse).length > 0 && (
-                <optgroup label="📍 Sucursal Principal">
+                <optgroup label={`📍 ${companySettings?.mainBranchName || 'Sucursal Principal'}`}>
                   {allWarehouses.filter(w => w.isActive && !w.branchId && w.id !== transferData.fromWarehouse).map(warehouse => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}

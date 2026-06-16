@@ -53,7 +53,7 @@ const UNITS = [
 ]
 
 export default function Ingredients() {
-  const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess, businessSettings } = useAppContext()
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
@@ -809,7 +809,7 @@ export default function Ingredients() {
                   className="flex-1 text-sm bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
                 >
                   <option value="all">Todas las sucursales</option>
-                  {hasMainBranchAccess && <option value="main">Sucursal Principal</option>}
+                  {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}

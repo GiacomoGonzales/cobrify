@@ -732,7 +732,7 @@ export default function DispatchGuides() {
                     className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                   >
                     {hasMainAccess && <option value="all">Todas las sucursales</option>}
-                    {hasMainAccess && <option value="main">Sucursal Principal</option>}
+                    {hasMainAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}

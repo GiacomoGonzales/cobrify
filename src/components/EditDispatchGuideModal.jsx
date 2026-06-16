@@ -93,7 +93,7 @@ const parseUbigeo = (ubigeo) => {
 
 export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdated }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, user } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, user, businessSettings } = useAppContext()
 
   // Sucursales disponibles
   const [branches, setBranches] = useState([])
@@ -873,7 +873,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   onChange={(e) => setSelectedBranchId(e.target.value)}
                   className="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 >
-                  <option value="">Sucursal Principal</option>
+                  <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}

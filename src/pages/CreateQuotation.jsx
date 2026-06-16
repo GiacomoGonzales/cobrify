@@ -1499,7 +1499,7 @@ export default function CreateQuotation() {
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
-                    <option value="">Sucursal Principal (por defecto)</option>
+                    <option value="">{(businessSettings?.mainBranchName || 'Sucursal Principal')} (por defecto)</option>
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name} {branch.address ? `- ${branch.address}` : ''}

@@ -12,7 +12,7 @@ import { useLocationAccess } from '@/utils/locationAccess'
 import WaiterFormModal from '@/components/restaurant/WaiterFormModal'
 
 export default function Waiters() {
-  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, businessSettings } = useAppContext()
   const toast = useToast()
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccess = useLocationAccess()
@@ -295,7 +295,7 @@ export default function Waiters() {
                     <TableCell className="text-gray-600">{waiter.phone || '-'}</TableCell>
                     {branches.length > 0 && (
                       <TableCell className="text-gray-600">
-                        {waiter.branchId ? (branchNameById[waiter.branchId] || waiter.branchId) : 'Sucursal Principal'}
+                        {waiter.branchId ? (branchNameById[waiter.branchId] || waiter.branchId) : (businessSettings?.mainBranchName || 'Sucursal Principal')}
                       </TableCell>
                     )}
                     <TableCell>
