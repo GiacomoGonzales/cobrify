@@ -103,6 +103,11 @@ export default function CreatePurchase() {
   const [itemMode, setItemMode] = useState('products')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // Lock SÍNCRONO para impedir que handleSave se ejecute dos veces (doble clic /
+  // re-render) y se duplique la compra. `isSaving` (estado) no basta porque es
+  // asíncrono: hay una ventana entre el clic y el re-render donde el botón sigue
+  // habilitado. Ver también el manejo de éxito (no se reactiva el botón hasta navegar).
+  const savingRef = useRef(false)
   const [message, setMessage] = useState(null)
   const [selectedSupplier, setSelectedSupplier] = useState(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -1241,6 +1246,8 @@ export default function CreatePurchase() {
   }
 
   const handleSave = async () => {
+    // Guard síncrono anti-duplicado: si ya hay un guardado en curso, ignorar.
+    if (savingRef.current) return
     const businessId = getBusinessId()
     if (!businessId) {
       setMessage({
@@ -1262,6 +1269,7 @@ export default function CreatePurchase() {
     // Validar usando los items normalizados (no el estado que puede estar desactualizado)
     if (!validateForm(normalizedItems)) return
 
+    savingRef.current = true
     setIsSaving(true)
     setMessage(null)
 
@@ -2059,7 +2067,10 @@ export default function CreatePurchase() {
         }
       }
 
-      // 6. Mostrar éxito y redirigir
+      // 6. Mostrar éxito y redirigir.
+      // OJO: en éxito NO reactivamos el botón (savingRef/isSaving siguen en true)
+      // para que durante el 1.5s previo a navegar el usuario no pueda volver a
+      // pulsar "Guardar" y duplicar la compra. La navegación desmonta la página.
       toast.success(isEditMode ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
         appNavigate('compras')
@@ -2070,7 +2081,8 @@ export default function CreatePurchase() {
         type: 'error',
         text: error.message || (isEditMode ? 'Error al actualizar la compra.' : 'Error al crear la compra. Inténtalo nuevamente.'),
       })
-    } finally {
+      // Solo en ERROR liberamos el lock para permitir reintentar.
+      savingRef.current = false
       setIsSaving(false)
     }
   }
