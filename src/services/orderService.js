@@ -1005,6 +1005,38 @@ export const getOrdersByTable = async (businessId, tableId) => {
 /**
  * Obtener órdenes de un mozo específico
  */
+/**
+ * Obtener órdenes creadas dentro de un rango de fechas (createdAt).
+ * Usa solo el campo createdAt (índice por defecto), sin índice compuesto.
+ * Pensado para reportes por periodo (ej. desempeño de mozos del día/semana/mes).
+ *
+ * @param {string} businessId
+ * @param {Date} startDate - inicio (inclusive)
+ * @param {Date} endDate - fin (inclusive)
+ */
+export const getOrdersInRange = async (businessId, startDate, endDate) => {
+  try {
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    const q = query(
+      ordersRef,
+      where('createdAt', '>=', startDate),
+      where('createdAt', '<=', endDate),
+      orderBy('createdAt', 'desc')
+    )
+    const snapshot = await getDocs(q)
+
+    const orders = []
+    snapshot.forEach((doc) => {
+      orders.push({ id: doc.id, ...doc.data() })
+    })
+
+    return { success: true, data: orders }
+  } catch (error) {
+    console.error('Error al obtener órdenes por rango:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export const getOrdersByWaiter = async (businessId, waiterId) => {
   try {
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
@@ -1205,6 +1237,7 @@ export default {
   getOrdersByStatus,
   getOrdersByTable,
   getOrdersByWaiter,
+  getOrdersInRange,
   getOrdersStats,
   cancelOrder,
   completeOrder,
