@@ -12,7 +12,7 @@ import { getWaiters, deleteWaiter, toggleWaiterStatus } from '@/services/waiterS
 import { getActiveBranches } from '@/services/branchService'
 import { getOrdersInRange } from '@/services/orderService'
 import { generateWaitersExcel } from '@/services/waiterExportService'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useLocationAccess } from '@/utils/locationAccess'
@@ -163,12 +163,9 @@ export default function Waiters() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleWaiters, perfByWaiter, isDemoMode, branchNameById])
 
-  // Filtro de búsqueda + orden por ventas desc (ranking)
+  // Filtro de búsqueda (insensible a acentos/tildes) + orden por ventas desc (ranking)
   const rankedWaiters = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const filtered = q
-      ? waitersWithPerf.filter(w => (w.name || '').toLowerCase().includes(q) || (w.code || '').toLowerCase().includes(q))
-      : waitersWithPerf
+    const filtered = waitersWithPerf.filter(w => matchesSearchQuery(search, w.name, w.code))
     return [...filtered].sort((a, b) => (b.perf.sales - a.perf.sales) || (b.perf.orders - a.perf.orders))
   }, [waitersWithPerf, search])
 

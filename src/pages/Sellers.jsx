@@ -9,7 +9,7 @@ import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import SellerFormModal from '@/components/SellerFormModal'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import Modal from '@/components/ui/Modal'
 import { getActiveBranches } from '@/services/branchService'
 
@@ -248,13 +248,14 @@ export default function Sellers() {
 
   // Filtrar vendedores
   const filteredSellers = sellersWithStats.filter(seller => {
-    // Filtrar por búsqueda
-    const search = searchTerm.toLowerCase()
-    const matchesSearch = !searchTerm ||
-      seller.name?.toLowerCase().includes(search) ||
-      seller.code?.toLowerCase().includes(search) ||
-      seller.dni?.includes(search) ||
-      seller.email?.toLowerCase().includes(search)
+    // Filtrar por búsqueda (insensible a acentos/tildes y mayúsculas)
+    const matchesSearch = matchesSearchQuery(
+      searchTerm,
+      seller.name,
+      seller.code,
+      seller.dni,
+      seller.email
+    )
 
     // Filtrar por sucursal
     let matchesBranch = true

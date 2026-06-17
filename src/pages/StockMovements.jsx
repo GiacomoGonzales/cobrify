@@ -19,6 +19,7 @@ import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { matchesSearchQuery } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -279,10 +280,8 @@ export default function StockMovements() {
     // Defensa de permisos por ubicación (además del saneo en la carga)
     if (!canAccess(movement, { warehouseFields: ['warehouseId', 'fromWarehouse', 'toWarehouse'] })) return false
 
-    const matchesSearch =
-      movement.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      movement.productCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      movement.notes?.toLowerCase().includes(searchTerm.toLowerCase())
+    // Búsqueda insensible a acentos/tildes y mayúsculas
+    const matchesSearch = matchesSearchQuery(searchTerm, movement.productName, movement.productCode, movement.notes)
 
     // Filtro de sucursal
     let matchesBranch = true

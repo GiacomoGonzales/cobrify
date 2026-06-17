@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getProjects, createProject, updateProject, deleteProject } from '@/services/projectService'
+import { matchesSearchQuery } from '@/lib/utils'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -165,11 +166,7 @@ export default function Projects() {
 
   // Filtrar proyectos
   const filtered = projects.filter(p => {
-    const matchSearch = !searchTerm ||
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.responsibleName?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchSearch = matchesSearchQuery(searchTerm, p.name, p.code, p.address, p.responsibleName)
     const matchStatus = filterStatus === 'all' || p.status === filterStatus
     return matchSearch && matchStatus
   })

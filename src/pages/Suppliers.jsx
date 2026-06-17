@@ -5,6 +5,7 @@ import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle, MoreVertical
 import { z } from 'zod'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { matchesSearchQuery } from '@/lib/utils'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -305,15 +306,16 @@ export default function Suppliers() {
     return { success, failed, duplicates }
   }
 
-  const filteredSuppliers = suppliers.filter(supplier => {
-    const search = searchTerm.toLowerCase()
-    return (
-      supplier.businessName?.toLowerCase().includes(search) ||
-      supplier.documentNumber?.includes(search) ||
-      supplier.contactName?.toLowerCase().includes(search) ||
-      supplier.email?.toLowerCase().includes(search)
+  const filteredSuppliers = suppliers.filter(supplier =>
+    // Búsqueda insensible a acentos/tildes y mayúsculas (multi-palabra, multi-campo)
+    matchesSearchQuery(
+      searchTerm,
+      supplier.businessName,
+      supplier.documentNumber,
+      supplier.contactName,
+      supplier.email
     )
-  })
+  )
 
   const displayedSuppliers = filteredSuppliers.slice(0, visibleCount)
   const hasMore = filteredSuppliers.length > visibleCount

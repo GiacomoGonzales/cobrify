@@ -21,7 +21,7 @@ import {
   updateCustomer,
   deleteCustomer,
 } from '@/services/firestoreService'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
@@ -393,23 +393,20 @@ export default function Customers() {
   // Filtrar y ordenar clientes
   const filteredCustomers = customers
     .filter(customer => {
-      const search = searchTerm.toLowerCase()
-      const matchesSearch = (
-        customer.name?.toLowerCase().includes(search) ||
-        customer.documentNumber?.includes(search) ||
-        customer.businessName?.toLowerCase().includes(search) ||
-        customer.email?.toLowerCase().includes(search) ||
-        customer.phone?.toLowerCase().includes(search) ||
-        customer.address?.toLowerCase().includes(search) ||
-        normalizePets(customer).some(p =>
-          p.name?.toLowerCase().includes(search) ||
-          p.species?.toLowerCase().includes(search) ||
-          p.breed?.toLowerCase().includes(search)
-        ) ||
-        customer.studentName?.toLowerCase().includes(search) ||
-        customer.studentSchedule?.toLowerCase().includes(search) ||
-        customer.vehiclePlate?.toLowerCase().includes(search) ||
-        customer.subscriptionPlan?.toLowerCase().includes(search)
+      // Búsqueda insensible a acentos/tildes y mayúsculas (multi-palabra, multi-campo)
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        customer.name,
+        customer.documentNumber,
+        customer.businessName,
+        customer.email,
+        customer.phone,
+        customer.address,
+        ...normalizePets(customer).flatMap(p => [p.name, p.species, p.breed]),
+        customer.studentName,
+        customer.studentSchedule,
+        customer.vehiclePlate,
+        customer.subscriptionPlan
       )
       if (!matchesSearch) return false
 

@@ -26,7 +26,7 @@ import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
-import { formatDate } from '@/lib/utils'
+import { formatDate, matchesSearchQuery } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import {
   collection,
@@ -729,15 +729,9 @@ export default function Certificates() {
   }
 
   // Filtrar certificados por búsqueda
-  const filteredCertificates = certificates[activeTab]?.filter(cert => {
-    if (!searchTerm) return true
-    const search = searchTerm.toLowerCase()
-    return (
-      cert.customerName?.toLowerCase().includes(search) ||
-      cert.customerRuc?.includes(search) ||
-      cert.certificateNumber?.toLowerCase().includes(search)
-    )
-  }) || []
+  const filteredCertificates = certificates[activeTab]?.filter(cert =>
+    matchesSearchQuery(searchTerm, cert.customerName, cert.customerRuc, cert.certificateNumber)
+  ) || []
 
   const displayedCertificates = filteredCertificates.slice(0, visibleCount)
   const hasMore = filteredCertificates.length > visibleCount

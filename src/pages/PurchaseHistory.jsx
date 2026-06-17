@@ -8,7 +8,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases as getIngredientPurchases, getIngredients } from '@/services/ingredientService'
 import { getPurchases as getProductPurchases } from '@/services/firestoreService'
@@ -208,10 +208,7 @@ export default function PurchaseHistory() {
 
   // Filter purchases
   const filteredPurchases = allPurchases.filter(purchase => {
-    const matchesSearch =
-      purchase.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      purchase.supplier?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      purchase.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = matchesSearchQuery(searchTerm, purchase.name, purchase.supplier, purchase.invoiceNumber)
 
     const matchesType = filterType === 'all' ||
       (filterType === 'products' && purchase.type === 'product') ||

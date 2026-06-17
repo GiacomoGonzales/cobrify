@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { matchesSearchQuery } from '@/lib/utils'
 import {
   Home,
   Plus,
@@ -273,11 +274,13 @@ export default function Properties() {
   // Filter properties
   const filteredProperties = useMemo(() => {
     return properties.filter(property => {
-      const matchesSearch = !searchTerm ||
-        property.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.district?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.address?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        property.title,
+        property.code,
+        property.district,
+        property.address
+      )
 
       const matchesType = typeFilter === 'all' || property.type === typeFilter
       const matchesOperation = operationFilter === 'all' || property.operation === operationFilter

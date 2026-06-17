@@ -30,7 +30,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import {
   createReservation,
   getReservations,
@@ -412,10 +412,7 @@ export default function HotelReservations() {
     return reservations.filter(r => {
       const matchesTab = activeTab === 'all' || r.status === activeTab
       const matchesRoom = roomFilter === 'all' || r.roomId === roomFilter
-      const matchesSearch = !searchTerm ||
-        r.guestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.documentNumber?.includes(searchTerm) ||
-        r.roomName?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = matchesSearchQuery(searchTerm, r.guestName, r.documentNumber, r.roomName)
       return matchesTab && matchesRoom && matchesSearch
     })
   }, [reservations, activeTab, searchTerm, roomFilter])

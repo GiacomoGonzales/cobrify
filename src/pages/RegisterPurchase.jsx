@@ -7,7 +7,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { getIngredients, registerPurchase } from '@/services/ingredientService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -229,7 +229,7 @@ export default function RegisterPurchase() {
   }
 
   const filteredIngredients = ingredients.filter(ing =>
-    ing.name.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearchQuery(searchTerm, ing.name)
   )
 
   if (isLoading) {

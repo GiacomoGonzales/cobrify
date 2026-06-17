@@ -6,7 +6,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 
 function ExpiryAlerts() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -160,11 +160,7 @@ function ExpiryAlerts() {
     }))
     .filter(p => {
       // Filtro de búsqueda
-      const matchesSearch =
-        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.genericName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.batchNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = matchesSearchQuery(searchTerm, p.name, p.code, p.genericName, p.batchNumber)
 
       if (!matchesSearch) return false
 

@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { matchesSearchQuery } from '@/lib/utils'
 import {
   UserCheck,
   Plus,
@@ -211,11 +212,13 @@ export default function Agents() {
   // Filter agents
   const filteredAgents = useMemo(() => {
     return agents.filter(agent => {
-      const matchesSearch = !searchTerm ||
-        agent.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        agent.documentNumber?.includes(searchTerm) ||
-        agent.phone?.includes(searchTerm) ||
-        agent.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        agent.name,
+        agent.documentNumber,
+        agent.phone,
+        agent.email
+      )
 
       return matchesSearch
     })

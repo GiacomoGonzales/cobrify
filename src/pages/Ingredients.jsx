@@ -12,7 +12,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import {
   getIngredients,
   createIngredient,
@@ -622,7 +622,7 @@ export default function Ingredients() {
 
   // Filter ingredients
   const filteredIngredients = ingredients.filter(ingredient => {
-    const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = matchesSearchQuery(searchTerm, ingredient.name)
     const matchesCategory = filterCategory === 'all' || ingredient.category === filterCategory
     return matchesSearch && matchesCategory
   })

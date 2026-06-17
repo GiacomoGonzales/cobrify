@@ -54,7 +54,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime, matchesSearchQuery } from '@/lib/utils'
 import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -2075,12 +2075,14 @@ Gracias por tu preferencia.`
     .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {
-      const search = searchTerm.toLowerCase()
-      const matchesSearch =
-        invoice.number?.toLowerCase().includes(search) ||
-        invoice.customer?.name?.toLowerCase().includes(search) ||
-        invoice.customer?.documentNumber?.includes(search) ||
-        invoice.items?.some(item => item.name?.toLowerCase().includes(search) || item.code?.toLowerCase().includes(search))
+      // Búsqueda insensible a acentos/tildes y mayúsculas (multi-campo, multi-palabra)
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        invoice.number,
+        invoice.customer?.name,
+        invoice.customer?.documentNumber,
+        ...((invoice.items || []).flatMap(item => [item.name, item.code]))
+      )
 
       const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
       const matchesType = filterType === 'all' || invoice.documentType === filterType

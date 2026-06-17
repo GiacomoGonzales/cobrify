@@ -17,6 +17,7 @@ import Card, { CardContent } from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const STATUS_CONFIG = {
   pending: { label: 'Recibido', className: 'bg-amber-100 text-amber-800 border-amber-300', icon: Clock },
@@ -132,13 +133,12 @@ export default function RappiOrders() {
   }, [ordersByMode, viewMode, dateRange])
 
   const filteredOrders = useMemo(() => {
-    if (!searchTerm.trim()) return ordersInRange
-    const term = searchTerm.toLowerCase()
-    return ordersInRange.filter(o =>
-      (o.rappiOrderId || '').toString().toLowerCase().includes(term) ||
-      (o.customerName || '').toLowerCase().includes(term) ||
-      (o.customerPhone || '').toLowerCase().includes(term)
-    )
+    return ordersInRange.filter(o => matchesSearchQuery(
+      searchTerm,
+      String(o.rappiOrderId || ''),
+      o.customerName,
+      o.customerPhone
+    ))
   }, [ordersInRange, searchTerm])
 
   const stats = useMemo(() => {

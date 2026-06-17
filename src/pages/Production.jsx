@@ -27,7 +27,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, cn } from '@/lib/utils'
+import { formatCurrency, cn, matchesSearchQuery } from '@/lib/utils'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -163,8 +163,7 @@ export default function Production() {
 
   // Filtrar producciones
   const filteredProductions = productions.filter(p => {
-    const matchesSearch = !searchTerm ||
-      p.productName?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = matchesSearchQuery(searchTerm, p.productName)
     const matchesMode = filterMode === 'all' || p.mode === filterMode
 
     // Filtrar por sucursal (a través de los almacenes que pertenecen a la sucursal)

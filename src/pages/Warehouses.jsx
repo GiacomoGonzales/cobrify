@@ -43,6 +43,7 @@ import {
 import { getProducts, getAllBranchSeriesFS, getCompanySettings, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
+import { matchesSearchQuery } from '@/lib/utils'
 
 // Schema de validación
 const warehouseSchema = z.object({
@@ -143,10 +144,7 @@ export default function Warehouses() {
   // Filtrar almacenes
   const filteredWarehouses = warehouses.filter(warehouse => {
     // Filtrar por búsqueda
-    const search = searchTerm.toLowerCase()
-    const matchesSearch = !searchTerm ||
-      warehouse.name?.toLowerCase().includes(search) ||
-      warehouse.location?.toLowerCase().includes(search)
+    const matchesSearch = matchesSearchQuery(searchTerm, warehouse.name, warehouse.location)
 
     // Filtrar por sucursal
     let matchesBranch = true

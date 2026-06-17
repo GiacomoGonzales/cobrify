@@ -10,7 +10,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { getRecipes, createRecipe, updateRecipe, deleteRecipe } from '@/services/recipeService'
 import { getIngredients } from '@/services/ingredientService'
 import { getProducts } from '@/services/firestoreService'
@@ -440,7 +440,7 @@ export default function Recipes() {
 
   // Filtrar recetas
   const filteredRecipes = recipes.filter(recipe =>
-    recipe.productName.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearchQuery(searchTerm, recipe.productName)
   )
 
   const displayedRecipes = filteredRecipes.slice(0, visibleCount)

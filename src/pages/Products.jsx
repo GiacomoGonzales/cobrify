@@ -18,7 +18,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
-import { formatCurrency, formatProductPrice, applyMarginToCost } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery } from '@/lib/utils'
 import {
   getProducts,
   createProduct,
@@ -3648,18 +3648,18 @@ export default function Products() {
   // Filtrar y ordenar productos por búsqueda y categoría (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
     const filtered = products.filter(product => {
-      // Dividir búsqueda en palabras individuales para búsqueda flexible
-      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-
       // Get category name for search (backward compatible)
       const categoryName = product.category
         ? (getCategoryById(categories, product.category)?.name || product.category)
         : ''
 
-      // Concatenar todos los campos buscables (incluir versión sin guiones para compatibilidad con pistola lectora)
+      // Búsqueda insensible a acentos/tildes y mayúsculas (matchesSearchQuery),
+      // multi-palabra. Se incluye la versión sin guiones de code/sku para
+      // compatibilidad con la pistola lectora de códigos de barras.
       const code = product.code || ''
       const sku = product.sku || ''
-      const searchableText = [
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
         code,
         code.replace(/-/g, ''),
         sku,
@@ -3669,10 +3669,7 @@ export default function Products() {
         product.description || '',
         product.marca || '',
         product.laboratoryName || ''
-      ].join(' ').toLowerCase()
-
-      // Verificar que TODAS las palabras de búsqueda estén presentes (en cualquier orden)
-      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
+      )
 
       // Check category filter (backward compatible with old string-based categories)
       let matchesCategory = false

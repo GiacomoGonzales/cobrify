@@ -4,6 +4,7 @@ import { useLocationAccess } from '@/utils/locationAccess'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { matchesSearchQuery } from '@/lib/utils'
 import Button from '@/components/ui/Button'
 import {
   getExpenses,
@@ -304,14 +305,9 @@ export default function Expenses() {
   const filteredExpenses = useMemo(() => {
     let result = [...expenses]
 
-    // Filtro de búsqueda
+    // Filtro de búsqueda (insensible a acentos/tildes y mayúsculas)
     if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      result = result.filter(e =>
-        e.description?.toLowerCase().includes(search) ||
-        e.supplier?.toLowerCase().includes(search) ||
-        e.reference?.toLowerCase().includes(search)
-      )
+      result = result.filter(e => matchesSearchQuery(searchTerm, e.description, e.supplier, e.reference))
     }
 
     // Filtro de categoría

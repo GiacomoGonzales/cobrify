@@ -23,6 +23,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import DeliveryTicket from '@/components/DeliveryTicket'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const OPERATIONAL_STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'success', icon: CheckCircle },
@@ -584,12 +585,12 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
       setFilteredInvoices(invoices.slice(0, 20))
       return
     }
-    const q = searchQuery.toLowerCase()
-    const filtered = invoices.filter(inv => {
-      const number = (inv.serie ? `${inv.serie}-${inv.number}` : inv.number || '').toLowerCase()
-      const customer = (inv.customer?.name || inv.customerName || '').toLowerCase()
-      return number.includes(q) || customer.includes(q)
-    })
+    const filtered = invoices.filter(inv => matchesSearchQuery(
+      searchQuery,
+      inv.serie ? `${inv.serie}-${inv.number}` : inv.number,
+      inv.customer?.name,
+      inv.customerName
+    ))
     setFilteredInvoices(filtered.slice(0, 20))
   }, [searchQuery, invoices])
 

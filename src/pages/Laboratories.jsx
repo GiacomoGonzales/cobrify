@@ -5,6 +5,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { matchesSearchQuery } from '@/lib/utils'
 
 function Laboratories() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -202,9 +203,7 @@ function Laboratories() {
   }
 
   const filteredLabs = laboratories.filter(lab =>
-    lab.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lab.ruc?.includes(searchTerm) ||
-    lab.country?.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearchQuery(searchTerm, lab.name, lab.ruc, lab.country)
   )
 
   return (

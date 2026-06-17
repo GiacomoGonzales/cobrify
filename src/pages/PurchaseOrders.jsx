@@ -27,7 +27,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import {
   getPurchaseOrders,
   deletePurchaseOrder,
@@ -198,9 +198,7 @@ export default function PurchaseOrders() {
 
   const filteredOrders = orders.filter(order => {
     const supplierName = order.supplier?.businessName || order.supplier?.name || ''
-    const matchesSearch =
-      (order.number?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = matchesSearchQuery(searchTerm, order.number, supplierName)
 
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus
 

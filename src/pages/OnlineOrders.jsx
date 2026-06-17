@@ -19,6 +19,7 @@ import {
 import Card, { CardContent } from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const STATUS_CONFIG = {
   pending: {
@@ -409,14 +410,7 @@ export default function OnlineOrders() {
     // Filtro "En proceso" agrupa aceptados + listos
     if (statusFilter === 'in_progress' && o.status !== 'accepted' && o.status !== 'ready') return false
     if (statusFilter !== 'all' && statusFilter !== 'in_progress' && o.status !== statusFilter) return false
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase().trim()
-      const matches =
-        (o.customerName || '').toLowerCase().includes(term) ||
-        String(o.orderNumber || '').toLowerCase().includes(term) ||
-        (o.customerPhone || '').includes(term)
-      if (!matches) return false
-    }
+    if (!matchesSearchQuery(searchTerm, o.customerName, String(o.orderNumber || ''), o.customerPhone)) return false
     return true
   }), [ordersInRange, statusFilter, searchTerm])
 

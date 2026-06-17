@@ -48,6 +48,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
@@ -287,16 +288,14 @@ export default function ComplaintsList() {
     let result = [...complaints]
 
     // Búsqueda
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      result = result.filter(c =>
-        c.complaintNumber?.toLowerCase().includes(search) ||
-        c.trackingCode?.toLowerCase().includes(search) ||
-        c.consumer?.fullName?.toLowerCase().includes(search) ||
-        c.consumer?.documentNumber?.includes(search) ||
-        c.consumer?.email?.toLowerCase().includes(search)
-      )
-    }
+    result = result.filter(c => matchesSearchQuery(
+      searchTerm,
+      c.complaintNumber,
+      c.trackingCode,
+      c.consumer?.fullName,
+      c.consumer?.documentNumber,
+      c.consumer?.email
+    ))
 
     // Filtro por estado
     if (statusFilter !== 'all') {

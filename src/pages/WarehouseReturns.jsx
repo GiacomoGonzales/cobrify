@@ -15,6 +15,7 @@ import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
+import { matchesSearchQuery } from '@/lib/utils'
 
 const CONDITION_CONFIG = {
   good: { label: 'Buen estado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -249,12 +250,13 @@ export default function WarehouseReturns() {
   const filtered = returns.filter(r => {
     // Seguridad: respetar almacén permitido (además del saneo en la carga)
     if (!canAccess(r)) return false
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return r.projectName?.toLowerCase().includes(term) ||
-      r.warehouseName?.toLowerCase().includes(term) ||
-      r.userName?.toLowerCase().includes(term) ||
-      r.items?.some(i => i.productName?.toLowerCase().includes(term))
+    return matchesSearchQuery(
+      searchTerm,
+      r.projectName,
+      r.warehouseName,
+      r.userName,
+      ...((r.items || []).map(i => i.productName))
+    )
   })
 
   const filteredProducts = productSearch.length >= 1

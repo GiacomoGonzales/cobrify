@@ -18,7 +18,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 
@@ -598,13 +598,13 @@ export default function Accounting() {
       }
     }
 
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase()
-      const matchNumber = inv.number?.toLowerCase().includes(s)
-      const matchClient = (inv.customer?.name || inv.customer?.businessName || '').toLowerCase().includes(s)
-      const matchDoc = (inv.customer?.documentNumber || '').includes(s)
-      if (!matchNumber && !matchClient && !matchDoc) return false
-    }
+    if (!matchesSearchQuery(
+      searchTerm,
+      inv.number,
+      inv.customer?.name,
+      inv.customer?.businessName,
+      inv.customer?.documentNumber
+    )) return false
 
     return true
   })

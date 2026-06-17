@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 
@@ -362,11 +362,13 @@ function BatchControl() {
   // Filtrar productos (sobre la base permitida)
   const filteredProducts = visibleProducts
     .filter(p => {
-      const matchesSearch =
-        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.genericName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.batches?.some(b => b.batchNumber?.toLowerCase().includes(searchTerm.toLowerCase()))
+      const matchesSearch = matchesSearchQuery(
+        searchTerm,
+        p.name,
+        p.code,
+        p.genericName,
+        ...((p.batches || []).map(b => b.batchNumber))
+      )
 
       if (!matchesSearch) return false
 

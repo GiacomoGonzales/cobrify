@@ -26,7 +26,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import { getLoans, createLoan, updateLoan, deleteLoan } from '@/services/firestoreService'
 
 // Datos de ejemplo para modo demo
@@ -470,12 +470,7 @@ export default function Loans() {
       .filter(loan => {
         if (typeFilter !== 'all' && loan.type !== typeFilter) return false
         if (statusFilter !== 'all' && loan.status !== statusFilter) return false
-        if (searchTerm) {
-          const search = searchTerm.toLowerCase()
-          return loan.lenderName?.toLowerCase().includes(search) ||
-                 loan.description?.toLowerCase().includes(search)
-        }
-        return true
+        return matchesSearchQuery(searchTerm, loan.lenderName, loan.description)
       })
   }, [loans, typeFilter, statusFilter, searchTerm])
 

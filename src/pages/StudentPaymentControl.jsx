@@ -21,7 +21,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getCustomersWithStats } from '@/services/firestoreService'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import * as XLSX from 'xlsx'
@@ -150,14 +150,7 @@ export default function StudentPaymentControl() {
     let result = [...students]
 
     // Filtrar por búsqueda
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      result = result.filter(s =>
-        s.name?.toLowerCase().includes(term) ||
-        s.studentName?.toLowerCase().includes(term) ||
-        s.phone?.toLowerCase().includes(term)
-      )
-    }
+    result = result.filter(s => matchesSearchQuery(searchTerm, s.name, s.studentName, s.phone))
 
     // Filtrar por estado de pago
     if (filterStatus !== 'all') {

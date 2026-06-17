@@ -15,6 +15,7 @@ import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
+import { matchesSearchQuery } from '@/lib/utils'
 
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode, demoData, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
@@ -382,13 +383,14 @@ export default function WarehouseExits() {
     const itemType = e.exitType || 'project'
     if (typeFilter !== 'all' && itemType !== typeFilter) return false
 
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return e.projectName?.toLowerCase().includes(term) ||
-      e.warehouseName?.toLowerCase().includes(term) ||
-      e.userName?.toLowerCase().includes(term) ||
-      e.reasonLabel?.toLowerCase().includes(term) ||
-      e.items?.some(i => i.productName?.toLowerCase().includes(term))
+    return matchesSearchQuery(
+      searchTerm,
+      e.projectName,
+      e.warehouseName,
+      e.userName,
+      e.reasonLabel,
+      ...((e.items || []).map(i => i.productName))
+    )
   })
 
   // Filtrar productos en el buscador del modal
