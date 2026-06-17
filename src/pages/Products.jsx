@@ -4394,6 +4394,7 @@ export default function Products() {
           hidePrivateData={hidePrivateData}
           marginFormula={businessSettings?.marginFormula === 'margin' ? 'margin' : 'markup'}
           baseCurrency={businessSettings?.currency || 'PEN'}
+          businessSettings={businessSettings}
           onClose={() => setPriceUpdateMode(false)}
           onEditProduct={(p) => openEditModal(p)}
           onSaved={loadProducts}
