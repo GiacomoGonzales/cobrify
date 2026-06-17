@@ -3326,9 +3326,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </button>
               ))}
             </div>
-            {/* Subcategorías de la categoría seleccionada */}
+            {/* Subcategorías de la categoría seleccionada.
+                Wrap en TODAS las pantallas: antes era una sola fila con scroll
+                horizontal y barra oculta → las subcategorías que no entraban se
+                cortaban y el cliente no sabía que podía deslizar. Ahora se acomodan
+                en varias líneas y se ven todas. */}
             {activeSubcategories.length > 0 && (
-              <div className="flex overflow-x-auto gap-2 pb-3 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+              <div className="flex flex-wrap gap-2 pb-3">
                 <button
                   onClick={() => setSelectedSubcategory(null)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
