@@ -34,6 +34,11 @@ const UNIT_CODE_MAP = {
   'GALONES': 'GLL',
   'CAJA': 'BX',
   'CAJAS': 'BX',
+  // "Display" = caja expendedora con varias unidades del mismo producto.
+  // SUNAT no tiene codigo propio; se mapea a BX (Caja) para validez del XML.
+  'DISPLAY': 'BX',
+  'DISPLAYS': 'BX',
+  'DISP': 'BX',
   'PAQUETE': 'PK',
   'PAQUETES': 'PK',
   'JUEGO': 'SET',

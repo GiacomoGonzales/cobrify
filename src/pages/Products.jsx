@@ -53,6 +53,7 @@ const UNITS = [
   { value: 'MTK', label: 'Metro cuadrado' },
   { value: 'MTQ', label: 'Metro cúbico' },
   { value: 'BX', label: 'Caja' },
+  { value: 'DISPLAY', label: 'Display' },
   { value: 'PK', label: 'Paquete' },
   { value: 'SET', label: 'Juego' },
   { value: 'HUR', label: 'Hora' },

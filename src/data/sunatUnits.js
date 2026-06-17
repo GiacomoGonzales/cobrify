@@ -97,6 +97,9 @@ const UNIT_ALIASES = {
   'CM3': 'CMQ', 'MM3': 'MMQ',
   // Empaque
   'CAJA': 'BX', 'CAJAS': 'BX', 'CJ': 'BX',
+  // "Display" = caja expendedora con varias unidades del mismo producto. SUNAT
+  // no tiene codigo propio; se mapea a BX (Caja) para que el XML sea valido.
+  'DISPLAY': 'BX', 'DISPLAYS': 'BX', 'DISP': 'BX',
   'BOLSA': 'BG', 'BOLSAS': 'BG', 'BLS': 'BG',
   'PAQUETE': 'PK', 'PAQUETES': 'PK', 'PAQ': 'PK', 'PKT': 'PK',
   'BOTELLA': 'BO', 'BOTELLAS': 'BO', 'BOT': 'BO',

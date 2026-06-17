@@ -21,6 +21,7 @@ const UNITS = [
   { value: 'LTR', label: 'Litro' },
   { value: 'MTR', label: 'Metro' },
   { value: 'BX', label: 'Caja' },
+  { value: 'DISPLAY', label: 'Display' },
   { value: 'PK', label: 'Paquete' },
   { value: 'DZN', label: 'Docena' },
   { value: 'MIL', label: 'Millar' },
