@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -9,7 +9,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide, deleteCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
-import { matchesSearchQuery } from '@/lib/utils'
+import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -316,17 +316,27 @@ export default function CarrierDispatchGuides() {
     setShowCreateModal(true)
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de guías, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const guideSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const guide of guides) {
+      map.set(guide.id, buildSearchHaystack(
+        guide.number,
+        guide.destination?.address,
+        guide.destination?.businessName,
+        guide.vehicle?.plate,
+        guide.shipper?.businessName,
+      ))
+    }
+    return map
+  }, [guides])
+
   // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
-  const filteredGuides = guides.filter(guide =>
-    matchesSearchQuery(
-      searchTerm,
-      guide.number,
-      guide.destination?.address,
-      guide.destination?.businessName,
-      guide.vehicle?.plate,
-      guide.shipper?.businessName,
-    )
-  )
+  const filteredGuides = useMemo(() => guides.filter(guide =>
+    matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
+  ), [guides, deferredSearchTerm, guideSearchIndex])
 
   const displayedGuides = filteredGuides.slice(0, visibleCount)
   const hasMore = filteredGuides.length > visibleCount

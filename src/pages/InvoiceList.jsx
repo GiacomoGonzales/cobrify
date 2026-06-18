@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -54,7 +54,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { formatCurrency, formatDate, formatDateTime, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -2069,6 +2069,23 @@ Gracias por tu preferencia.`
     return 'Todo el tiempo'
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de comprobantes, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const invoiceSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const invoice of invoices) {
+      const itemFields = (invoice.items || []).flatMap(item => [item.name, item.code])
+      map.set(invoice.id, buildSearchHaystack(
+        invoice.number,
+        invoice.customer?.name,
+        invoice.customer?.documentNumber,
+        ...itemFields
+      ))
+    }
+    return map
+  }, [invoices])
+
   // Filtrar facturas
   const filteredInvoices = invoices
     .filter(canAccessInvoice) // Seguridad: respetar sucursal/almacén permitido (defensa adicional al saneo de carga)
@@ -2076,13 +2093,7 @@ Gracias por tu preferencia.`
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {
       // Búsqueda insensible a acentos/tildes y mayúsculas (multi-campo, multi-palabra)
-      const matchesSearch = matchesSearchQuery(
-        searchTerm,
-        invoice.number,
-        invoice.customer?.name,
-        invoice.customer?.documentNumber,
-        ...((invoice.items || []).flatMap(item => [item.name, item.code]))
-      )
+      const matchesSearch = matchesPrebuilt(deferredSearchTerm, invoiceSearchIndex.get(invoice.id) || '')
 
       const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
       const matchesType = filterType === 'all' || invoice.documentType === filterType

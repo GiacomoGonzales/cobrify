@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useDeferredValue } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -49,7 +49,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -2601,30 +2601,27 @@ export default function POS() {
     return () => { cancelled = true; clearTimeout(handle) }
   }, [isLoading, companySettings?.allowNegativeStock, getBusinessId, isDemoMode, selectedWarehouse?.id, saleCompleted])
 
-  // Optimizar filtrado de productos con useMemo
-  const filteredProducts = React.useMemo(() => {
-    return products.filter(p => {
-      // Excluir productos desactivados (isActive === false).
-      // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
-      if (p.isActive === false) return false
-      // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
-      // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
+  // useDeferredValue mantiene el <input> responsivo aunque el filtro tarde.
+  // React renderiza el input con la última tecla de inmediato, y el filter
+  // se procesa "low priority" un tick después. Sensación instantánea con 4k+ productos.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+
+  // Índice de búsqueda pre-normalizado por producto. Se rearma SOLO cuando
+  // cambian `products`, NO en cada keystroke. En cada tecla la búsqueda es un
+  // `includes()` por producto en vez de re-normalizar 10 campos con NFD/regex
+  // (que con 4k productos eran ~40k ops/tecla → cuelga el input).
+  const productSearchIndex = React.useMemo(() => {
+    const map = new Map()
+    for (const p of products) {
       const code = p.code || ''
       const sku = p.sku || ''
-      // SKUs y códigos de barras de las variantes (para que sean buscables también)
       const variantTokens = (p.hasVariants && Array.isArray(p.variants))
-        ? p.variants.flatMap(v => [
-            v?.sku || '',
-            (v?.sku || '').replace(/-/g, ''),
-            v?.barcode || '',
-          ]).filter(Boolean)
+        ? p.variants.flatMap(v => [v?.sku || '', (v?.sku || '').replace(/-/g, ''), v?.barcode || '']).filter(Boolean)
         : []
-      // Códigos de barra adicionales (mismo producto, múltiples EANs)
       const extraBarcodeTokens = Array.isArray(p.barcodes)
         ? p.barcodes.flatMap(b => [b || '', String(b || '').replace(/-/g, '')]).filter(Boolean)
         : []
-      const matchesSearch = matchesSearchQuery(
-        searchTerm,
+      map.set(p.id, buildSearchHaystack(
         p.name,
         code,
         code.replace(/-/g, ''),
@@ -2634,7 +2631,18 @@ export default function POS() {
         p.laboratoryName,
         ...variantTokens,
         ...extraBarcodeTokens,
-      )
+      ))
+    }
+    return map
+  }, [products])
+
+  // Optimizar filtrado de productos con useMemo
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(p => {
+      // Excluir productos desactivados (isActive === false).
+      // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
+      if (p.isActive === false) return false
+      const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(p.id) || '')
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
       let matchesCategory = false
@@ -2683,16 +2691,26 @@ export default function POS() {
 
       return matchesSearch && matchesCategory && matchesBrand
     })
-  }, [products, searchTerm, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
+  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
 
-  // Apply pagination only when there's no search term (optimizado con useMemo)
+  // Cap del render para que el grid no explote en pantallas con miles de
+  // productos. Antes al buscar mostraba TODAS las coincidencias (con 4k
+  // productos podían ser 1000+ cards y el render se volvía pesado). Ahora:
+  //  - Sin búsqueda: respeta `visibleProductsCount` (paginación clásica).
+  //  - Con búsqueda: muestra al menos 60 resultados de una (suficiente para
+  //    cubrir el caso típico) sin colapsar el render con 4k productos.
+  // En ambos casos el botón "Ver más" sigue disponible para cargar el resto.
+  const renderCap = React.useMemo(() => {
+    return deferredSearchTerm.trim()
+      ? Math.max(visibleProductsCount, 60)
+      : visibleProductsCount
+  }, [deferredSearchTerm, visibleProductsCount])
+
   const displayedProducts = React.useMemo(() => {
-    return searchTerm || selectedCategoryFilter !== 'all'
-      ? filteredProducts
-      : filteredProducts.slice(0, visibleProductsCount)
-  }, [filteredProducts, searchTerm, selectedCategoryFilter, visibleProductsCount])
+    return filteredProducts.slice(0, renderCap)
+  }, [filteredProducts, renderCap])
 
-  const hasMoreProducts = filteredProducts.length > visibleProductsCount && !searchTerm && selectedCategoryFilter === 'all'
+  const hasMoreProducts = filteredProducts.length > renderCap
 
   const loadMoreProducts = () => {
     setVisibleProductsCount(prev => prev + PRODUCTS_PER_PAGE)
@@ -7351,7 +7369,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     onClick={loadMoreProducts}
                     className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
                   >
-                    Ver más productos ({filteredProducts.length - visibleProductsCount} restantes)
+                    Ver más productos ({filteredProducts.length - renderCap} restantes)
                   </button>
                 </div>
               )}
@@ -7568,7 +7586,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     onClick={loadMoreProducts}
                     className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
                   >
-                    Ver más productos ({filteredProducts.length - visibleProductsCount} restantes)
+                    Ver más productos ({filteredProducts.length - renderCap} restantes)
                   </button>
                 </div>
               )}

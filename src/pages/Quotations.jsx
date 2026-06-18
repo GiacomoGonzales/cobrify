@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -34,7 +34,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatDate, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import {
   getQuotations,
@@ -490,15 +490,25 @@ export default function Quotations() {
     setTicketQuotation(null)
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de cotizaciones, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const quotationSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const quotation of quotations) {
+      map.set(quotation.id, buildSearchHaystack(
+        quotation.number,
+        quotation.customer?.name,
+        quotation.customer?.businessName,
+        quotation.customer?.documentNumber,
+      ))
+    }
+    return map
+  }, [quotations])
+
   // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
   const filteredQuotations = quotations.filter(canAccessQuotation).filter(quotation => {
-    const matchesSearch = matchesSearchQuery(
-      searchTerm,
-      quotation.number,
-      quotation.customer?.name,
-      quotation.customer?.businessName,
-      quotation.customer?.documentNumber,
-    )
+    const matchesSearch = matchesPrebuilt(deferredSearchTerm, quotationSearchIndex.get(quotation.id) || '')
 
     const matchesStatus = filterStatus === 'all' || quotation.status === filterStatus
 

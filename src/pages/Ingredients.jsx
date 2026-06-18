@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight, FolderPlus, ChevronUp, ChevronDown, SortAsc, Check, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -12,7 +12,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   getIngredients,
   createIngredient,
@@ -620,9 +620,20 @@ export default function Ingredients() {
     }
   }, [warehouses, filterBranch, allowedWarehouseIdSet])
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de insumos, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const ingredientSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const ingredient of ingredients) {
+      map.set(ingredient.id, buildSearchHaystack(ingredient.name))
+    }
+    return map
+  }, [ingredients])
+
   // Filter ingredients
   const filteredIngredients = ingredients.filter(ingredient => {
-    const matchesSearch = matchesSearchQuery(searchTerm, ingredient.name)
+    const matchesSearch = matchesPrebuilt(deferredSearchTerm, ingredientSearchIndex.get(ingredient.id) || '')
     const matchesCategory = filterCategory === 'all' || ingredient.category === filterCategory
     return matchesSearch && matchesCategory
   })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -12,7 +12,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
-import { matchesSearchQuery } from '@/lib/utils'
+import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
 import { updateDispatchGuide, deleteDispatchGuide } from '@/services/firestoreService'
@@ -531,15 +531,25 @@ export default function DispatchGuides() {
     }
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de guías, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const guideSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const guide of guides) {
+      map.set(guide.id, buildSearchHaystack(
+        guide.number,
+        guide.destination?.address,
+        guide.destination?.businessName,
+        guide.destination?.documentNumber,
+      ))
+    }
+    return map
+  }, [guides])
+
   // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
   const filteredGuides = guides.filter(canAccess).filter(guide => {
-    const matchesSearch = matchesSearchQuery(
-      searchTerm,
-      guide.number,
-      guide.destination?.address,
-      guide.destination?.businessName,
-      guide.destination?.documentNumber,
-    )
+    const matchesSearch = matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
 
     // Filtrar por sucursal
     let matchesBranch = true

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { Search, Package, Calendar, User, DollarSign, Loader2, Receipt, TrendingUp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -8,7 +8,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatDate, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases as getIngredientPurchases, getIngredients } from '@/services/ingredientService'
 import { getPurchases as getProductPurchases } from '@/services/firestoreService'
@@ -206,9 +206,20 @@ export default function PurchaseHistory() {
     new Set(allPurchases.map(p => p.supplier).filter(Boolean))
   ).sort()
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de compras, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const purchaseSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const purchase of allPurchases) {
+      map.set(purchase.id, buildSearchHaystack(purchase.name, purchase.supplier, purchase.invoiceNumber))
+    }
+    return map
+  }, [allPurchases])
+
   // Filter purchases
   const filteredPurchases = allPurchases.filter(purchase => {
-    const matchesSearch = matchesSearchQuery(searchTerm, purchase.name, purchase.supplier, purchase.invoiceNumber)
+    const matchesSearch = matchesPrebuilt(deferredSearchTerm, purchaseSearchIndex.get(purchase.id) || '')
 
     const matchesType = filterType === 'all' ||
       (filterType === 'products' && purchase.type === 'product') ||

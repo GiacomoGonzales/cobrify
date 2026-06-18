@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
@@ -21,7 +21,7 @@ import {
   updateCustomer,
   deleteCustomer,
 } from '@/services/firestoreService'
-import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
@@ -390,24 +390,35 @@ export default function Customers() {
     return 'active'
   }
 
-  // Filtrar y ordenar clientes
-  const filteredCustomers = customers
-    .filter(customer => {
-      // Búsqueda insensible a acentos/tildes y mayúsculas (multi-palabra, multi-campo)
-      const matchesSearch = matchesSearchQuery(
-        searchTerm,
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de clientes, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const customerSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const customer of customers) {
+      const petFields = normalizePets(customer).flatMap(p => [p.name, p.species, p.breed])
+      map.set(customer.id, buildSearchHaystack(
         customer.name,
         customer.documentNumber,
         customer.businessName,
         customer.email,
         customer.phone,
         customer.address,
-        ...normalizePets(customer).flatMap(p => [p.name, p.species, p.breed]),
+        ...petFields,
         customer.studentName,
         customer.studentSchedule,
         customer.vehiclePlate,
         customer.subscriptionPlan
-      )
+      ))
+    }
+    return map
+  }, [customers])
+
+  // Filtrar y ordenar clientes
+  const filteredCustomers = useMemo(() => customers
+    .filter(customer => {
+      // Búsqueda insensible a acentos/tildes y mayúsculas (multi-palabra, multi-campo)
+      const matchesSearch = matchesPrebuilt(deferredSearchTerm, customerSearchIndex.get(customer.id) || '')
       if (!matchesSearch) return false
 
       // Filtro de suscripción
@@ -446,7 +457,7 @@ export default function Customers() {
         default:
           return (a.name || '').localeCompare(b.name || '')
       }
-    })
+    }), [customers, deferredSearchTerm, customerSearchIndex, subscriptionFilter, birthMonthFilter, sortBy])
 
   const displayedCustomers = filteredCustomers.slice(0, visibleCount)
   const hasMore = filteredCustomers.length > visibleCount

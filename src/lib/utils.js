@@ -57,6 +57,45 @@ export function matchesSearchQuery(query, ...fields) {
 }
 
 /**
+ * Pre-construye un "haystack" normalizado (string en minúsculas y sin tildes)
+ * a partir de N campos. Diseñado para usarse UNA SOLA VEZ por item (dentro de
+ * un useMemo), guardar el resultado en un Map id→haystack, y luego en cada
+ * keystroke filtrar con `matchesPrebuilt(searchTerm, map.get(id))`.
+ *
+ * Sin esto, cada tecla del buscador re-normaliza todos los campos de los miles
+ * de productos (NFD + regex + lowercase ≈ ~40 000 ops por keystroke con 4k
+ * productos). Con el índice, cada tecla cuesta ~1 `includes()` por producto.
+ *
+ * @param {...(string|null|undefined)} fields
+ * @returns {string}
+ */
+export function buildSearchHaystack(...fields) {
+  return normalizeText(fields.filter(Boolean).join(' '))
+}
+
+/**
+ * Versión rápida de matchesSearchQuery cuando el haystack ya está
+ * pre-normalizado (string en minúsculas sin tildes). Soporta multi-palabra.
+ *
+ *   const hay = buildSearchHaystack(p.name, p.sku)   // una vez
+ *   matchesPrebuilt('pol roj', hay)                  // por keystroke
+ *
+ * @param {string} query - Lo que escribió el usuario
+ * @param {string} haystack - String ya normalizado (resultado de buildSearchHaystack)
+ * @returns {boolean}
+ */
+export function matchesPrebuilt(query, haystack) {
+  const normalizedQuery = normalizeText(query).trim()
+  if (!normalizedQuery) return true
+  if (!haystack) return false
+  const words = normalizedQuery.split(/\s+/).filter(Boolean)
+  for (let i = 0; i < words.length; i++) {
+    if (!haystack.includes(words[i])) return false
+  }
+  return true
+}
+
+/**
  * Formatea un número como moneda.
  *
  * Por compatibilidad con las 686+ llamadas existentes en el repo, el

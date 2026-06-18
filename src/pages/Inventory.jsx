@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useDeferredValue } from 'react'
 import {
   Package,
   AlertTriangle,
@@ -56,7 +56,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatProductPrice, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
@@ -1733,6 +1733,31 @@ export default function Inventory() {
     return result
   }, [products, ingredients, filterType])
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de items, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const itemSearchIndex = React.useMemo(() => {
+    const map = new Map()
+    for (const item of allItems) {
+      // Key compuesta porque productos e ingredientes pueden compartir id.
+      const key = `${item.itemType}-${item.id}`
+      if (item.itemType === 'ingredient') {
+        // Los insumos solo tienen name + category relevantes.
+        map.set(key, buildSearchHaystack(item.name, item.code, item.category))
+      } else {
+        map.set(key, buildSearchHaystack(
+          item.name,
+          item.code,
+          item.sku,
+          item.category,
+          item.marca,
+          item.laboratoryName,
+        ))
+      }
+    }
+    return map
+  }, [allItems])
+
   // Filtrar y ordenar items (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
     console.log(`🔍 [Inventory] filteredProducts recalculando. allItems.length=${allItems.length}`)
@@ -1740,15 +1765,7 @@ export default function Inventory() {
     const filtered = allItems.filter(item => {
       // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
       // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
-      const matchesSearch = matchesSearchQuery(
-        searchTerm,
-        item.name,
-        item.code,
-        item.sku,
-        item.category,
-        item.marca,
-        item.laboratoryName,
-      )
+      const matchesSearch = matchesPrebuilt(deferredSearchTerm, itemSearchIndex.get(`${item.itemType}-${item.id}`) || '')
 
       // Multi-select: array vacío = todas las categorías
       const matchesCategory =
@@ -1844,7 +1861,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, searchTerm, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
+  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {

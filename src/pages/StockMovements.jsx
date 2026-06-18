@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import * as XLSX from 'xlsx'
 import {
   History,
@@ -19,7 +19,7 @@ import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { matchesSearchQuery } from '@/lib/utils'
+import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -275,13 +275,24 @@ export default function StockMovements() {
     setFilterWarehouse('all') // Resetear almacén al cambiar sucursal
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de movimientos, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const movementSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const movement of movements) {
+      map.set(movement.id, buildSearchHaystack(movement.productName, movement.productCode, movement.notes))
+    }
+    return map
+  }, [movements])
+
   // Filtrar movimientos
   const filteredMovements = movements.filter(movement => {
     // Defensa de permisos por ubicación (además del saneo en la carga)
     if (!canAccess(movement, { warehouseFields: ['warehouseId', 'fromWarehouse', 'toWarehouse'] })) return false
 
     // Búsqueda insensible a acentos/tildes y mayúsculas
-    const matchesSearch = matchesSearchQuery(searchTerm, movement.productName, movement.productCode, movement.notes)
+    const matchesSearch = matchesPrebuilt(deferredSearchTerm, movementSearchIndex.get(movement.id) || '')
 
     // Filtro de sucursal
     let matchesBranch = true

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Pill, Layers, Warehouse, Store } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 
@@ -359,16 +359,22 @@ function BatchControl() {
     })
   }, [products, allowedWarehouseIdSet])
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de productos, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const productSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const p of visibleProducts) {
+      const batchFields = (p.batches || []).map(b => b.batchNumber)
+      map.set(p.id, buildSearchHaystack(p.name, p.code, p.genericName, ...batchFields))
+    }
+    return map
+  }, [visibleProducts])
+
   // Filtrar productos (sobre la base permitida)
   const filteredProducts = visibleProducts
     .filter(p => {
-      const matchesSearch = matchesSearchQuery(
-        searchTerm,
-        p.name,
-        p.code,
-        p.genericName,
-        ...((p.batches || []).map(b => b.batchNumber))
-      )
+      const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(p.id) || '')
 
       if (!matchesSearch) return false
 

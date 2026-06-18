@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle, MoreVertical, Phone, Mail, MapPin, FileSpreadsheet } from 'lucide-react'
 import { z } from 'zod'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { matchesSearchQuery } from '@/lib/utils'
+import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -306,16 +306,26 @@ export default function Suppliers() {
     return { success, failed, duplicates }
   }
 
-  const filteredSuppliers = suppliers.filter(supplier =>
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de proveedores, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const supplierSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const supplier of suppliers) {
+      map.set(supplier.id, buildSearchHaystack(
+        supplier.businessName,
+        supplier.documentNumber,
+        supplier.contactName,
+        supplier.email
+      ))
+    }
+    return map
+  }, [suppliers])
+
+  const filteredSuppliers = useMemo(() => suppliers.filter(supplier =>
     // Búsqueda insensible a acentos/tildes y mayúsculas (multi-palabra, multi-campo)
-    matchesSearchQuery(
-      searchTerm,
-      supplier.businessName,
-      supplier.documentNumber,
-      supplier.contactName,
-      supplier.email
-    )
-  )
+    matchesPrebuilt(deferredSearchTerm, supplierSearchIndex.get(supplier.id) || '')
+  ), [suppliers, deferredSearchTerm, supplierSearchIndex])
 
   const displayedSuppliers = filteredSuppliers.slice(0, visibleCount)
   const hasMore = filteredSuppliers.length > visibleCount

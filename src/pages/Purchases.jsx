@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -40,7 +40,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, formatDate, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction, getCompanySettings } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase, deleteIngredientPurchasesByRelated } from '@/services/ingredientService'
@@ -1065,6 +1065,21 @@ export default function Purchases() {
     return branch?.name || companySettings?.mainBranchName || 'Sucursal Principal'
   }
 
+  // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
+  // la lista de compras, no en cada keystroke.
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const purchaseSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const purchase of purchases) {
+      map.set(purchase.id, buildSearchHaystack(
+        purchase.invoiceNumber,
+        purchase.supplier?.businessName,
+        purchase.supplier?.documentNumber,
+      ))
+    }
+    return map
+  }, [purchases])
+
   const filteredPurchases = purchases
     .filter(filterByDate) // Filtrar por fecha
     .filter(filterByPayment) // Filtrar por tipo de pago
@@ -1072,12 +1087,7 @@ export default function Purchases() {
     .filter(purchase =>
       // Búsqueda flexible: múltiples palabras parciales en cualquier orden,
       // insensible a acentos. Ej: "fact 001 prov" matchea "Factura 001 - Proveedor SA".
-      matchesSearchQuery(
-        searchTerm,
-        purchase.invoiceNumber,
-        purchase.supplier?.businessName,
-        purchase.supplier?.documentNumber,
-      )
+      matchesPrebuilt(deferredSearchTerm, purchaseSearchIndex.get(purchase.id) || '')
     )
     .sort((a, b) => {
       let comparison = 0
